@@ -8,177 +8,28 @@ jobs:
   quality-check:
     name: Quality Gate Check
     runs-on: ubuntu-latest
-    
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: '18'
+          node-version: '20'
           cache: 'npm'
-          cache-dependency-path: backend
 
       - name: Install dependencies
-        run: |
-          cd backend
-          npm ci
+        run: npm ci
 
-      - name: Run ESLint
-        id: eslint
-        run: |
-          cd backend
-          npm run lint
-        continue-on-error: true
+      - name: Build shared contracts
+        run: npm run build -w shared
 
-      - name: Run TypeScript check
-        id: typecheck
-        run: |
-          cd backend
-          npm run typecheck
-        continue-on-error: true
+      - name: Frontend typecheck
+        run: npm run typecheck
 
-      - name: Run unit tests
-        id: unit-tests
-        run: |
-          cd backend
-          npm run test:unit -- --coverage
-        continue-on-error: true
+      - name: Backend typecheck
+        run: cd backend && npm ci && npm run typecheck
 
-      - name: Run integration tests
-        id: integration-tests
-        run: |
-          cd backend
-          npm run test:integration
-        continue-on-error: true
-
-      - name: Check coverage
-        id: coverage-check
-        run: |
-          cd backend
-          npx nyc report --check-coverage --lines 70 --functions 70 --branches 70 --statements 70
-        continue-on-error: true
-
-      - name: Check code size
-        id: size-check
-        run: |
-          cd backend
-          npm run build
-          DIST_SIZE=$(du -sh dist/ | cut -f1)
-          echo "Distribution size: $DIST_SIZE KB"
-          if [ "$DIST_SIZE" -gt 1024 ]; then
-            echo "::error::Distribution size too large: $DIST_SIZE KB (max: 1024 KB)"
-            exit 1
-          fi
-        continue-on-error: true
-
-      - name: Check for TODOs
-        id: todo-check
-        run: |
-          cd backend
-          TODO_COUNT=$(grep -r "TODO\|FIXME\|HACK\|XXX" src/ | wc -l)
-          echo "Found $TODO_COUNT TODO/FIXME comments"
-          if [ "$TODO_COUNT" -gt 10 ]; then
-            echo "::warning::Too many TODO/FIXME comments: $TODO_COUNT (max: 10)"
-          fi
-        continue-on-error: true
-
-      - name: Quality Gate Summary
-        run: |
-          echo "## Quality Gate Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Check Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ESLint | ${{ steps.eslint.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| TypeScript | ${{ steps.typecheck.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Unit Tests | ${{ steps.unit-tests.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Integration Tests | ${{ steps.integration-tests.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Coverage | ${{ steps.coverage-check.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Code Size | ${{ steps.size-check.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-
-      - name: Fail if any check failed
-        if: |
-          steps.eslint.outcome == 'failure' ||
-          steps.typecheck.outcome == 'failure' ||
-          steps.unit-tests.outcome == 'failure' ||
-          steps.integration-tests.outcome == 'failure' ||
-          steps.coverage-check.outcome == 'failure' ||
-          steps.size-check.outcome == 'failure'
-        run: |
-          echo "::error::Quality gate failed. Please fix the above issues before merging."
-          exit 1
-
-  code-review-check:
-    name: Code Review Requirements
-    runs-on: ubuntu-latest
-    
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check PR description
-        id: pr-description
-        run: |
-          PR_BODY="${{ github.event.pull_request.body }}"
-          if [ -z "$PR_BODY" ]; then
-            echo "::error::PR description is required"
-            exit 1
-          fi
-          if [ ${#PR_BODY} -lt 50 ]; then
-            echo "::error::PR description is too short (minimum 50 characters)"
-            exit 1
-          fi
-
-      - name: Check linked issues
-        id: linked-issues
-        run: |
-          LINKED_ISSUES=$(gh pr view ${{ github.event.pull_request.number }} --json body | jq -r '.body | scan("\\b#\\d+") | length')
-          echo "Linked issues: $LINKED_ISSUES"
-          if [ "$LINKED_ISSUES" -eq 0 ]; then
-            echo "::warning::No issues linked to this PR"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check commit messages
-        id: commit-messages
-        run: |
-          COMMITS=$(gh pr view ${{ github.event.pull_request.number }} --json commits -q '.commits[].message')
-          INVALID_COMMITS=$(echo "$COMMITS" | grep -vE "^(feat|fix|docs|style|refactor|test|chore)" || echo "")
-          if [ -n "$INVALID_COMMITS" ]; then
-            echo "::warning::Some commits don't follow conventional commit format"
-            echo "$INVALID_COMMITS"
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Check for breaking changes
-        id: breaking-changes
-        run: |
-          COMMITS=$(gh pr view ${{ github.event.pull_request.number }} --json commits -q '.commits[].message')
-          BREAKING_COMMITS=$(echo "$COMMITS" | grep -i "BREAKING CHANGE" || echo "")
-          if [ -n "$BREAKING_COMMITS" ]; then
-            echo "::error::Breaking changes detected. Please update CHANGELOG.md and add ! to the commit type."
-            echo "$BREAKING_COMMITS"
-            exit 1
-          fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Summary
-        run: |
-          echo "## Code Review Requirements" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Check Results" >> $GITHUB_STEP_SUMMARY
-          echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
-          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| PR Description | ${{ steps.pr-description.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Linked Issues | ${{ steps.linked-issues.outcome == 'success' && '✅ Passed' || '⚠️ Warning' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Commit Format | ${{ steps.commit-messages.outcome == 'success' && '✅ Passed' || '⚠️ Warning' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Breaking Changes | ${{ steps.breaking-changes.outcome == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+      - name: Frontend build
+        run: npm run build

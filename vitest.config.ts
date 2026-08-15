@@ -7,6 +7,12 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'jsdom',
+    exclude: [
+      '**/node_modules/**',
+      'backend/**',      // 后端测试归 backend 自己的 runner（tsx --test / jest）
+      'android/**',
+      'dist/**',
+    ],
     setupFiles: ['./src/v2/__tests__/setup.ts'],
     css: true,
     coverage: {
