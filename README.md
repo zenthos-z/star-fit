@@ -344,7 +344,7 @@ star-fit/
 
 ## 📚 文档
 
-完整文档在 VitePress 文档站（`npm run docs:dev` 或访问 GitHub Pages）：
+完整文档在 VitePress 文档站：**https://zenthos-z.github.io/star-fit/**（本地 `npm run docs:dev`）：
 
 - [项目简介](docs-site/getting-started/introduction.md) · [快速开始](docs-site/getting-started/quick-start.md) · [设计理念](docs-site/getting-started/design-philosophy.md)
 - [数据协议](docs-site/concepts/data-protocol.md) · [同步系统](docs-site/concepts/sync-system.md) · [AI 教练](docs-site/concepts/ai-coach.md) · [视频管理](docs-site/concepts/video-management.md)
