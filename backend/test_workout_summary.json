@@ -1,0 +1,51 @@
+{
+  "message": "请总结我刚刚的训练表现。",
+  "userId": "test-user-20250111",
+  "sessionId": "test-session-20250111",
+  "scenario": "chat",
+  "metadata": {
+    "intent_context": {
+      "type": "workout_summary",
+      "data": {
+        "id": "test-workout-001",
+        "duration": 1800,
+        "exerciseCount": 3,
+        "completedCount": 3,
+        "exercises": [
+          {
+            "id": "ex1",
+            "exerciseId": "bench_press",
+            "name": "杠铃卧推",
+            "type": "RESISTANCE",
+            "sets": [
+              {"reps": 10, "weight": 60, "rpe": 7, "completed": true},
+              {"reps": 10, "weight": 60, "rpe": 7, "completed": true},
+              {"reps": 10, "weight": 60, "rpe": 7, "completed": true}
+            ]
+          },
+          {
+            "id": "ex2",
+            "exerciseId": "squat",
+            "name": "深蹲",
+            "type": "RESISTANCE",
+            "sets": [
+              {"reps": 8, "weight": 80, "rpe": 8, "completed": true},
+              {"reps": 8, "weight": 80, "rpe": 8, "completed": true}
+            ]
+          },
+          {
+            "id": "ex3",
+            "exerciseId": "pull_up",
+            "name": "引体向上",
+            "type": "RESISTANCE",
+            "sets": [
+              {"reps": 12, "weight": 0, "rpe": 6, "completed": true},
+              {"reps": 12, "weight": 0, "rpe": 6, "completed": true},
+              {"reps": 12, "weight": 0, "rpe": 6, "completed": true}
+            ]
+          }
+        ]
+      }
+    }
+  }
+}

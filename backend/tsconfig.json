@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    "target": "ES2023",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "outDir": "dist",
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "#utils/logger": ["./src/utils/logger.ts"],
+      "@shared/*": ["../shared/*"],
+      "shared/contracts": ["../shared/contracts/index.ts"],
+      "shared/contracts/*": ["../shared/contracts/*"]
+    }
+  },
+  "include": ["src", "../shared"],
+  "exclude": ["node_modules", "dist"]
+}
+

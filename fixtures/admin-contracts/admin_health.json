@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "status": 200,
+  "json": {
+    "api": {
+      "status": "ok",
+      "latency": 0
+    },
+    "ai": {
+      "status": "disconnected",
+      "provider": "gemini",
+      "model": ""
+    },
+    "storage": {
+      "used": 205643934,
+      "total": 10737418240,
+      "percent": 2,
+      "available": 10531774306
+    },
+    "uptime": 2006.1318201
+  }
+}

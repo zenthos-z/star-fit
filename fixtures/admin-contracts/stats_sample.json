@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "userId": "test20260115",
+  "status": 200,
+  "json": [
+    {
+      "id": "a22241a1-f3da-4f0e-b994-a9208471ae78",
+      "start_time": 1768563076298,
+      "duration": 30,
+      "title": "二头弯举/划船机",
+      "raw_json": "{\"id\":\"a22241a1-f3da-4f0e-b994-a9208471ae78\",\"startTime\":1768563076298,\"pausedDuration\":-1835232,\"status\":\"finished\",\"exercises\":[{\"id\":\"afd30da4-cb3e-4302-829f-1665ea98633b\",\"name\":\"二头弯举\",\"type\":\"resistance\",\"sets\":[{\"id\":\"9ad68436-9200-4461-af24-79e093723faf\",\"completed\":true,\"weight\":20,\"reps\":10,\"duration\":0,\"distance\":0},{\"id\":\"bb9e217a-709b-4e1b-b539-87c45e92ae23\",\"completed\":true,\"weight\":20,\"reps\":10,\"duration\":0,\"distance\":0},{\"id\":\"5017de07-0e63-499c-90db-a73d59879910\",\"completed\":true,\"weight\":20,\"reps\":10,\"duration\":0,\"distance\":0}],\"targetRpe\":7,\"unilateral\":false,\"metadata\":{\"cardioMode\":\"FREE_RUN\",\"cardioSubtype\":\"GENERAL\"},\"primaryMuscles\":[\"肱二头肌\"],\"equipment\":\"dumbbell\",\"bodyCategory\":\"arms\"},{\"id\":\"4531e504-761a-42f1-a922-c03da585c350\",\"name\":\"划船机\",\"type\":\"cardio\",\"sets\":[{\"id\":\"8f0f8679-a6cb-4240-a361-8d04dbf69c14\",\"completed\":false,\"weight\":0,\"reps\":0,\"duration\":0,\"distance\":0}],\"targetRpe\":7,\"unilateral\":false,\"metadata\":{\"cardioMode\":\"FREE_RUN\",\"cardioSubtype\":\"GENERAL\"},\"primaryMuscles\":[\"背阔肌\",\"股四头肌\",\"臀大肌\"],\"equipment\":\"rowing_machine\",\"bodyCategory\":\"cardio\"},{\"id\":\"88a4f355-d4bc-4d1d-9031-8555ef64bff7\",\"name\":\"卷腹\",\"type\":\"bodyweight\",\"sets\":[{\"id\":\"eeaaea5c-cd00-49ce-bd73-94af8d26be8c\",\"completed\":true,\"weight\":0,\"reps\":17,\"duration\":0,\"distance\":0},{\"id\":\"b3e6a432-64f3-4bca-a532-19cedd9edc87\",\"completed\":true,\"weight\":0,\"reps\":17,\"duration\":0,\"distance\":0}],\"targetRpe\":8,\"unilateral\":false,\"referenceBodyweight\":75,\"metadata\":{\"cardioMode\":\"FREE_RUN\",\"cardioSubtype\":\"GENERAL\"},\"primaryMuscles\":[\"腹直肌\"],\"equipment\":\"none\",\"bodyCategory\":\"core\"}],\"endTime\":1768563106369}"
+    }
+  ]
+}

@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "status": 200,
+  "json": {
+    "aiProvider": "gemini",
+    "coachPersona": "professional",
+    "promptStyle": "default",
+    "styleParams": {}
+  }
+}

@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>Project Starfit</title>
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            colors: {
+              'star-white': '#FAFAFA',
+              'star-gray': '#F4F4F5',
+              'star-dark': '#18181B',
+              'star-accent': '#3B82F6',
+            },
+            boxShadow: {
+              'white-model': '0 4px 6px -1px rgba(0, 0, 0, 0.02), 0 2px 4px -1px rgba(0, 0, 0, 0.02), 0 0 0 1px rgba(0,0,0,0.03)',
+              'floating': '0 20px 25px -5px rgba(0, 0, 0, 0.05), 0 10px 10px -5px rgba(0, 0, 0, 0.02)',
+            },
+            typography: {
+              DEFAULT: {
+                css: {
+                  maxWidth: 'none',
+                  color: '#374151',
+                  p: {
+                    marginTop: '0.5em',
+                    marginBottom: '0.5em',
+                  },
+                },
+              },
+            },
+          },
+        },
+        plugins: [],
+      };
+    </script>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.8/dist/katex.min.css">
+    <style>
+      /* Global Scrollbar Hiding for Native App Feel */
+      
+      /* Chrome, Safari, Opera */
+      ::-webkit-scrollbar {
+        display: none;
+      }
+      
+      /* Firefox, IE, Edge */
+      html, body {
+        -ms-overflow-style: none;  /* IE and Edge */
+        scrollbar-width: none;  /* Firefox */
+        -webkit-overflow-scrolling: touch;
+        overscroll-behavior-y: auto;
+      }
+      
+      /* Ensure it applies to all scrollable containers */
+      * {
+        -ms-overflow-style: none;
+        scrollbar-width: none;
+      }
+
+      body {
+        background-color: #FAFAFA;
+        color: #18181B;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        -webkit-font-smoothing: antialiased;
+        /* Handle safe area at body level for full background */
+        padding-top: env(safe-area-inset-top);
+        padding-bottom: env(safe-area-inset-bottom);
+      }
+      
+      /* Markdown Table Styles specific to AI Chat */
+      .markdown-body table {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        border-collapse: collapse;
+        margin: 0.75rem 0;
+        border-radius: 12px;
+        border-style: hidden; /* hide standard table border */
+        box-shadow: 0 0 0 1px #E5E7EB; /* simulate border */
+        background-color: #ffffff; /* Card look, readable on dark bg */
+      }
+      .markdown-body thead {
+        background-color: #F9FAFB;
+      }
+      .markdown-body th {
+        text-align: left;
+        padding: 0.75rem 1rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: #6B7280;
+        border-bottom: 1px solid #E5E7EB;
+        white-space: nowrap;
+      }
+      .markdown-body td {
+        padding: 0.75rem 1rem;
+        font-size: 0.85rem;
+        color: #374151;
+        border-bottom: 1px solid #F3F4F6;
+        vertical-align: top;
+      }
+      .markdown-body tr:last-child td {
+        border-bottom: none;
+      }
+
+      @keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+      }
+      
+      /* Markdown Blockquotes */
+      .markdown-body blockquote {
+        border-left: 3px solid #E5E7EB;
+        padding-left: 1rem;
+        margin: 0.5rem 0;
+        color: #6B7280;
+        font-style: italic;
+      }
+    </style>
+ 
+<link rel="manifest" href="/manifest.json">
+<link rel="stylesheet" href="/index.css">
+</head>
+  <body>
+    <div id="root"></div>
+  <script type="module" src="/index.tsx"></script>
+</body>
+</html>

@@ -1,0 +1,10 @@
+
+# LangGraph API
+.langgraph_api
+
+# Windows reserved-name file, must be ignored to avoid git add failure
+nul
+
+# 本地 secret（不进 git）：放本地覆盖配置，如 DEEPSEEK_API_KEY
+.env.local
+.env.*.local

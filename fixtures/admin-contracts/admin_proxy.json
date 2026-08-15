@@ -1,0 +1,13 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "status": 200,
+  "json": {
+    "GLOBAL_PROXY": "http://127.0.0.1:7897",
+    "GEMINI_PROXY": "http://127.0.0.1:7897",
+    "OPENAI_PROXY": "",
+    "AI_PROVIDER": "gemini",
+    "GOOGLE_API_KEY": "***",
+    "OPENAI_API_KEY": ""
+  }
+}

@@ -1,0 +1,145 @@
+/* Global styles for Project Starfit */
+
+/* ============================================
+   教程内容样式 (Exercise Tutorial)
+   ============================================ */
+
+.tutorial-content {
+  /* 标题样式 */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 700;
+    line-height: 1.4;
+    margin-top: 1.5em;
+    margin-bottom: 0.75em;
+  }
+
+  h1 { font-size: 1.5rem; }
+  h2 { font-size: 1.25rem; }
+  h3 { font-size: 1.125rem; }
+
+  /* 段落 */
+  p {
+    margin-bottom: 1em;
+    line-height: 1.75;
+  }
+
+  /* 列表 */
+  ul, ol {
+    margin-bottom: 1em;
+    padding-left: 1.5em;
+  }
+  
+  ul {
+    list-style-type: disc;
+  }
+  
+  ol {
+    list-style-type: decimal;
+  }
+
+  li {
+    margin-bottom: 0.5em;
+    line-height: 1.6;
+    padding-left: 0.25em; /* Add slight padding between marker and text */
+  }
+
+  /* 强调 */
+  strong {
+    font-weight: 700;
+    color: #1f2937;
+  }
+
+  em {
+    font-style: italic;
+  }
+
+  /* 链接 */
+  a {
+    color: #2563eb;
+    text-decoration: underline;
+  }
+
+  a:hover {
+    color: #1d4ed8;
+  }
+
+  /* 图片 */
+  img {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+  }
+
+  /* 视频 */
+  video {
+    max-width: 100%;
+    height: auto;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+  }
+
+  /* YouTube iframe */
+  iframe {
+    max-width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: 0.5rem;
+    margin: 1rem 0;
+  }
+
+  /* 代码 */
+  code {
+    background-color: #f3f4f6;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.25rem;
+    font-family: ui-monospace, monospace;
+    font-size: 0.875em;
+  }
+
+  pre {
+    background-color: #f3f4f6;
+    padding: 1rem;
+    border-radius: 0.5rem;
+    overflow-x: auto;
+    margin-bottom: 1rem;
+  }
+
+  pre code {
+    background-color: transparent;
+    padding: 0;
+  }
+
+  /* 引用 */
+  blockquote {
+    border-left: 4px solid #e5e7eb;
+    padding-left: 1rem;
+    margin: 1rem 0;
+    color: #6b7280;
+    font-style: italic;
+  }
+
+  /* 分隔线 */
+  hr {
+    border: none;
+    border-top: 1px solid #e5e7eb;
+    margin: 2rem 0;
+  }
+
+  /* 表格 */
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+  }
+
+  th, td {
+    border: 1px solid #e5e7eb;
+    padding: 0.5rem;
+    text-align: left;
+  }
+
+  th {
+    background-color: #f9fafb;
+    font-weight: 600;
+  }
+}

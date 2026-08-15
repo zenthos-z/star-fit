@@ -1,0 +1,58 @@
+{
+  "name": "shared",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "./dist/contracts/index.js",
+  "types": "./dist/contracts/index.d.ts",
+  "exports": {
+    "./contracts": {
+      "import": "./dist/contracts/index.js",
+      "types": "./dist/contracts/index.d.ts"
+    },
+    "./contracts/*": {
+      "import": "./dist/contracts/*.js",
+      "types": "./dist/contracts/*.d.ts"
+    },
+    "./contracts/database": {
+      "import": "./dist/contracts/database/index.js",
+      "types": "./dist/contracts/database/index.d.ts"
+    },
+    "./contracts/database/*": {
+      "import": "./dist/contracts/database/*.js",
+      "types": "./dist/contracts/database/*.d.ts"
+    },
+    "./contracts/mapping": {
+      "import": "./dist/contracts/mapping/index.js",
+      "types": "./dist/contracts/mapping/index.d.ts"
+    },
+    "./contracts/mapping/*": {
+      "import": "./dist/contracts/mapping/*.js",
+      "types": "./dist/contracts/mapping/*.d.ts"
+    },
+    "./contracts/validation": {
+      "import": "./dist/contracts/validation.js",
+      "types": "./dist/contracts/validation.d.ts"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "contracts": ["dist/contracts/index.d.ts"],
+      "contracts/*": ["dist/contracts/*.d.ts"],
+      "contracts/database": ["dist/contracts/database/index.d.ts"],
+      "contracts/database/*": ["dist/contracts/database/*.d.ts"],
+      "contracts/mapping": ["dist/contracts/mapping/index.d.ts"],
+      "contracts/mapping/*": ["dist/contracts/mapping/*.d.ts"],
+      "contracts/validation": ["dist/contracts/validation.d.ts"]
+    }
+  },
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc --watch",
+    "clean": "rimraf dist",
+    "prebuild": "npm run clean"
+  },
+  "devDependencies": {
+    "rimraf": "^6.0.1",
+    "typescript": "^5.6.3"
+  }
+}

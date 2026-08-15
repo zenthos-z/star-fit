@@ -1,0 +1,15 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "status": 200,
+  "json": [
+    {
+      "id": "test20260115",
+      "device_id": "***",
+      "created_at": 1768563106543,
+      "role": "user",
+      "permissions": null,
+      "session_count": 1
+    }
+  ]
+}

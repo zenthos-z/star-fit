@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>海报提示词生成器</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Serif+SC:wght@400;700&family=Noto+Sans+SC:wght@300;400;700&family=JetBrains+Mono:wght@400;700&display=swap');
+        
+        body {
+            font-family: 'Noto Sans SC', sans-serif;
+        }
+        
+        .mono-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+        
+        .serif-font {
+            font-family: 'Noto Serif SC', serif;
+        }
+        
+        /* Acid Style */
+        .acid-theme {
+            background-color: #020205;
+            color: #FF5F1F;
+        }
+        .acid-card {
+            background: #0A0A15;
+            border: 1px solid #FF5F1F/40;
+            box-shadow: 3px 3px 0px #FF5F1F;
+        }
+        .acid-btn {
+            background: #FF5F1F;
+            color: #000;
+            box-shadow: 4px 4px 0px #fff;
+        }
+        .acid-btn:hover {
+            background: #fff;
+        }
+        
+        /* Bauhaus Style */
+        .bauhaus-theme {
+            background-color: #F0F0F0;
+            color: #1A1A1A;
+        }
+        .bauhaus-card {
+            background: #fff;
+            border: 2px solid #000;
+            box-shadow: 4px 4px 0px rgba(0,0,0,1);
+        }
+        .bauhaus-btn {
+            background: #000;
+            color: #fff;
+        }
+        .bauhaus-btn:hover {
+            background: #0047AB;
+        }
+        
+        /* Shanshui Style */
+        .shanshui-theme {
+            background-color: #f0f4f3;
+            color: #0F2E28;
+        }
+        .shanshui-card {
+            background: rgba(255, 255, 255, 0.9);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(15, 46, 40, 0.1);
+            box-shadow: 0 10px 30px -10px rgba(15, 46, 40, 0.15);
+        }
+        .shanshui-btn {
+            background-color: #0F2E28;
+            color: #fff;
+        }
+        .shanshui-btn:hover {
+            background-color: #1a4d42;
+        }
+        
+        /* Loader Animation */
+        .loader {
+            border: 3px solid #f3f3f3;
+            border-radius: 50%;
+            border-top: 3px solid currentColor;
+            width: 20px;
+            height: 20px;
+            animation: spin 1s linear infinite;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .scrollbar-thin::-webkit-scrollbar {
+            width: 6px;
+        }
+        .scrollbar-thin::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .scrollbar-thin::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.2);
+            border-radius: 3px;
+        }
+
+        /* Image Modal */
+        .image-modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 9999;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .image-modal.active {
+            display: flex;
+        }
+        .image-modal img {
+            max-width: 100%;
+            max-height: 100vh;
+            object-fit: contain;
+            border-radius: 8px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.8);
+        }
+        .image-modal-close {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(255, 95, 31, 0.9);
+            color: white;
+            border: none;
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            font-size: 20px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: all 0.3s;
+        }
+        .image-modal-close:hover {
+            background: #fff;
+            color: #000;
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body class="min-h-screen acid-theme transition-colors duration-500" id="appBody">
+    <div class="min-h-screen p-4 md:p-8">
+        <!-- Header -->
+        <header class="max-w-7xl mx-auto mb-6 md:mb-8 border-b-2 border-[#FF5F1F] pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4" id="mainHeader">
+            <div>
+                <h1 class="text-2xl md:text-3xl font-black italic tracking-tighter flex items-center gap-2">
+                    <i class="fas fa-bolt"></i>
+                    <span id="appTitle">ACID_VISUAL_TERMINAL</span>
+                </h1>
+                <p class="text-[10px] mt-1 bg-[#FF5F1F] text-black px-2 py-0.5 inline-block font-bold uppercase tracking-tight" id="appVersion">
+                    V6.4 // LIQUID_CHROME_UPDATE
+                </p>
+            </div>
+            
+            <!-- Style Selector -->
+            <div class="flex gap-2 flex-wrap">
+                <button onclick="setTheme('acid')" class="theme-btn px-4 py-2 text-xs font-bold uppercase border-2 border-[#FF5F1F] hover:bg-[#FF5F1F] hover:text-black transition-all" data-theme="acid">
+                    Acid
+                </button>
+                <button onclick="setTheme('bauhaus')" class="theme-btn px-4 py-2 text-xs font-bold uppercase border-2 border-gray-600 hover:bg-black hover:text-white transition-all" data-theme="bauhaus">
+                    Bauhaus
+                </button>
+                <button onclick="setTheme('shanshui')" class="theme-btn px-4 py-2 text-xs font-bold uppercase border-2 border-[#0F2E28] hover:bg-[#0F2E28] hover:text-white transition-all" data-theme="shanshui">
+                    Shanshui
+                </button>
+                <div class="w-px bg-gray-600 mx-1"></div>
+                <button onclick="exportConfig()" class="px-3 py-2 text-xs font-bold uppercase border-2 border-gray-600 hover:bg-green-600 hover:text-white transition-all" title="导出配置">
+                    <i class="fas fa-download"></i>
+                </button>
+                <button onclick="importConfig()" class="px-3 py-2 text-xs font-bold uppercase border-2 border-gray-600 hover:bg-blue-600 hover:text-white transition-all" title="导入配置">
+                    <i class="fas fa-upload"></i>
+                </button>
+                <button onclick="if(confirm('确定要清除所有配置吗？'))clearConfig()" class="px-3 py-2 text-xs font-bold uppercase border-2 border-gray-600 hover:bg-red-600 hover:text-white transition-all" title="清除配置">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-7xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6">
+            
+            <!-- Left Panel: Input -->
+            <div class="lg:col-span-4 space-y-4">
+                <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-[#FF5F1F] pl-2">
+                    <i class="fas fa-terminal"></i>
+                    <span id="inputLabel">01_Log_Entry (训练日志)</span>
+                </div>
+                <div class="acid-card p-2" id="inputCard">
+                    <textarea 
+                        id="logInput"
+                        class="w-full h-48 md:h-64 bg-black/40 p-3 md:p-4 outline-none resize-none text-[12px] md:text-[13px] text-orange-100 border border-transparent focus:border-[#FF5F1F]/20 scrollbar-thin"
+                        placeholder="输入你的训练记录...&#10;例如：&#10;今天练了腿，总时长60分钟。&#10;1. 哑铃高脚杯深蹲 12.5KG 3组 12次&#10;2. 哑铃罗马尼亚硬拉 12.5KG 3组 10次"
+                    ></textarea>
+                </div>
+                
+                <!-- API Configuration (Optional) -->
+                <div class="acid-card p-3" id="apiKeyCard">
+                    <label class="text-[8px] uppercase font-black opacity-60 flex items-center gap-1 mb-2">
+                        <i class="fas fa-cog"></i> API 配置 (可选)
+                    </label>
+
+                    <!-- Provider Selection -->
+                    <div class="mb-2">
+                        <select
+                            id="providerSelect"
+                            onchange="updateProviderUI()"
+                            class="w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                        >
+                            <option value="gemini">Gemini (Google)</option>
+                            <option value="openai">OpenAI / 兼容服务</option>
+                        </select>
+                    </div>
+
+                    <!-- API Key -->
+                    <div class="mb-2">
+                        <input
+                            type="password"
+                            id="apiKeyInput"
+                            placeholder="输入API密钥..."
+                            class="w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                            onchange="saveConfig()"
+                        />
+                    </div>
+
+                    <!-- Base URL -->
+                    <div class="mb-2">
+                        <input
+                            type="text"
+                            id="baseUrlInput"
+                            placeholder="API Base URL (如 https://generativelanguage.googleapis.com)"
+                            class="w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F] mb-2"
+                            onchange="saveConfig()"
+                        />
+                    </div>
+
+                    <!-- Model Configuration -->
+                    <div class="mb-2">
+                        <input
+                            type="text"
+                            id="modelNameInput"
+                            placeholder="提示词模型 (如 gemini-flash-latest)"
+                            class="w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F] mb-2"
+                            onchange="saveConfig()"
+                        />
+                        <input
+                            type="text"
+                            id="imageModelInput"
+                            placeholder="生图模型ID (如 gemini-3.1-flash-image-preview)"
+                            class="w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                            onchange="saveConfig()"
+                        />
+                    </div>
+                </div>
+
+                <button
+                    onclick="generatePrompt()"
+                    id="generateBtn"
+                    class="w-full acid-btn py-4 md:py-5 font-black text-base md:text-lg flex items-center justify-center gap-2 transition-all"
+                >
+                    <i class="fas fa-bolt"></i>
+                    <span id="generateBtnText">GENERATE_PROMPT</span>
+                </button>
+            </div>
+
+            <!-- Middle Panel: Configuration -->
+            <div class="lg:col-span-4 space-y-6">
+                
+                <!-- Acid Style Options -->
+                <div id="acidOptions" class="space-y-4">
+                    <section class="space-y-3">
+                        <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-[#FF5F1F] pl-2">
+                            <i class="fas fa-box"></i> 02_Visual_Scene (视觉场景)
+                        </div>
+                        <div class="grid grid-cols-1 gap-2">
+                            <button onclick="setAcidTemplate('Industrial_Dark')" class="acid-template-btn text-left p-3 text-[11px] border bg-[#FF5F1F] text-black border-white shadow-[2px_2px_0px_#fff]">
+                                <div class="font-black mb-0.5">工业重金属 (DEFAULT)</div>
+                                <div class="text-[8px] uppercase tracking-tighter truncate opacity-60">Acid Graphics, Maximalism</div>
+                            </button>
+                            <button onclick="setAcidTemplate('Liquid_Chrome')" class="acid-template-btn text-left p-3 text-[11px] border bg-black text-[#FF5F1F] border-[#FF5F1F]/30">
+                                <div class="font-black mb-0.5">超限流体 (LIQUID_CHROME)</div>
+                                <div class="text-[8px] uppercase tracking-tighter truncate opacity-60">Liquid Metal Acid, Organic Distortion</div>
+                            </button>
+                            <button onclick="setAcidTemplate('Cyber_Neon')" class="acid-template-btn text-left p-3 text-[11px] border bg-black text-[#FF5F1F] border-[#FF5F1F]/30">
+                                <div class="font-black mb-0.5">赛博霓虹 (HYPER-VIBE)</div>
+                                <div class="text-[8px] uppercase tracking-tighter truncate opacity-60">Cyber-Acid, Neo-Tokyo</div>
+                            </button>
+                            <button onclick="setAcidTemplate('Vintage_Punk')" class="acid-template-btn text-left p-3 text-[11px] border bg-black text-[#FF5F1F] border-[#FF5F1F]/30">
+                                <div class="font-black mb-0.5">复古朋克 (OLD_SCHOOL)</div>
+                                <div class="text-[8px] uppercase tracking-tighter truncate opacity-60">90s Zine Culture, Punk Rock</div>
+                            </button>
+                        </div>
+                    </section>
+
+                    <section class="space-y-3">
+                        <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-[#FF5F1F] pl-2">
+                            <i class="fas fa-sliders-h"></i> 03_Vibe_Specs (个性化参数)
+                        </div>
+                        <div class="acid-card p-4 space-y-4">
+                            <div class="space-y-1">
+                                <label class="text-[8px] uppercase font-black opacity-60 flex items-center gap-1">
+                                    <i class="fas fa-user"></i> Branding Name (品牌名称)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="brandingName"
+                                    placeholder="e.g. zenthos瞻"
+                                    class="w-full bg-black border border-[#FF5F1F]/30 p-2 text-[10px] md:text-[11px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[8px] uppercase font-black opacity-60">
+                                    标语 (Slogans)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="slogans"
+                                    value="SYSTEM OVERLOAD, LEG DAY, NO PAIN NO GAIN"
+                                    class="w-full bg-black border border-[#FF5F1F]/30 p-2 text-[10px] md:text-[11px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-[8px] uppercase font-black opacity-60">
+                                    色彩 (Palette)
+                                </label>
+                                <input
+                                    type="text"
+                                    id="palette"
+                                    value="High contrast Neon Orange (#FF5F1F) vs Midnight Blue (#000080)"
+                                    class="w-full bg-black border border-[#FF5F1F]/30 p-2 text-[10px] md:text-[11px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Bauhaus Options -->
+                <div id="bauhausOptions" class="space-y-4 hidden">
+                    <section class="space-y-3">
+                        <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-black pl-2">
+                            <i class="fas fa-cube"></i> Visual Configuration
+                        </div>
+                        <div class="bauhaus-card p-4 space-y-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-black uppercase flex items-center gap-1">
+                                    <i class="fas fa-user"></i> Athlete Nickname
+                                </label>
+                                <input
+                                    type="text"
+                                    id="bauhausNickname"
+                                    placeholder="e.g. zenthos"
+                                    class="w-full bg-white border-2 border-black p-3 font-bold focus:bg-[#0047AB] focus:text-white outline-none"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-black uppercase flex items-center gap-1">
+                                    <i class="fas fa-calendar"></i> Batch Date
+                                </label>
+                                <input
+                                    type="text"
+                                    id="bauhausDate"
+                                    placeholder="YYYYMMDD"
+                                    class="w-full bg-white border-2 border-black p-3 font-bold focus:bg-[#E31E24] focus:text-white outline-none"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-black uppercase flex items-center gap-1">
+                                    <i class="fas fa-clock"></i> Duration (Mins)
+                                </label>
+                                <input
+                                    type="number"
+                                    id="bauhausDuration"
+                                    placeholder="60"
+                                    class="w-full bg-white border-2 border-black p-3 font-bold focus:bg-[#FFD700] outline-none"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                        </div>
+                    </section>
+                </div>
+
+                <!-- Shanshui Options -->
+                <div id="shanshuiOptions" class="space-y-4 hidden">
+                    <section class="space-y-3">
+                        <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-[#0F2E28] pl-2">
+                            <i class="fas fa-palette"></i> 山水配置
+                        </div>
+                        <div class="shanshui-card p-4 space-y-4">
+                            <div class="space-y-1">
+                                <label class="text-xs font-black uppercase flex items-center gap-1">
+                                    <i class="fas fa-user"></i> 用户标识
+                                </label>
+                                <input
+                                    type="text"
+                                    id="shanshuiNickname"
+                                    placeholder="@zenthos瞻"
+                                    class="w-full bg-white border border-gray-200 p-3 font-bold focus:border-[#0F2E28] outline-none"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                            <div class="space-y-1">
+                                <label class="text-xs font-black uppercase flex items-center gap-1">
+                                    <i class="fas fa-calendar"></i> 日期
+                                </label>
+                                <input
+                                    type="text"
+                                    id="shanshuiDate"
+                                    placeholder="YYYY.MM.DD"
+                                    class="w-full bg-white border border-gray-200 p-3 font-bold focus:border-[#0F2E28] outline-none"
+                                    onchange="saveConfig()"
+                                />
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <!-- Right Panel: Output -->
+            <div id="result-area" class="lg:col-span-4 space-y-4">
+                <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-[#FF5F1F] pl-2">
+                        <i class="fas fa-activity"></i> 04_Final_Prompt (最终结果)
+                    </div>
+                    <button 
+                        onclick="copyToClipboard()"
+                        id="copyBtn"
+                        class="hidden text-[9px] px-3 py-1.5 font-bold flex items-center gap-1 transition-all bg-white text-black hover:bg-[#FF5F1F]"
+                    >
+                        <i class="fas fa-copy"></i>
+                        <span id="copyBtnText">复制指令</span>
+                    </button>
+                </div>
+                
+                <div class="acid-card p-4 md:p-6 h-64 md:h-80 lg:min-h-[400px] overflow-y-auto scrollbar-thin relative" id="outputCard">
+                    <div id="outputPlaceholder" class="h-full flex flex-col items-center justify-center opacity-10 text-center">
+                        <i class="fas fa-layer-group text-5xl md:text-6xl mb-4"></i>
+                        <p class="text-[9px] font-black uppercase tracking-widest">Awaiting Command</p>
+                    </div>
+                    <div id="errorMsg" class="hidden text-red-500 text-[10px] font-bold bg-red-500/10 p-3 border border-red-500"></div>
+                    <textarea
+                        id="outputContent"
+                        class="hidden w-full h-full bg-transparent border-none outline-none resize-none text-[10px] md:text-[11px] leading-relaxed whitespace-pre-wrap break-words text-orange-100/80 mono-font scrollbar-thin"
+                        spellcheck="false"
+                    ></textarea>
+                </div>
+
+                <!-- Image Generation Section (shown after prompt is generated) -->
+                <div id="imageGenSection" class="hidden">
+                    <div id="imageGenTitle" class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-purple-500 pl-2 mt-4">
+                        <i class="fas fa-magic"></i> 05_Image_Generation (图片生成)
+                    </div>
+
+                    <div id="imageGenCard" class="acid-card p-3 mt-2">
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <div>
+                                <label id="imageSizeLabel" class="text-[8px] uppercase font-black opacity-60 mb-1 block">清晰度</label>
+                                <select
+                                    id="imageSizeSelect"
+                                    class="w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                                    onchange="saveConfig()"
+                                >
+                                    <option value="512px">0.5K (512px)</option>
+                                    <option value="1K" selected>1K (默认)</option>
+                                    <option value="2K">2K</option>
+                                    <option value="4K">4K</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label id="aspectRatioLabel" class="text-[8px] uppercase font-black opacity-60 mb-1 block">比例</label>
+                                <select
+                                    id="aspectRatioSelect"
+                                    class="w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]"
+                                    onchange="saveConfig()"
+                                >
+                                    <option value="">不设置</option>
+                                    <!-- 方形 -->
+                                    <option value="1:1">1:1 (方形)</option>
+                                    <!-- 常见横版 -->
+                                    <option value="4:3">4:3 (横版)</option>
+                                    <option value="3:2">3:2 (横版)</option>
+                                    <option value="16:9">16:9 (宽屏)</option>
+                                    <option value="21:9">21:9 (超宽)</option>
+                                    <!-- 常见竖版 -->
+                                    <option value="3:4" selected>3:4 (竖版)</option>
+                                    <option value="2:3">2:3 (竖版)</option>
+                                    <option value="9:16">9:16 (手机屏)</option>
+                                    <!-- 极端横版 (Gemini 3.1 新增) -->
+                                    <option value="4:1">4:1 (超宽横幅)</option>
+                                    <option value="8:1">8:1 (全景横幅)</option>
+                                    <!-- 极端竖版 (Gemini 3.1 新增) -->
+                                    <option value="1:4">1:4 (长竖图)</option>
+                                    <option value="1:8">1:8 (超长竖图)</option>
+                                    <!-- 接近方形 -->
+                                    <option value="4:5">4:5 (接近方形)</option>
+                                    <option value="5:4">5:4 (接近方形)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <button
+                            onclick="generateImage()"
+                            id="generateImageBtn"
+                            class="w-full acid-btn py-3 font-black text-xs flex items-center justify-center gap-2 transition-all"
+                        >
+                            <i class="fas fa-image"></i>
+                            <span id="generateImageBtnText">生成图片</span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Image Preview Section -->
+                <div id="imagePreviewSection" class="hidden">
+                    <div class="flex items-center justify-between mt-4">
+                        <div id="imagePreviewTitle" class="flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-purple-500 pl-2">
+                            <i class="fas fa-image"></i> 05_Image_Preview (图片预览)
+                        </div>
+                        <button
+                            onclick="downloadImage()"
+                            id="downloadBtn"
+                            class="text-[9px] px-3 py-1.5 font-bold flex items-center gap-1 transition-all bg-purple-600 text-white hover:bg-purple-500"
+                        >
+                            <i class="fas fa-download"></i>
+                            <span>下载</span>
+                        </button>
+                    </div>
+
+                    <div id="imagePreviewCard" class="acid-card p-3 mt-2">
+                        <div id="imagePreviewContainer" class="relative group cursor-pointer" onclick="openImageModal()">
+                            <img id="generatedImage" src="" alt="Generated Poster" class="w-full h-auto rounded border border-[#FF5F1F]/30" />
+                            <div class="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                <i class="fas fa-expand text-white text-2xl"></i>
+                            </div>
+                        </div>
+                        <div id="imageLoading" class="hidden py-8 flex flex-col items-center justify-center">
+                            <div class="loader mb-2"></div>
+                            <p class="text-[9px] uppercase tracking-wider opacity-60">Generating Image...</p>
+                        </div>
+                        <div id="imageError" class="hidden text-red-400 text-[10px] font-bold bg-red-500/10 p-3 border border-red-500/30 mt-2"></div>
+                    </div>
+                </div>
+            </div>
+
+        </main>
+
+        <!-- Footer -->
+        <footer class="max-w-7xl mx-auto mt-8 border-t border-[#FF5F1F]/20 pt-6 text-[8px] md:text-[9px] opacity-30 flex flex-col md:flex-row justify-between items-center gap-2 italic" id="mainFooter">
+            <div class="text-center" id="footerTerminal">TERMINAL: ANONYMOUS</div>
+            <div class="text-center font-bold uppercase tracking-tighter">Poster Prompt Generator v1.0</div>
+        </footer>
+    </div>
+
+    <!-- Image Modal -->
+    <div id="imageModal" class="image-modal" onclick="closeImageModal(event)">
+        <button class="image-modal-close" onclick="closeImageModal(event)">
+            <i class="fas fa-times"></i>
+        </button>
+        <img id="modalImage" src="" alt="Full size preview" onclick="event.stopPropagation()" />
+    </div>
+
+    <script>
+        // ==========================================
+        // 🎨 ACID SCENE TEMPLATES
+        // ==========================================
+        const ACID_TEMPLATES = {
+            "Industrial_Dark": {
+                name: "工业重金属 (DEFAULT)",
+                style: "Acid Graphics, Maximalism, David Carson Grunge Style",
+                background: "Dark, moody close-up of a Squat Rack (Industrial metal, scratched, oily surfaces)",
+                texture: "Heavy grainy noise, scan-line textures, vintage film dust",
+                lighting: "High-contrast Cyberpunk Blue & Purple rim lights, hard shadows",
+                character: "Flat 2D neon-orange fluid abstract blob, wearing a fierce determination expression (咆哮/发力感), emanating fighting spirit in a combative stance"
+            },
+            "Liquid_Chrome": {
+                name: "超限流体 (LIQUID_CHROME)",
+                style: "Ultra-high contrast, Liquid Metal Acid, Organic Distortion, Y2K Chromaticism",
+                background: "Deep matte black with iridescent oil spill reflections, macro view of distorted chrome dumbbells",
+                texture: "Chromatic aberration, liquid mercury ripples, high-gloss plastic finish, spectral gradients",
+                lighting: "Hard Neon Green and Hot Pink top-down spotlighting, sharp caustic light refractions",
+                character: "An amorphous 3D chrome liquid entity, sharp jagged edges, reflecting the entire gym environment on its surface, high-intensity combative posture"
+            },
+            "Cyber_Neon": {
+                name: "赛博霓虹 (HYPER-VIBE)",
+                style: "Cyber-Acid, Neo-Tokyo, Futuristic Grunge",
+                background: "Blurry neon city gym lights, reflections on chrome plates",
+                texture: "Digital glitch, pixel noise, glowing screen edge",
+                lighting: "Neon Pink and Electric Cyan bi-color lighting, hyper-glow",
+                character: "Electric blue holographic creature, muscular silhouette, dynamic motion blur"
+            },
+            "Vintage_Punk": {
+                name: "复古朋克 (OLD_SCHOOL)",
+                style: "90s Zine Culture, Punk Rock Xerox Style",
+                background: "High-contrast photocopied gym environment, gritty black and white",
+                texture: "Paper grain, ink bleed, halftone patterns",
+                lighting: "Stark flash photography style, high-key white and deep blacks",
+                character: "Sketch-style orange ink blob, raw brush strokes, chaotic energy"
+            }
+        };
+
+        // ==========================================
+        // 🎨 STATE MANAGEMENT
+        // ==========================================
+        let currentTheme = 'acid';
+        let currentAcidTemplate = 'Industrial_Dark';
+        let isGenerating = false;
+
+        const CONFIG_STORAGE_KEY = 'poster_prompt_generator_config';
+
+        // ==========================================
+        // 💾 CONFIG STORAGE
+        // ==========================================
+        function saveConfig() {
+            const config = {
+                theme: currentTheme,
+                acidTemplate: currentAcidTemplate,
+                // Acid options
+                brandingName: document.getElementById('brandingName').value,
+                slogans: document.getElementById('slogans').value,
+                palette: document.getElementById('palette').value,
+                // Bauhaus options
+                bauhausNickname: document.getElementById('bauhausNickname').value,
+                bauhausDate: document.getElementById('bauhausDate').value,
+                bauhausDuration: document.getElementById('bauhausDuration').value,
+                // Shanshui options
+                shanshuiNickname: document.getElementById('shanshuiNickname').value,
+                shanshuiDate: document.getElementById('shanshuiDate').value,
+                // API config
+                provider: document.getElementById('providerSelect').value,
+                apiKey: document.getElementById('apiKeyInput').value,
+                baseUrl: document.getElementById('baseUrlInput').value,
+                modelName: document.getElementById('modelNameInput').value,
+                imageModel: document.getElementById('imageModelInput')?.value || '',
+                // Image gen config
+                imageSize: document.getElementById('imageSizeSelect')?.value || '1K',
+                aspectRatio: document.getElementById('aspectRatioSelect')?.value || ''
+            };
+            localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+        }
+
+        function loadConfig() {
+            try {
+                const saved = localStorage.getItem(CONFIG_STORAGE_KEY);
+                if (!saved) return null;
+                return JSON.parse(saved);
+            } catch (e) {
+                console.error('Failed to load config:', e);
+                return null;
+            }
+        }
+
+        function applyConfig(config) {
+            if (!config) return;
+
+            // Apply theme
+            if (config.theme) {
+                setTheme(config.theme);
+                currentTheme = config.theme;
+            }
+
+            // Apply acid template
+            if (config.acidTemplate) {
+                setAcidTemplate(config.acidTemplate);
+                currentAcidTemplate = config.acidTemplate;
+            }
+
+            // Apply Acid options
+            if (config.brandingName) document.getElementById('brandingName').value = config.brandingName;
+            if (config.slogans) document.getElementById('slogans').value = config.slogans;
+            if (config.palette) document.getElementById('palette').value = config.palette;
+
+            // Apply Bauhaus options
+            if (config.bauhausNickname) document.getElementById('bauhausNickname').value = config.bauhausNickname;
+            if (config.bauhausDate) document.getElementById('bauhausDate').value = config.bauhausDate;
+            if (config.bauhausDuration) document.getElementById('bauhausDuration').value = config.bauhausDuration;
+
+            // Apply Shanshui options
+            if (config.shanshuiNickname) document.getElementById('shanshuiNickname').value = config.shanshuiNickname;
+            if (config.shanshuiDate) document.getElementById('shanshuiDate').value = config.shanshuiDate;
+
+            // Apply API config
+            if (config.provider) {
+                document.getElementById('providerSelect').value = config.provider;
+                updateProviderUI();
+            }
+            if (config.apiKey) document.getElementById('apiKeyInput').value = config.apiKey;
+            if (config.baseUrl) document.getElementById('baseUrlInput').value = config.baseUrl;
+            if (config.modelName) document.getElementById('modelNameInput').value = config.modelName;
+            if (config.imageModel) document.getElementById('imageModelInput').value = config.imageModel;
+
+            // Apply image gen config
+            if (config.imageSize) document.getElementById('imageSizeSelect').value = config.imageSize;
+            if (config.aspectRatio !== undefined) document.getElementById('aspectRatioSelect').value = config.aspectRatio;
+        }
+
+        function clearConfig() {
+            localStorage.removeItem(CONFIG_STORAGE_KEY);
+            // Reload page to reset
+            location.reload();
+        }
+
+        function exportConfig() {
+            // 直接从当前 DOM 读取配置，而不是从 localStorage 读取
+            // 这样可以确保导出的是用户当前看到的值
+            saveConfig(); // 先保存当前输入框的值
+            const config = loadConfig();
+            if (!config) {
+                alert('没有可导出的配置');
+                return;
+            }
+            const blob = new Blob([JSON.stringify(config, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `poster-config-${Date.now()}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        function importConfig() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    try {
+                        const config = JSON.parse(event.target.result);
+                        localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(config));
+                        location.reload();
+                    } catch (e) {
+                        alert('配置文件格式错误');
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // ==========================================
+        // 🔧 PROVIDER MANAGEMENT
+        // ==========================================
+        function updateProviderUI() {
+            // Update placeholder based on provider
+            const provider = document.getElementById('providerSelect').value;
+            const baseUrlInput = document.getElementById('baseUrlInput');
+
+            if (provider === 'gemini') {
+                baseUrlInput.placeholder = 'API Base URL (如 https://generativelanguage.googleapis.com)';
+            } else {
+                baseUrlInput.placeholder = 'API Base URL (如 https://api.openai.com/v1)';
+            }
+
+            // Save config after provider change
+            saveConfig();
+        }
+
+        // ==========================================
+        // 🎨 THEME MANAGEMENT
+        // ==========================================
+        function setTheme(theme) {
+            currentTheme = theme;
+            const body = document.getElementById('appBody');
+            const header = document.getElementById('mainHeader');
+            const inputCard = document.getElementById('inputCard');
+            const apiKeyCard = document.getElementById('apiKeyCard');
+            const generateBtn = document.getElementById('generateBtn');
+            const outputCard = document.getElementById('outputCard');
+            const acidOptions = document.getElementById('acidOptions');
+            const bauhausOptions = document.getElementById('bauhausOptions');
+            const shanshuiOptions = document.getElementById('shanshuiOptions');
+
+            // Update theme buttons - remove all active states first
+            document.querySelectorAll('.theme-btn').forEach(btn => {
+                btn.className = 'theme-btn px-4 py-2 text-xs font-bold uppercase border-2 transition-all';
+                if (btn.getAttribute('data-theme') === 'acid') {
+                    btn.classList.add('border-[#FF5F1F]', 'hover:bg-[#FF5F1F]', 'hover:text-black');
+                } else if (btn.getAttribute('data-theme') === 'bauhaus') {
+                    btn.classList.add('border-gray-600', 'hover:bg-black', 'hover:text-white');
+                } else if (btn.getAttribute('data-theme') === 'shanshui') {
+                    btn.classList.add('border-[#0F2E28]', 'hover:bg-[#0F2E28]', 'hover:text-white');
+                }
+            });
+            
+            // Add active state to selected theme button
+            const activeBtn = document.querySelector(`[data-theme="${theme}"]`);
+            if (activeBtn) {
+                if (theme === 'acid') {
+                    activeBtn.className = 'theme-btn px-4 py-2 text-xs font-bold uppercase border-2 bg-[#FF5F1F] text-black transition-all';
+                } else if (theme === 'bauhaus') {
+                    activeBtn.className = 'theme-btn px-4 py-2 text-xs font-bold uppercase border-2 bg-black text-white transition-all';
+                } else if (theme === 'shanshui') {
+                    activeBtn.className = 'theme-btn px-4 py-2 text-xs font-bold uppercase border-2 bg-[#0F2E28] text-white transition-all';
+                }
+            }
+
+            // Apply theme
+            if (theme === 'acid') {
+                body.className = 'min-h-screen acid-theme transition-colors duration-500';
+                header.className = 'max-w-7xl mx-auto mb-6 md:mb-8 border-b-2 border-[#FF5F1F] pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4';
+                inputCard.className = 'acid-card p-2';
+                apiKeyCard.className = 'acid-card p-3';
+                generateBtn.className = 'w-full acid-btn py-4 md:py-5 font-black text-base md:text-lg flex items-center justify-center gap-2 transition-all';
+                outputCard.className = 'acid-card p-4 md:p-6 h-64 md:h-80 lg:min-h-[400px] overflow-y-auto scrollbar-thin relative shadow-[4px_4px_0px_#000080]';
+                acidOptions.classList.remove('hidden');
+                bauhausOptions.classList.add('hidden');
+                shanshuiOptions.classList.add('hidden');
+
+                // Update input styles
+                updateInputStyles('acid');
+
+                // Update generate image button
+                const generateImageBtn = document.getElementById('generateImageBtn');
+                if (generateImageBtn) {
+                    generateImageBtn.className = 'w-full acid-btn py-3 font-black text-xs flex items-center justify-center gap-2 transition-all';
+                }
+
+                document.getElementById('appTitle').textContent = 'ACID_VISUAL_TERMINAL';
+                document.getElementById('inputLabel').textContent = '01_Log_Entry (训练日志)';
+                document.getElementById('generateBtnText').textContent = 'GENERATE_PROMPT';
+                document.getElementById('footerTerminal').textContent = 'TERMINAL: ' + (document.getElementById('brandingName').value || 'ANONYMOUS');
+
+                // Update output text color for acid theme (light text on dark background)
+                document.getElementById('outputContent').className = 'hidden w-full h-full bg-transparent border-none outline-none resize-none text-[10px] md:text-[11px] leading-relaxed whitespace-pre-wrap break-words text-orange-100/80 mono-font scrollbar-thin';
+            } else if (theme === 'bauhaus') {
+                body.className = 'min-h-screen bauhaus-theme transition-colors duration-500';
+                header.className = 'max-w-7xl mx-auto mb-6 md:mb-8 border-b-4 border-black pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4';
+                inputCard.className = 'bauhaus-card p-2';
+                apiKeyCard.className = 'bauhaus-card p-3';
+                generateBtn.className = 'w-full bauhaus-btn py-4 md:py-5 font-black text-base md:text-lg flex items-center justify-center gap-2 transition-all';
+                outputCard.className = 'bauhaus-card p-4 md:p-6 h-64 md:h-80 lg:min-h-[400px] overflow-y-auto scrollbar-thin relative shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]';
+                acidOptions.classList.add('hidden');
+                bauhausOptions.classList.remove('hidden');
+                shanshuiOptions.classList.add('hidden');
+
+                // Update input styles
+                updateInputStyles('bauhaus');
+
+                // Update generate image button
+                const generateImageBtn = document.getElementById('generateImageBtn');
+                if (generateImageBtn) {
+                    generateImageBtn.className = 'w-full bauhaus-btn py-3 font-black text-xs flex items-center justify-center gap-2 transition-all';
+                }
+
+                document.getElementById('appTitle').textContent = 'BAUHAUS ATHLETE';
+                document.getElementById('inputLabel').textContent = 'INPUT_LOGS';
+                document.getElementById('generateBtnText').textContent = 'GENERATE PROMPT';
+                document.getElementById('footerTerminal').textContent = 'SYSTEM: BAUHAUS_V2';
+
+                // Update output text color for bauhaus theme (dark text on light background)
+                document.getElementById('outputContent').className = 'hidden w-full h-full bg-transparent border-none outline-none resize-none text-[10px] md:text-[11px] leading-relaxed whitespace-pre-wrap break-words text-gray-900 mono-font scrollbar-thin';
+            } else if (theme === 'shanshui') {
+                body.className = 'min-h-screen shanshui-theme transition-colors duration-500';
+                header.className = 'max-w-7xl mx-auto mb-6 md:mb-8 border-b-2 border-[#0F2E28] pb-4 flex flex-col md:flex-row justify-between items-start md:items-end gap-4';
+                inputCard.className = 'shanshui-card p-2';
+                apiKeyCard.className = 'shanshui-card p-3';
+                generateBtn.className = 'w-full shanshui-btn py-4 md:py-5 font-black text-base md:text-lg flex items-center justify-center gap-2 transition-all shadow-lg';
+                outputCard.className = 'shanshui-card p-4 md:p-6 h-64 md:h-80 lg:min-h-[400px] overflow-y-auto scrollbar-thin relative';
+                acidOptions.classList.add('hidden');
+                bauhausOptions.classList.add('hidden');
+                shanshuiOptions.classList.remove('hidden');
+
+                // Update input styles
+                updateInputStyles('shanshui');
+
+                // Update generate image button
+                const generateImageBtn = document.getElementById('generateImageBtn');
+                if (generateImageBtn) {
+                    generateImageBtn.className = 'w-full shanshui-btn py-3 font-black text-xs flex items-center justify-center gap-2 transition-all shadow-lg';
+                }
+
+                document.getElementById('appTitle').textContent = '青绿山水·训练日志';
+                document.getElementById('inputLabel').textContent = '输入无格式日志';
+                document.getElementById('generateBtnText').textContent = '生成 Prompt';
+                document.getElementById('footerTerminal').textContent = '山水模式';
+
+                // Update output text color for shanshui theme (dark text on light background)
+                document.getElementById('outputContent').className = 'hidden w-full h-full bg-transparent border-none outline-none resize-none text-[10px] md:text-[11px] leading-relaxed whitespace-pre-wrap break-words text-[#0F2E28] mono-font scrollbar-thin';
+            }
+
+            // Save config after theme change
+            saveConfig();
+        }
+
+        function setAcidTemplate(templateKey) {
+            currentAcidTemplate = templateKey;
+            document.querySelectorAll('.acid-template-btn').forEach(btn => {
+                btn.className = 'acid-template-btn text-left p-3 text-[11px] border bg-black text-[#FF5F1F] border-[#FF5F1F]/30 active:border-[#FF5F1F]';
+            });
+            const clickedBtn = document.querySelector(`[onclick="setAcidTemplate('${templateKey}')"]`);
+            if (clickedBtn) {
+                clickedBtn.className = 'acid-template-btn text-left p-3 text-[11px] border bg-[#FF5F1F] text-black border-white shadow-[2px_2px_0px_#fff]';
+            }
+
+            // If prompt is already generated, hide it and show placeholder to indicate regeneration needed
+            const outputContent = document.getElementById('outputContent');
+            const outputPlaceholder = document.getElementById('outputPlaceholder');
+            const imageGenSection = document.getElementById('imageGenSection');
+
+            if (!outputContent.classList.contains('hidden')) {
+                // Prompt was already generated, reset output to indicate regeneration needed
+                outputContent.classList.add('hidden');
+                outputPlaceholder.classList.remove('hidden');
+                // Also hide image generation section
+                imageGenSection.classList.add('hidden');
+                // Update placeholder text to indicate regeneration needed
+                outputPlaceholder.innerHTML = `
+                    <i class="fas fa-sync text-5xl md:text-6xl mb-4"></i>
+                    <p class="text-[9px] font-black uppercase tracking-widest">Template Changed</p>
+                    <p class="text-[8px] opacity-40 mt-2">Click generate to update prompt</p>
+                `;
+            }
+
+            // Save config after template change
+            saveConfig();
+        }
+
+        function updateInputStyles(theme) {
+            const providerSelect = document.getElementById('providerSelect');
+            const apiKeyInput = document.getElementById('apiKeyInput');
+            const baseUrlInput = document.getElementById('baseUrlInput');
+            const modelNameInput = document.getElementById('modelNameInput');
+
+            if (theme === 'acid') {
+                const acidInputClass = 'w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]';
+                providerSelect.className = acidInputClass;
+                apiKeyInput.className = acidInputClass;
+                baseUrlInput.className = acidInputClass + ' mb-2';
+                modelNameInput.className = acidInputClass;
+            } else if (theme === 'bauhaus') {
+                const bauhausInputClass = 'w-full bg-white border-2 border-black p-2 font-bold outline-none focus:bg-[#0047AB] focus:text-white';
+                providerSelect.className = bauhausInputClass;
+                apiKeyInput.className = bauhausInputClass;
+                baseUrlInput.className = bauhausInputClass + ' mb-2';
+                modelNameInput.className = bauhausInputClass;
+            } else if (theme === 'shanshui') {
+                const shanshuiInputClass = 'w-full bg-white border border-gray-200 p-2 outline-none focus:border-[#0F2E28]';
+                providerSelect.className = shanshuiInputClass;
+                apiKeyInput.className = shanshuiInputClass;
+                baseUrlInput.className = shanshuiInputClass + ' mb-2';
+                modelNameInput.className = shanshuiInputClass;
+            }
+
+            // Update image generation section styles
+            updateImageGenStyles(theme);
+        }
+
+        function updateImageGenStyles(theme) {
+            const imageGenTitle = document.getElementById('imageGenTitle');
+            const imageGenCard = document.getElementById('imageGenCard');
+            const imageSizeSelect = document.getElementById('imageSizeSelect');
+            const aspectRatioSelect = document.getElementById('aspectRatioSelect');
+            const imagePreviewTitle = document.getElementById('imagePreviewTitle');
+            const imagePreviewCard = document.getElementById('imagePreviewCard');
+            const downloadBtn = document.getElementById('downloadBtn');
+
+            if (theme === 'acid') {
+                // Acid theme styles
+                imageGenTitle.className = 'flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-purple-500 pl-2 mt-4 text-[#FF5F1F]';
+                imageGenCard.className = 'acid-card p-3 mt-2';
+                imageSizeSelect.className = 'w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]';
+                aspectRatioSelect.className = 'w-full bg-black/40 border border-[#FF5F1F]/30 p-2 text-[10px] text-orange-50 outline-none focus:border-[#FF5F1F]';
+                imagePreviewTitle.className = 'flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-purple-500 pl-2 text-[#FF5F1F]';
+                imagePreviewCard.className = 'acid-card p-3 mt-2';
+                downloadBtn.className = 'text-[9px] px-3 py-1.5 font-bold flex items-center gap-1 transition-all bg-purple-600 text-white hover:bg-purple-500';
+            } else if (theme === 'bauhaus') {
+                // Bauhaus theme styles
+                imageGenTitle.className = 'flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-4 border-black pl-2 mt-4 text-black';
+                imageGenCard.className = 'bauhaus-card p-3 mt-2';
+                imageSizeSelect.className = 'w-full bg-white border-2 border-black p-2 font-bold outline-none focus:bg-[#0047AB] focus:text-white';
+                aspectRatioSelect.className = 'w-full bg-white border-2 border-black p-2 font-bold outline-none focus:bg-[#0047AB] focus:text-white';
+                imagePreviewTitle.className = 'flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-4 border-black pl-2 text-black';
+                imagePreviewCard.className = 'bauhaus-card p-3 mt-2';
+                downloadBtn.className = 'text-[9px] px-3 py-1.5 font-bold flex items-center gap-1 transition-all bg-black text-white hover:bg-[#0047AB]';
+            } else if (theme === 'shanshui') {
+                // Shanshui theme styles
+                imageGenTitle.className = 'flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-[#0F2E28] pl-2 mt-4 text-[#0F2E28]';
+                imageGenCard.className = 'shanshui-card p-3 mt-2';
+                imageSizeSelect.className = 'w-full bg-white border border-gray-200 p-2 outline-none focus:border-[#0F2E28] text-gray-800';
+                aspectRatioSelect.className = 'w-full bg-white border border-gray-200 p-2 outline-none focus:border-[#0F2E28] text-gray-800';
+                imagePreviewTitle.className = 'flex items-center gap-2 text-xs font-black uppercase tracking-widest border-l-2 border-[#0F2E28] pl-2 text-[#0F2E28]';
+                imagePreviewCard.className = 'shanshui-card p-3 mt-2';
+                downloadBtn.className = 'text-[9px] px-3 py-1.5 font-bold flex items-center gap-1 transition-all bg-[#0F2E28] text-white hover:bg-[#1a4a3d]';
+            }
+        }
+
+        // ==========================================
+        // 🚀 PROMPT GENERATION
+        // ==========================================
+        async function generatePrompt() {
+            // 先保存当前配置，确保用户输入的值不会丢失
+            saveConfig();
+            if (isGenerating) return;
+            
+            const rawInput = document.getElementById('logInput').value.trim();
+            if (!rawInput) {
+                showError('请输入训练日志内容');
+                return;
+            }
+
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            const brandingName = document.getElementById('brandingName').value.trim();
+            const slogans = document.getElementById('slogans').value.trim();
+            const palette = document.getElementById('palette').value.trim();
+            
+            const bauhausNickname = document.getElementById('bauhausNickname').value.trim();
+            const bauhausDate = document.getElementById('bauhausDate').value.trim();
+            const bauhausDuration = document.getElementById('bauhausDuration').value.trim();
+            
+            const shanshuiNickname = document.getElementById('shanshuiNickname').value.trim();
+            const shanshuiDate = document.getElementById('shanshuiDate').value.trim();
+
+            isGenerating = true;
+            updateLoadingState(true);
+
+            try {
+                let finalPrompt = '';
+
+                if (apiKey) {
+                    const provider = document.getElementById('providerSelect').value;
+                    let parsedData;
+
+                    // Use appropriate API based on provider
+                    if (provider === 'openai') {
+                        const baseUrl = document.getElementById('baseUrlInput').value.trim() || 'https://api.openai.com/v1';
+                        const modelName = document.getElementById('modelNameInput').value.trim() || 'gpt-4o-mini';
+                        parsedData = await parseWithOpenAI(rawInput, apiKey, baseUrl, modelName);
+                    } else {
+                        parsedData = await parseWithGemini(rawInput, apiKey);
+                    }
+                    
+                    if (currentTheme === 'acid') {
+                        finalPrompt = generateAcidPrompt(parsedData, brandingName, slogans, palette);
+                    } else if (currentTheme === 'bauhaus') {
+                        finalPrompt = generateBauhausPrompt(parsedData, bauhausNickname || parsedData.nickname, bauhausDate || parsedData.date, bauhausDuration || parsedData.duration);
+                    } else if (currentTheme === 'shanshui') {
+                        finalPrompt = generateShanshuiPrompt(parsedData, shanshuiNickname || '@' + parsedData.nickname, shanshuiDate || parsedData.date);
+                    }
+                } else {
+                    // Manual parsing fallback
+                    const manualData = manualParse(rawInput);
+                    
+                    if (currentTheme === 'acid') {
+                        finalPrompt = generateAcidPrompt(manualData, brandingName || manualData.nickname, slogans, palette);
+                    } else if (currentTheme === 'bauhaus') {
+                        finalPrompt = generateBauhausPrompt(manualData, bauhausNickname || manualData.nickname, bauhausDate || manualData.date, bauhausDuration || manualData.duration);
+                    } else if (currentTheme === 'shanshui') {
+                        finalPrompt = generateShanshuiPrompt(manualData, shanshuiNickname || '@' + manualData.nickname, shanshuiDate || manualData.date);
+                    }
+                }
+
+                showOutput(finalPrompt);
+                document.getElementById('copyBtn').classList.remove('hidden');
+                document.getElementById('copyBtn').classList.add('flex');
+                
+                // Update footer
+                if (currentTheme === 'acid') {
+                    document.getElementById('footerTerminal').textContent = 'TERMINAL: ' + (brandingName || 'ANONYMOUS');
+                }
+                
+                // Scroll to result
+                document.getElementById('result-area').scrollIntoView({ behavior: 'smooth' });
+                
+            } catch (error) {
+                showError('生成失败: ' + error.message);
+            } finally {
+                isGenerating = false;
+                updateLoadingState(false);
+            }
+        }
+
+        async function parseWithGemini(rawInput, apiKey) {
+            const today = new Date();
+            const defaultDate = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+
+            const systemPrompt = `You are a data extractor for a fitness visualization tool.
+Task: Analyze the user's unstructured training log.
+Output: A strict JSON object.
+Schema:
+{
+    "nickname": "User name if mentioned, otherwise empty string",
+    "date": "Date string. If not mentioned in text, use '${defaultDate}' in format YYYY.MM.DD",
+    "duration": "Total time in minutes (number)",
+    "exercises": [
+        {
+            "name": "Exercise name in Chinese",
+            "weight": "Weight if mentioned, otherwise '自重'",
+            "sets": "Number of sets",
+            "reps": "Number of reps or duration"
+        }
+    ]
+}
+Limit exercises to top 6 items. Do not include markdown code blocks, just raw JSON.`;
+
+            // Get API configuration
+            const baseUrl = document.getElementById('baseUrlInput').value.trim();
+            const modelName = document.getElementById('modelNameInput')?.value?.trim() || 'gemini-flash-lite-latest';
+
+            // Build API URL
+            let apiUrl;
+            if (baseUrl) {
+                apiUrl = `${baseUrl}/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            } else {
+                // Default to Google's API
+                apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+            }
+
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ parts: [{ text: rawInput }] }],
+                    systemInstruction: { parts: [{ text: systemPrompt }] },
+                    generationConfig: { responseMimeType: "application/json" }
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const rawJson = data.candidates?.[0]?.content?.parts?.[0]?.text;
+            return JSON.parse(rawJson);
+        }
+
+        async function parseWithOpenAI(rawInput, apiKey, baseUrl, modelName) {
+            const today = new Date();
+            const defaultDate = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+
+            const systemPrompt = `You are a data extractor for a fitness visualization tool.
+Task: Analyze the user's unstructured training log.
+Output: A strict JSON object.
+Schema:
+{
+    "nickname": "User name if mentioned, otherwise empty string",
+    "date": "Date string. If not mentioned in text, use '${defaultDate}' in format YYYY.MM.DD",
+    "duration": "Total time in minutes (number)",
+    "exercises": [
+        {
+            "name": "Exercise name in Chinese",
+            "weight": "Weight if mentioned, otherwise '自重'",
+            "sets": "Number of sets",
+            "reps": "Number of reps or duration"
+        }
+    ]
+}
+Limit exercises to top 6 items. Respond with raw JSON only, no markdown code blocks.`;
+
+            const response = await fetch(`${baseUrl}/chat/completions`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                },
+                body: JSON.stringify({
+                    model: modelName,
+                    messages: [
+                        { role: 'system', content: systemPrompt },
+                        { role: 'user', content: rawInput }
+                    ],
+                    response_format: { type: 'json_object' },
+                    temperature: 0
+                })
+            });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            const rawJson = data.choices?.[0]?.message?.content;
+            return JSON.parse(rawJson);
+        }
+
+        function manualParse(rawInput) {
+            const lines = rawInput.split('\n').filter(line => line.trim());
+            const exercises = [];
+            
+            // Try to extract nickname
+            const nicknameMatch = rawInput.match(/^([^，,]+)/);
+            const nickname = nicknameMatch ? nicknameMatch[1].trim() : '';
+            
+            // Try to extract date
+            const dateMatch = rawInput.match(/(\d{4}年\d{1,2}月\d{1,2}日|\d{4}\/\d{1,2}\/\d{1,2}|今天|昨天)/);
+            const today = new Date();
+            let date = `${today.getFullYear()}.${String(today.getMonth() + 1).padStart(2, '0')}.${String(today.getDate()).padStart(2, '0')}`;
+            
+            if (dateMatch) {
+                const matched = dateMatch[1];
+                if (matched === '今天') {
+                    // Already set
+                } else if (matched.includes('年')) {
+                    const d = new Date(matched.replace('年', '-').replace('月', '-').replace('日', ''));
+                    date = `${d.getFullYear()}.${String(d.getMonth() + 1).padStart(2, '0')}.${String(d.getDate()).padStart(2, '0')}`;
+                }
+            }
+            
+            // Try to extract duration
+            const durationMatch = rawInput.match(/(\d+)\s*分钟|(\d+)\s*min/i);
+            const duration = durationMatch ? parseInt(durationMatch[1] || durationMatch[2]) : 60;
+            
+            // Extract exercises
+            const exerciseRegex = /(\d+)\.?\s*([^\d]+?)(\d*\.?\d*?\s*KG?|自重)?\s*(\d+)\s*组\s*(\d+)\s*(个|次|min|MIN)/g;
+            let match;
+            while ((match = exerciseRegex.exec(rawInput)) !== null && exercises.length < 6) {
+                exercises.push({
+                    name: match[2].trim(),
+                    weight: match[3] ? match[3].trim() : '自重',
+                    sets: match[4],
+                    reps: match[5] + (match[6] || '')
+                });
+            }
+            
+            return { nickname, date, duration, exercises };
+        }
+
+        function generateAcidPrompt(data, brandingName, slogans, palette) {
+            const template = ACID_TEMPLATES[currentAcidTemplate];
+            const nickname = brandingName || data.nickname || 'ANONYMOUS';
+            const workoutList = data.exercises.map(ex => `        - "${ex.name} | ${ex.weight} | ${ex.sets}组 | ${ex.reps}"`).join('\n');
+            
+            return `# SYSTEM ROLE: ACID_POSTER_AI_SYSTEM
+# TASK: 严格按照以下渲染函数逻辑执行，生成一张 3:4 比例的酸性风格海报图片。
+
+// ==========================================
+// 🎨 执行函数: Render_Poster(Final_Data)
+// ==========================================
+
+FUNCTION Render_Poster(Final_Data):
+
+    // [1. 视觉场景构建 (The Scene)] -> 【前置输入：选择模板】
+    SET Scene_Setup:
+        Style           = "${template.style}"
+        Background      = "${template.background}"
+        Texture         = "${template.texture}"
+        Lighting        = "${template.lighting}"
+        Character       = "${template.character}"
+
+    // [2. 数据承载容器 (The Anchor)]
+    SET Data_Block_Container:
+        Object          = "Massive Rectangular Industrial Specification Label (磨砂半透明质感)"
+        Position        = "Diagonal (倾斜 15-25 度) across the main visual anchor"
+        Graphics        = {
+            "Borders": "Black/Yellow diagonal warning hazard stripes (█ ░ █ ░)",
+            "Details": "Micro-typography (TORQUE_CHECK, STABILITY_OK), QR codes, Functional Barcodes",
+            "Texture": "Digital noise particles (░▒▓█)"
+        }
+        Text_Render     = "清楚显示提炼后的训练数据":
+${workoutList}
+
+    // [3. 氛围填充元素 (The Vibe)] -> 【前置输入：手动修改】
+    SET Atmosphere_Elements:
+        Texts_FX        = {
+            "Slogans": "${slogans}",
+            "Glitch": "应用字符位移/重复故障效果 (e.g., L-L-LEG D-DAY)",
+            "Layout": "在画面左右边缘添加垂直排布的条形码 (║█║▌║█║▌│║▌)"
+        }
+        Color_Palette   = "${palette}"
+        Branding        = "Render ${nickname} in Chrome Metallic 3D style (带有流体反光的镀铬质感)"
+        Time_Widget     = "Digital clock box (8-bit style) displaying ${data.duration} MINS / ${data.date}"
+        Industrial_Noise= "随机填充代码: [BATCH_NO: ${data.date.replace(/\./g, '')}-A], [PRESSURE: CRITICAL]"
+
+    // [4. 执行合成]
+    RETURN Image(Combine(Scene_Setup, Data_Block_Container, Atmosphere_Elements))
+
+END FUNCTION
+
+// ==========================================
+📝 最终约束规格 (Final Specs):
+- Ratio: 3:4
+- Format: 图片 (Image)
+- Principle: 严禁精简细节。保持排版破碎感，保持每个文字元素的精准风格和空间位置。
+
+请立即渲染生成。`;
+        }
+
+        function generateBauhausPrompt(data, nickname, date, duration) {
+            const finalNickname = nickname || 'ATHLETE';
+            const finalDate = date || data.date;
+            const finalDuration = duration || data.duration;
+            const matrixLines = data.exercises.map(ex => `            - "${ex.name} · ${ex.sets}组 · ${ex.reps} · ${ex.weight}"`).join('\n');
+            
+            return `# SYSTEM ROLE: BAUHAUS_ATHLETE_VISUAL_SYSTEM
+# TASK: Execute the rendering function below to generate a 3:4 ratio poster with high-level architectural aesthetics and fitness-specific structural hints.
+
+// ==========================================
+// 🏗️ RENDER FUNCTION: Execute_Final_Layout(Data)
+// ==========================================
+
+FUNCTION Execute_Final_Layout(Data):
+
+    // [1. BACKDROP & TEXTURE: Gym-Specific Subtle Cues]
+    SET Background_Environment:
+        Base_Color     = "Warm Architectural Grey (#D1D1D1)"
+        Texture        = "Fine-grain concrete with micro-diamond knurling (Ref: Barbell grip texture)"
+        Grid_Logic     = "Structural engineering grid, 1:10 scale alignment lines"
+        Implicit_Cues  = {
+            "Anatomy": "Ultra-thin biomechanical vector lines and joint pivots indicating force direction",
+            "Hardware": "Vertical scale markings (01-20) on the edges, mimicking weight-stack pin holes",
+            "Depth": "Faint silhouettes of 20KG bumper plates integrated into the background layers"
+        }
+
+    // [2. PRIMARY FOCUS: Visual Anchor (Identity)]
+    SET Branding_Anchor:
+        Text_Content   = "${finalNickname}"
+        Font_Weight    = "Extreme Bold Sans-serif / Swiss Typeface"
+        Position       = "Upper quadrant or Left-aligned Vertical, dominating the visual axis"
+        Styling        = "Mix of solid black fill and thin outline stroke; partially overlapped by a Deep Cobalt Blue (#0047AB) circle"
+
+    // [3. SECONDARY FOCUS: Core Training Matrix (Function)]
+    SET Training_Matrix:
+        Composition    = "Concentrated rectangular block, high negative space surroundings to ensure legibility"
+        Leading        = "Tight / Negative leading (文字块状挤压感)"
+        Font           = "Geometric Heavy Gothic (SimSun/Microsoft Yahei Bold aesthetic)"
+        
+        RENDER_DATA_STRING:
+${matrixLines}
+
+    // [4. TERTIARY ELEMENTS: Decorative Micro-Typography]
+    SET Visual_Nuances:
+        English_Labels = {
+            "Metadata": "BATCH_NO: ${finalDate} / SYSTEM_STATUS: OPTIMIZED",
+            "Parameter": "POSTURE_ALIGNMENT: ACTIVE",
+            "Clock": "Digital LCD-style display: ${finalDuration} MINS"
+        }
+        Accent_Logic   = "Vivid Red (#E31E24) horizontal bars cutting through white space; Golden Yellow (#FFD700) geometric bullet points"
+
+    // [5. COMPOSITION RULES: Squeeze & Release]
+    RETURN Image(
+        Apply_Tension(Branding_Anchor, Training_Matrix) + 
+        Apply_Depth(Background_Environment, Visual_Nuances)
+    )
+
+END FUNCTION
+
+// ==========================================
+📝 FINAL SPECIFICATIONS:
+- Ratio: 3:4
+- Aesthetic: Cold, Precise, Professional.
+- Interaction: All geometric shapes must intersect or overlap with text to create spatial tension.
+- Content: NO English prefixes for Chinese training actions. Keep them clean and bold.
+
+IMMEDIATE RENDERING REQUESTED.`;
+        }
+
+        function generateShanshuiPrompt(data, nickname, date) {
+            const finalNickname = nickname || '@user';
+            const finalDate = date || data.date;
+            const exerciseLines = data.exercises.map((ex, index) => {
+                const lineNum = index + 1;
+                const content = `"${ex.name}     ${ex.weight} · ${ex.sets}组 · ${ex.reps}"`;
+                return `            Line_${lineNum}: ${content.padEnd(50)} // Center`;
+            }).join('\n');
+            
+            return `# SYSTEM ROLE: SHANSHUI_ATHLETE_V1_FRAMED (V1画风·竖线框定系统)
+# TASK: Generate a 3:4 fitness poster with V1 aesthetics, CENTER-ALIGNED typography framed by vertical lines, and specific spatial depth instructions.
+
+// ==========================================
+// 🎨 RENDER FUNCTION: Execute_Framed_Jade_Layout(Data)
+// ==========================================
+
+FUNCTION Execute_Framed_Jade_Layout(Data):
+
+    // [1. VISUAL FOUNDATION: STRICT V1 AESTHETICS]
+    SET Background_Environment:
+        Architecture   = "Towering ancient pavilions with Blue-White Jade walls (蓝白玉墙). Texture is cold, hard, wet stone, emerging from mist."
+        Nature_Scene   = "Lush pine trees surrounding the water. Wet grasslands. White sheep walking in the distance."
+        Atmosphere     = "White Dew (白露) Season. Fine, vertical rain streaks (white lines) creating a rhythmic screen over the whole image."
+        Style_Lock     = "Green Ink Painting Style (青绿山水) but with 8K Resolution and delicate brushstrokes. Aerial Perspective."
+
+    // [2. TYPOGRAPHY: CENTERED WITH VERTICAL FRAMES]
+    SET Training_Matrix:
+        Composition    = "Strict Center Alignment (居中对齐)."
+        Decoration     = "Two simple, thin vertical lines (竖线) framing the text block on the Left and Right sides. No horizontal lines."
+        Spacing        = "Generous Leading. The text floats in the center."
+        
+        Font_Style     = {
+            "Chinese": "Slender Songti (Thin Serif) - Sharp, elegant.",
+            "Numbers": "Modern Geometric Sans - Clean."
+        }
+        
+        Color_Logic    = "Deep Ink Green (#0F2E28). High contrast against the pale jade background."
+
+        // DATA CONTENT (Updated Log):
+        RENDER_DATA_FLOW:
+${exerciseLines}
+
+    // [3. FOREGROUND INTERACTION: SINGLE RANDOM ELEMENT]
+    SET Foreground_Occluder = RANDOMLY_SELECT_ONE_FROM:
+        - OPTION_A (Pine Branch / 松枝): "A realistic pine branch extending from the side, passing *between* line 2 and 3."
+        - OPTION_B (White Crane / 白鹤): "A white crane flying upwards, its wingtip physically covering a small part of the text block."
+        - OPTION_C (Flowing Mist / 流云): "A wisp of white mist drifting horizontally *in front of* the text list."
+
+    // [4. IDENTITY & DECORATION]
+    SET UI_Details:
+        User_ID    = "${finalNickname}" (Centered Top)
+        Time_Tag   = "${data.duration} MINS" (Centered Bottom)
+        Date_Stamp = "Cinnabar Red (朱砂) Seal Chop containing '${finalDate}'" (Bottom corner)
+
+    // [5. COMPOSITION ASSEMBLY & MANDATORY INSTRUCTION]
+    RETURN Image(
+        Layer_1_V1_Background(Background_Environment) + 
+        Layer_2_Framed_Typography(Training_Matrix) + 
+        Layer_3_Foreground_Single_Element(Foreground_Occluder) + 
+        Layer_4_Rain_Filter(Atmosphere) +
+        Process_Rule("文字需要和背影有交错重叠的空间感") 
+    )
+
+END FUNCTION
+
+// ==========================================
+📝 FINAL PROMPT INSTRUCTIONS:
+- **Visuals**: STRICTLY "Blue-white Jade Walls", "Sheep", "Pine Trees", "Rain".
+- **Layout**: "Center Aligned" with "Vertical Side Lines" (两边竖线).
+- **Spatial Logic**: "文字需要和背影有交错重叠的空间感" (Ensure text layers interact deeply with the background/foreground, not just floating on top).
+
+IMMEDIATE RENDERING REQUESTED.`;
+        }
+
+        // ==========================================
+        // 📤 UI HELPERS
+        // ==========================================
+        function showError(message) {
+            document.getElementById('outputPlaceholder').classList.add('hidden');
+            document.getElementById('outputContent').classList.add('hidden');
+            const errorMsg = document.getElementById('errorMsg');
+            errorMsg.classList.remove('hidden');
+            errorMsg.textContent = message;
+        }
+
+        function updateLoadingState(loading) {
+            const btn = document.getElementById('generateBtn');
+            const btnText = document.getElementById('generateBtnText');
+            
+            if (loading) {
+                btn.disabled = true;
+                btn.classList.add('opacity-50', 'cursor-not-allowed');
+                btnText.textContent = 'PROCESSING...';
+            } else {
+                btn.disabled = false;
+                btn.classList.remove('opacity-50', 'cursor-not-allowed');
+                btnText.textContent = currentTheme === 'shanshui' ? '生成 Prompt' : 'GENERATE_PROMPT';
+            }
+        }
+
+        function copyToClipboard() {
+            const outputContent = document.getElementById('outputContent');
+            outputContent.select();
+
+            try {
+                document.execCommand('copy');
+                const copyBtn = document.getElementById('copyBtn');
+                const copyBtnText = document.getElementById('copyBtnText');
+                copyBtnText.textContent = '已复制';
+                copyBtn.classList.add('bg-green-600', 'text-white');
+                setTimeout(() => {
+                    copyBtnText.textContent = '复制指令';
+                    copyBtn.classList.remove('bg-green-600', 'text-white');
+                }, 2000);
+            } catch (err) {
+                alert('复制失败，请手动复制');
+            }
+        }
+
+        // ==========================================
+        // 🖼️ IMAGE GENERATION
+        // ==========================================
+        let currentGeneratedImageData = null;
+
+        function showOutput(content) {
+            document.getElementById('outputPlaceholder').classList.add('hidden');
+            document.getElementById('errorMsg').classList.add('hidden');
+            const outputContent = document.getElementById('outputContent');
+            outputContent.classList.remove('hidden');
+            outputContent.value = content;
+
+            // Show image generation section
+            document.getElementById('imageGenSection').classList.remove('hidden');
+        }
+
+        async function generateImage() {
+            // 先保存当前配置，确保用户输入的值不会丢失
+            saveConfig();
+
+            const prompt = document.getElementById('outputContent').value;
+            if (!prompt) {
+                showImageError('请先生成提示词');
+                return;
+            }
+
+            const apiKey = document.getElementById('apiKeyInput').value.trim();
+            if (!apiKey) {
+                showImageError('请先配置 API Key');
+                return;
+            }
+
+            const imageSize = document.getElementById('imageSizeSelect').value;
+            const aspectRatio = document.getElementById('aspectRatioSelect').value;
+
+            // Show loading state
+            const previewSection = document.getElementById('imagePreviewSection');
+            const previewContainer = document.getElementById('imagePreviewContainer');
+            const loadingDiv = document.getElementById('imageLoading');
+            const errorDiv = document.getElementById('imageError');
+            const generateBtn = document.getElementById('generateImageBtn');
+            const btnText = document.getElementById('generateImageBtnText');
+
+            previewSection.classList.remove('hidden');
+            previewContainer.classList.add('hidden');
+            loadingDiv.classList.remove('hidden');
+            errorDiv.classList.add('hidden');
+            generateBtn.disabled = true;
+            btnText.textContent = '生成中...';
+
+            try {
+                // Build image config (only include aspectRatio if specified)
+                const imageConfig = {
+                    imageSize: imageSize
+                };
+                if (aspectRatio) {
+                    imageConfig.aspectRatio = aspectRatio;
+                }
+
+                // Get API configuration
+                let baseUrl = document.getElementById('baseUrlInput').value.trim();
+                const imageModel = document.getElementById('imageModelInput')?.value?.trim() || 'gemini-3.1-flash-image-preview';
+
+                // Determine API format based on model type
+                const isGeminiModel = imageModel.toLowerCase().includes('gemini') || imageModel.includes('-');
+                const isDalleModel = imageModel.toLowerCase().includes('dall-e') || imageModel.toLowerCase().includes('dalle');
+
+                let apiUrl;
+                let headers = {
+                    'Content-Type': 'application/json'
+                };
+
+                if (isGeminiModel && !isDalleModel) {
+                    // Gemini API format (for Google API or DMXAPI)
+                    if (baseUrl) {
+                        // Remove trailing slash from base URL
+                        baseUrl = baseUrl.replace(/\/$/, '');
+
+                        // Check if base URL already contains the model path
+                        if (baseUrl.includes('/v1beta/models/') || baseUrl.includes(':generateContent')) {
+                            // Base URL is already a full endpoint
+                            apiUrl = baseUrl;
+                        } else if (baseUrl.endsWith('/v1beta') || baseUrl.endsWith('/v1')) {
+                            // Base URL ends with version path, append model path
+                            apiUrl = `${baseUrl}/models/${imageModel}:generateContent`;
+                        } else {
+                            // Base URL is domain only, append full path
+                            apiUrl = `${baseUrl}/v1beta/models/${imageModel}:generateContent`;
+                        }
+                    } else {
+                        // Google's native API - key in URL
+                        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`;
+                    }
+                    headers['x-goog-api-key'] = apiKey;
+                } else if (isDalleModel) {
+                    // DALL-E / OpenAI format
+                    if (baseUrl) {
+                        baseUrl = baseUrl.replace(/\/$/, '');
+                        if (baseUrl.endsWith('/images/generations')) {
+                            apiUrl = baseUrl;
+                        } else if (baseUrl.endsWith('/v1')) {
+                            apiUrl = `${baseUrl}/images/generations`;
+                        } else {
+                            apiUrl = `${baseUrl}/v1/images/generations`;
+                        }
+                    } else {
+                        apiUrl = `https://api.openai.com/v1/images/generations`;
+                    }
+                    headers['Authorization'] = `Bearer ${apiKey}`;
+                } else {
+                    // Default to Gemini format for unknown models
+                    if (baseUrl) {
+                        baseUrl = baseUrl.replace(/\/$/, '');
+                        apiUrl = `${baseUrl}/v1beta/models/${imageModel}:generateContent`;
+                    } else {
+                        apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${imageModel}:generateContent?key=${apiKey}`;
+                    }
+                    headers['x-goog-api-key'] = apiKey;
+                }
+
+                const response = await fetch(apiUrl, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify({
+                        contents: [{
+                            parts: [{ text: prompt }]
+                        }],
+                        generationConfig: {
+                            responseModalities: ['IMAGE'],
+                            imageConfig: imageConfig
+                        }
+                    })
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.error?.message || `HTTP ${response.status}`);
+                }
+
+                const data = await response.json();
+                const parts = data.candidates?.[0]?.content?.parts || [];
+
+                for (const part of parts) {
+                    if (part.inlineData?.data) {
+                        const base64Data = part.inlineData.data;
+                        const imageSrc = `data:image/png;base64,${base64Data}`;
+
+                        // Store image data for download
+                        currentGeneratedImageData = base64Data;
+
+                        // Show image
+                        const generatedImage = document.getElementById('generatedImage');
+                        generatedImage.src = imageSrc;
+
+                        loadingDiv.classList.add('hidden');
+                        previewContainer.classList.remove('hidden');
+
+                        // Update modal image
+                        document.getElementById('modalImage').src = imageSrc;
+
+                        break;
+                    }
+                }
+            } catch (error) {
+                showImageError('生成失败: ' + error.message);
+                loadingDiv.classList.add('hidden');
+            } finally {
+                generateBtn.disabled = false;
+                btnText.textContent = '生成图片';
+            }
+        }
+
+        function showImageError(message) {
+            const previewSection = document.getElementById('imagePreviewSection');
+            const errorDiv = document.getElementById('imageError');
+
+            previewSection.classList.remove('hidden');
+            errorDiv.classList.remove('hidden');
+            errorDiv.textContent = message;
+        }
+
+        function openImageModal() {
+            if (!currentGeneratedImageData) return;
+            document.getElementById('imageModal').classList.add('active');
+            document.body.style.overflow = 'hidden';
+        }
+
+        function closeImageModal(event) {
+            event.stopPropagation();
+            document.getElementById('imageModal').classList.remove('active');
+            document.body.style.overflow = '';
+        }
+
+        function downloadImage() {
+            if (!currentGeneratedImageData) return;
+
+            const link = document.createElement('a');
+            link.href = `data:image/png;base64,${currentGeneratedImageData}`;
+            link.download = `poster_${Date.now()}.png`;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+
+        // ==========================================
+        // 🚀 INITIALIZATION
+        // ==========================================
+        // Load saved config first
+        const savedConfig = loadConfig();
+        if (savedConfig) {
+            applyConfig(savedConfig);
+        } else {
+            // Initialize with Acid theme if no saved config
+            setTheme('acid');
+            // Set initial Acid template selection
+            setAcidTemplate('Industrial_Dark');
+        }
+    </script>
+</body>
+</html>

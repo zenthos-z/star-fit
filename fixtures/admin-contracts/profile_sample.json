@@ -1,0 +1,23 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "userId": "test20260115",
+  "status": 200,
+  "json": {
+    "user_id": "test20260115",
+    "fitness_level": "beginner",
+    "red_flags": [],
+    "updated_at": 1768563106544,
+    "modified_by": "system",
+    "basic_info": {},
+    "preferences": {},
+    "physiological": {},
+    "load_anchors": {},
+    "psychological": {},
+    "tags_json": "[\"exercise:二头弯举\",\"exercise:划船机\",\"exercise:卷腹\"]",
+    "summary": "",
+    "protocol_version": "2.0.0",
+    "version": 1,
+    "metadata_json": null
+  }
+}

@@ -1,0 +1,339 @@
+:root {
+  /* Starfit App Colors */
+  --star-white: #FAFAFA;
+  --star-gray: #F4F4F5;
+  --star-dark: #18181B;
+  --star-accent: #3B82F6;
+  --star-accent-dark: #2563EB;
+  --star-border: #E4E4E7;
+
+  /* VitePress Theme Overrides */
+  --vp-c-brand-1: var(--star-accent);
+  --vp-c-brand-2: var(--star-accent-dark);
+  --vp-c-brand-3: #1D4ED8;
+
+  --vp-c-bg: var(--star-white);
+  --vp-c-bg-alt: var(--star-gray);
+  --vp-c-bg-soft: var(--star-gray);
+
+  --vp-c-text-1: var(--star-dark);
+  --vp-c-text-2: #374151; /* gray-700 */
+  --vp-c-text-3: #6B7280; /* gray-500 */
+
+  --vp-c-border: var(--star-border);
+  --vp-c-divider: var(--star-border);
+  --vp-c-gutter: var(--star-border);
+
+  /* Typography */
+  --vp-font-family-base: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  
+  /* Hero */
+  --vp-home-hero-name-color: transparent;
+  --vp-home-hero-name-background: -webkit-linear-gradient(120deg, var(--star-accent) 30%, var(--star-dark));
+  
+  /* Code Blocks */
+  --vp-code-block-bg: #F4F4F5;
+  --vp-code-fg: #374151;
+}
+
+/* Dark Mode Overrides */
+.dark {
+  --vp-c-bg: #18181B;
+  --vp-c-bg-alt: #27272A;
+  --vp-c-bg-soft: #27272A; /* Match alt for consistency */
+  --vp-c-text-1: #FAFAFA;
+  --vp-c-text-2: #E4E4E7;
+  --vp-c-text-3: #A1A1AA; /* lighter gray for dark mode */
+  --vp-c-border: #3F3F46; /* zinc-700 */
+  --vp-c-divider: #3F3F46;
+  
+  --vp-code-block-bg: #27272A;
+  --vp-code-fg: #E4E4E7;
+  
+  /* Re-map star variables for dark context if needed in custom classes */
+  --star-border: #3F3F46;
+  --star-gray: #27272A;
+}
+
+/* Content Beautification (Matching App Tutorial Style) */
+.vp-doc h1, 
+.vp-doc h2, 
+.vp-doc h3, 
+.vp-doc h4, 
+.vp-doc h5, 
+.vp-doc h6 {
+  font-weight: 700;
+  color: var(--vp-c-text-1);
+}
+
+.vp-doc h1 { font-size: 2.25rem; margin-top: 1.5em; margin-bottom: 1em; letter-spacing: -0.02em; }
+.vp-doc h2 { font-size: 1.75rem; margin-top: 1.5em; margin-bottom: 0.75em; border-bottom: none; letter-spacing: -0.01em; }
+.vp-doc h3 { font-size: 1.35rem; margin-top: 1.5em; margin-bottom: 0.75em; }
+
+.vp-doc p {
+  line-height: 1.75;
+  margin-bottom: 1.2em;
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc li {
+  line-height: 1.6;
+  margin-bottom: 0.5em;
+}
+
+/* Blockquotes */
+.vp-doc blockquote {
+  border-left: 4px solid var(--star-accent);
+  background-color: rgba(59, 130, 246, 0.05); /* Tinted background */
+  padding: 1rem 1.25rem;
+  margin: 1.5rem 0;
+  border-radius: 0 0.5rem 0.5rem 0;
+  color: var(--vp-c-text-2);
+  font-style: normal; /* Override italic */
+}
+.dark .vp-doc blockquote {
+  background-color: rgba(59, 130, 246, 0.15); /* Slightly darker tint for dark mode */
+  color: var(--vp-c-text-2);
+}
+
+.vp-doc blockquote p {
+  margin: 0;
+}
+
+/* Tables */
+.table-wrapper {
+  overflow-x: auto;
+  margin: 1.5rem 0;
+  border-radius: 0.75rem;
+  box-shadow: 0 0 0 1px var(--star-border);
+  background-color: #ffffff;
+}
+
+.dark .table-wrapper {
+  background-color: var(--vp-c-bg-alt); /* Dark background for table wrapper */
+  box-shadow: 0 0 0 1px var(--vp-c-border);
+}
+
+.vp-doc table {
+  width: 100%;
+  border-collapse: collapse;
+  display: table; /* Reset to table behavior */
+  margin: 0; /* Margin handled by wrapper */
+}
+
+.vp-doc thead {
+  background-color: var(--star-gray);
+}
+.dark .vp-doc thead {
+  background-color: #3F3F46; /* Darker header background */
+}
+
+.vp-doc th {
+  padding: 0.75rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--vp-c-text-3);
+  border: none;
+  border-bottom: 1px solid var(--star-border);
+  white-space: nowrap; /* Prevent headers from breaking awkwardly */
+}
+
+.vp-doc td {
+  padding: 0.85rem 1rem;
+  font-size: 0.95rem;
+  color: var(--vp-c-text-2);
+  border: none;
+  border-bottom: 1px solid var(--star-border);
+}
+
+.vp-doc tr:last-child td {
+  border-bottom: none;
+}
+
+.vp-doc tr:nth-child(even) {
+  background-color: #fafafa;
+}
+.dark .vp-doc tr:nth-child(even) {
+  background-color: rgba(255, 255, 255, 0.03); /* Subtle striping for dark mode */
+}
+
+/* Mermaid Enhancements */
+.mermaid {
+  cursor: zoom-in;
+  transition: opacity 0.2s;
+  display: flex;
+  justify-content: center;
+  margin: 2rem 0;
+}
+
+.mermaid:hover {
+  opacity: 0.9;
+}
+
+/* Mermaid Dark Mode Optimization */
+/* Instead of inverting colors (which can be unreliable), we wrap the diagram
+   in a white card-like container to preserve its original readability. */
+.dark .mermaid {
+  background-color: #fff;
+  padding: 1.5rem;
+  border-radius: 8px;
+  filter: none; /* Reset filter */
+}
+
+/* Fix text visibility issues where dark mode text colors bleed into the white card */
+.dark .mermaid svg,
+.dark .mermaid-lightbox-content svg {
+  color: #333 !important; /* Force base text color to dark */
+}
+
+/* Force all text elements to be strictly black (#000) */
+.dark .mermaid text,
+.dark .mermaid tspan,
+.dark .mermaid .nodeLabel,
+.dark .mermaid .edgeLabel,
+.dark .mermaid .cluster-label,
+.dark .mermaid .label,
+.dark .mermaid-lightbox-content text,
+.dark .mermaid-lightbox-content tspan,
+.dark .mermaid div,
+.dark .mermaid span,
+.dark .mermaid p,
+.dark .mermaid foreignObject {
+  fill: #000000 !important;
+  color: #000000 !important;
+  stroke: none !important;
+  font-weight: 600 !important; /* Increase weight for better readability */
+}
+
+/* Force shapes (nodes, actors, boxes) to have light backgrounds and dark borders */
+.dark .mermaid rect,
+.dark .mermaid circle,
+.dark .mermaid ellipse,
+.dark .mermaid polygon,
+.dark .mermaid-lightbox-content rect,
+.dark .mermaid-lightbox-content circle,
+.dark .mermaid-lightbox-content ellipse,
+.dark .mermaid-lightbox-content polygon {
+  fill: #F4F4F5 !important; /* Light gray fill */
+  stroke: #333 !important;  /* Dark border */
+  stroke-width: 1.5px !important;
+}
+
+/* Specific fix for Sequence Diagram Actors */
+.dark .mermaid .actor,
+.dark .mermaid-lightbox-content .actor {
+  fill: #E4E4E7 !important;
+  stroke: #333 !important;
+}
+
+/* Specific fix for Sequence Diagram Notes */
+.dark .mermaid .note,
+.dark .mermaid-lightbox-content .note {
+  fill: #FFFBEB !important; /* Light yellow for notes */
+  stroke: #D97706 !important; /* Amber border */
+}
+
+/* Fix lines and arrows */
+.dark .mermaid line,
+.dark .mermaid path,
+.dark .mermaid-lightbox-content line,
+.dark .mermaid-lightbox-content path {
+  stroke: #333 !important;
+}
+
+/* Exception: Text inside nodes should remain stroke-less (handled by text rule above) */
+/* Exception: Arrowheads (markers) usually inherit stroke/fill, but paths need stroke */
+
+/* Lightbox Styles */
+.mermaid-lightbox-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background-color: rgba(255, 255, 255, 0.95);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: zoom-out;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.dark .mermaid-lightbox-overlay {
+  background-color: rgba(0, 0, 0, 0.95); /* Dark background for lightbox in dark mode */
+}
+
+.mermaid-lightbox-overlay.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.mermaid-lightbox-content {
+  position: relative;
+  width: 90vw;
+  height: 90vh;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.mermaid-lightbox-content svg {
+  max-width: 100%;
+  max-height: 100%;
+  transition: transform 0.1s ease-out;
+  transform-origin: center center;
+  cursor: grab;
+}
+
+.dark .mermaid-lightbox-content svg {
+  /* In lightbox, we also need a white background since the overlay is dark */
+  background-color: #fff;
+  padding: 2rem; /* Add padding inside lightbox */
+  border-radius: 8px;
+  filter: none;
+}
+
+.mermaid-lightbox-content svg:active {
+  cursor: grabbing;
+}
+
+.mermaid-lightbox-close {
+  position: absolute;
+  top: 20px;
+  right: 20px;
+  width: 40px;
+  height: 40px;
+  background: white;
+  border-radius: 50%;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 2001;
+  color: var(--star-dark);
+  font-size: 24px;
+}
+
+.dark .mermaid-lightbox-close {
+  background: #333;
+  color: white;
+}
+
+.mermaid-lightbox-hint {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(0,0,0,0.7);
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 14px;
+  pointer-events: none;
+}

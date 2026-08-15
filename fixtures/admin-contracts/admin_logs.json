@@ -1,0 +1,12 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "status": 200,
+  "json": [
+    {
+      "timestamp": "2026-01-16T12:54:57.168Z",
+      "level": "info",
+      "message": "No logs available"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "generated_at": "2026-01-16T14:00:00.000Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "status": 200,
+  "json": {
+    "protocol_version": "2.0.0",
+    "features": {
+      "dashboard": {
+        "health": true,
+        "logs": true,
+        "quick_actions": true
+      },
+      "settings": {
+        "proxy": true,
+        "ai_config": true
+      },
+      "users": {
+        "list": true,
+        "profile": true,
+        "stats": true,
+        "delete_user": true,
+        "delete_session": true,
+        "health_integrations": false
+      },
+      "content": {
+        "exercises": true,
+        "videos_upload": true,
+        "media_upload": true
+      }
+    }
+  }
+}

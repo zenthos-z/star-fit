@@ -1,0 +1,801 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Starfit 端口管理器 GUI</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700&display=swap');
+
+        body {
+            font-family: 'Noto Sans SC', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background: linear-gradient(135deg, #0F172A 0%, #1E3A8A 50%, #0F172A 100%);
+            min-height: 100vh;
+        }
+
+        .glass-card {
+            background: rgba(30, 41, 59, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+        }
+
+        .port-card {
+            transition: all 0.2s ease;
+        }
+
+        .port-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.4);
+        }
+
+        .status-running {
+            color: #10B981;
+            text-shadow: 0 0 10px rgba(16, 185, 129, 0.5);
+        }
+
+        .status-idle {
+            color: #64748B;
+        }
+
+        .status-waiting {
+            color: #F59E0B;
+        }
+
+        .status-protected {
+            color: #EF4444;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #3B82F6, #2563EB);
+            transition: all 0.2s ease;
+        }
+
+        .btn-primary:hover {
+            background: linear-gradient(135deg, #2563EB, #1D4ED8);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+        }
+
+        .btn-danger {
+            background: linear-gradient(135deg, #EF4444, #DC2626);
+            transition: all 0.2s ease;
+        }
+
+        .btn-danger:hover {
+            background: linear-gradient(135deg, #DC2626, #B91C1C);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(220, 38, 38, 0.4);
+        }
+
+        .btn-secondary {
+            background: rgba(100, 116, 139, 0.2);
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .btn-secondary:hover {
+            background: rgba(100, 116, 139, 0.3);
+            border-color: rgba(100, 116, 139, 0.5);
+        }
+
+        .toast {
+            animation: slideIn 0.3s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(100%);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .pulse-dot {
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+
+        .spinner {
+            border: 2px solid rgba(255, 255, 255, 0.1);
+            border-top-color: #3B82F6;
+            border-radius: 50%;
+            width: 16px;
+            height: 16px;
+            animation: spin 0.8s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .modal-overlay {
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(4px);
+        }
+
+        .command-box {
+            background: #0F172A;
+            border: 1px solid rgba(100, 116, 139, 0.3);
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', monospace;
+        }
+
+        /* Scrollbar styling */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(30, 41, 59, 0.5);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.5);
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(100, 116, 139, 0.7);
+        }
+    </style>
+</head>
+<body class="text-white">
+    <div id="app" class="min-h-screen p-4 md:p-8">
+        <!-- Header -->
+        <header class="max-w-4xl mx-auto mb-8">
+            <div class="glass-card rounded-2xl p-6 flex items-center justify-between">
+                <div>
+                    <h1 class="text-2xl font-bold flex items-center gap-3">
+                        <i class="fas fa-network-wired text-blue-400"></i>
+                        Starfit 端口管理器
+                    </h1>
+                    <p class="text-slate-400 text-sm mt-1">可视化项目开发服务端口管理工具</p>
+                </div>
+                <div class="flex items-center gap-3">
+                    <div id="autoRefreshToggle" class="flex items-center gap-2 cursor-pointer btn-secondary rounded-lg px-4 py-2">
+                        <i id="autoRefreshIcon" class="fas fa-sync-alt text-slate-400"></i>
+                        <span id="autoRefreshText" class="text-sm text-slate-400">自动刷新: 关</span>
+                    </div>
+                    <button onclick="refreshPorts()" class="btn-primary rounded-lg px-5 py-2 font-medium flex items-center gap-2">
+                        <i class="fas fa-redo-alt"></i>
+                        <span id="refreshText">刷新</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="max-w-4xl mx-auto">
+            <!-- Port Cards Grid -->
+            <div id="portCards" class="grid gap-4">
+                <!-- Port cards will be dynamically inserted here -->
+                <div class="glass-card rounded-xl p-8 text-center text-slate-400">
+                    <div class="spinner mx-auto mb-4"></div>
+                    <p>正在加载端口状态...</p>
+                </div>
+            </div>
+
+            <!-- Custom Port Section -->
+            <div class="glass-card rounded-xl p-6 mt-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i class="fas fa-search text-blue-400"></i>
+                    自定义端口查询
+                </h3>
+                <div class="flex gap-3">
+                    <input
+                        type="number"
+                        id="customPortInput"
+                        placeholder="输入端口号 (如: 3000)"
+                        class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-blue-500 transition-colors"
+                        min="1"
+                        max="65535"
+                    >
+                    <button onclick="checkCustomPort()" class="btn-secondary rounded-lg px-6 py-3 font-medium">
+                        <i class="fas fa-search mr-2"></i>检测
+                    </button>
+                </div>
+                <div id="customPortResult" class="mt-4 hidden">
+                    <!-- Custom port result will be shown here -->
+                </div>
+            </div>
+
+            <!-- Quick Commands Section -->
+            <div class="glass-card rounded-xl p-6 mt-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i class="fas fa-terminal text-green-400"></i>
+                    常用启动命令
+                </h3>
+                <div class="grid md:grid-cols-2 gap-3">
+                    <button onclick="showCommand('frontend')" class="btn-secondary rounded-lg px-4 py-3 text-left hover:bg-slate-700/30">
+                        <i class="fas fa-desktop text-blue-400 mr-2"></i>
+                        <span class="font-medium">前端 Vite</span>
+                        <span class="text-slate-500 text-sm block mt-1">npm run dev</span>
+                    </button>
+                    <button onclick="showCommand('backend')" class="btn-secondary rounded-lg px-4 py-3 text-left hover:bg-slate-700/30">
+                        <i class="fas fa-server text-green-400 mr-2"></i>
+                        <span class="font-medium">后端 API</span>
+                        <span class="text-slate-500 text-sm block mt-1">cd backend && npm run dev</span>
+                    </button>
+                    <button onclick="showCommand('langgraph')" class="btn-secondary rounded-lg px-4 py-3 text-left hover:bg-slate-700/30">
+                        <i class="fas fa-project-diagram text-purple-400 mr-2"></i>
+                        <span class="font-medium">LangGraph Studio</span>
+                        <span class="text-slate-500 text-sm block mt-1">cd backend && npm run studio</span>
+                    </button>
+                    <button onclick="showCommand('docs')" class="btn-secondary rounded-lg px-4 py-3 text-left hover:bg-slate-700/30">
+                        <i class="fas fa-book text-yellow-400 mr-2"></i>
+                        <span class="font-medium">Docs 文档站</span>
+                        <span class="text-slate-500 text-sm block mt-1">npm run docs:dev</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Command Execution Section -->
+            <div class="glass-card rounded-xl p-6 mt-6">
+                <h3 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                    <i class="fas fa-code text-orange-400"></i>
+                    执行系统命令
+                </h3>
+                <p class="text-slate-400 text-sm mb-4">
+                    <i class="fas fa-exclamation-triangle text-yellow-500 mr-1"></i>
+                    警告：此功能会直接在系统执行命令，请谨慎使用
+                </p>
+                <div class="flex gap-3 mb-3">
+                    <input
+                        type="text"
+                        id="commandInput"
+                        placeholder="输入命令 (如: netstat -ano | findstr :3000)"
+                        class="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-4 py-3 focus:outline-none focus:border-orange-500 transition-colors font-mono text-sm"
+                    >
+                    <button onclick="executeCommandInput()" class="btn-primary rounded-lg px-6 py-3 font-medium">
+                        <i class="fas fa-play mr-2"></i>执行
+                    </button>
+                </div>
+                <div class="flex gap-2 flex-wrap">
+                    <button onclick="setQuickCommand('netstat -ano | findstr :43111')" class="text-xs bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                        检查后端端口
+                    </button>
+                    <button onclick="setQuickCommand('netstat -ano | findstr :43112')" class="text-xs bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                        检查前端端口
+                    </button>
+                    <button onclick="setQuickCommand('tasklist | findstr node')" class="text-xs bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 hover:bg-slate-700/50 transition-colors">
+                        查找 node 进程
+                    </button>
+                </div>
+                <div id="commandResult" class="mt-4 hidden">
+                    <div class="bg-slate-900 rounded-lg p-4 border border-slate-700">
+                        <div class="flex items-center justify-between mb-2">
+                            <span class="text-sm text-slate-400">执行结果</span>
+                            <button onclick="document.getElementById('commandResult').classList.add('hidden')" class="text-slate-500 hover:text-white transition-colors">
+                                <i class="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <pre id="commandOutput" class="text-sm text-green-400 font-mono whitespace-pre-wrap max-h-64 overflow-y-auto"></pre>
+                    </div>
+                </div>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="max-w-4xl mx-auto mt-8 text-center text-slate-500 text-sm">
+            <p>端口管理器 GUI v2.0.0 | 支持命令执行 | 仅用于开发环境</p>
+        </footer>
+    </div>
+
+    <!-- Command Modal -->
+    <div id="commandModal" class="fixed inset-0 modal-overlay hidden items-center justify-center z-50 p-4">
+        <div class="glass-card rounded-2xl p-6 max-w-lg w-full">
+            <div class="flex items-center justify-between mb-4">
+                <h3 id="commandModalTitle" class="text-lg font-semibold">启动命令</h3>
+                <button onclick="closeCommandModal()" class="text-slate-400 hover:text-white transition-colors">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            <div class="command-box rounded-lg p-4 mb-4">
+                <code id="commandModalContent" class="text-green-400 text-sm break-all"></code>
+            </div>
+            <p class="text-slate-400 text-sm mb-4">
+                <i class="fas fa-info-circle mr-1"></i>
+                在终端中执行此命令来启动服务
+            </p>
+            <button onclick="copyCommand()" class="btn-primary w-full rounded-lg py-3 font-medium">
+                <i class="fas fa-copy mr-2"></i>复制命令
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Container -->
+    <div id="toastContainer" class="fixed top-4 right-4 z-50 space-y-2"></div>
+
+    <script>
+        // Configuration - Will be auto-detected or use standalone server
+        const API_BASE = 'http://localhost:43113'; // Standalone server
+        const BACKUP_API_BASE = 'http://localhost:43111'; // Main backend
+        const AUTO_REFRESH_INTERVAL = 3000; // 3 seconds
+
+        // State
+        let portData = null;
+        let autoRefreshTimer = null;
+        let isAutoRefreshEnabled = false;
+        let isRefreshing = false;
+        let currentApiBase = API_BASE;
+
+        // Port icons and colors
+        const PORT_CONFIG = {
+            frontend: { icon: 'fa-desktop', color: 'blue', name: '前端 Vite' },
+            backend: { icon: 'fa-server', color: 'green', name: '后端 API' },
+            langgraph: { icon: 'fa-project-diagram', color: 'purple', name: 'LangGraph Studio' },
+            postgres: { icon: 'fa-database', color: 'cyan', name: 'PostgreSQL' },
+            docs: { icon: 'fa-book', color: 'yellow', name: 'Docs 文档站' },
+        };
+
+        // Commands
+        const COMMANDS = {
+            frontend: 'npm run dev',
+            backend: 'cd backend && npm run dev',
+            langgraph: 'cd backend && npm run studio',
+            docs: 'npm run docs:dev',
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            await detectApiServer();
+            refreshPorts();
+            setupAutoRefreshToggle();
+            setupCommandInput();
+        });
+
+        // Detect which API server to use
+        async function detectApiServer() {
+            // Try standalone server first
+            try {
+                const response = await fetch(`${API_BASE}/api/info`, { method: 'GET' });
+                if (response.ok) {
+                    currentApiBase = API_BASE;
+                    console.log('[PortManager] Using standalone server:', API_BASE);
+                    return;
+                }
+            } catch (e) {
+                console.log('[PortManager] Standalone server not available, trying main backend...');
+            }
+
+            // Try main backend
+            try {
+                const response = await fetch(`${BACKUP_API_BASE}/api/admin/ports/status`, { method: 'GET' });
+                if (response.ok) {
+                    currentApiBase = BACKUP_API_BASE;
+                    console.log('[PortManager] Using main backend:', BACKUP_API_BASE);
+                    showToast('info', 'API 连接', `使用主后端 API: ${BACKUP_API_BASE}`);
+                    return;
+                }
+            } catch (e) {
+                console.log('[PortManager] Main backend not available either');
+            }
+
+            showToast('warning', 'API 连接失败', '请先启动端口管理服务器: node .claude/skills/port-manager/port-manager-server.mjs');
+        }
+
+        // Get API endpoint path based on current server
+        function getApiPath(path) {
+            if (currentApiBase === BACKUP_API_BASE) {
+                // Main backend uses /api/admin prefix
+                return `/api/admin${path}`;
+            }
+            // Standalone server uses /api prefix
+            return `/api${path}`;
+        }
+
+        // Setup command input
+        function setupCommandInput() {
+            const input = document.getElementById('commandInput');
+            input.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    executeCommandInput();
+                }
+            });
+        }
+
+        // Set quick command
+        function setQuickCommand(command) {
+            const input = document.getElementById('commandInput');
+            input.value = command;
+            input.focus();
+        }
+
+        // Setup auto-refresh toggle
+        function setupAutoRefreshToggle() {
+            const toggle = document.getElementById('autoRefreshToggle');
+            toggle.addEventListener('click', () => {
+                isAutoRefreshEnabled = !isAutoRefreshEnabled;
+                updateAutoRefreshUI();
+
+                if (isAutoRefreshEnabled) {
+                    autoRefreshTimer = setInterval(refreshPorts, AUTO_REFRESH_INTERVAL);
+                } else {
+                    clearInterval(autoRefreshTimer);
+                }
+            });
+        }
+
+        function updateAutoRefreshUI() {
+            const icon = document.getElementById('autoRefreshIcon');
+            const text = document.getElementById('autoRefreshText');
+            const toggle = document.getElementById('autoRefreshToggle');
+
+            if (isAutoRefreshEnabled) {
+                icon.className = 'fas fa-sync-alt text-green-400 pulse-dot';
+                text.textContent = '自动刷新: 开';
+                text.className = 'text-sm text-green-400';
+            } else {
+                icon.className = 'fas fa-sync-alt text-slate-400';
+                text.textContent = '自动刷新: 关';
+                text.className = 'text-sm text-slate-400';
+            }
+        }
+
+        // Refresh port status
+        async function refreshPorts() {
+            if (isRefreshing) return;
+
+            isRefreshing = true;
+            const refreshText = document.getElementById('refreshText');
+            const originalText = refreshText.textContent;
+            refreshText.textContent = '刷新中...';
+
+            try {
+                const apiPath = currentApiBase === BACKUP_API_BASE
+                    ? `${currentApiBase}/api/admin/ports/status`
+                    : `${currentApiBase}/api/ports/status`;
+
+                const response = await fetch(apiPath);
+                if (!response.ok) {
+                    throw new Error('API 请求失败');
+                }
+                portData = await response.json();
+                renderPortCards(portData.ports);
+            } catch (error) {
+                console.error('获取端口状态失败:', error);
+                renderError(`无法连接到 API 服务器 (${currentApiBase})。<br>请运行: node .claude/skills/port-manager/port-manager-server.mjs`);
+            } finally {
+                isRefreshing = false;
+                refreshText.textContent = originalText;
+            }
+        }
+
+        // Render port cards
+        function renderPortCards(ports) {
+            const container = document.getElementById('portCards');
+
+            if (!ports || ports.length === 0) {
+                container.innerHTML = `
+                    <div class="glass-card rounded-xl p-8 text-center text-slate-400">
+                        <i class="fas fa-exclamation-circle text-4xl mb-4 text-yellow-500"></i>
+                        <p>未能获取端口信息</p>
+                    </div>
+                `;
+                return;
+            }
+
+            container.innerHTML = ports.map(port => {
+                const config = PORT_CONFIG[port.key] || { icon: 'fa-plug', color: 'gray', name: port.name };
+                const isRunning = port.status === 'running';
+                const isProtected = port.key === 'postgres';
+
+                let statusHtml = '';
+                if (isProtected) {
+                    statusHtml = `
+                        <div class="flex items-center gap-2">
+                            <span class="status-protected"><i class="fas fa-lock"></i></span>
+                            <span class="text-sm text-slate-400">系统服务</span>
+                        </div>
+                    `;
+                } else if (isRunning) {
+                    statusHtml = `
+                        <div class="flex items-center gap-2">
+                            <span class="status-running pulse-dot"><i class="fas fa-circle text-xs"></i></span>
+                            <span class="text-sm text-green-400">运行中</span>
+                        </div>
+                    `;
+                } else {
+                    statusHtml = `
+                        <div class="flex items-center gap-2">
+                            <span class="status-idle"><i class="far fa-circle"></i></span>
+                            <span class="text-sm text-slate-400">空闲</span>
+                        </div>
+                    `;
+                }
+
+                const processInfo = isRunning && port.processes && port.processes.length > 0
+                    ? port.processes.map(p => `
+                        <div class="flex items-center justify-between text-sm bg-slate-800/50 rounded px-3 py-2">
+                            <span class="text-slate-300">PID: ${p.pid}</span>
+                            <span class="text-slate-400">${p.name}</span>
+                        </div>
+                    `).join('')
+                    : '';
+
+                const buttons = isProtected
+                    ? `<button class="btn-secondary rounded-lg px-4 py-2 text-sm opacity-50 cursor-not-allowed" disabled>
+                        <i class="fas fa-shield-alt mr-2"></i>系统保护
+                       </button>`
+                    : isRunning
+                    ? `<button onclick="killPort(${port.port})" class="btn-danger rounded-lg px-4 py-2 text-sm">
+                        <i class="fas fa-stop mr-2"></i>关闭
+                       </button>`
+                    : `<button onclick="showCommand('${port.key}')" class="btn-secondary rounded-lg px-4 py-2 text-sm">
+                        <i class="fas fa-play mr-2"></i>启动命令
+                       </button>`;
+
+                return `
+                    <div class="port-card glass-card rounded-xl p-5">
+                        <div class="flex items-start justify-between">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-${config.color}-500/20 flex items-center justify-center">
+                                    <i class="fas ${config.icon} text-${config.color}-400 text-xl"></i>
+                                </div>
+                                <div>
+                                    <h3 class="font-semibold text-lg">${port.name}</h3>
+                                    <p class="text-slate-400 text-sm">端口 ${port.port}</p>
+                                </div>
+                            </div>
+                            ${statusHtml}
+                        </div>
+                        ${processInfo ? `
+                            <div class="mt-4 space-y-2">
+                                ${processInfo}
+                            </div>
+                        ` : ''}
+                        <div class="mt-4 flex items-center justify-between">
+                            <span class="text-xs text-slate-500">${port.desc}</span>
+                            ${buttons}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        // Render error state
+        function renderError(message) {
+            const container = document.getElementById('portCards');
+            container.innerHTML = `
+                <div class="glass-card rounded-xl p-8 text-center">
+                    <i class="fas fa-exclamation-triangle text-4xl mb-4 text-red-500"></i>
+                    <p class="text-slate-300 mb-2">连接失败</p>
+                    <p class="text-slate-400 text-sm">${message}</p>
+                    <button onclick="refreshPorts()" class="btn-primary rounded-lg px-6 py-2 mt-4">
+                        <i class="fas fa-redo-alt mr-2"></i>重试
+                    </button>
+                </div>
+            `;
+        }
+
+        // Kill port process
+        async function killPort(port) {
+            try {
+                const apiPath = currentApiBase === BACKUP_API_BASE
+                    ? `${currentApiBase}/api/admin/ports/kill`
+                    : `${currentApiBase}/api/ports/kill`;
+
+                const response = await fetch(apiPath, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ port })
+                });
+
+                if (!response.ok) {
+                    throw new Error('关闭端口失败');
+                }
+
+                const result = await response.json();
+
+                if (result.success) {
+                    showToast('success', `端口 ${port} 已关闭`, result.message);
+                    refreshPorts();
+                } else {
+                    showToast('error', '关闭失败', result.message || '无法关闭端口进程');
+                }
+            } catch (error) {
+                console.error('关闭端口失败:', error);
+                showToast('error', '关闭失败', error.message);
+            }
+        }
+
+        // Check custom port
+        async function checkCustomPort() {
+            const input = document.getElementById('customPortInput');
+            const port = parseInt(input.value);
+
+            if (!port || port < 1 || port > 65535) {
+                showToast('error', '无效端口号', '请输入 1-65535 之间的端口号');
+                return;
+            }
+
+            // Check if port exists in our list
+            const existingPort = portData?.ports?.find(p => p.port === port);
+            const resultDiv = document.getElementById('customPortResult');
+
+            if (existingPort) {
+                // Show existing port info
+                const config = PORT_CONFIG[existingPort.key] || { icon: 'fa-plug', color: 'gray', name: existingPort.name };
+                const isRunning = existingPort.status === 'running';
+
+                resultDiv.innerHTML = `
+                    <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                        <div class="flex items-center gap-3 mb-3">
+                            <div class="w-10 h-10 rounded-lg bg-${config.color}-500/20 flex items-center justify-center">
+                                <i class="fas ${config.icon} text-${config.color}-400"></i>
+                            </div>
+                            <div>
+                                <h4 class="font-medium">${existingPort.name}</h4>
+                                <p class="text-sm text-slate-400">端口 ${existingPort.port}</p>
+                            </div>
+                            ${isRunning
+                                ? '<span class="ml-auto text-green-400"><i class="fas fa-circle text-xs pulse-dot"></i> 运行中</span>'
+                                : '<span class="ml-auto text-slate-400"><i class="far fa-circle"></i> 空闲</span>'
+                            }
+                        </div>
+                        ${isRunning && existingPort.processes ? existingPort.processes.map(p => `
+                            <div class="flex items-center justify-between text-sm bg-slate-900/50 rounded px-3 py-2">
+                                <span class="text-slate-300">PID: ${p.pid}</span>
+                                <span class="text-slate-400">${p.name}</span>
+                            </div>
+                        `).join('') : ''}
+                    </div>
+                `;
+            } else {
+                resultDiv.innerHTML = `
+                    <div class="bg-slate-800/50 rounded-lg p-4 border border-slate-700">
+                        <p class="text-slate-400">
+                            <i class="fas fa-info-circle mr-2"></i>
+                            端口 ${port} 不是项目预设端口。请使用命令行工具检查：
+                        </p>
+                        <div class="command-box rounded-lg p-3 mt-2">
+                            <code class="text-green-400 text-sm">netstat -ano | findstr :${port}</code>
+                        </div>
+                    </div>
+                `;
+            }
+
+            resultDiv.classList.remove('hidden');
+        }
+
+        // Show command modal
+        function showCommand(type) {
+            const modal = document.getElementById('commandModal');
+            const title = document.getElementById('commandModalTitle');
+            const content = document.getElementById('commandModalContent');
+
+            const config = PORT_CONFIG[type] || { name: '服务' };
+            const command = COMMANDS[type] || '';
+
+            title.textContent = `${config.name} - 启动命令`;
+            content.textContent = command;
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeCommandModal() {
+            const modal = document.getElementById('commandModal');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        function copyCommand() {
+            const content = document.getElementById('commandModalContent').textContent;
+            navigator.clipboard.writeText(content).then(() => {
+                showToast('success', '复制成功', '命令已复制到剪贴板');
+                closeCommandModal();
+            }).catch(() => {
+                showToast('error', '复制失败', '无法复制到剪贴板');
+            });
+        }
+
+        // Toast notification
+        function showToast(type, title, message) {
+            const container = document.getElementById('toastContainer');
+            const toast = document.createElement('div');
+
+            const bgColor = type === 'success' ? 'bg-green-500/20 border-green-500/50' : 'bg-red-500/20 border-red-500/50';
+            const icon = type === 'success' ? 'fa-check-circle text-green-400' : 'fa-exclamation-circle text-red-400';
+
+            toast.className = `toast glass-card rounded-lg p-4 border ${bgColor} min-w-[300px] max-w-md`;
+            toast.innerHTML = `
+                <div class="flex items-start gap-3">
+                    <i class="fas ${icon} mt-0.5"></i>
+                    <div>
+                        <h4 class="font-medium">${title}</h4>
+                        <p class="text-sm text-slate-300 mt-1">${message}</p>
+                    </div>
+                    <button onclick="this.parentElement.parentElement.remove()" class="ml-auto text-slate-400 hover:text-white">
+                        <i class="fas fa-times"></i>
+                    </button>
+                </div>
+            `;
+
+            container.appendChild(toast);
+
+            setTimeout(() => {
+                toast.remove();
+            }, 5000);
+        }
+
+        // Execute command from input
+        async function executeCommandInput() {
+            const input = document.getElementById('commandInput');
+            const command = input.value.trim();
+
+            if (!command) {
+                showToast('warning', '输入为空', '请输入要执行的命令');
+                return;
+            }
+
+            // Only standalone server supports command execution
+            if (currentApiBase !== API_BASE) {
+                showToast('error', '功能不可用', '命令执行功能仅在使用独立服务器时可用。请运行: node .claude/skills/port-manager/port-manager-server.mjs');
+                return;
+            }
+
+            const outputDiv = document.getElementById('commandResult');
+            const outputPre = document.getElementById('commandOutput');
+
+            outputDiv.classList.remove('hidden');
+            outputPre.textContent = '执行中...';
+
+            try {
+                const response = await fetch(`${API_BASE}/api/command/execute`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ command })
+                });
+
+                const result = await response.json();
+
+                if (result.success) {
+                    let output = `$ ${command}\n\n`;
+                    if (result.stdout) {
+                        output += result.stdout;
+                    }
+                    if (result.stderr) {
+                        output += `\n[stderr]\n${result.stderr}`;
+                    }
+                    if (result.exitCode !== undefined) {
+                        output += `\n[退出码: ${result.exitCode}]`;
+                    }
+                    outputPre.textContent = output;
+                    showToast('success', '命令执行成功', `退出码: ${result.exitCode || 0}`);
+                } else {
+                    outputPre.textContent = `$ ${command}\n\n错误: ${result.error}`;
+                    showToast('error', '命令执行失败', result.error);
+                }
+            } catch (error) {
+                outputPre.textContent = `$ ${command}\n\n错误: ${error.message}`;
+                showToast('error', '执行出错', error.message);
+            }
+        }
+
+        // Close modal on escape
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeCommandModal();
+            }
+        });
+
+        // Close modal on backdrop click
+        document.getElementById('commandModal').addEventListener('click', (e) => {
+            if (e.target.id === 'commandModal') {
+                closeCommandModal();
+            }
+        });
+    </script>
+</body>
+</html>

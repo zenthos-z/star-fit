@@ -1,0 +1,142 @@
+{
+  "generated_at": "2026-01-16T12:54:51.545Z",
+  "apiBase": "http://192.168.31.100:43113/api",
+  "status": 200,
+  "json": [
+    {
+      "id": "tricep_pushdown",
+      "name": "三头下压-E2E-E2E-E2E",
+      "category": null,
+      "content_html": null,
+      "assets_json": "{\"video\":[]}",
+      "tags_json": "[\"isolation\",\"arms\"]",
+      "updated_at": 1768503074519,
+      "exercise_type": "resistance",
+      "body_category": "arms",
+      "muscle_groups": {
+        "primary": [
+          "肱三头肌"
+        ],
+        "secondary": [],
+        "stabilizers": [
+          "核心肌群"
+        ]
+      },
+      "equipment_required": [
+        "cable"
+      ],
+      "difficulty": "beginner",
+      "modified_by": "admin",
+      "modified_at": 1768503074519
+    },
+    {
+      "id": "bicep_curl",
+      "name": "二头弯举",
+      "category": null,
+      "content_html": null,
+      "assets_json": null,
+      "tags_json": "[\"isolation\",\"arms\"]",
+      "updated_at": "2026-01-13 05:42:06",
+      "exercise_type": "resistance",
+      "body_category": "arms",
+      "muscle_groups": {
+        "primary": [
+          "肱二头肌"
+        ],
+        "secondary": [
+          "肱肌"
+        ],
+        "stabilizers": []
+      },
+      "equipment_required": [
+        "dumbbell"
+      ],
+      "difficulty": "beginner",
+      "modified_by": "system",
+      "modified_at": 1768282926094
+    },
+    {
+      "id": "lying_tricep_extension",
+      "name": "仰卧臂屈伸",
+      "category": null,
+      "content_html": null,
+      "assets_json": null,
+      "tags_json": "[\"isolation\",\"arms\"]",
+      "updated_at": "2026-01-13 05:42:06",
+      "exercise_type": "resistance",
+      "body_category": "arms",
+      "muscle_groups": {
+        "primary": [
+          "肱三头肌"
+        ],
+        "secondary": [],
+        "stabilizers": [
+          "核心肌群"
+        ]
+      },
+      "equipment_required": [
+        "dumbbell",
+        "bench"
+      ],
+      "difficulty": "beginner",
+      "modified_by": "system",
+      "modified_at": 1768282926095
+    },
+    {
+      "id": "hammer_curl",
+      "name": "锤式弯举",
+      "category": null,
+      "content_html": null,
+      "assets_json": null,
+      "tags_json": "[\"isolation\",\"arms\"]",
+      "updated_at": "2026-01-13 05:42:06",
+      "exercise_type": "resistance",
+      "body_category": "arms",
+      "muscle_groups": {
+        "primary": [
+          "肱二头肌",
+          "肱肌"
+        ],
+        "secondary": [],
+        "stabilizers": []
+      },
+      "equipment_required": [
+        "dumbbell"
+      ],
+      "difficulty": "beginner",
+      "modified_by": "system",
+      "modified_at": 1768282926095
+    },
+    {
+      "id": "rowing",
+      "name": "划船机",
+      "category": null,
+      "content_html": null,
+      "assets_json": null,
+      "tags_json": "[\"cardio\",\"full_body\",\"endurance\"]",
+      "updated_at": "2026-01-13 05:42:06",
+      "exercise_type": "cardio",
+      "body_category": "cardio",
+      "muscle_groups": {
+        "primary": [
+          "背阔肌",
+          "股四头肌",
+          "臀大肌"
+        ],
+        "secondary": [
+          "腘绳肌",
+          "二头肌"
+        ],
+        "stabilizers": [
+          "核心肌群"
+        ]
+      },
+      "equipment_required": [
+        "rowing_machine"
+      ],
+      "difficulty": "beginner",
+      "modified_by": "system",
+      "modified_at": 1768282926095
+    }
+  ]
+}
