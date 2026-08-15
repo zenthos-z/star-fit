@@ -31,7 +31,7 @@ jobs:
         run: npm run typecheck
 
       - name: Backend typecheck
-        run: cd backend && npm ci && npm run typecheck
+        run: cd backend && npm run typecheck
 
       - name: Frontend build
         run: npm run build
