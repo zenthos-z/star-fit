@@ -2,6 +2,10 @@
 ![Node](https://img.shields.io/badge/node-%3E%3D18-green)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
+<p align="center">
+  <img src="docs/cover.png" alt="Starfit cover" width="100%">
+</p>
+
 # 🏋️ Starfit — AI 时代的健身搭子
 
 > 快乐至上 · AI 隐形 · 丰俭由人 · 数据主权
