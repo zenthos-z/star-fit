@@ -3,7 +3,7 @@
 ![License](https://img.shields.io/badge/license-MIT-green)
 
 <p align="center">
-  <img src="docs/cover.webp" alt="Starfit cover" width="100%">
+  <img src="docs/cover.jpg" alt="Starfit cover" width="100%">
 </p>
 
 # 🏋️ Starfit — AI 时代的健身搭子
