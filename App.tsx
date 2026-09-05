@@ -4,7 +4,6 @@ import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from
 import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiScenario } from './types';
 import { LoadAnchors } from './src/v2/types/protocol';
 import TimerCapsule from './components/TimerCapsule';
-import { ParticleBackground } from './src/components/ParticleBackground';
 import { ExerciseCardV2 } from './src/v2/components/execution/ExerciseCardV2';
 import ReorderMode from './src/v2/components/execution/ReorderMode';
 import SettlementV2 from './src/v2/components/settlement/SettlementV2';
@@ -1125,7 +1124,6 @@ const App: React.FC = () => {
 
   return (
     <div className={`min-h-screen bg-star-white text-star-dark relative ${isAiOverlayOpen || currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession ? 'h-screen overflow-hidden' : 'overflow-x-hidden'}`}>
-      <ParticleBackground isActive={session.status === 'active'} className="z-0" />
       <motion.div
         onTouchStart={handleOverscrollTouchStart}
         onTouchMove={handleOverscrollTouchMove}

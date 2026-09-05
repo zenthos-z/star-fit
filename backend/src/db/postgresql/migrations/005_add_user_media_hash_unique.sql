@@ -8,8 +8,14 @@
 -- Date: 2026-02-23
 -- Context: Exercise information storage fix and data migration
 
--- Add UNIQUE constraint to hash field
-ALTER TABLE user_media ADD CONSTRAINT user_media_hash_key UNIQUE (hash);
+-- Add UNIQUE constraint to hash field (idempotent: schema.sql bootstrap may have created it already)
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'user_media_hash_key') THEN
+    ALTER TABLE user_media ADD CONSTRAINT user_media_hash_key UNIQUE (hash);
+  END IF;
+END
+$$;
 
 -- Create index for efficient hash lookups (if not already exists)
 CREATE INDEX IF NOT EXISTS idx_user_media_hash ON user_media(hash);

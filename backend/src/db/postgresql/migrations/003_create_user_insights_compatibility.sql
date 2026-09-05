@@ -31,7 +31,7 @@ SELECT
   u.id::text as user_id,
   u.created_at,  -- Add created_at for UserProfileV2 validation
   COALESCE(
-    u.profile_static->'fitness_level',
+    u.profile_static->>'fitness_level',
     'beginner'
   )::fitness_level as fitness_level,
   COALESCE(
