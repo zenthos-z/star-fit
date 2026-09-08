@@ -190,11 +190,13 @@ export function BasicInfoForm({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [hasChanges, setHasChanges] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const handleFieldChange = useCallback(
     <K extends keyof ProfileStatic>(field: K, value: ProfileStatic[K]) => {
       setFormData((prev) => ({ ...prev, [field]: value }));
       setHasChanges(true);
+      setSubmitError(null);
     },
     []
   );
@@ -205,6 +207,7 @@ export function BasicInfoForm({
       if (!hasChanges) return;
 
       setIsSubmitting(true);
+      setSubmitError(null);
       try {
         // Only send changed fields
         const updates: Partial<ProfileStatic> = {};
@@ -216,6 +219,11 @@ export function BasicInfoForm({
 
         await onUpdate(updates);
         setHasChanges(false);
+      } catch (err) {
+        // 更新失败：展示错误并保留表单内容供重试，不让 rejection 变成 Unhandled Rejection
+        setSubmitError(err instanceof Error ? err.message : '保存失败，请重试');
+         
+        console.error('[BasicInfoForm] update failed:', err);
       } finally {
         setIsSubmitting(false);
       }
@@ -248,6 +256,16 @@ export function BasicInfoForm({
       </h2>
 
       <form onSubmit={handleSubmit} className="space-y-4">
+        {/* 提交错误提示 */}
+        {submitError && (
+          <div
+            role="alert"
+            className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600"
+          >
+            {submitError}
+          </div>
+        )}
+
         {/* Physical Measurements */}
         <div className="grid grid-cols-2 gap-4">
           <FormField label="年龄">

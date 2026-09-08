@@ -268,9 +268,11 @@ describe('BasicInfoForm', () => {
       render(<BasicInfoForm {...defaultProps} />);
 
       // Change only age
+      // 注意：NumberInput 的 min/max guard 会拒绝逐键输入的中间态
+      // （'3' < min=10 被拒，第二键在空串上变 '1' 又被拒），
+      // 因此用 fireEvent.change 整串提交值，而非 userEvent 逐键 type。
       const ageInput = screen.getByDisplayValue('30') as HTMLInputElement;
-      await user.clear(ageInput);
-      await user.type(ageInput, '31');
+      fireEvent.change(ageInput, { target: { value: '31' } });
 
       // Submit should be available
       const saveButton = await screen.findByText('保存');
@@ -291,14 +293,12 @@ describe('BasicInfoForm', () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
-      // Change age and weight
+      // Change age and weight（同上：min/max guard 拒绝逐键中间态，用 fireEvent 整串提交）
       const ageInput = screen.getByDisplayValue('30') as HTMLInputElement;
-      await user.clear(ageInput);
-      await user.type(ageInput, '32');
+      fireEvent.change(ageInput, { target: { value: '32' } });
 
       const weightInput = screen.getByDisplayValue('75') as HTMLInputElement;
-      await user.clear(weightInput);
-      await user.type(weightInput, '80');
+      fireEvent.change(weightInput, { target: { value: '80' } });
 
       const saveButton = await screen.findByText('保存');
       await user.click(saveButton);
