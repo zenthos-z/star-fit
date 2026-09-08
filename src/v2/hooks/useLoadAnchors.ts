@@ -76,6 +76,11 @@ function invalidateCache(userId: string): void {
   anchorsCache.delete(userId);
 }
 
+/** 清空全部锚点缓存（供测试在各用例间隔离缓存状态；生产代码勿调用） */
+export function clearAnchorsCache(): void {
+  anchorsCache.clear();
+}
+
 /**
  * Fetch load anchors from Service Layer
  */

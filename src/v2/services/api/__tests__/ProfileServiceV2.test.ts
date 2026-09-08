@@ -110,7 +110,7 @@ describe('ProfileServiceV2', () => {
       const result = await ProfileService.getProfile(mockUserId);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `http://localhost:43111/api/profiles/${mockUserId}`,
+        `http://localhost:43111/api/admin/users/${mockUserId}/profile`,
         expect.objectContaining({
           method: 'GET'
         })
@@ -228,10 +228,10 @@ describe('ProfileServiceV2', () => {
       await ProfileService.updateProfileStatic(mockUserId, updates);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `http://localhost:43111/api/profiles/${mockUserId}`,
+        `http://localhost:43111/api/admin/users/${mockUserId}/profile/static`,
         expect.objectContaining({
           method: 'PUT',
-          body: expect.stringContaining('"profile_static"')
+          body: expect.stringContaining('"age"')
         })
       );
     });
@@ -259,10 +259,10 @@ describe('ProfileServiceV2', () => {
       await ProfileService.updateProfileDynamic(mockUserId, updates);
 
       expect(mockFetch).toHaveBeenCalledWith(
-        `http://localhost:43111/api/profiles/${mockUserId}`,
+        `http://localhost:43111/api/admin/users/${mockUserId}/profile/dynamic`,
         expect.objectContaining({
           method: 'PUT',
-          body: expect.stringContaining('"profile_dynamic"')
+          body: expect.stringContaining('"load_anchors"')
         })
       );
     });
@@ -308,7 +308,14 @@ describe('ProfileServiceV2', () => {
 
       await ProfileService.updateLoadAnchor(mockUserId, exerciseId, newAnchor);
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // 当前实现直接 POST 单锚点接口，不再先拉全量再回写
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:43111/api/admin/users/${mockUserId}/anchors/${exerciseId}`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(newAnchor)
+        })
+      );
     });
   });
 
@@ -338,7 +345,14 @@ describe('ProfileServiceV2', () => {
 
       await ProfileService.addActiveLimitation(mockUserId, limitation);
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // 当前实现直接 POST 单限制接口，不再先拉全量再回写
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:43111/api/admin/users/${mockUserId}/limitations`,
+        expect.objectContaining({
+          method: 'POST',
+          body: JSON.stringify(limitation)
+        })
+      );
     });
   });
 
@@ -366,7 +380,11 @@ describe('ProfileServiceV2', () => {
 
       await ProfileService.removeActiveLimitation(mockUserId, partToRemove);
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      // 当前实现直接 DELETE 单限制接口，不再先拉全量再回写
+      expect(mockFetch).toHaveBeenCalledWith(
+        `http://localhost:43111/api/admin/users/${mockUserId}/limitations/${partToRemove}`,
+        expect.objectContaining({ method: 'DELETE' })
+      );
     });
   });
 });

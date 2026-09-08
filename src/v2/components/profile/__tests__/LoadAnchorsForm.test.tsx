@@ -262,12 +262,13 @@ describe('LoadAnchorsForm', () => {
       const user = userEvent.setup();
       render(<LoadAnchorsForm {...defaultProps} />);
 
-      // The component has a modal placeholder, so clicking should trigger the edit callback
+      // 点击卡片打开编辑弹窗
       const benchPressCard = screen.getByText('bench_press').closest('div');
       await user.click(benchPressCard!);
 
-      // The current implementation shows anchor values in the card itself
-      expect(screen.getByText(/100kg/)).toBeInTheDocument();
+      // 弹窗内展示锚点当前值
+      expect(screen.getByText('编辑负荷锚点')).toBeInTheDocument();
+      expect(screen.getAllByText(/100kg/).length).toBeGreaterThan(0);
     });
 
     it('should call onUpdate when edit button is clicked', async () => {
@@ -406,9 +407,10 @@ describe('LoadAnchorsForm', () => {
 
       const anchors = Object.keys(defaultProps.anchors);
       anchors.forEach(anchor => {
-        const card = screen.getByText(anchor).closest('div');
-        // Check that the card has cursor-pointer in its className
-        expect(card?.className).toContain('cursor-pointer');
+        // 卡片自身带 cursor-pointer（可点击打开编辑弹窗）；closest('div') 命中的是卡片内层布局 div，需向上找 motion 容器
+        const textEl = screen.getByText(anchor);
+        const card = textEl.closest('[class*="cursor-pointer"]');
+        expect(card).not.toBeNull();
       });
     });
   });

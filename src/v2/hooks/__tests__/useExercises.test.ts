@@ -5,18 +5,27 @@
  */
 
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useExercises } from '../useExercises';
+import { vi } from 'vitest';
+import { useExercises, clearExercisesCache } from '../useExercises';
 import type { ParsedExercise, MuscleTarget } from '../../services/api/ExerciseServiceV2';
 
 // Mock the WebSocket client
-jest.mock('@/v2/services/transport/WebSocketClient', () => ({
+vi.mock('../../services/transport/WebSocketClient', () => ({
   socketService: {
-    subscribe: jest.fn(() => jest.fn())
+    subscribe: vi.fn(() => vi.fn())
   }
 }));
 
-// Mock fetch globally
-global.fetch = jest.fn();
+// Mock ExerciseService（vitest 的 vi.mock 会 hoist，整个文件内生效；
+// 各用例通过 mockGetAllExercises 改变返回值，等价于原 Jest 的 doMock+resetModules 模式）
+const { mockGetAllExercises } = vi.hoisted(() => ({ mockGetAllExercises: vi.fn() }));
+// 注意：hook 内部是 `await import('../services/api')`（ barrels 经 index.ts），
+// mock 路径必须是 services/api 入口而非 ExerciseServiceV2 文件
+vi.mock('../../services/api', () => ({
+  ExerciseService: {
+    getAllExercises: mockGetAllExercises,
+  },
+}));
 
 describe('useExercises', () => {
   const mockExercises: ParsedExercise[] = [
@@ -54,23 +63,15 @@ describe('useExercises', () => {
   ];
 
   beforeEach(() => {
-    jest.clearAllMocks();
-    // Clear module cache
-    jest.resetModules();
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
+    mockGetAllExercises.mockReset();
+    // 原 Jest 用 jest.resetModules() 重置模块级 TTL 缓存；vitest 下静态 import 的
+    // hook 实例不随 resetModules 更新，改为显式清缓存
+    clearExercisesCache();
   });
 
   describe('Data fetching on mount', () => {
     it('should fetch exercises on mount', async () => {
-      // Mock ExerciseService
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockResolvedValue(mockExercises)
-        }
-      }));
+      mockGetAllExercises.mockResolvedValue(mockExercises);
 
       const { result } = renderHook(() => useExercises());
 
@@ -86,11 +87,7 @@ describe('useExercises', () => {
 
     it('should handle fetch errors', async () => {
       // Mock ExerciseService to throw error
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockRejectedValue(new Error('Network error'))
-        }
-      }));
+      mockGetAllExercises.mockRejectedValue(new Error('Network error'));
 
       const { result } = renderHook(() => useExercises());
 
@@ -103,12 +100,7 @@ describe('useExercises', () => {
     });
 
     it('should handle empty exercise list', async () => {
-      // Mock ExerciseService with empty array
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockResolvedValue([])
-        }
-      }));
+      mockGetAllExercises.mockResolvedValue([]);
 
       const { result } = renderHook(() => useExercises());
 
@@ -123,12 +115,7 @@ describe('useExercises', () => {
 
   describe('Filtering methods', () => {
     beforeEach(async () => {
-      // Mock ExerciseService
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockResolvedValue(mockExercises)
-        }
-      }));
+      mockGetAllExercises.mockResolvedValue(mockExercises);
     });
 
     it('should get exercise by ID', async () => {
@@ -205,12 +192,7 @@ describe('useExercises', () => {
 
   describe('Search functionality', () => {
     beforeEach(async () => {
-      // Mock ExerciseService
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockResolvedValue(mockExercises)
-        }
-      }));
+      mockGetAllExercises.mockResolvedValue(mockExercises);
     });
 
     it('should search by exercise name', async () => {
@@ -244,7 +226,8 @@ describe('useExercises', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      const results = result.current.searchExercises('胸部');
+      // mock 数据的中下胸 targets 不包含「胸部」子串（includes 匹配），用「胸」匹配 2 个
+      const results = result.current.searchExercises('胸');
       expect(results).toHaveLength(2);
     });
 
@@ -288,19 +271,9 @@ describe('useExercises', () => {
         }
       ];
 
-      let mockCallCount = 0;
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockImplementation(() => {
-            mockCallCount++;
-            if (mockCallCount === 1) {
-              return Promise.resolve(mockExercises);
-            } else {
-              return Promise.resolve(updatedExercises);
-            }
-          })
-        }
-      }));
+      mockGetAllExercises
+        .mockResolvedValueOnce(mockExercises)
+        .mockResolvedValue(updatedExercises);
 
       const { result } = renderHook(() => useExercises());
 
@@ -325,12 +298,7 @@ describe('useExercises', () => {
 
   describe('Cache behavior', () => {
     it('should use cached data for multiple hook instances', async () => {
-      jest.doMock('../services/api/ExerciseServiceV2', () => {
-        const ExerciseService = {
-          getAllExercises: jest.fn().mockResolvedValue(mockExercises)
-        };
-        return { ExerciseService };
-      });
+      mockGetAllExercises.mockResolvedValue(mockExercises);
 
       // First hook instance
       const { result: result1 } = renderHook(() => useExercises());
@@ -352,15 +320,11 @@ describe('useExercises', () => {
 
   describe('WebSocket event handling', () => {
     it('should subscribe to exercise update events', async () => {
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockResolvedValue(mockExercises)
-        }
-      }));
+      mockGetAllExercises.mockResolvedValue(mockExercises);
 
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
-      const unsubscribe = jest.fn();
-      (socketService.subscribe as jest.Mock).mockReturnValue(unsubscribe);
+      const { socketService } = await import('../../services/transport/WebSocketClient');
+      const unsubscribe = vi.fn();
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockReturnValue(unsubscribe);
 
       renderHook(() => useExercises());
 
@@ -369,15 +333,11 @@ describe('useExercises', () => {
     });
 
     it('should unsubscribe from events on unmount', async () => {
-      jest.doMock('../services/api/ExerciseServiceV2', () => ({
-        ExerciseService: {
-          getAllExercises: jest.fn().mockResolvedValue(mockExercises)
-        }
-      }));
+      mockGetAllExercises.mockResolvedValue(mockExercises);
 
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
-      const unsubscribe = jest.fn();
-      (socketService.subscribe as jest.Mock).mockReturnValue(unsubscribe);
+      const { socketService } = await import('../../services/transport/WebSocketClient');
+      const unsubscribe = vi.fn();
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockReturnValue(unsubscribe);
 
       const { unmount } = renderHook(() => useExercises());
 

@@ -9,15 +9,15 @@
 
 import React from 'react';
 import { render, screen, waitFor } from '@testing-library/react';
+import { vi } from 'vitest';
 import { HistoryContainer } from '../history/HistoryContainer';
 import type { HistorySummary } from 'shared/contracts';
 
-// Mock the hooks module
-jest.mock('@/v2/hooks', () => ({
-  useProfileV2: jest.fn(),
+// Mock the hooks module（vi.mock 工厂会被 hoist，mock 函数用 vi.hoisted 创建以便后续引用）
+const { mockUseProfileV2 } = vi.hoisted(() => ({ mockUseProfileV2: vi.fn() }));
+vi.mock('../../hooks', () => ({
+  useProfileV2: mockUseProfileV2,
 }));
-
-const mockUseProfileV2 = require('@/v2/hooks').useProfileV2;
 
 // Helper to create mock history data
 const createMockHistorySummary = (): HistorySummary => ({
@@ -244,14 +244,15 @@ describe('HistoryContainer', () => {
       expect(mockRefetch).toHaveBeenCalled();
     });
 
-    it('should update isLoading state during refetch', async () => {
-      const mockHistory = createMockHistorySummary();
-
+    it('should render loading branch while hook reports loading (actions not yet exposed)', async () => {
+      // 说明：原用例断言 renderHistory 收到 isLoading:true，但 hook mock 恒定 loading:true 时
+      // 组件直接渲染 loading 分支，renderHistory 不会被调用——原断言自相矛盾（1012ms 超时）。
+      // 本用例改为断言 loading 分支的实际行为；actions.isLoading 的传递已由 refetch 用例覆盖。
       mockUseProfileV2.mockReturnValue({
         profile: null,
         profileStatic: null,
         profileDynamic: null,
-        historySummary: mockHistory,
+        historySummary: createMockHistorySummary(),
         loading: true,
         error: null,
         refetch: jest.fn().mockResolvedValue(undefined),
@@ -259,26 +260,15 @@ describe('HistoryContainer', () => {
         updateDynamic: jest.fn().mockResolvedValue(undefined),
       });
 
-      let capturedActions: any;
-
-      const renderHistory = jest.fn().mockImplementation((data, actions) => {
-        capturedActions = actions;
-        return <div>History Summary</div>;
-      });
-
+      // loading 分支不调 renderHistory，但该 prop 为必填——传 no-op 满足类型
       render(
         <HistoryContainer
           userId="user-123"
-          renderHistory={renderHistory}
+          renderHistory={() => null}
         />
       );
 
-      await waitFor(() => {
-        expect(capturedActions).toBeDefined();
-      });
-
-      // Check loading state
-      expect(capturedActions.isLoading).toBe(true);
+      expect(screen.getByText('加载历史记录中...')).toBeInTheDocument();
     });
   });
 

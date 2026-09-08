@@ -92,6 +92,11 @@ async function fetchExercises(): Promise<ParsedExercise[]> {
  * }
  * ```
  */
+/** 清空模块级练习缓存（供测试在各用例间隔离缓存状态；生产代码勿调用） */
+export function clearExercisesCache(): void {
+  exercisesCache = null;
+}
+
 export function useExercises(): UseExercisesResult {
 // TS2484: interface UseExercisesResult is defined in this same file and
 // re-exported via hooks/index.ts — no extra export type line needed.

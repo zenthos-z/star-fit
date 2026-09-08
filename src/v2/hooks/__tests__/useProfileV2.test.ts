@@ -4,19 +4,20 @@
  * @version 2.0.0
  */
 
+import { vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useProfileV2 } from '../useProfileV2';
+import { useProfileV2, clearProfileCache } from '../useProfileV2';
 import type { UserProfileV2, ProfileStatic, ProfileDynamic, HistorySummary } from 'shared/contracts';
 
 // Mock the WebSocket client
-jest.mock('@/v2/services/transport/WebSocketClient', () => ({
+vi.mock('../../services/transport/WebSocketClient', () => ({
   socketService: {
     subscribe: jest.fn(() => jest.fn())
   }
 }));
 
 // Mock the geminiService
-jest.mock('@/services/geminiService', () => ({
+vi.mock('../../services/geminiService', () => ({
   API_BASE: 'http://localhost:43111/api',
   getHeaders: jest.fn(() => ({
     'Content-Type': 'application/json',
@@ -27,8 +28,19 @@ jest.mock('@/services/geminiService', () => ({
 // Mock fetch globally
 global.fetch = jest.fn();
 
+
+// ProfileServiceV2.handleResponse 走 response.text()；统一构造同时带 text/json 的 mock 响应
+const mockResponse = (data: unknown, ok = true) => ({
+  ok,
+  status: ok ? 200 : 500,
+  statusText: ok ? 'OK' : 'Internal Server Error',
+  text: async () => JSON.stringify(data),
+  json: async () => data,
+});
+
 describe('useProfileV2', () => {
-  const mockUserId = 'test-user-123';
+  // ProfileServiceV2 经 Zod 校验 user_id 必须 UUID
+  const mockUserId = '00000000-0000-4000-8000-000000000123';
   const mockProfile: UserProfileV2 = {
     protocol_version: '2.0.0',
     user_id: mockUserId,
@@ -63,8 +75,8 @@ describe('useProfileV2', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    // Clear cache
-    (require('../useProfileV2') as any).profileCache?.clear?.();
+    // Clear cache（原 Jest require 模块内部 Map；vitest 下改用显式导出的清缓存函数）
+    clearProfileCache();
   });
 
   afterEach(() => {
@@ -73,10 +85,7 @@ describe('useProfileV2', () => {
 
   describe('Data fetching on mount', () => {
     it('should fetch profile data on mount', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockProfile
-      } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockResponse(mockProfile));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 
@@ -94,7 +103,7 @@ describe('useProfileV2', () => {
     });
 
     it('should handle fetch errors', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockRejectedValueOnce(
+      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(
         new Error('Network error')
       );
 
@@ -109,11 +118,7 @@ describe('useProfileV2', () => {
     });
 
     it('should handle HTTP errors', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: false,
-        status: 404,
-        statusText: 'Not Found'
-      } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockResponse({ message: 'Not Found' }, false));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 
@@ -122,16 +127,14 @@ describe('useProfileV2', () => {
       });
 
       expect(result.current.error).toBeInstanceOf(Error);
-      expect(result.current.error?.message).toContain('404');
+      // ProfileServiceV2 报错格式：`ProfileService getProfile failed: <status>`
+      expect(result.current.error?.message).toContain('500');
     });
   });
 
   describe('Cache behavior', () => {
     it('should use cached data if available and fresh', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockProfile
-      } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockResponse(mockProfile));
 
       // First render - should fetch
       const { result, rerender } = renderHook(() => useProfileV2(mockUserId));
@@ -154,21 +157,15 @@ describe('useProfileV2', () => {
     });
 
     it('should refetch when cache is invalidated via refetch()', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockProfile
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            ...mockProfile,
-            profile_static: {
-              ...mockProfile.profile_static,
-              age: 31
-            } as ProfileStatic
-          })
-        } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(mockResponse(mockProfile))
+        .mockResolvedValueOnce(mockResponse({
+          ...mockProfile,
+          profile_static: {
+            ...mockProfile.profile_static,
+            age: 31
+          } as ProfileStatic
+        }));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 
@@ -193,10 +190,10 @@ describe('useProfileV2', () => {
   });
 
   describe('WebSocket event handling', () => {
-    it('should subscribe to WebSocket events on mount', () => {
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
+    it('should subscribe to WebSocket events on mount', async () => {
+      const { socketService } = await import('../../services/transport/WebSocketClient');
       const unsubscribe = jest.fn();
-      (socketService.subscribe as jest.Mock).mockReturnValue(unsubscribe);
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockReturnValue(unsubscribe);
 
       renderHook(() => useProfileV2(mockUserId));
 
@@ -206,10 +203,10 @@ describe('useProfileV2', () => {
       expect(socketService.subscribe).toHaveBeenCalledWith('history_summary_updated', expect.any(Function));
     });
 
-    it('should unsubscribe from WebSocket events on unmount', () => {
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
+    it('should unsubscribe from WebSocket events on unmount', async () => {
+      const { socketService } = await import('../../services/transport/WebSocketClient');
       const unsubscribe = jest.fn();
-      (socketService.subscribe as jest.Mock).mockReturnValue(unsubscribe);
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockReturnValue(unsubscribe);
 
       const { unmount } = renderHook(() => useProfileV2(mockUserId));
 
@@ -219,28 +216,22 @@ describe('useProfileV2', () => {
     });
 
     it('should refetch when receiving profile_updated event for current user', async () => {
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
+      const { socketService } = await import('../../services/transport/WebSocketClient');
       let eventHandler: ((payload: any) => void) | null = null;
 
-      (socketService.subscribe as jest.Mock).mockImplementation((event: string, handler: (payload: any) => void) => {
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockImplementation((event: string, handler: (payload: any) => void) => {
         if (event === 'profile_updated') {
           eventHandler = handler;
         }
         return jest.fn();
       });
 
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockProfile
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            ...mockProfile,
-            updated_at: '2024-01-02T00:00:00.000Z'
-          })
-        } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(mockResponse(mockProfile))
+        .mockResolvedValueOnce(mockResponse({
+          ...mockProfile,
+          updated_at: '2024-01-02T00:00:00.000Z'
+        }));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 
@@ -261,20 +252,17 @@ describe('useProfileV2', () => {
     });
 
     it('should ignore WebSocket events for other users', async () => {
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
+      const { socketService } = await import('../../services/transport/WebSocketClient');
       let eventHandler: ((payload: any) => void) | null = null;
 
-      (socketService.subscribe as jest.Mock).mockImplementation((event: string, handler: (payload: any) => void) => {
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockImplementation((event: string, handler: (payload: any) => void) => {
         if (event === 'profile_updated') {
           eventHandler = handler;
         }
         return jest.fn();
       });
 
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockProfile
-      } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockResponse(mockProfile));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 
@@ -296,25 +284,16 @@ describe('useProfileV2', () => {
 
   describe('Update methods', () => {
     it('should update static state and refetch', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockProfile
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({} as Response)
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            ...mockProfile,
-            profile_static: {
-              ...mockProfile.profile_static,
-              age: 35
-            } as ProfileStatic
-          })
-        } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(mockResponse(mockProfile))
+        .mockResolvedValueOnce(mockResponse({}))
+        .mockResolvedValueOnce(mockResponse({
+          ...mockProfile,
+          profile_static: {
+            ...mockProfile.profile_static,
+            age: 35
+          } as ProfileStatic
+        }));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 
@@ -343,24 +322,15 @@ describe('useProfileV2', () => {
         }
       };
 
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockProfile
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({} as Response)
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            ...mockProfile,
-            profile_dynamic: {
-              load_anchors: updatedAnchors
-            } as ProfileDynamic
-          })
-        } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(mockResponse(mockProfile))
+        .mockResolvedValueOnce(mockResponse({}))
+        .mockResolvedValueOnce(mockResponse({
+          ...mockProfile,
+          profile_dynamic: {
+            load_anchors: updatedAnchors
+          } as ProfileDynamic
+        }));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 
@@ -380,11 +350,8 @@ describe('useProfileV2', () => {
     });
 
     it('should handle update errors', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockProfile
-        } as Response)
+      (global.fetch as ReturnType<typeof vi.fn>)
+        .mockResolvedValueOnce(mockResponse(mockProfile))
         .mockRejectedValueOnce(new Error('Update failed'));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
@@ -397,7 +364,7 @@ describe('useProfileV2', () => {
         await act(async () => {
           await result.current.updateStatic({ age: 35 });
         });
-      }).rejects.toThrow('Failed to update static state');
+      }).rejects.toThrow('Update failed');
     });
   });
 
@@ -408,7 +375,7 @@ describe('useProfileV2', () => {
         resolveFetch = resolve;
       });
 
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockReturnValueOnce(
+      (global.fetch as ReturnType<typeof vi.fn>).mockReturnValueOnce(
         fetchPromise as any
       );
 
@@ -417,10 +384,7 @@ describe('useProfileV2', () => {
       expect(result.current.loading).toBe(true);
 
       await act(async () => {
-        resolveFetch!({
-          ok: true,
-          json: async () => mockProfile
-        } as Response);
+        resolveFetch!(mockResponse(mockProfile));
       });
 
       await waitFor(() => {
@@ -438,10 +402,7 @@ describe('useProfileV2', () => {
     });
 
     it('should handle null profile data', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => null
-      } as Response);
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockResponse(null));
 
       const { result } = renderHook(() => useProfileV2(mockUserId));
 

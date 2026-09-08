@@ -10,6 +10,11 @@ import { vi, beforeEach, afterEach } from 'vitest';
 import '@testing-library/jest-dom';
 import { cleanup } from '@testing-library/react';
 
+// --- Jest 兼容层 -----------------------------------------------------------
+// 项目 runner 已是 Vitest，但历史测试用 Jest 语法编写（jest.mock/fn/spyOn 等）。
+// 此桥把全局 jest 指向 vi，让旧测试无需逐行改写即可运行；新测试请直接用 vi。
+(globalThis as any).jest = vi;
+
 // Cleanup after each test
 afterEach(() => {
   cleanup();
@@ -57,3 +62,5 @@ global.requestAnimationFrame = (callback: FrameRequestCallback) => {
 global.cancelAnimationFrame = (id: number) => {
   clearTimeout(id);
 };
+
+(globalThis as any).jest = vi;

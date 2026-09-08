@@ -4,31 +4,65 @@
  * @version 2.0.0
  */
 
+import { vi } from 'vitest';
 import { renderHook, act, waitFor } from '@testing-library/react';
-import { useLoadAnchors } from '../useLoadAnchors';
+import { useLoadAnchors, clearAnchorsCache } from '../useLoadAnchors';
 import type { LoadAnchors, LoadAnchor } from 'shared/contracts';
 
 // Mock the WebSocket client
-jest.mock('@/v2/services/transport/WebSocketClient', () => ({
+vi.mock('../../services/transport/WebSocketClient', () => ({
   socketService: {
     subscribe: jest.fn(() => jest.fn())
   }
 }));
 
-// Mock the geminiService
-jest.mock('@/services/geminiService', () => ({
+// Mock the geminiService（hook 经 '@/services/geminiService' 动态导入，
+// vitest alias '@' 指向仓库根，这里同时 mock 两种解析路径以保证命中）
+vi.mock('../../services/geminiService', () => ({
   API_BASE: 'http://localhost:43111/api',
-  getHeaders: jest.fn(() => ({
+  getHeaders: vi.fn(() => ({
     'Content-Type': 'application/json',
     'X-User-Id': 'test-user'
-  }))
+  })),
+  getUserId: vi.fn(() => 'test-user')
+}));
+vi.mock('@/services/geminiService', () => ({
+  API_BASE: 'http://localhost:43111/api',
+  getHeaders: vi.fn(() => ({
+    'Content-Type': 'application/json',
+    'X-User-Id': 'test-user'
+  })),
+  getUserId: vi.fn(() => 'test-user')
 }));
 
-// Mock fetch globally
-global.fetch = jest.fn();
+// Mock services/api（hook 内部 `await import('../services/api')` 使用 ProfileService）
+const { mockGetLoadAnchors, mockUpdateLoadAnchor } = vi.hoisted(() => ({
+  mockGetLoadAnchors: vi.fn(),
+  mockUpdateLoadAnchor: vi.fn(),
+}));
+vi.mock('../../services/api', () => ({
+  ProfileService: {
+    getLoadAnchors: mockGetLoadAnchors,
+    updateLoadAnchor: mockUpdateLoadAnchor,
+  },
+}));
+
+// Mock fetch globally（deleteAnchor 的直连 fetch 用）
+global.fetch = vi.fn();
+
+
+// ProfileServiceV2.handleResponse 走 response.text()；统一构造同时带 text/json 的 mock 响应
+const mockResponse = (data: unknown, ok = true) => ({
+  ok,
+  status: ok ? 200 : 500,
+  statusText: ok ? 'OK' : 'Internal Server Error',
+  text: async () => JSON.stringify(data),
+  json: async () => data,
+});
 
 describe('useLoadAnchors', () => {
-  const mockUserId = 'test-user-123';
+  // ProfileServiceV2 经 Zod 校验 user_id 必须 UUID
+  const mockUserId = '00000000-0000-4000-8000-000000000123';
   const mockAnchors: LoadAnchors = {
     bench_press: {
       best_weight: 100,
@@ -52,19 +86,12 @@ describe('useLoadAnchors', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     // Clear cache
-    (require('../useLoadAnchors') as any).anchorsCache?.clear?.();
-  });
-
-  afterEach(() => {
-    jest.restoreAllMocks();
+    clearAnchorsCache();
   });
 
   describe('Data fetching on mount', () => {
     it('should fetch load anchors on mount', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockAnchors
-      } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -79,9 +106,7 @@ describe('useLoadAnchors', () => {
     });
 
     it('should handle fetch errors', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockRejectedValueOnce(
-        new Error('Network error')
-      );
+      mockGetLoadAnchors.mockRejectedValueOnce(new Error('Network error'));
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -94,10 +119,7 @@ describe('useLoadAnchors', () => {
     });
 
     it('should handle empty anchors', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({})
-      } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce({});
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -112,10 +134,7 @@ describe('useLoadAnchors', () => {
 
   describe('getAnchor method', () => {
     it('should return correct anchor by exercise ID', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockAnchors
-      } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -129,10 +148,7 @@ describe('useLoadAnchors', () => {
     });
 
     it('should return undefined for non-existent exercise', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockAnchors
-      } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -154,22 +170,11 @@ describe('useLoadAnchors', () => {
         last_updated: Date.now()
       };
 
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAnchors
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({} as Response)
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            ...mockAnchors,
-            bench_press: updatedAnchor
-          })
-        } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors)
+      mockGetLoadAnchors.mockResolvedValueOnce({
+        ...mockAnchors,
+        bench_press: updatedAnchor
+      });
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -197,22 +202,8 @@ describe('useLoadAnchors', () => {
         last_updated: Date.now()
       };
 
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAnchors
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({} as Response)
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            ...mockAnchors,
-            deadlift: newAnchor
-          })
-        } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors)
+      mockGetLoadAnchors.mockResolvedValueOnce({ ...mockAnchors, deadlift: newAnchor });
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -233,12 +224,8 @@ describe('useLoadAnchors', () => {
     });
 
     it('should handle update errors', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAnchors
-        } as Response)
-        .mockRejectedValueOnce(new Error('Update failed'));
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
+      mockUpdateLoadAnchor.mockRejectedValueOnce(new Error('Update failed'));
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -255,15 +242,11 @@ describe('useLoadAnchors', () => {
             last_updated: Date.now()
           });
         });
-      }).rejects.toThrow('Failed to update load anchor');
+      }).rejects.toThrow('Update failed');
     });
 
     it('should throw error when userId is empty', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({})
-      } as Response);
-
+      // 空 userId 时 hook 的 loadAnchors 提前 return——同理不要 queue fetch 值（防泄漏队列）。
       const { result } = renderHook(() => useLoadAnchors(''));
 
       await waitFor(() => {
@@ -283,10 +266,7 @@ describe('useLoadAnchors', () => {
     });
 
     it('should throw error when exerciseId is empty', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockAnchors
-      } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -309,22 +289,14 @@ describe('useLoadAnchors', () => {
 
   describe('deleteAnchor method', () => {
     it('should delete an existing anchor', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAnchors
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({} as Response)
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => {
-            const { bench_press, ...remaining } = mockAnchors;
-            return remaining;
-          }
-        } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
+      // DELETE 请求（直连 fetch）→ ok 响应
+      (global.fetch as ReturnType<typeof vi.fn>).mockResolvedValueOnce(mockResponse({ message: 'deleted' }));
+      // 删除后 refetch
+      mockGetLoadAnchors.mockResolvedValueOnce((() => {
+        const { bench_press, ...remaining } = mockAnchors as Record<string, unknown>;
+        return remaining;
+      })());
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -347,12 +319,9 @@ describe('useLoadAnchors', () => {
     });
 
     it('should handle delete errors', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAnchors
-        } as Response)
-        .mockRejectedValueOnce(new Error('Delete failed'));
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
+      // deleteAnchor → deleteLoadAnchorApi 用直连 fetch；rejection 由 fetch 抛出
+      (global.fetch as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('Delete failed'));
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -360,19 +329,22 @@ describe('useLoadAnchors', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      await expect(async () => {
-        await act(async () => {
+      let caught: unknown = null;
+      await act(async () => {
+        try {
           await result.current.deleteAnchor('bench_press');
-        });
-      }).rejects.toThrow('Failed to delete load anchor');
+        } catch (e) {
+          caught = e;
+        }
+      });
+
+      expect(caught).toBeInstanceOf(Error);
+      expect((caught as Error).message).toContain('Delete failed');
     });
 
     it('should throw error when userId is empty', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => ({})
-      } as Response);
-
+      // 空 userId 时 hook 的 loadAnchors 提前 return——此处不要 queue 任何 fetch 值，
+      // 否则成为泄漏队列污染后续用例（delete errors 曾因此吃到残留 resolved 值而不抛错）。
       const { result } = renderHook(() => useLoadAnchors(''));
 
       await waitFor(() => {
@@ -387,10 +359,7 @@ describe('useLoadAnchors', () => {
     });
 
     it('should throw error when exerciseId is empty', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockAnchors
-      } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -418,15 +387,8 @@ describe('useLoadAnchors', () => {
         }
       };
 
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAnchors
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => updatedAnchors
-        } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors)
+      mockGetLoadAnchors.mockResolvedValueOnce(updatedAnchors);
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -451,10 +413,7 @@ describe('useLoadAnchors', () => {
 
   describe('Cache behavior', () => {
     it('should use cached data if available and fresh', async () => {
-      (global.fetch as jest.MockedFunction<typeof fetch>).mockResolvedValueOnce({
-        ok: true,
-        json: async () => mockAnchors
-      } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors);
 
       const { result, rerender } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -462,7 +421,7 @@ describe('useLoadAnchors', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(mockGetLoadAnchors).toHaveBeenCalledTimes(1);
 
       // Re-render with same userId - should use cache
       rerender();
@@ -471,16 +430,16 @@ describe('useLoadAnchors', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      // Fetch should not be called again due to cache
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      // Should not be called again due to cache
+      expect(mockGetLoadAnchors).toHaveBeenCalledTimes(1);
     });
   });
 
   describe('WebSocket event handling', () => {
-    it('should subscribe to WebSocket events on mount', () => {
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
+    it('should subscribe to WebSocket events on mount', async () => {
+      const { socketService } = await import('../../services/transport/WebSocketClient');
       const unsubscribe = jest.fn();
-      (socketService.subscribe as jest.Mock).mockReturnValue(unsubscribe);
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockReturnValue(unsubscribe);
 
       renderHook(() => useLoadAnchors(mockUserId));
 
@@ -489,10 +448,10 @@ describe('useLoadAnchors', () => {
       expect(socketService.subscribe).toHaveBeenCalledWith('profile_dynamic_updated', expect.any(Function));
     });
 
-    it('should unsubscribe from WebSocket events on unmount', () => {
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
+    it('should unsubscribe from WebSocket events on unmount', async () => {
+      const { socketService } = await import('../../services/transport/WebSocketClient');
       const unsubscribe = jest.fn();
-      (socketService.subscribe as jest.Mock).mockReturnValue(unsubscribe);
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockReturnValue(unsubscribe);
 
       const { unmount } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -502,33 +461,26 @@ describe('useLoadAnchors', () => {
     });
 
     it('should refetch when receiving load_anchors_updated event for current user', async () => {
-      const { socketService } = require('@/v2/services/transport/WebSocketClient');
+      const { socketService } = await import('../../services/transport/WebSocketClient');
       let eventHandler: ((payload: any) => void) | null = null;
 
-      (socketService.subscribe as jest.Mock).mockImplementation((event: string, handler: (payload: any) => void) => {
+      (socketService.subscribe as ReturnType<typeof vi.fn>).mockImplementation((event: string, handler: (payload: any) => void) => {
         if (event === 'load_anchors_updated') {
           eventHandler = handler;
         }
         return jest.fn();
       });
 
-      (global.fetch as jest.MockedFunction<typeof fetch>)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => mockAnchors
-        } as Response)
-        .mockResolvedValueOnce({
-          ok: true,
-          json: async () => ({
-            ...mockAnchors,
-            deadlift: {
-              best_weight: 180,
-              best_reps: 5,
-              est_1rm: 200,
-              last_updated: Date.now()
-            }
-          })
-        } as Response);
+      mockGetLoadAnchors.mockResolvedValueOnce(mockAnchors)
+      mockGetLoadAnchors.mockResolvedValueOnce({
+        ...mockAnchors,
+        deadlift: {
+          best_weight: 180,
+          best_reps: 5,
+          est_1rm: 200,
+          last_updated: Date.now()
+        }
+      });
 
       const { result } = renderHook(() => useLoadAnchors(mockUserId));
 
@@ -536,7 +488,7 @@ describe('useLoadAnchors', () => {
         expect(result.current.loading).toBe(false);
       });
 
-      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(mockGetLoadAnchors).toHaveBeenCalledTimes(1);
 
       // Simulate WebSocket event
       act(() => {
@@ -544,7 +496,7 @@ describe('useLoadAnchors', () => {
       });
 
       await waitFor(() => {
-        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(mockGetLoadAnchors).toHaveBeenCalledTimes(2);
       });
     });
   });
