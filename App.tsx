@@ -3,6 +3,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiScenario } from './types';
 import { navigationReducer, initialNavigation } from './src/v2/lib/navigation';
+import { computeSettlementSummary } from './src/v2/lib/settlementSummary';
 import { LoadAnchors } from './src/v2/types/protocol';
 import TimerCapsule from './components/TimerCapsule';
 import { ExerciseCardV2 } from './src/v2/components/execution/ExerciseCardV2';
@@ -891,46 +892,16 @@ const App: React.FC = () => {
    * Calculate workout statistics from exercises
    * Returns total volume (kg), completed sets count, and optional average heart rate
    */
-  const calculateWorkoutStats = (exercises: Exercise[]): {
+  // [unified-stats] 训练完成统计与 Settlement 展示共用 settlementSummary 纯函数口径
+  // （isometric 无配重走 referenceBodyweight 兜底，取代旧硬编码 75kg；外场 isometric 误判 bug 一并消除）
+  const calculateWorkoutStats = useCallback((exercises: Exercise[]): {
     totalVolume: number;
     setsCount: number;
     avgHr?: number;
   } => {
-    let totalVolume = 0;
-    let setsCount = 0;
-
-    exercises.forEach(ex => {
-      // [DEFENSIVE] Ensure ex.sets is an array
-      const sets = Array.isArray(ex.sets) ? ex.sets : [];
-      
-      // Determine exercise type for appropriate stats calculation
-      const isCardioOrOutdoor = ex.type === 'cardio' || ex.type === 'outdoor' || ex.metadata?.isOutdoor;
-      
-      sets.forEach((set: any) => {
-        if (set.completed) {
-          if (isCardioOrOutdoor) {
-            // For cardio/outdoor exercises, calculate volume based on duration or distance
-            // Duration-based: weight * duration (like isometric) or just track duration
-            if (ex.type === 'isometric') {
-              const weight = set.weight || 0;
-              const duration = set.duration || 0;
-              totalVolume += (weight > 0 ? weight : 75) * duration;
-            } else {
-              // For regular cardio (running, cycling, etc.), volume is not applicable
-              // We track duration and distance separately
-              totalVolume += 0; // No traditional volume for cardio
-            }
-          } else {
-            // For resistance exercises: weight * reps
-            totalVolume += (set.weight || 0) * (set.reps || 0);
-          }
-          setsCount++;
-        }
-      });
-    });
-
-    return { totalVolume, setsCount };
-  };
+    const { totalVolume, totalSets, avgHr } = computeSettlementSummary(exercises);
+    return { totalVolume, setsCount: totalSets, avgHr };
+  }, []);
 
   /**
    * Detect training anomalies for personalized question generation

@@ -7,6 +7,8 @@ import { DEFAULT_BODYWEIGHT } from '../../../constants';
 export interface SettlementSummary {
   totalVolume: number;
   totalSets: number;
+  /** 可选：全部完成组的平均心率（任一组缺心率则整体缺失） */
+  avgHr?: number;
 }
 
 /** 单个动作的容量：只计完成组。 */
@@ -43,12 +45,32 @@ export function calculateExerciseVolume(ex: Exercise): number {
   return vol;
 }
 
-/** 整个 session 的结算汇总。 */
+/** 整个 session 的结算汇总（容量/完成组数/可选平均心率）。App 端训练完成统计与 Settlement 展示共用此口径。 */
 export function computeSettlementSummary(exercises: Exercise[]): SettlementSummary {
   const totalVolume = exercises.reduce((acc, ex) => acc + calculateExerciseVolume(ex), 0);
   const totalSets = exercises.reduce(
     (acc, ex) => acc + (Array.isArray(ex.sets) ? ex.sets.filter(s => s.completed).length : 0),
     0
   );
-  return { totalVolume, totalSets };
+
+  // 平均心率：取全部完成组的心率均值；任一完成组缺心率则整体视为缺失（宁缺勿错）
+  let hrSum = 0;
+  let hrCount = 0;
+  let hrMissing = false;
+  exercises.forEach(ex => {
+    const sets = Array.isArray(ex.sets) ? ex.sets : [];
+    sets.forEach(s => {
+      if (!s.completed) return;
+      const hr = (s as { heartRate?: number }).heartRate;
+      if (typeof hr === 'number' && !Number.isNaN(hr)) {
+        hrSum += hr;
+        hrCount += 1;
+      } else {
+        hrMissing = true;
+      }
+    });
+  });
+  const avgHr = !hrMissing && hrCount > 0 ? Math.round(hrSum / hrCount) : undefined;
+
+  return { totalVolume, totalSets, ...(avgHr !== undefined ? { avgHr } : {}) };
 }

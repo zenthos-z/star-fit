@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { computeSettlementSummary, calculateExerciseVolume } from '../settlementSummary';
 import { Exercise, ExerciseType } from '../../../../types';
 
-const mkSet = (p: Partial<{ weight: number; reps: number; duration: number; completed: boolean }>) => ({
+const mkSet = (p: Partial<{ weight: number; reps: number; duration: number; completed: boolean; heartRate: number }>) => ({
   id: Math.random().toString(36).slice(2),
   completed: false,
   ...p,
@@ -78,5 +78,34 @@ describe('computeSettlementSummary', () => {
       totalVolume: 50 * 10 * 2,
       totalSets: 3, // a 的 2 个完成组 + cardio 的 1 个完成组
     });
+  });
+
+  it('等长无配重：用 referenceBodyweight 而非硬编码 75（与旧 App 端口径的差异点）', () => {
+    const ex = mkEx('isometric', [mkSet({ duration: 60, completed: true })], 80);
+    expect(computeSettlementSummary([ex])).toEqual({ totalVolume: 80 * 60, totalSets: 1 });
+  });
+
+  it('全部完成组都有心率：avgHr = 四舍五入均值', () => {
+    const a = mkEx('cardio', [
+      { ...mkSet({ duration: 60, completed: true }), heartRate: 140 },
+      { ...mkSet({ duration: 60, completed: true }), heartRate: 151 },
+    ]);
+    expect(computeSettlementSummary([a]).avgHr).toBe(146); // (140+151)/2 = 145.5 → 146
+  });
+
+  it('任一完成组缺心率：avgHr 整体缺失（宁缺勿错）', () => {
+    const a = mkEx('cardio', [
+      { ...mkSet({ duration: 60, completed: true }), heartRate: 140 },
+      mkSet({ duration: 60, completed: true }), // 无心率
+    ]);
+    expect(computeSettlementSummary([a]).avgHr).toBeUndefined();
+  });
+
+  it('未完成组的心率不参与均值', () => {
+    const a = mkEx('cardio', [
+      { ...mkSet({ duration: 60, completed: true }), heartRate: 140 },
+      { ...mkSet({ duration: 60, completed: false }), heartRate: 200 },
+    ]);
+    expect(computeSettlementSummary([a]).avgHr).toBe(140);
   });
 });
