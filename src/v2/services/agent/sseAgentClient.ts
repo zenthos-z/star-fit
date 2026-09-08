@@ -71,7 +71,7 @@ export function parseSSEChunk(buffer: string): ParseResult {
   const events: AgentEvent[] = [];
   let pos = 0;
 
-  // eslint-disable-next-line no-constant-condition
+   
   while (true) {
     // Find the next blank-line boundary at/after `pos`.
     const lf = buffer.indexOf('\n\n', pos);
@@ -181,7 +181,7 @@ export function createSseAgentClient(opts: AgentClientOptions = {}): AgentClient
       let buffer = '';
 
       try {
-        // eslint-disable-next-line no-constant-condition
+         
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;

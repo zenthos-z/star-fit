@@ -20,15 +20,17 @@ export const DeviationWarningModal: React.FC<DeviationWarningModalProps> = ({
   onConfirm,
   context
 }) => {
-  if (!isOpen) return null;
+  const [selectedReason, setSelectedReason] = useState('');
 
   // iOS sheet 规范：盖住原生 tab bar
   useEffect(() => {
+    if (!isOpen) return;
     setTabBarHidden(true);
     return () => setTabBarHidden(false);
-  }, []);
+  }, [isOpen]);
 
-  const [selectedReason, setSelectedReason] = useState('');
+  if (!isOpen) return null;
+
   const reasons = ['状态极佳', '感到疲劳', '受伤预防', '器械限制'];
 
   const fieldLabels: Record<string, string> = {

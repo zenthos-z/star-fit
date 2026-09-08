@@ -71,7 +71,7 @@ export interface ExerciseRef {
 let isSyncing = false;
 let serverOnline: boolean | null = null;
 let lastError: string | undefined;
-let listeners: Set<() => void> = new Set();
+const listeners: Set<() => void> = new Set();
 
 // ---------------------------------------------------------------------------
 // 缓存读写

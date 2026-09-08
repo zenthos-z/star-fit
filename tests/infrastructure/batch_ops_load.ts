@@ -45,7 +45,7 @@ async function runBatchOpsLoadTest() {
   
   // In a real scenario, these would be separate requests. 
   // Here we test the service's logic and memory safety.
-  let currentWorkout = mockWorkout;
+  const currentWorkout = mockWorkout;
   const results = await Promise.all(ops.map(op => {
     try {
       // Simulate atomic application

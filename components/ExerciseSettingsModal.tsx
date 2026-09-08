@@ -797,7 +797,7 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
     // 只有有氧/户外动作才添加有氧专属字段
     const isCardioOrOutdoor = type === 'cardio' || type === 'outdoor';
 
-    let finalMetadata: any = {
+    const finalMetadata: any = {
       ...metadata,
       name,
       targetRpe,

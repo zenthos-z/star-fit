@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
-  X, Upload, Download, FileUp, AlertTriangle, 
-  CheckCircle, Loader2, FileArchive, ChevronRight 
+  X, Download, FileUp, AlertTriangle, 
+  CheckCircle, Loader2, FileArchive
 } from 'lucide-react';
 import { setTabBarHidden } from '../../src/lib/nativeTabBar';
 import {
@@ -23,13 +23,14 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ open, onClose }) => 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  if (!open) return null;
-
   // iOS sheet 规范：sheet 呈现时盖住原生 tab bar，关闭恢复
   useEffect(() => {
+    if (!open) return;
     setTabBarHidden(true);
     return () => setTabBarHidden(false);
-  }, []);
+  }, [open]);
+
+  if (!open) return null;
 
   const handleExport = async () => {
     setLoading(true);

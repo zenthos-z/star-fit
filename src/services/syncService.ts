@@ -334,7 +334,7 @@ export const SyncService = {
          console.log(`[SyncService] Merging ${exercises.length} exercises from server`);
          
          const cached = await ExerciseLibraryService.getCache();
-         let merged = cached?.exercises || [];
+         const merged = cached?.exercises || [];
          
          const idSet = new Set(merged.map(e => e.id));
          let addedCount = 0;

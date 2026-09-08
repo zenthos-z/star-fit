@@ -8,7 +8,7 @@ const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const CACHE_VERSION = 3; // Incremented to invalidate old cache (NanoID migration)
 
 let isSyncing = false;
-let listeners: Set<() => void> = new Set();
+const listeners: Set<() => void> = new Set();
 
 function computeHash(exercises: Exercise[]): string {
   const sorted = exercises
