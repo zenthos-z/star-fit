@@ -92,7 +92,6 @@ export interface PlanGenerationRequest {
 
 export enum AppRoute {
   HOME = 'HOME',
-  AI_OVERLAY = 'AI_OVERLAY',
   SETTLEMENT = 'SETTLEMENT',
   HISTORY = 'HISTORY',
   SETTINGS = 'SETTINGS',
