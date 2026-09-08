@@ -431,7 +431,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
         transition={{ type: "spring", damping: 25, stiffness: 200 }}
         className={`
           bg-white w-full shadow-2xl flex flex-col overflow-hidden transition-all duration-300 ease-in-out
-          ${isFullScreen ? 'h-full rounded-none' : 'h-[85vh] sm:h-[80vh] rounded-t-[2rem] sm:rounded-2xl sm:max-w-lg'}
+          ${isFullScreen ? 'h-full rounded-none' : 'h-[85vh] sm:h-[80vh] rounded-t-[40px] sm:rounded-2xl sm:max-w-lg'}
         `}
         onClick={e => e.stopPropagation()}
       >

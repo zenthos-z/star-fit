@@ -1,26 +1,37 @@
+/**
+ * History — 运动记录页（iOS Large Title 形态）
+ *
+ * 2026-09-08 设计规范改造：
+ * - 去右上角 ×（tab 页无关闭语义，与 tab bar 重复）
+ * - 导出/导入/设置/诊断/注销 整合为右上角单「···」菜单
+ * - Large Title：滚动前 34px 大标题，滚动后导航栏 17px 居中小标题淡入
+ * - 安全区：顶部 var(--safe-top)，底部 pb 留 tab bar 余量
+ * - 诊断面板改为底部 sheet（圆角 rounded-t-[40px] 全局统一）
+ */
+
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Session, Exercise } from '../types';
 import { DEFAULT_BODYWEIGHT } from '../constants';
 import SwipeableRow from './SwipeableRow';
 import { SyncService } from '../services/syncService';
-import { storageGet, storageSet } from '../storage';
-import { Keys } from '../storage/schemas';
+import { storageSet } from '../storage';
 import { API_BASE, setApiBase, getHeaders } from '../services/geminiService';
 import { useLoginStatus } from '../src/hooks/useLoginStatus';
 import { motion, AnimatePresence } from 'framer-motion';
+import { haptic } from '../src/lib/nativeHaptics';
 import { List } from 'react-window';
 
 const calculateVolume = (ex: Exercise) => {
    let vol = 0;
    const bodyweight = ex.referenceBodyweight || DEFAULT_BODYWEIGHT;
    const isCardioOrOutdoor = ex.type === 'cardio' || ex.type === 'outdoor' || ex.metadata?.isOutdoor;
-   
+
    ex.sets.forEach(set => {
        if (!set.completed) return;
        const reps = set.reps || 0;
        const weight = set.weight || 0;
        const duration = set.duration || 0;
-       
+
        switch (ex.type) {
            case 'resistance': vol += weight * reps; break;
            case 'unilateral': vol += weight * reps * 2; break;
@@ -41,6 +52,7 @@ interface HistoryProps {
   onSelect: (s: Session) => void;
   onImport: (data: Session[]) => void;
   onDelete: (sessionId: string) => void;
+  onOpenSettings?: () => void;
   isTransitioning?: boolean;
 }
 
@@ -71,6 +83,8 @@ const SessionItem = ({ index, style, sessions, onSelect, onDelete }: { index: nu
       >
         <div
           onClick={() => onSelect(session)}
+          role="button"
+          aria-label={`${dateStr} 训练记录，${duration} 分钟`}
           className="w-full bg-white p-5 text-left active:bg-gray-50 transition-all rounded-2xl rounded-tl-sm"
         >
           <div className="flex justify-between items-start mb-3">
@@ -84,7 +98,7 @@ const SessionItem = ({ index, style, sessions, onSelect, onDelete }: { index: nu
                 {exerciseNames}{session.exercises.length > 3 ? '...' : ''}
               </p>
             </div>
-            <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 group-active:text-star-primary transition-colors">
+            <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 group-active:text-star-primary transition-colors" aria-hidden="true">
               <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
               </svg>
@@ -94,11 +108,11 @@ const SessionItem = ({ index, style, sessions, onSelect, onDelete }: { index: nu
           <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-50">
             <div className="flex flex-col">
               <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest leading-none mb-1">时长</span>
-              <span className="text-sm font-mono font-black text-star-dark">{duration}<span className="text-[10px] ml-0.5 opacity-40">m</span></span>
+              <span className="text-sm font-mono font-black text-star-dark">{duration}<span className="text-[10px] ml-0.5 font-sans font-bold text-gray-400">分</span></span>
             </div>
             <div className="flex flex-col border-l border-gray-100 pl-3">
               <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest leading-none mb-1">容量</span>
-              <span className="text-sm font-mono font-black text-star-dark">{totalVolume}<span className="text-[10px] ml-0.5 opacity-40">kg</span></span>
+              <span className="text-sm font-mono font-black text-star-dark">{totalVolume}<span className="text-[10px] ml-0.5 font-sans font-bold text-gray-400">kg</span></span>
             </div>
             <div className="flex flex-col border-l border-gray-100 pl-3">
               <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest leading-none mb-1">组数</span>
@@ -111,9 +125,38 @@ const SessionItem = ({ index, style, sessions, onSelect, onDelete }: { index: nu
   );
 };
 
-const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport, onDelete, isTransitioning = false }) => {
-  const [showContent, setShowContent] = useState(true);
-  const [exportMenuOpen, setExportMenuOpen] = useState(false);
+// --- 菜单项（···菜单用，iOS Action Menu 风格）---
+const MENU_ICONS: Record<string, React.ReactNode> = {
+  export: <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />,
+  json: <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />,
+  import: <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-18-9l6.75-6.75L12 4.5m-9 3L9.75 11.25M12 4.5v9" />,
+  settings: <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.213 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 01-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 01-1.369-.49l-1.297-2.247a1.125 1.125 0 01.26-1.431l1.004-.827c.292-.24.437-.613.43-.992a6.932 6.932 0 010-.255c.007-.378-.138-.75-.43-.99l-1.004-.828a1.125 1.125 0 01-.26-1.43l1.297-2.247a1.125 1.125 0 011.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.087.22-.128.332-.183.582-.495.644-.869l.214-1.28z M15 12a3 3 0 11-6 0 3 3 0 016 0z" />,
+  debug: <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M4.5 15.5l-.5 3.5m15-3.5l.5 3.5M7.5 21h9" />,
+  logout: <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />,
+};
+
+function MenuItem({ icon, label, onClick, danger = false }: { icon: string; label: string; onClick: () => void; danger?: boolean }): JSX.Element {
+  return (
+    <button
+      onClick={onClick}
+      role="menuitem"
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left active:bg-gray-100 ${danger ? 'text-red-600' : 'text-gray-800'}`}
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 opacity-70" aria-hidden="true">
+        {MENU_ICONS[icon]}
+      </svg>
+      <span className="text-[15px] font-medium">{label}</span>
+    </button>
+  );
+}
+
+const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelete, onOpenSettings }) => {
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setIsScrolled(e.currentTarget.scrollTop > 30);
+  }, []);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Sync Debug State
@@ -123,84 +166,13 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
   const [netLogs, setNetLogs] = useState<string[]>([]);
   const [deviceId, setDeviceId] = useState('');
   const [userId, setUserId] = useState('');
-  const [isSyncing, setIsSyncing] = useState(false);
-  const [syncError, setSyncError] = useState<string | null>(null);
-  const [pullProgress, setPullProgress] = useState(0);
-  const [isRefreshing, setIsRefreshing] = useState(false);
-  const pullThreshold = 80;
-  const startY = useRef(0);
-  const currentY = useRef(0);
-  const isPulling = useRef(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const { logout } = useLoginStatus();
-
-  const handleTouchStart = useCallback((e: TouchEvent) => {
-    if (containerRef.current && containerRef.current.scrollTop === 0) {
-      startY.current = e.touches[0].pageY;
-      isPulling.current = true;
-    }
-  }, []);
-
-  const handleTouchMove = useCallback((e: TouchEvent) => {
-    if (!isPulling.current) return;
-    currentY.current = e.touches[0].pageY;
-    const diff = currentY.current - startY.current;
-
-    if (diff > 0) {
-      if (e.cancelable) e.preventDefault();
-      const progress = Math.min(diff, pullThreshold + 20);
-      setPullProgress(progress);
-    } else {
-      isPulling.current = false;
-      setPullProgress(0);
-    }
-  }, [pullThreshold]);
-
-  const handleTouchEnd = useCallback(async () => {
-    if (!isPulling.current) return;
-    isPulling.current = false;
-
-    setPullProgress(prev => {
-      if (prev >= pullThreshold) {
-        setIsRefreshing(true);
-        setPullProgress(pullThreshold);
-        (async () => {
-          try {
-            await SyncService.push();
-            await SyncService.pull();
-          } catch (e) {
-            console.error('Refresh failed', e);
-          } finally {
-            setTimeout(() => {
-              setIsRefreshing(false);
-              setPullProgress(0);
-            }, 500);
-          }
-        })();
-      }
-      return 0;
-    });
-  }, [pullThreshold]);
-
-  useEffect(() => {
-    const container = containerRef.current;
-    if (!container) return;
-
-    container.addEventListener('touchstart', handleTouchStart, { passive: true });
-    container.addEventListener('touchmove', handleTouchMove, { passive: false });
-    container.addEventListener('touchend', handleTouchEnd, { passive: true });
-
-    return () => {
-      container.removeEventListener('touchstart', handleTouchStart);
-      container.removeEventListener('touchmove', handleTouchMove);
-      container.removeEventListener('touchend', handleTouchEnd);
-    };
-  }, [handleTouchStart, handleTouchMove, handleTouchEnd]);
 
   // Auto-capture console logs when debug is open
   React.useEffect(() => {
     if (!showDebug) return;
-    
+
     const originalLog = console.log;
     const originalError = console.error;
     const originalWarn = console.warn;
@@ -256,7 +228,6 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
     a.click();
     document.body.removeChild(a);
     URL.revokeObjectURL(url);
-    setExportMenuOpen(false);
   };
 
   const handleExportMarkdown = async () => {
@@ -264,34 +235,33 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
         alert("暂无记录可导出");
         return;
     }
-    
+
     try {
-      const userId = localStorage.getItem('starfit_user_id');
-      if (!userId) {
+      const uid = localStorage.getItem('starfit_user_id');
+      if (!uid) {
         alert("用户未登录，无法导出 Markdown 报告");
         return;
       }
-      
-      const res = await fetch(`${API_BASE}/admin/users/${userId}/export-markdown`, {
+
+      const res = await fetch(`${API_BASE}/admin/users/${uid}/export-markdown`, {
         headers: getHeaders()
       });
-      
+
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || `导出失败: ${res.status}`);
       }
-      
+
       const data = await res.json();
       const blob = new Blob([data.markdown], { type: 'text/markdown' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `training_report_${userId.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.md`;
+      a.download = `training_report_${uid.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.md`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setExportMenuOpen(false);
     } catch (err) {
       alert('导出报告失败: ' + (err as Error).message);
     }
@@ -317,7 +287,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
                     alert("文件格式不正确，无法识别为 Starfit 数据。");
                     return;
                 }
-                
+
                 if (window.confirm(`解析到 ${parsed.length} 条记录。\n是否导入并合并到现有记录中？`)) {
                     onImport(parsed);
                 }
@@ -333,23 +303,17 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
     e.target.value = '';
   };
 
-
-
-  // 1. 获取 NetLogs (从 window 对象或 Service 注入，这里简单模拟/读取)
-  // 为了真实抓取，我们需要在 fetch 上做文章，或者让 SyncService 暴露 log
-  // 这里暂时只显示手动触发的 log
-  
   const handlePing = async () => {
     setPingResult('Testing...');
     const logs: string[] = [];
     const log = (msg: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-    
+
     try {
         log(`GET Ping to: ${API_BASE.replace('/api', '')}/api/ping`);
         const start = Date.now();
         const resGet = await fetch(`${API_BASE.replace('/api', '')}/api/ping`, { mode: 'cors' });
         const end = Date.now();
-        
+
         if (resGet.ok) {
             const data = await resGet.json();
             log(`GET Success (${end-start}ms): ${JSON.stringify(data)}`);
@@ -383,49 +347,32 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
     setNetLogs(prev => [...logs, ...prev]);
   };
 
-  const handleSync = async () => {
-    setIsSyncing(true);
-    setSyncError(null);
-    try {
-      await SyncService.push();
-      await SyncService.pull();
-      // Simple alert as showToast is not defined in this scope
-      alert('同步成功');
-    } catch (e: any) {
-      console.error(e);
-      setSyncError(e.message || '同步失败');
-      alert('同步失败: ' + (e.message || '未知错误'));
-    } finally {
-      setIsSyncing(false);
-    }
-  };
-
   const handleForceSync = async () => {
       setSyncStatus('正在同步...');
       console.log('[History] Starting Force Sync...');
-      
+
       try {
           const { API_BASE } = await import('../services/geminiService');
           console.log(`[History] API_BASE: ${API_BASE}`);
-          
-          const deviceId = await SyncService.getDeviceId();
-          console.log(`[History] DeviceID: ${deviceId}`);
-          
+
+          const did = await SyncService.getDeviceId();
+          console.log(`[History] DeviceID: ${did}`);
+
           const { loadHistory } = await import('../storage/index');
           const allHistory = await loadHistory() || [];
           const ids = allHistory.map((s: any) => s.id);
           console.log(`[History] Found ${ids.length} sessions in history`);
-          
+
           await storageSet('STARFIT_SYNC_QUEUE', ids);
           SyncService.queue = ids;
 
           console.log('[History] Starting Push (via syncAll)...');
           await SyncService.syncAll();
           console.log('[History] Push Done. Starting Pull...');
-          
+
           await SyncService.pull();
           console.log('[History] Pull Done.');
-          
+
           setSyncStatus(`同步完成`);
           setTimeout(() => window.location.reload(), 1500); // Give time to read logs
       } catch (e: any) {
@@ -454,62 +401,104 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
   return (
     <motion.div
       ref={containerRef}
-      initial={{ opacity: 0, scale: 0.95, y: 20 }}
-      animate={{ opacity: 1, scale: 1, y: 0 }}
-      exit={{ opacity: 0, scale: 0.98, y: -10 }}
-      transition={{
-        type: 'spring',
-        stiffness: 350,
-        damping: 28
-      }}
-      className="fixed inset-0 bg-star-gray/90 backdrop-blur-sm z-[100] overflow-y-auto"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.15, ease: 'easeOut' }}
+      className="fixed inset-0 bg-star-gray z-[100] overflow-y-auto"
+      onScroll={handleScroll}
     >
-      {/* Pull to Refresh Indicator */}
-      <div 
-        className="absolute top-0 left-0 right-0 flex items-center justify-center overflow-hidden transition-all duration-200 pointer-events-none"
-        style={{ 
-          height: `${pullProgress}px`,
-          opacity: pullProgress / pullThreshold
-        }}
-      >
-        <div className={`p-2 rounded-full bg-white shadow-md border border-gray-100 transition-transform ${isRefreshing ? 'animate-spin' : ''}`}
-             style={{ transform: `rotate(${pullProgress * 3}deg)` }}>
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5 text-star-primary">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
-          </svg>
-        </div>
-      </div>
+      {/* 隐藏文件选择器 */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept=".json,application/json"
+        onChange={handleFileChange}
+        className="hidden"
+        aria-hidden="true"
+        tabIndex={-1}
+      />
 
-      <div className="h-full flex flex-col px-4 py-6 pb-20 max-w-md mx-auto" style={{ transform: pullProgress > 0 ? `translateY(${pullProgress/2}px)` : 'none' }}>
-        
-        {/* Navbar */}
-        <div className="flex justify-between items-center mb-8 sticky top-0 bg-star-gray/90 backdrop-blur-md py-4 z-10 -mx-4 px-4">
-            <h2 className="text-2xl font-black text-star-dark tracking-tight">运动记录</h2>
-            <div className="flex gap-2">
-                <button 
-                    onClick={() => setShowDebug(!showDebug)}
-                    className={`p-2 rounded-full shadow-sm transition-all active:scale-90 ${showDebug ? 'bg-star-primary text-white' : 'bg-white text-gray-400'}`}
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75" />
-                    </svg>
-                </button>
-                <button onClick={onClose} className="bg-white rounded-full p-2 shadow-sm text-gray-600 hover:text-black transition-all active:scale-90">
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                </button>
-            </div>
+      <div className="h-full flex flex-col px-4 pb-20 max-w-md mx-auto">
+
+        {/* Navbar — iOS Large Title：滚动后居中小标题淡入；右上角单「···」菜单 */}
+        <div
+          className="sticky top-0 z-20 -mx-4 px-4 bg-star-gray/85 backdrop-blur-md"
+          style={{ paddingTop: 'calc(var(--safe-top, 0px) + 4px)', paddingBottom: '10px' }}
+        >
+          <div className="relative flex justify-end items-center h-11">
+            <span
+              className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-star-dark transition-opacity duration-200 pointer-events-none"
+              style={{ opacity: isScrolled ? 1 : 0 }}
+              aria-hidden={!isScrolled}
+            >
+              运动记录
+            </span>
+            <button
+                onClick={() => { haptic('light'); setMenuOpen(!menuOpen); }}
+                aria-label="更多操作"
+                aria-expanded={menuOpen}
+                className={`w-11 h-11 rounded-full shadow-sm transition-all active:scale-90 flex items-center justify-center ${menuOpen ? 'bg-star-primary text-white' : 'bg-white text-gray-600'}`}
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-5 h-5" aria-hidden="true">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+                </svg>
+            </button>
+          </div>
         </div>
 
-        {/* Sync Debug Panel */}
+        {/* Large Title — 滚动时折叠 */}
+        <h2
+          className="text-[34px] leading-[41px] font-black text-star-dark tracking-tight transition-all duration-200 overflow-hidden"
+          style={{ opacity: isScrolled ? 0 : 1, maxHeight: isScrolled ? 0 : 60, marginBottom: isScrolled ? 0 : 16 }}
+        >
+          运动记录
+        </h2>
+
+        {/* ··· 菜单：导出/导入/设置/诊断/注销 */}
+        <AnimatePresence>
+          {menuOpen && (
+            <>
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setMenuOpen(false)}
+                className="fixed inset-0 z-30"
+              />
+              <motion.div
+                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                transition={{ duration: 0.18, ease: 'easeOut' }}
+                role="menu"
+                className="absolute right-4 z-40 w-60 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 p-1.5 flex flex-col gap-0.5"
+                style={{ top: 'calc(var(--safe-top, 0px) + 60px)' }}
+              >
+                <MenuItem icon="export" label="导出 Markdown 战报" onClick={() => { setMenuOpen(false); handleExportMarkdown(); haptic('light'); }} />
+                <MenuItem icon="json" label="导出 JSON 备份" onClick={() => { setMenuOpen(false); handleExportJSON(); haptic('light'); }} />
+                <MenuItem icon="import" label="导入备份" onClick={() => { setMenuOpen(false); handleImportClick(); haptic('medium'); }} />
+                <div className="my-1 h-px bg-gray-100 mx-2" />
+                {onOpenSettings && <MenuItem icon="settings" label="设置" onClick={() => { setMenuOpen(false); onOpenSettings(); haptic('light'); }} />}
+                <MenuItem icon="debug" label="诊断" onClick={() => { setMenuOpen(false); setShowDebug(true); haptic('light'); }} />
+                <div className="my-1 h-px bg-gray-100 mx-2" />
+                <MenuItem icon="logout" label="注销登录" danger onClick={() => { setMenuOpen(false); handleLogout(); }} />
+                <div className="text-[9px] text-gray-300 text-center pt-1.5 pb-0.5 italic">数据加密存储于本地 · 建议定期备份</div>
+              </motion.div>
+            </>
+          )}
+        </AnimatePresence>
+
+        {/* Sync Debug Panel — 底部 sheet（rounded-t-[40px] 全局统一）*/}
         {showDebug && (
-            <div className="mb-6 bg-gray-900 text-gray-200 p-4 rounded-xl shadow-lg border border-gray-700 animate-in slide-in-from-top-5">
+            <div className="fixed inset-x-0 bottom-0 z-50 bg-gray-900 text-gray-200 p-4 rounded-t-[40px] shadow-2xl animate-in slide-in-from-bottom-6 max-w-md mx-auto" style={{ paddingBottom: 'calc(16px + var(--safe-bottom, 0px))' }}>
                 <div className="flex justify-between items-center mb-3">
                     <h3 className="font-mono text-sm font-bold text-star-primary">DIAGNOSTICS</h3>
-                    <span className="text-[10px] bg-gray-800 px-2 py-1 rounded text-gray-400">V1.1</span>
+                    <button onClick={() => setShowDebug(false)} aria-label="关闭诊断" className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 active:scale-90">
+                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                    </button>
                 </div>
-                
+
                 {/* 1. Environment Info */}
                 <div className="bg-black/30 p-2 rounded mb-3 space-y-1">
                     <div className="text-[10px] text-gray-400">API_BASE (Current)</div>
@@ -518,9 +507,9 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
                     </div>
                     {/* Manual Override Input */}
                     <div className="flex gap-1 mt-2">
-                        <input 
+                        <input
                             id="manual-api-input"
-                            type="text" 
+                            type="text"
                             placeholder="Set Manual API URL (e.g. http://192.168.1.5:43111)"
                             className="flex-1 bg-black/50 border border-gray-700 rounded px-2 py-1 text-[10px] text-white font-mono focus:border-star-primary outline-none"
                             onKeyDown={(e) => {
@@ -529,7 +518,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
                                 }
                             }}
                         />
-                        <button 
+                        <button
                             onClick={() => {
                                 const input = document.getElementById('manual-api-input') as HTMLInputElement;
                                 if (input && input.value) {
@@ -542,7 +531,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
                         >
                             Save
                         </button>
-                         <button 
+                         <button
                             onClick={() => {
                                 if(window.confirm('确定重置为自动检测的地址吗？')) {
                                     localStorage.removeItem('STARFIT_API_BASE');
@@ -564,13 +553,13 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
 
                 {/* 2. Controls */}
                 <div className="grid grid-cols-2 gap-2 mb-3">
-                    <button 
+                    <button
                         onClick={handlePing}
                         className="bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 text-xs font-bold py-2 rounded border border-blue-800/50"
                     >
                         Test Connectivity (Ping)
                     </button>
-                    <button 
+                    <button
                         onClick={handleForceSync}
                         className="bg-star-primary/20 hover:bg-star-primary/30 text-star-primary text-xs font-bold py-2 rounded border border-star-primary/50"
                     >
@@ -608,7 +597,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
                             ))}
                         </div>
                     )}
-                    
+
                     {/* User ID Display */}
                     <div className="text-[10px] text-gray-500 mt-2 flex items-center gap-2">
                         <span>UserID:</span>
@@ -621,12 +610,6 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
                     </div>
                     <div className="flex justify-between items-center gap-2 mt-2">
                         <button onClick={handleResetSyncState} className="text-[10px] text-red-500 underline">强制同步</button>
-                        <button
-                          onClick={handleLogout}
-                          className="text-[10px] bg-red-600 hover:bg-red-700 text-white px-3 py-1.5 rounded font-bold transition-colors"
-                        >
-                          注销登录
-                        </button>
                     </div>
                 </div>
             </div>
@@ -634,8 +617,8 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
 
         {/* List */}
         {sessions.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-50">
-                <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mb-4 text-gray-400">
+            <div className="flex-1 flex flex-col items-center justify-center text-center py-20 opacity-50" role="status">
+                <div className="w-16 h-16 bg-gray-200 rounded-full flex items-center justify-center mb-4 text-gray-400" aria-hidden="true">
                     <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-8 h-8">
                         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
@@ -655,89 +638,6 @@ const History: React.FC<HistoryProps> = ({ sessions, onClose, onSelect, onImport
               />
             </div>
         )}
-
-        {/* Data Management Section */}
-        <div className="mt-4 pt-4 border-t border-gray-100 relative">
-            <div className="flex items-center justify-between mb-2.5">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">数据管理</h3>
-                <span className="text-[8px] font-mono text-gray-300">DATA V2.1</span>
-            </div>
-            <div className="flex gap-3">
-                <div className="flex-1 relative">
-                    <button 
-                        onClick={() => setExportMenuOpen(!exportMenuOpen)}
-                        className={`w-full bg-white border border-gray-200 text-gray-700 font-bold py-2.5 rounded-xl shadow-sm hover:bg-gray-50 active:scale-95 transition-all flex items-center justify-center gap-2 ${exportMenuOpen ? 'border-star-primary ring-2 ring-star-primary/10' : ''}`}
-                    >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5 text-gray-400">
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                        </svg>
-                        <span className="text-[11px]">导出</span>
-                    </button>
-
-                    <AnimatePresence>
-                        {exportMenuOpen && (
-                            <>
-                                <motion.div 
-                                    initial={{ opacity: 0 }}
-                                    animate={{ opacity: 1 }}
-                                    exit={{ opacity: 0 }}
-                                    onClick={() => setExportMenuOpen(false)}
-                                    className="fixed inset-0 z-40"
-                                />
-                                <motion.div
-                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
-                                    className="absolute bottom-full left-0 right-0 mb-2 bg-white rounded-2xl shadow-2xl border border-gray-100 p-1.5 z-50 flex flex-col gap-1 overflow-hidden"
-                                >
-                                    <button 
-                                        onClick={handleExportMarkdown}
-                                        className="flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-xl transition-colors text-left group"
-                                    >
-                                        <div className="w-7 h-7 rounded-lg bg-blue-50 flex items-center justify-center text-blue-600 group-hover:scale-110 transition-transform">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                                            </svg>
-                                        </div>
-                                        <div>
-                                            <div className="text-[11px] font-black text-gray-900 uppercase italic">Markdown</div>
-                                            <div className="text-[9px] text-gray-400 font-medium">战报报告 (推荐)</div>
-                                        </div>
-                                    </button>
-                                    <button 
-                                        onClick={handleExportJSON}
-                                        className="flex items-center gap-3 p-2.5 hover:bg-gray-50 rounded-xl transition-colors text-left group"
-                                    >
-                                        <div className="w-7 h-7 rounded-lg bg-purple-50 flex items-center justify-center text-purple-600 group-hover:scale-110 transition-transform">
-                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5">
-                                                <path strokeLinecap="round" strokeLinejoin="round" d="M14.25 9.75L16.5 12l-2.25 2.25m-4.5 0L7.5 12l2.25-2.25M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
-                                            </svg>
-                                        </div>
-                                        <div>
-                                            <div className="text-[11px] font-black text-gray-900 uppercase italic">JSON</div>
-                                            <div className="text-[9px] text-gray-400 font-medium">原始数据备份</div>
-                                        </div>
-                                    </button>
-                                </motion.div>
-                            </>
-                        )}
-                    </AnimatePresence>
-                </div>
-
-                <button 
-                    onClick={handleImportClick}
-                    className="flex-1 bg-white border border-gray-200 text-gray-700 font-bold py-2.5 rounded-xl shadow-sm hover:bg-gray-50 active:scale-95 transition-all flex items-center justify-center gap-2"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-3.5 h-3.5 text-gray-400">
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                    </svg>
-                    <span className="text-[11px]">导入</span>
-                </button>
-            </div>
-            <p className="text-[9px] text-gray-300 mt-2 text-center italic font-medium">
-                数据加密存储于本地。建议定期备份以防丢失。
-            </p>
-        </div>
 
       </div>
     </motion.div>

@@ -154,7 +154,7 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
           className="w-full max-w-md bg-white text-star-dark shadow-2xl rounded-[2.5rem] relative flex flex-col overflow-hidden border border-gray-100"
         >
           {/* 1. Sporty Header Area */}
-          <div className="bg-star-dark p-6 pb-8 relative overflow-hidden rounded-t-[2.5rem]">
+          <div className="bg-star-dark p-6 pb-8 relative overflow-hidden rounded-t-[40px]">
             {/* Decorative Patterns */}
             <div className="absolute top-0 right-0 opacity-10 pointer-events-none transform translate-x-1/4 -translate-y-1/4">
               <svg width="200" height="200" viewBox="0 0 100 100">

@@ -240,7 +240,7 @@ export const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/40 backdrop-blur-sm" onClick={onClose}>
-      <div className="bg-white w-full max-w-md rounded-t-2xl shadow-2xl overflow-hidden flex flex-col h-[90vh]" onClick={e => e.stopPropagation()}>
+      <div className="bg-white w-full max-w-md rounded-t-[40px] shadow-2xl overflow-hidden flex flex-col h-[90vh]" onClick={e => e.stopPropagation()}>
         <div className="p-6 overflow-y-auto pb-32">
           {showDeviationWarning ? (
             <DeviationWarningModal

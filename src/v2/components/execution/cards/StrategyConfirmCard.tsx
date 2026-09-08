@@ -79,7 +79,7 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
   const FullscreenEditor = (
     <div className="fixed inset-0 z-[9999] bg-gray-50 flex flex-col p-4 pt-8">
       {/* Header - Fixed at top */}
-      <div className="flex-shrink-0 bg-star-dark px-4 py-4 rounded-t-2xl flex items-center justify-between">
+      <div className="flex-shrink-0 bg-star-dark px-4 py-4 rounded-t-[40px] flex items-center justify-between">
         <div className="flex items-center gap-3">
           <h3 className="text-white text-lg font-black uppercase tracking-widest">编辑训练策略</h3>
         </div>

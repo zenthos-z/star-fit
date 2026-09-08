@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion'
+import { haptic } from '../../../lib/nativeHaptics';;
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -313,7 +314,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         opacity: isOpen ? 1 : 0,
         pointerEvents: isOpen ? 'auto' : 'none',
       }}
-      className={`fixed inset-0 z-50 flex flex-col h-full rounded-t-[14px] shadow-[0_-8px_40px_rgba(0,0,0,0.18)] overflow-hidden bg-[#F6F6F8]`}
+      className={`fixed inset-0 z-50 flex flex-col h-full rounded-t-[40px] shadow-[0_-8px_40px_rgba(0,0,0,0.18)] overflow-hidden bg-[#F6F6F8]`}
     >
       {/* Header — iMessage 风格：左关闭 / 中标题 / 右历史 */}
       <div className="flex-shrink-0 z-20 px-4 pt-2 pb-3 flex items-center justify-between" style={{ paddingTop: 'calc(var(--safe-top) + 8px)' }}>
@@ -325,7 +326,6 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
           </svg>
-          <span className="text-[15px] font-medium">教练</span>
         </button>
         <div className="text-center">
           <div className="text-[17px] font-semibold text-gray-900 leading-tight">AI 教练</div>
@@ -522,7 +522,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                   ? "正在分析本次训练…"
                   : isPlanMode
                     ? "描述你想调整的内容…"
-                    : "iMessage 风格输入"
+                    : "给教练发消息"
               }
               disabled={isBusy}
               className="flex-1 resize-none bg-transparent outline-none text-[16px] leading-[1.4] py-1.5 max-h-24 text-gray-900 placeholder-gray-400 custom-scrollbar"

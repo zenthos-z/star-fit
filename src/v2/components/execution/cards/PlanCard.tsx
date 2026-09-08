@@ -46,7 +46,7 @@ export const PlanCard: React.FC<PlanCardProps> = ({ uiHint, onConfirm }) => {
 
   return (
     <div className="bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-xl">
-      <div className="bg-star-dark px-5 py-4 flex items-center gap-3 rounded-t-[2.5rem]">
+      <div className="bg-star-dark px-5 py-4 flex items-center gap-3 rounded-t-[40px]">
         <div className="w-1 h-6 bg-star-accent rounded-full"></div>
         <div>
           <span className="text-sm font-bold text-white uppercase tracking-wider">建议训练计划</span>
