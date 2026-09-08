@@ -8,6 +8,7 @@ import { ExerciseCardV2 } from './src/v2/components/execution/ExerciseCardV2';
 import ReorderMode from './src/v2/components/execution/ReorderMode';
 import SettlementV2 from './src/v2/components/settlement/SettlementV2';
 import History from './components/History';
+import { haptic } from './src/lib/nativeHaptics';
 import TimeEditor from './components/TimeEditor';
 import MainTabBar, { MainTab } from './components/MainTabBar';
 import ExerciseSettingsModal from './components/ExerciseSettingsModal';
@@ -632,6 +633,7 @@ const App: React.FC = () => {
   };
 
   const handleStartSession = () => {
+    haptic('medium'); // 主操作：开始训练
     // If no exercises, clicking START should trigger adding an exercise instead of starting the timer
     if (session.exercises.length === 0) {
       handleAddSingleExercise();
