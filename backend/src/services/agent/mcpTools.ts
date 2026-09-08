@@ -70,6 +70,7 @@ import {
   createUserRepository,
 } from '../../db/postgresql/repository/index.js';
 import { getPostgresClient } from '../../db/postgresql/index.js';
+import { mergeHistorySources } from './historyMerger.js';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -512,7 +513,28 @@ export function buildMcpToolsWith(
       const userId = getUserIdFromContext({ explicitConfig: config, injectedUserId });
       const userRepo = createUserRepository(client);
       const history = await userRepo.getHistorySummary(userId);
-      const trimmed = trimSessions(history, input.limit ?? 10);
+      const limit = input.limit ?? 10;
+
+      // History reads no longer rely solely on users.history_summary — the
+      // sync/push write path upserts the `sessions` table but never maintains
+      // the summary JSONB, so a summary-only read can return empty history
+      // right after a workout. Merge both sources (live rows win the dedupe).
+      let liveRows: Array<{ raw_json: unknown }> = [];
+      try {
+        liveRows = await client.queryMany(
+          `SELECT raw_json FROM sessions
+            WHERE user_id = $userId
+            ORDER BY start_time DESC
+            LIMIT $limit`,
+          { userId, limit: limit * 3 },
+        );
+      } catch {
+        liveRows = [];
+      }
+      const trimmed = trimSessions(
+        { ...(history ?? {}), sessions: mergeHistorySources((history as Record<string, unknown> | null)?.sessions, liveRows, limit) },
+        limit,
+      );
       let profileStatic: unknown = null;
       if (input.include_profile !== false) {
         try {

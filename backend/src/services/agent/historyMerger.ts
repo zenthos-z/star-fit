@@ -1,0 +1,100 @@
+import { z } from 'zod';
+
+/**
+ * load_history 读取修复：历史训练不再只依赖 users.history_summary（该字段
+ * 在 sync/push 写入路径上无人维护，长期为空）。改为「summary + sessions 表
+ * 实时查询」双源合并：sessions 表是每次 sync/push 都会写的权威数据，
+ * summary 里已有的条目按 session_id 去重后并在一起，按开始时间倒序取 limit 条。
+ */
+
+/** sessions 表 raw_json 行的最小形状（宽松解析，容错字段缺失）。 */
+const RawSessionRowSchema = z.object({
+  id: z.string().optional(),
+  session_id: z.string().optional(),
+  start_time: z.union([z.string(), z.number()]).optional(),
+  startTime: z.union([z.string(), z.number()]).optional(),
+  end_time: z.union([z.string(), z.number()]).optional(),
+  endTime: z.union([z.string(), z.number()]).optional(),
+  title: z.string().optional(),
+  exercises: z.array(z.any()).optional(),
+  stats: z.record(z.any(), z.any()).optional(),
+  notes: z.string().optional(),
+});
+
+export type RawSessionRow = z.infer<typeof RawSessionRowSchema>;
+
+function toIso(value: string | number | undefined): string | undefined {
+  if (value === undefined) return undefined;
+  const date = typeof value === 'number' ? new Date(value) : new Date(String(value));
+  if (Number.isNaN(date.getTime())) return undefined;
+  return date.toISOString();
+}
+
+/** Normalize a raw_json row into the history_summary.sessions entry shape. */
+export function normalizeSessionRow(raw: unknown): RawSessionRow | null {
+  const parsed = RawSessionRowSchema.safeParse(raw);
+  if (!parsed.success) return null;
+  const s = parsed.data;
+  const id = s.id ?? s.session_id;
+  if (!id) return null;
+  return {
+    session_id: id,
+    start_time: toIso(s.start_time ?? s.startTime),
+    end_time: toIso(s.end_time ?? s.endTime),
+    title: s.title,
+    exercises: s.exercises,
+    stats: s.stats,
+    notes: s.notes,
+  };
+}
+
+/** Key used to dedupe summary entries against live-session rows. */
+function dedupeKey(entry: Record<string, unknown>): string {
+  const id = entry.session_id ?? entry.id;
+  return typeof id === 'string' && id.length > 0 ? id : JSON.stringify(entry).slice(0, 120);
+}
+
+/**
+ * Merge `history_summary.sessions` (may be stale/empty) with real-time rows
+ * queried from the `sessions` table. Live rows win the dedupe (they are the
+ * source of truth written by every sync/push). Result: newest-first, capped
+ * at `limit`.
+ */
+export function mergeHistorySources(
+  summarySessions: unknown,
+  liveRows: Array<{ raw_json: unknown }>,
+  limit: number,
+): Record<string, unknown>[] {
+  const seen = new Set<string>();
+  const merged: Record<string, unknown>[] = [];
+
+  // Live rows first (authoritative), newest-first by start_time.
+  const normalizedLive = liveRows
+    .map((r) => normalizeSessionRow(r.raw_json))
+    .filter((v): v is RawSessionRow => v !== null)
+    .sort((a, b) => {
+      const ta = a.start_time ? Date.parse(String(a.start_time)) : 0;
+      const tb = b.start_time ? Date.parse(String(b.start_time)) : 0;
+      return tb - ta;
+    });
+  for (const s of normalizedLive) {
+    const rec: Record<string, unknown> = { ...s };
+    if (!rec.start_time) delete rec.start_time;
+    if (rec.title === undefined) delete rec.title;
+    seen.add(dedupeKey(rec));
+    merged.push(rec);
+  }
+
+  // Then summary entries not already covered by a live row.
+  if (Array.isArray(summarySessions)) {
+    for (const entry of summarySessions) {
+      if (!entry || typeof entry !== 'object') continue;
+      const rec = entry as Record<string, unknown>;
+      if (seen.has(dedupeKey(rec))) continue;
+      merged.push(rec);
+      seen.add(dedupeKey(rec));
+    }
+  }
+
+  return merged.slice(0, limit);
+}

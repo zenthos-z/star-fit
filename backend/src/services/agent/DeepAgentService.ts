@@ -337,8 +337,21 @@ export class DeepAgentService implements AgentService {
       // surfaced, after the whole turn finishes. Checkpoint state still
       // persists in agent_runtime via the injected checkpointer, so the thread
       // resumes correctly on the next message.
+      //
+      // Time grounding: the model has NO clock tool and the system prompt is
+      // built once (cached), so "today" is injected as a per-request context
+      // prefix on the user message. Without this the agent hallucinates dates
+      // (e.g. injury auto-heal set to a past date) and cannot recognize
+      // "trained earlier today".
+      const now = new Date();
+      const timeContext =
+        `[System context] Current time: ${now.toISOString()} ` +
+        `(user local date: ${now.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}, ` +
+        `${now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Shanghai' })}). ` +
+        'All "today / tomorrow / this week" references and any auto-heal / expiry ' +
+        'dates must be computed from this timestamp.\n\n';
       const result = (await agent.invoke(
-        { messages: [{ role: 'user', content: req.message }] },
+        { messages: [{ role: 'user', content: `${timeContext}${req.message}` }] },
         {
           configurable: {
             thread_id: threadId,
