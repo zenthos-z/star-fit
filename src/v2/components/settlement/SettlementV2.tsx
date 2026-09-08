@@ -2,10 +2,11 @@ import React, { useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Session } from '../../../../types';
 import { WorkoutSession } from '../../types/protocol';
-import { APP_NAME, DEFAULT_BODYWEIGHT } from '../../../../constants';
+import { APP_NAME } from '../../../../constants';
 import { toPng } from 'html-to-image';
 import { PosterPromptGeneratorV2 } from '../poster/PosterPromptGeneratorV2';
 import { convertSessionToWorkoutSession } from '../../utils/typeBridge';
+import { calculateExerciseVolume } from '../../lib/settlementSummary';
 import { buttonPress, tapScale, staggerContainer, staggerItem } from '../../lib/animations';
 
 interface SettlementV2Props {
@@ -25,39 +26,8 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
   const endTime = session.endTime || Date.now();
   const durationMinutes = Math.floor((endTime - session.startTime - session.pausedDuration) / 1000 / 60);
 
-  const calculateVolume = (ex: any) => {
-    let vol = 0;
-    const bodyweight = ex.referenceBodyweight || DEFAULT_BODYWEIGHT;
-
-    ex.sets.forEach((set: any) => {
-      if (!set.completed) return;
-
-      const reps = set.reps || 0;
-      const weight = set.weight || 0;
-      const duration = set.duration || 0;
-
-      switch (ex.type) {
-        case 'resistance':
-        case 'bodyweight':
-        case 'assisted':
-        case 'unilateral':
-        case 'heavy_weight':
-        case 'rep_training':
-          vol += weight * reps;
-          break;
-        case 'cardio':
-        case 'outdoor':
-          break;
-        case 'isometric':
-          if (weight > 0) vol += weight * duration;
-          else vol += bodyweight * duration;
-          break;
-      }
-    });
-    return vol;
-  };
-
-  const totalVolume = session.exercises.reduce((acc, ex) => acc + calculateVolume(ex), 0);
+  // 容量计算已抽取为纯函数 src/v2/lib/settlementSummary.ts（有单测钉死口径）
+  const totalVolume = session.exercises.reduce((acc, ex) => acc + calculateExerciseVolume(ex), 0);
   const totalSets = session.exercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed).length, 0);
 
   const getExerciseStats = (ex: any) => {
