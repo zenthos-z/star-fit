@@ -111,7 +111,12 @@ interface AICoachOverlayProps {
   isLoading: boolean;
   isPlanMode: boolean;
   setIsPlanMode: (mode: boolean) => void;
-  handleChatSubmit: (e?: React.FormEvent, directMessage?: string) => void;
+  handleChatSubmit: (
+    e?: React.FormEvent,
+    directMessage?: string,
+    scenarioOverride?: string,
+    opts?: { silent?: boolean }
+  ) => void;
   handleConfirmPlan: (plan: any[], mode: 'append' | 'replace') => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
@@ -448,6 +453,39 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                           if (payload?.action === 'save') {
                             // Save strategy via API - returns Promise for async handling
                             return handleStrategySave(payload.content);
+                          }
+                        } else if (uiHintType === 'profile_update_confirm') {
+                          // [画像更新闭环] docs/profile-update-frontend-spec.md §3.3
+                          // 确认/取消均为静默回传：指令不进聊天流，用户只看到 Agent 回复
+                          // 确认 → scenario=update_profile 执行轮（携带 proposals 原文）→
+                          //   Agent 写库后回 audit_complete 卡片（含「查看详情」）
+                          // 取消 → scenario=chat 纯文本确认轮，不做任何写入
+                          const proposals = Array.isArray(payload?.proposals) ? payload.proposals : [];
+                          const silentOpts = { silent: true };
+                          if (payload?.action === 'confirm_update') {
+                            const proposalsText = proposals.map((p: any) =>
+                              `${p.label}(${p.field}): ${p.change}` + (p.value !== undefined ? ` 新值: ${JSON.stringify(p.value)}` : '')
+                            ).join('；');
+                            handleChatSubmit(
+                              undefined,
+                              `已确认画像更新，请按以下提案执行：${proposalsText}`,
+                              'update_profile',
+                              silentOpts
+                            );
+                          } else if (payload?.action === 'cancel_update') {
+                            const fields = proposals.map((p: any) => p.field).join('、');
+                            handleChatSubmit(
+                              undefined,
+                              `用户选择暂不更新画像（放弃提案：${fields || '无'}）。请简短确认，不做任何修改。`,
+                              'chat',
+                              silentOpts
+                            );
+                          }
+                        } else if (uiHintType === 'audit_complete') {
+                          // [画像更新闭环] 「查看详情」无 auditContent 时的兜底已移入卡片内：
+                          // 有 updates 就地展开明细；仅当真正无内容可看时才通知父级
+                          if (payload?.action === 'view_audit_details') {
+                            console.log('[AICoachOverlay] audit details requested', payload);
                           }
                         }
                       }}

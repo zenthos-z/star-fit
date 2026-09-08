@@ -13,6 +13,7 @@ import { SurveySuccessCard } from './cards/SurveySuccessCard';
 import { AuditCompleteCard } from './cards/AuditCompleteCard';
 import { HitlConfirmCard } from './cards/HitlConfirmCard';
 import { StrategyConfirmCard } from './cards/StrategyConfirmCard';
+import { ProfileUpdateConfirmCard } from './cards/ProfileUpdateConfirmCard';
 import { FloatingAttachment, Attachment } from './FloatingAttachment';
 import { useAttachments } from '../../hooks/useAttachments';
 
@@ -66,6 +67,7 @@ const PluginRegistry: Record<string, React.FC<any>> = {
   'audit_complete': AuditCompleteCard,
   'strategy_confirm': StrategyConfirmCard,
   'hitl_confirm': HitlConfirmCard,
+  'profile_update_confirm': ProfileUpdateConfirmCard,
 
   // 错误兜底
   'skeleton': StandardCard,

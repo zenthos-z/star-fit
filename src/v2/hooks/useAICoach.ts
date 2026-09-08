@@ -312,7 +312,12 @@ export const useAICoach = (
     }
   }, [chatMessage]);
 
-  const handleChatSubmit = async (e?: React.FormEvent, directMessage?: string) => {
+  const handleChatSubmit = async (
+    e?: React.FormEvent,
+    directMessage?: string,
+    scenarioOverride?: string,
+    opts?: { silent?: boolean }
+  ) => {
     console.log('[handleChatSubmit] Called with:', { hasEvent: !!e, directMessage, isLoading });
 
     if (e) e.preventDefault();
@@ -508,7 +513,10 @@ ${JSON.stringify(uploadData, null, 2)}`
 
     setChatMessage("");
     setAttachedContext(null); // Clear attachment after send
-    setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
+    // 静默轮（画像确认等系统回传）：不把指令文本推入聊天流，用户只看到 Agent 的回复
+    if (!opts?.silent) {
+      setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
+    }
 
     if (textareaRef.current) textareaRef.current.style.height = '64px';
 
@@ -516,7 +524,13 @@ ${JSON.stringify(uploadData, null, 2)}`
     setChatHistory(prev => [...prev, { role: 'ai', text: '', isThinking: true, progressItems: [] }]);
 
     try {
-      const scenario: AgentScenario = isPlanMode ? "plan" : "chat";
+      // scenario 覆盖（如画像确认卡回传的 update_profile 执行轮），否则按模式默认
+      const validScenarios = ['chat', 'plan', 'workout_complete', 'update_profile'];
+      const scenario: AgentScenario = (
+        scenarioOverride && validScenarios.includes(scenarioOverride)
+          ? scenarioOverride
+          : isPlanMode ? "plan" : "chat"
+      ) as AgentScenario;
 
       // [PHASE 4.1] 流式增量渲染（打字机）：token 是纯散文（卡片 JSON 已被后端
       //  extractUiHintEvents 剥成单独的 uiHint 事件），逐字追加到 thinking 气泡即时显示；
