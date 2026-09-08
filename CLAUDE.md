@@ -5,7 +5,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## 项目简介
 
 Starfit — 移动端优先的健身记录与 AI 教练应用。前端 React 19 + Vite（Capacitor 打包 Android），
-后端 Fastify 5 + PostgreSQL(pgvector)，Agent 内核为 Deep Agents（单 Agent + Skill 路由 + SSE 流式）。
+后端 Fastify 5 + PostgreSQL，Agent 内核为 Deep Agents（单 Agent + Skill 路由 + SSE 流式）。
 
 ────────────────────────────────────────
 │ 0. 核心红线 (不可违反)

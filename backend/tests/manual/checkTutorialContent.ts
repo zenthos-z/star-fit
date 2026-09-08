@@ -22,7 +22,6 @@ pool.query(`
       ELSE '不包含冲击'
     END as has_impact
   FROM exercises
-  WHERE embedding IS NOT NULL
   ORDER BY name
 `)
   .then(res => {

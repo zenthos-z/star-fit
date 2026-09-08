@@ -107,6 +107,10 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   const [isGpsTimeout, setIsGpsTimeout] = useState(false);
   const [elapsed, setElapsed] = useState(currentSet.duration || 0);
   const [isCompleted, setIsCompleted] = useState(currentSet.status === 'COMPLETED');
+  // 心率录入：完成前可手动填（穿戴设备对接后可自动写入）
+  const [heartRateInput, setHeartRateInput] = useState<string>(
+    currentSet.heartRate ? String(currentSet.heartRate) : ''
+  );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   const [tileUrl, setTileUrl] = useState('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png');
@@ -227,15 +231,38 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   const syncToParent = (finalElapsed?: number, finalDistance?: number, finalStatus?: 'COMPLETED' | 'PLANNED') => {
     if (onUpdate) {
       const status = finalStatus ?? (isCompleted ? 'COMPLETED' : 'PLANNED');
+      const hr = heartRateInput ? Number(heartRateInput) : undefined;
       onUpdate({
         sets: [{
           index: 0,
           duration: Math.floor(finalElapsed ?? elapsed),
           distance: Math.floor(finalDistance ?? distance),
+          heartRate: hr && hr > 0 ? hr : undefined,
           status,
           timestamp: new Date().toISOString()
         }]
       });
+    }
+  };
+
+  /** 心率输入变化：即时同步到父层（合法值才写） */
+  const handleHeartRateChange = (value: string) => {
+    setHeartRateInput(value);
+    const n = Number(value);
+    if (Number.isFinite(n) && n > 0) {
+      // 直接带值同步，避免读旧 state
+      if (onUpdate) {
+        onUpdate({
+          sets: [{
+            index: 0,
+            duration: Math.floor(elapsed),
+            distance: Math.floor(distance),
+            heartRate: n,
+            status: isCompleted ? 'COMPLETED' : 'PLANNED',
+            timestamp: new Date().toISOString()
+          }]
+        });
+      }
     }
   };
 
@@ -485,6 +512,31 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
     );
   };
 
+  /** 心率录入行（地图上方统计区之下） */
+  const renderHeartRateInput = () => (
+    <div className="w-full px-6 pb-3 pt-1 flex items-center justify-center gap-3">
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border shrink-0 bg-rose-50 text-rose-600 border-rose-100">
+        <Heart className="w-3.5 h-3.5 fill-rose-600" />
+        <span className="text-[10px] font-black uppercase tracking-widest">目标: Zone {targetHeartRateZone}</span>
+      </div>
+      <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1 flex-1 max-w-[10rem]">
+        <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100 shrink-0" />
+        <input
+          type="number"
+          inputMode="numeric"
+          min={40}
+          max={220}
+          placeholder="实际心率"
+          value={heartRateInput}
+          onChange={(e) => handleHeartRateChange(e.target.value)}
+          disabled={isCompleted}
+          className="w-full min-w-0 bg-transparent text-sm font-bold text-gray-800 outline-none placeholder-gray-300 placeholder:text-[10px] placeholder:uppercase placeholder:tracking-widest [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+        />
+        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">BPM</span>
+      </div>
+    </div>
+  );
+
   const renderMapContent = () => {
     if (!isRunning && !isWaitingForGPS && elapsed === 0 && !isCompleted) {
       return (
@@ -663,13 +715,14 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
          </div>
       </div>
 
-      <div className="flex flex-col rounded-2xl border border-gray-100 overflow-hidden mb-6 bg-gray-50/30">
+        <div className="flex flex-col rounded-2xl border border-gray-100 overflow-hidden mb-6 bg-gray-50/30">
         <div className={`relative flex flex-col items-center justify-center py-6 border-b border-gray-100 transition-all duration-500 ${
             isCompleted ? 'bg-[#f0fdf4]/50' : 'bg-transparent'
         }`}>
             <div className="w-full mt-1">
               {renderStats()}
             </div>
+            {renderHeartRateInput()}
         </div>
 
         <div 

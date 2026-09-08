@@ -14,7 +14,6 @@
 
 -- Enable required extensions
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-CREATE EXTENSION IF NOT EXISTS "vector";
 
 -- ============================================================================
 -- ENUMS - Define reusable enums (idempotent using DO blocks)
@@ -647,7 +646,7 @@ COMMENT ON COLUMN users.profile_static IS 'Long-term biological/psychological tr
 COMMENT ON COLUMN users.profile_dynamic IS 'High-frequency state: load anchors, limitations, recovery, updated per session';
 COMMENT ON COLUMN users.history_summary IS 'Compressed history for AI token optimization, updated weekly';
 
-COMMENT ON TABLE exercises IS 'Exercise library (loaded in full by the agent via list_exercises; no vector search)';
+COMMENT ON TABLE exercises IS 'Exercise library (loaded in full by the agent via the list_exercises MCP tool)';
 COMMENT ON COLUMN exercises.attributes IS 'Flexible JSONB for exercise attributes, tags, equipment, impact levels';
 
 COMMENT ON TABLE sessions IS 'Training sessions with full context storage for AI processing';

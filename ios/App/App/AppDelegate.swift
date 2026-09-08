@@ -8,6 +8,8 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
+        // LiquidGlassPlugin 通过 capacitor.config.json 的 packageClassList 注册
+        // （cap sync 会清空该列表——每次 sync 后需重跑 scripts/patch-capacitor-json.sh）
         return true
     }
 

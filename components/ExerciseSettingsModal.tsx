@@ -6,9 +6,10 @@ import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '../constan
 import { v4 as uuidv4 } from 'uuid';
 import { Timer, MapPin, Watch, Heart, Flame, Zap, Trophy, Gauge, Navigation } from 'lucide-react';
 import ExerciseLibraryModal from './ExerciseLibraryModal';
-import { predictMetrics } from '../services/geminiService';
+import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } from '../src/services/suggestionService';
 import { guessCardioSubtype } from '../utils/exerciseLogic';
 import { DeviationLogger } from '../src/v2/services/logging/DeviationLogger';
+import { setTabBarHidden } from '../src/lib/nativeTabBar';
 
 interface ExerciseSettingsModalProps {
   exercise: ExerciseAction;
@@ -22,6 +23,179 @@ interface ExerciseSettingsModalProps {
   loadAnchors?: LoadAnchorsType;
   userId?: string;
   onSaveComplete?: () => void;  // New callback to notify parent that save is complete
+}
+
+// ---------------------------------------------------------------------------
+// 建议来源徽标 + 解释窗口（纯展示组件）
+// ---------------------------------------------------------------------------
+
+const DATA_BASIS_LABELS: Record<string, string> = {
+    anchor: '训练锚点（系统记录）',
+    history: '历史最佳推导',
+    bodyweight_estimate: '体重系数估算',
+    type_default: '类型默认值（保守）',
+};
+
+const SOURCE_LABELS: Record<SuggestionSource, string> = {
+    hybrid: '云端 · AI',
+    formula: '云端',
+    cache: '缓存',
+    heuristic: '本地估算',
+};
+
+function relativeTime(ts: number | undefined): string {
+    if (!ts) return '';
+    const diff = Date.now() - ts;
+    if (diff < 60 * 1000) return '刚刚';
+    if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`;
+    if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)} 小时前`;
+    return `${Math.floor(diff / 86400000)} 天前`;
+}
+
+function SuggestionSourceBadge({ source, generatedAt }: { source?: SuggestionSource; generatedAt?: number }) {
+    if (!source) return null;
+    const isCloud = source === 'formula' || source === 'hybrid';
+    const isHeuristic = source === 'heuristic';
+    return (
+        <span
+          className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold ${
+              isCloud
+                  ? 'bg-blue-50 text-blue-500'
+                  : isHeuristic
+                    ? 'bg-amber-50 text-amber-500'
+                    : 'bg-gray-100 text-gray-400'
+          }`}
+        >
+            <span className={`w-1 h-1 rounded-full ${isCloud ? 'bg-blue-400' : isHeuristic ? 'bg-amber-400' : 'bg-gray-300'}`} />
+            {SOURCE_LABELS[source]}
+            {source === 'cache' && generatedAt ? ` · ${relativeTime(generatedAt)}` : ''}
+        </span>
+    );
+}
+
+function SuggestionInfoWindow({
+    suggestion,
+    onClose,
+}: {
+    suggestion: ResolvedSuggestion;
+    onClose: () => void;
+}) {
+    const v = suggestion.values;
+    const rows: Array<[string, string]> = [];
+    if (v.weight !== undefined) rows.push(['配重', `${v.weight} kg`]);
+    if (v.reps !== undefined) rows.push(['次数', `${v.reps} 次/组`]);
+    if (v.set_count !== undefined) rows.push(['组数', `${v.set_count} 组`]);
+    if (v.duration_sec !== undefined) rows.push(['时长', `${Math.round(v.duration_sec / 60)} 分钟`]);
+    if (v.distance_m !== undefined) rows.push(['距离', `${(v.distance_m / 1000).toFixed(1)} km`]);
+    if (v.target_rpe !== undefined) rows.push(['目标 RPE', `${v.target_rpe}`]);
+
+    return (
+        <motion.div
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.2 }}
+          className="fixed inset-0 z-[70] bg-black/60 backdrop-blur-sm"
+          onClick={onClose}
+        >
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9, y: 50 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.9, y: 50 }}
+            transition={{ type: 'tween', duration: 0.3, ease: 'easeOut' }}
+            className="fixed inset-0 flex items-center justify-center p-6"
+          >
+            <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-6 max-h-[80vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+
+              <div className="flex items-center justify-between mb-4">
+                  <h3 className="text-base font-black text-star-dark">推荐依据</h3>
+                  <SuggestionSourceBadge source={suggestion.source} generatedAt={suggestion.generatedAt} />
+              </div>
+
+              {/* 理由 */}
+              {suggestion.reason && (
+                  <div className="rounded-2xl bg-star-dark/5 p-4 mb-4">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">推荐理由</p>
+                      <p className="text-sm font-medium text-star-dark leading-relaxed">{suggestion.reason}</p>
+                      {suggestion.safetyNote && (
+                          <p className="text-xs font-medium text-amber-600 mt-2">⚠ {suggestion.safetyNote}</p>
+                      )}
+                  </div>
+              )}
+
+              {/* 数据依据 */}
+              <div className="mb-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">数据依据</p>
+                  <div className="space-y-1.5">
+                      <div className="flex justify-between text-xs">
+                          <span className="text-gray-500">能力锚点</span>
+                          <span className="font-bold text-star-dark">{DATA_BASIS_LABELS[suggestion.dataBasis ?? ''] ?? '—'}</span>
+                      </div>
+                      {suggestion.est1rm !== undefined && (
+                          <div className="flex justify-between text-xs">
+                              <span className="text-gray-500">估算 1RM</span>
+                              <span className="font-bold text-star-dark">{suggestion.est1rm.toFixed(1)} kg</span>
+                          </div>
+                      )}
+                      {suggestion.anchorConfidence !== undefined && (
+                          <div className="flex justify-between text-xs">
+                              <span className="text-gray-500">锚点置信度</span>
+                              <span className="font-bold text-star-dark">{Math.round(suggestion.anchorConfidence * 100)}%</span>
+                          </div>
+                      )}
+                      {suggestion.baselineRpe !== undefined && (
+                          <div className="flex justify-between text-xs">
+                              <span className="text-gray-500">基准 RPE</span>
+                              <span className="font-bold text-star-dark">{suggestion.baselineRpe}</span>
+                          </div>
+                      )}
+                  </div>
+              </div>
+
+              {/* 建议数值 */}
+              <div className="mb-4">
+                  <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">建议数值</p>
+                  <div className="grid grid-cols-3 gap-2">
+                      {rows.map(([label, value]) => (
+                          <div key={label} className="rounded-xl bg-gray-50 p-2 text-center">
+                              <p className="text-sm font-black text-star-dark">{value}</p>
+                              <p className="text-[9px] font-bold text-gray-400">{label}</p>
+                          </div>
+                      ))}
+                  </div>
+              </div>
+
+              {/* Agent 调整明细 */}
+              {suggestion.adjustmentActions && suggestion.adjustmentActions.length > 0 && (
+                  <div className="mb-4">
+                      <p className="text-[10px] font-bold text-gray-400 uppercase mb-2">AI 调整明细</p>
+                      <div className="space-y-1">
+                          {suggestion.adjustmentActions.map((a, i) => (
+                              <div key={i} className="flex justify-between text-xs bg-blue-50/50 rounded-lg px-3 py-1.5">
+                                  <span className="text-gray-600 font-medium">{a.field}</span>
+                                  <span className="font-bold text-blue-600">
+                                      {a.mode === 'multiply' ? `× ${a.value}` : `${a.value > 0 ? '+' : ''}${a.value}`}
+                                  </span>
+                              </div>
+                          ))}
+                      </div>
+                  </div>
+              )}
+
+              <p className="text-[10px] text-gray-300 text-center mb-4">
+                  生成于 {suggestion.generatedAt ? new Date(suggestion.generatedAt).toLocaleString('zh-CN') : '—'}
+              </p>
+
+              <button
+                onClick={onClose}
+                className="w-full py-3 rounded-xl font-bold text-white bg-star-dark hover:bg-black transition-all shadow-lg"
+              >
+                知道了
+              </button>
+            </div>
+          </motion.div>
+        </motion.div>
+    );
 }
 
 const CARDIO_ZONES = [
@@ -114,8 +288,10 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   const [isTypeSelectorOpen, setIsTypeSelectorOpen] = useState(false);
 
   // AI & Smart Features
-  const [aiSuggestion, setAiSuggestion] = useState<{ weight?: number; duration?: number; distance?: number; reps?: number } | null>(null);
+  const [aiSuggestion, setAiSuggestion] = useState<ResolvedSuggestion | null>(null);
   const [isCalculating, setIsCalculating] = useState(false);
+  // 建议解释窗口（「应用建议」左侧展开按钮触发）
+  const [showSuggestionInfo, setShowSuggestionInfo] = useState(false);
 
   // Deep copy sets for editing - convert ExerciseAction sets to ExerciseSet format
   const [sets, setSets] = useState<ExerciseSet[]>(exercise.sets.map((s, idx) => ({
@@ -172,6 +348,12 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   };
 
   // Check if current exercise has anchor data
+  // iOS sheet 规范：sheet 呈现时盖住原生 tab bar，关闭恢复
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
+
   useEffect(() => {
     const exerciseName = (exercise as any).name || exercise.metadata?.name || exercise.id;
     const anchor = loadAnchors?.[exerciseName || ''];
@@ -206,40 +388,91 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   const units = config.units as any;
 
   // --- Smart RPE System ---
+  // 三级链解析：缓存本地导出（零请求）→ POST /api/suggestions → 本地启发式
   useEffect(() => {
-      // Debounce logic for AI prediction when RPE or Type changes
+      if (!name || name === '新动作 (New)') {
+          setAiSuggestion(null);
+          return;
+      }
+      let cancelled = false;
       const timer = setTimeout(async () => {
-         setIsCalculating(true);
-         const predicted = await predictMetrics(name, type, targetRpe);
-         setAiSuggestion(predicted);
-         setIsCalculating(false);
-      }, 500);
-      return () => clearTimeout(timer);
+          setIsCalculating(true);
+          const first = sets[0];
+          const current = first
+              ? {
+                    ...(first.weight ? { weight: first.weight } : {}),
+                    ...(first.reps ? { reps: first.reps } : {}),
+                    ...(sets.length ? { set_count: sets.length } : {}),
+                }
+              : undefined;
+          const resolved = await SuggestionService.resolve(name, type, targetRpe, current);
+          if (!cancelled) {
+              setAiSuggestion(resolved);
+              setIsCalculating(false);
+          }
+      }, 800);
+      return () => {
+          cancelled = true;
+          clearTimeout(timer);
+      };
+      // sets 仅取首组作上下文快照，不需要作为依赖（避免每组编辑都触发重解析）
+      // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetRpe, name, type]);
 
-  const applyAiSuggestion = () => {
-      if (aiSuggestion) {
-          // Sync Cardio/Outdoor UI State
-          if (type === 'cardio' || type === 'outdoor') {
-              if (aiSuggestion.duration) setTargetDurationMin(aiSuggestion.duration);
-              if (aiSuggestion.distance) setTargetDistanceKm(aiSuggestion.distance);
-          }
+  // 后台批量刷新完成后重解析（缓存条目翻新，徽标/数值随之更新）
+  useEffect(() => {
+      return SuggestionService.subscribe(() => {
+          if (!name || name === '新动作 (New)') return;
+          SuggestionService.resolve(name, type, targetRpe)
+              .then((resolved) => setAiSuggestion(resolved))
+              .catch(() => {});
+      });
+  }, [name, type, targetRpe]);
 
-          const newSets = sets.map(s => ({
-              ...s,
-              // Conditionally update fields if AI provided them
-              ...(aiSuggestion.weight !== undefined && { weight: aiSuggestion.weight }),
-              ...(aiSuggestion.duration !== undefined && { 
-                  duration: aiSuggestion.duration,
-                  targetDuration: aiSuggestion.duration // Sync to target for goal setting
-              }),
-              ...(aiSuggestion.distance !== undefined && { 
-                  distance: aiSuggestion.distance,
-                  targetDistance: aiSuggestion.distance // Sync to target for goal setting
-              }),
-              ...(aiSuggestion.reps !== undefined && { reps: aiSuggestion.reps }),
-          }));
-          setSets(newSets);
+  const applyAiSuggestion = () => {
+      if (!aiSuggestion) return;
+      const v = aiSuggestion.values;
+      // cardio/outdoor UI 用 分/km；sets 用契约单位 秒/米
+      const durationMin = v.duration_sec !== undefined ? Math.round(v.duration_sec / 60) : undefined;
+      const distanceKm = v.distance_m !== undefined ? +(v.distance_m / 1000).toFixed(2) : undefined;
+      const isCardioLike = type === 'cardio' || type === 'outdoor';
+
+      // Sync Cardio/Outdoor UI State
+      if (isCardioLike) {
+          if (durationMin) setTargetDurationMin(durationMin);
+          if (distanceKm) setTargetDistanceKm(distanceKm);
+      }
+
+      let newSets = sets.map(s => ({
+          ...s,
+          // Conditionally update fields if suggestion provided them
+          ...(v.weight !== undefined && { weight: v.weight }),
+          ...(v.duration_sec !== undefined && {
+              duration: v.duration_sec,
+              targetDuration: v.duration_sec, // Sync to target for goal setting
+          }),
+          ...(v.distance_m !== undefined && {
+              distance: v.distance_m,
+              targetDistance: v.distance_m, // Sync to target for goal setting
+          }),
+          ...(v.reps !== undefined && { reps: v.reps }),
+      }));
+
+      // 组数建议：克隆末组逼近（COMPLETED 组永不裁、至少保留 1 组）
+      if (v.set_count !== undefined && v.set_count >= 1) {
+          while (newSets.length > v.set_count && !newSets[newSets.length - 1].completed) {
+              newSets = newSets.slice(0, -1);
+          }
+          while (newSets.length < v.set_count && newSets.length > 0) {
+              const last = newSets[newSets.length - 1];
+              newSets.push({ ...last, id: uuidv4(), completed: false, status: 'PLANNED' as const });
+          }
+      }
+      setSets(newSets);
+
+      // 目标 RPE 建议（换档会自然触发上面的防抖重解析）
+      if (v.target_rpe !== undefined) {
+          setTargetRpe(v.target_rpe);
       }
   };
 
@@ -290,20 +523,38 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   }, [name, type]);
 
   // Helper for AI Box Display
+  // 契约单位（秒/米）→ 展示单位（有氧：分/km；其余秒）的映射层
+  const getAiDisplay = () => {
+      if (!aiSuggestion) return null;
+      const v = aiSuggestion.values;
+      const isCardioLike = type === 'cardio' || type === 'outdoor';
+      return {
+          weight: v.weight,
+          reps: v.reps,
+          duration: v.duration_sec !== undefined
+              ? (isCardioLike ? Math.round(v.duration_sec / 60) : v.duration_sec)
+              : undefined,
+          distance: v.distance_m !== undefined ? +(v.distance_m / 1000).toFixed(1) : undefined,
+          setCount: v.set_count,
+      };
+  };
+
+  const aiDisplay = getAiDisplay();
+
   const getAiBoxContent = () => {
       if (isCalculating) return <span className="text-sm font-bold text-gray-400 animate-pulse">计算中...</span>;
-      if (!aiSuggestion) return <span className="text-xl font-black text-gray-300">--</span>;
+      if (!aiDisplay) return <span className="text-xl font-black text-gray-300">--</span>;
 
       // Special handling for Cardio/Outdoor (Duration + Distance)
       if (type === 'cardio' || type === 'outdoor') {
           return (
              <div className="flex items-baseline gap-1">
-                 <span className="text-xl font-black text-star-dark">{aiSuggestion.duration}</span>
+                 <span className="text-xl font-black text-star-dark">{aiDisplay.duration}</span>
                  <span className="text-xs font-bold text-gray-400 uppercase mr-2">{units.duration}</span>
-                 {aiSuggestion.distance && (
+                 {aiDisplay.distance && (
                     <>
                         <span className="text-sm font-bold text-gray-300">/</span>
-                        <span className="text-xl font-black text-star-dark ml-2">{aiSuggestion.distance}</span>
+                        <span className="text-xl font-black text-star-dark ml-2">{aiDisplay.distance}</span>
                         <span className="text-xs font-bold text-gray-400 uppercase">{units.distance}</span>
                     </>
                  )}
@@ -313,15 +564,15 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
       // [UPDATED] Combined Weight + Reps display for Resistance/Unilateral/Assisted
       // Only show if both are present and non-zero (to avoid showing 0kg for bodyweight if not needed)
-      if (aiSuggestion.weight && aiSuggestion.reps) {
+      if (aiDisplay.weight && aiDisplay.reps) {
            return (
              <div className="flex items-baseline gap-3">
                  <div className="flex items-baseline gap-1">
-                     <span className="text-xl font-black text-star-dark">{aiSuggestion.weight}</span>
+                     <span className="text-xl font-black text-star-dark">{aiDisplay.weight}</span>
                      <span className="text-xs font-bold text-gray-400 uppercase">KG</span>
                  </div>
                  <div className="flex items-baseline gap-1">
-                     <span className="text-xl font-black text-star-dark">{aiSuggestion.reps}</span>
+                     <span className="text-xl font-black text-star-dark">{aiDisplay.reps}</span>
                      <span className="text-xs font-bold text-gray-400 uppercase">次</span>
                  </div>
              </div>
@@ -330,8 +581,8 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
       // Determine primary metric based on type
       const field = config.primaryMetric as 'weight' | 'reps' | 'duration' | 'distance';
-      const value = aiSuggestion[field];
-      
+      const value = (aiDisplay as Record<string, number | undefined>)[field];
+
       // Get unit from current exercise config or fallback
       const unit = units[field] || (field === 'weight' ? 'KG' : field === 'reps' ? '次' : 's');
 
@@ -835,14 +1086,24 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                     >
                         {displayName || "未命名动作"}
                     </h1>
-                    
-                    <button 
-                        onClick={() => onLibraryOpenChange(true)}
-                        className="shrink-0 px-4 py-2 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 active:scale-95 transition-all flex items-center gap-2"
-                    >
-                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
-                        <span className="text-sm font-bold">动作库</span>
-                    </button>
+
+                    {/* iOS sheet 规范：右侧圆形确认（prominent）+ 左侧胶囊动作库（gray） */}
+                    <div className="shrink-0 flex items-center gap-2.5">
+                        <button
+                            onClick={() => onLibraryOpenChange(true)}
+                            className="px-4 h-10 bg-gray-100 text-gray-600 rounded-full hover:bg-gray-200 active:scale-95 transition-all flex items-center gap-1.5"
+                        >
+                            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>
+                            <span className="text-sm font-bold">动作库</span>
+                        </button>
+                        <button
+                            onClick={() => handleSave(false)}
+                            aria-label={isCreating ? '确认添加动作' : '保存设置'}
+                            className="w-10 h-10 bg-star-dark text-white rounded-full flex items-center justify-center shadow-md hover:scale-105 active:scale-95 transition-all"
+                        >
+                            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                        </button>
+                    </div>
                 </div>
 
                 {/* Tags Row - Includes Smart Fill Trigger */}
@@ -963,22 +1224,42 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                         {/* Right: AI Action */}
                         <div className="flex flex-col items-end justify-center min-w-[100px]">
                              <div className="text-right mb-1">
-                                <span className="text-[10px] font-bold text-gray-300 uppercase block mb-0.5">{getAiBoxTitle().replace('AI 推荐', '')}</span>
+                                <div className="flex items-center justify-end gap-1.5 mb-0.5">
+                                    <SuggestionSourceBadge source={aiSuggestion?.source} generatedAt={aiSuggestion?.generatedAt} />
+                                    <span className="text-[10px] font-bold text-gray-300 uppercase block">{getAiBoxTitle().replace('AI 推荐', '')}</span>
+                                </div>
                                 {getAiBoxContent()}
+                                {aiDisplay?.setCount && (type !== 'cardio' && type !== 'outdoor') && (
+                                    <span className="text-[10px] font-bold text-gray-400 block mt-0.5">共 {aiDisplay.setCount} 组</span>
+                                )}
                              </div>
 
-                             <button
-                                onClick={applyAiSuggestion}
-                                disabled={isCalculating || !aiSuggestion}
-                                className="relative group overflow-hidden bg-star-dark text-white px-4 py-2 rounded-xl text-[10px] font-black shadow-md active:scale-90 hover:bg-black transition-all duration-200 flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none"
-                             >
-                                <span className="relative z-10">应用建议</span>
-                                <div className="relative z-10 w-4 h-4 rounded-full bg-white/20 flex items-center justify-center group-hover:translate-y-0.5 transition-transform">
-                                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" /></svg>
-                                </div>
-                                {/* 内部光效动画 */}
-                                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] transition-transform" />
-                             </button>
+                             <div className="flex items-center gap-2">
+                                {/* 展开解释按钮（heuristic 无理由时不显示） */}
+                                {aiSuggestion?.reason && (
+                                    <button
+                                       onClick={() => setShowSuggestionInfo(true)}
+                                       aria-label="查看建议解释"
+                                       className="w-8 h-8 rounded-full border border-gray-200 bg-white text-gray-500 flex items-center justify-center shadow-sm active:scale-90 hover:border-star-dark hover:text-star-dark transition-all"
+                                    >
+                                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                                           <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+                                       </svg>
+                                    </button>
+                                )}
+                                <button
+                                   onClick={applyAiSuggestion}
+                                   disabled={isCalculating || !aiSuggestion}
+                                   className="relative group overflow-hidden bg-star-dark text-white px-4 py-2 rounded-xl text-[10px] font-black shadow-md active:scale-90 hover:bg-black transition-all duration-200 flex items-center gap-1.5 disabled:opacity-30 disabled:pointer-events-none"
+                                >
+                                   <span className="relative z-10">应用建议</span>
+                                   <div className="relative z-10 w-4 h-4 rounded-full bg-white/20 flex items-center justify-center group-hover:translate-y-0.5 transition-transform">
+                                       <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 13.5L12 21m0 0l-7.5-7.5M12 21V3" /></svg>
+                                   </div>
+                                   {/* 内部光效动画 */}
+                                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:animate-[shimmer_1.5s_infinite] transition-transform" />
+                                </button>
+                             </div>
                         </div>
                     </div>
                 </div>
@@ -1217,17 +1498,18 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
         </div>
 
-        {/* Footer */}
-        <div className="p-6 pt-4 border-t border-gray-100 bg-white">
-            <button
-                onClick={() => handleSave(false)}
-                className="w-full bg-star-dark text-white py-4 rounded-xl font-bold text-lg shadow-lg hover:scale-[1.02] active:scale-[0.98] transition-all"
-            >
-                {isCreating ? '确认添加动作' : '保存设置'}
-            </button>
-        </div>
+        {/* Footer - removed: confirm moved to sheet header (iOS style) */}
+
       </div>
       </motion.div>
+      )}
+
+      {/* Suggestion Explanation Overlay（应用建议左侧展开按钮触发） */}
+      {showSuggestionInfo && aiSuggestion && (
+        <SuggestionInfoWindow
+          suggestion={aiSuggestion}
+          onClose={() => setShowSuggestionInfo(false)}
+        />
       )}
 
       {/* Deviation Warning Overlay */}
@@ -1303,23 +1585,23 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                 ))}
               </div>
 
-              {/* Action Buttons */}
-              <div className="flex gap-3">
+              {/* Action Buttons - iOS Alert grouped style */}
+              <div className="border-t border-gray-200 -mx-5">
                 <button
                   onClick={() => {
                     setShowDeviationWarning(false);
                     setDeviationReason('');
                     setDeviationField('');
                   }}
-                  className="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all"
+                  className="w-full py-3 text-[17px] font-normal text-star-accent active:bg-gray-100 transition-colors border-b border-gray-200"
                 >
                   返回修改
                 </button>
                 <button
                   onClick={() => handleSave(true)}
-                  className="flex-1 py-3 rounded-xl font-bold text-white bg-star-dark hover:bg-black transition-all shadow-lg"
+                  className="w-full py-3 text-[17px] font-semibold text-star-accent active:bg-gray-100 transition-colors"
                 >
-                  确认并保存
+                  确认保存
                 </button>
               </div>
             </div>

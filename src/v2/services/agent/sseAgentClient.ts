@@ -19,7 +19,7 @@ import type { AgentClient } from './AgentClient';
 import { API_BASE, getHeaders as defaultGetHeaders, getUserId as defaultGetUserId } from '@/services/geminiService';
 
 /** Valid AgentEvent type literals (frozen verbatim, matches shared contract). */
-const EVENT_TYPES = new Set<AgentEvent['type']>(['token', 'uiHint', 'done', 'error']);
+const EVENT_TYPES = new Set<AgentEvent['type']>(['token', 'uiHint', 'done', 'error', 'thinking']);
 
 /**
  * Coerce an unknown parsed value into a well-typed AgentEvent, or `null` if it
@@ -35,6 +35,10 @@ export function normalizeAgentEvent(value: unknown): AgentEvent | null {
   switch (type as AgentEvent['type']) {
     case 'token':
       return { type: 'token', text: typeof obj.text === 'string' ? obj.text : '' };
+    case 'thinking':
+      // Agent self-revision prose from rejected validation rounds — collapsed
+      // by the UI, never shown as answer text.
+      return { type: 'thinking', text: typeof obj.text === 'string' ? obj.text : '' };
     case 'uiHint':
       // P007: a uiHint without a card payload is not renderable — skip it.
       return obj.card && typeof obj.card === 'object'
@@ -246,6 +250,9 @@ const CARD_TYPE_TO_LEGACY: Record<UiHintCard['type'], string> = {
   survey: 'survey_card',
   instruction: 'instruction_card',
   deviation: 'deviation_confirmation',
+  // 2026-09: user-profile auto-update consent bubble. Rendered as-is so the
+  // frontend can bind its special confirm/cancel bubble to this type.
+  profile_update_confirm: 'profile_update_confirm',
   unknown: 'unknown_card',
 };
 

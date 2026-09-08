@@ -10,6 +10,7 @@ interface TimerCapsuleProps {
   onPause: () => void;
   onResume: () => void;
   onOpenManual: () => void;
+  onEnd: () => void;
 }
 
 const TimerCapsule: React.FC<TimerCapsuleProps> = ({ 
@@ -20,7 +21,8 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
   onStart,
   onPause,
   onResume,
-  onOpenManual
+  onOpenManual,
+  onEnd
 }) => {
   const [displayTime, setDisplayTime] = useState("00:00");
   const [textIndex, setTextIndex] = useState(0);
@@ -33,12 +35,13 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
     if (isCentered) {
       const interval = setInterval(() => {
         setTextIndex(prev => (prev + 1) % 2);
-      }, 2000);
+      }, 2600);
       return () => clearInterval(interval);
     } else {
       setTextIndex(0);
     }
   }, [isCentered]);
+
   useEffect(() => {
     if (status !== 'active') {
       if (status === 'paused' || status === 'finished') {
@@ -80,108 +83,71 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
   // iOS-style spring configuration
   const springConfig = { type: 'spring', stiffness: 400, damping: 38, mass: 1 } as const;
 
+  const idleLabels = ["开始运动", "添加动作"];
+
   return (
     <div className="fixed inset-0 z-50 pointer-events-none flex items-start justify-center">
       <motion.div
         initial={false}
         animate={{
-          y: isCentered ? '50vh' : 'calc(env(safe-area-inset-top, 0px) + 80px)',
+          y: isCentered ? '50vh' : 'calc(var(--safe-top) + 12px)',
           translateY: isCentered ? '-50%' : '0%',
-          scale: isCentered ? 1.1 : 1,
+          scale: isCentered ? 1.05 : 1,
         }}
         transition={springConfig}
         className="pointer-events-auto origin-center"
       >
+        {/* 阴影载体：不能放进 mask 容器，否则阴影被裁掉（上一轮的教训） */}
         <motion.div
-          className={`
-            bg-star-dark/90 backdrop-blur-xl text-white shadow-[0_20px_50px_-10px_rgba(0,0,0,0.5),0_0_40px_-10px_rgba(255,255,255,0.2)] flex items-center overflow-hidden border border-white/15
-            ${status === 'idle' ? 'hover:bg-star-dark active:scale-95 transition-colors cursor-pointer' : ''}
-          `}
+          className={status === 'idle' ? 'liquid-glass absolute inset-0' : 'liquid-glass-dark absolute inset-0'}
+          style={{ borderRadius: '32px' }}
+          animate={{
+            width: status === 'idle' ? 208 : (isPaused ? 320 : 180),
+            height: 64,
+          }}
+          transition={springConfig}
+        />
+        {/* 玻璃本体 + 流光：mask 裁切层，WebKit 上 overflow:hidden 裁不住 blur 合成层，
+            必须用 -webkit-mask（此 hack 为 iOS WebKit 必需，勿删） */}
+        <motion.div
+          className="relative flex items-center overflow-hidden"
           style={{
             borderRadius: '32px',
             WebkitMaskImage: '-webkit-radial-gradient(white, black)',
-            clipPath: 'inset(0 round 32px)',
+            maskImage: 'radial-gradient(white, black)',
           }}
           onClick={status === 'idle' ? onStart : undefined}
           animate={{
-            width: status === 'idle' ? 220 : (isPaused ? 320 : 180),
-            height: status === 'idle' ? 72 : 64,
-            borderRadius: '32px',
-            clipPath: 'inset(0 round 32px)',
+            width: status === 'idle' ? 208 : (isPaused ? 320 : 180),
+            height: 64,
           }}
           transition={springConfig}
         >
+          {/* Siri 风格边缘流光（仅 idle 态）：被 mask 裁进胶囊内部 */}
+          {status === 'idle' && <div className="siri-glow" />}
           <AnimatePresence mode="popLayout" initial={false}>
             {status === 'idle' ? (
               <motion.div
                 key="start-btn"
-                initial={{ opacity: 0, scale: 0.8 }}
-                animate={{ opacity: 1, scale: 1 }}
-                exit={{ opacity: 0, scale: 0.8 }}
-                className="w-full h-full flex items-center justify-center gap-3 relative group"
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                className="w-full h-full flex items-center justify-center relative"
               >
-                {/* Dynamic Glow Layer */}
-                <motion.div
-                  className="absolute inset-0 bg-star-accent/20 blur-2xl"
-                  animate={{
-                    opacity: [0.2, 0.4, 0.2],
-                  }}
-                  transition={{
-                    duration: 3,
-                    repeat: Infinity,
-                    ease: "easeInOut",
-                  }}
-                />
-
-                {/* High-light Sweep Effect */}
-                <motion.div
-                  animate={{
-                    left: ['-100%', '200%'],
-                  }}
-                  transition={{
-                    duration: 2,
-                    repeat: Infinity,
-                    ease: "linear",
-                    repeatDelay: 1.5
-                  }}
-                  className="absolute top-0 w-1/2 h-full bg-gradient-to-r from-transparent via-white/20 to-transparent skew-x-[-25deg] pointer-events-none z-20"
-                />
-                
-                <div className="relative z-10 flex items-center justify-center gap-0.5 ml-2 min-w-[110px]">
-                  <AnimatePresence mode="wait">
-                    <motion.div 
-                      key={textIndex}
-                      className="flex items-center justify-center gap-0.5"
+                {/* 文案：双文案同格叠放，纯交叉溶解（无位移、不卸载，杜绝跑马灯感和掉帧） */}
+                <div className="grid items-center justify-items-center">
+                  {idleLabels.map((label, i) => (
+                    <motion.span
+                      key={label}
+                      initial={false}
+                      animate={{ opacity: textIndex === i ? 1 : 0 }}
+                      transition={{ duration: 0.45, ease: "easeInOut" }}
+                      className="col-start-1 row-start-1 text-[19px] font-semibold tracking-[0.06em] whitespace-nowrap"
                     >
-                      {(textIndex === 0 ? "START" : "添加动作").split('').map((char, i) => (
-                        <motion.span
-                          key={i}
-                          initial={{ rotateX: -90, opacity: 0 }}
-                          animate={{ rotateX: 0, opacity: 1 }}
-                          exit={{ rotateX: 90, opacity: 0 }}
-                          transition={{ 
-                            duration: 0.15, 
-                            delay: i * 0.03,
-                            ease: "easeOut"
-                          }}
-                          className="font-black text-xl tracking-[0.02em] inline-block origin-center"
-                          style={{ backfaceVisibility: 'hidden', perspective: '1000px' }}
-                        >
-                          {char}
-                        </motion.span>
-                      ))}
-                    </motion.div>
-                  </AnimatePresence>
+                      {label}
+                    </motion.span>
+                  ))}
                 </div>
-                <motion.div
-                  className="relative z-10"
-                  animate={{ x: [0, 4, 0] }}
-                  transition={{ repeat: Infinity, duration: 1.5, ease: "easeInOut" }}
-                >
-                  <svg className="w-6 h-6 text-star-accent" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M7 5.757c0-1.156 1.256-1.878 2.257-1.298l9.428 5.462c1.001.58 1.001 2.017 0 2.597l-9.428 5.462C8.256 18.658 7 17.935 7 16.78V5.757z" />
-                  </svg>
-                </motion.div>
               </motion.div>
             ) : (
               <motion.div
@@ -191,21 +157,23 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                 exit={{ opacity: 0 }}
                 className="w-full h-full flex items-center relative"
               >
-                {/* Paused Controls - Left */}
+                {/* Paused Controls - Left：红色停止（结束运动） */}
                 <AnimatePresence>
                   {isPaused && (
                     <motion.div
                       initial={{ opacity: 0, x: -20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: -20 }}
-                      className="absolute left-4"
+                      className="absolute left-3"
                     >
-                      <button 
-                        onClick={onOpenManual}
-                        className="w-12 h-12 rounded-full flex items-center justify-center text-white/40 hover:text-white hover:bg-white/10 active:scale-90 transition-all"
+                      <button
+                        onClick={onEnd}
+                        aria-label="结束运动"
+                        className="w-12 h-12 rounded-full flex items-center justify-center active:scale-90 transition-all"
                       >
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+                        {/* 纯红色小矩形：比三角形大 5px，视觉均衡（方形同面积显小） */}
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF3B30" className="w-[33px] h-[33px]">
+                          <rect x="6.5" y="6.5" width="11" height="11" rx="2" />
                         </svg>
                       </button>
                     </motion.div>
@@ -214,13 +182,20 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
 
                 {/* Time Display - Center */}
                 <motion.button
-                  onClick={isPaused || isFinished ? undefined : onPause}
+                  onClick={isFinished ? undefined : (isPaused ? onOpenManual : onPause)}
                   className={`
                     flex-1 flex items-center justify-center h-full
-                    ${(isPaused || isFinished) ? 'cursor-default' : 'cursor-pointer active:scale-95'}
+                    ${isFinished ? 'cursor-default' : 'cursor-pointer active:scale-95'}
                   `}
                 >
-                  <div className="w-[140px] flex justify-center">
+                  <div className="w-[140px] flex items-center justify-center gap-2.5">
+                    {/* 运行状态指示点：代替旧的脉冲描边 */}
+                    {!isPaused && !isFinished && (
+                      <span className="relative flex w-2 h-2">
+                        <span className="absolute inline-flex w-full h-full rounded-full bg-green-400 opacity-60 animate-ping" />
+                        <span className="relative inline-flex w-2 h-2 rounded-full bg-green-400" />
+                      </span>
+                    )}
                     <span 
                       style={{ fontFeatureSettings: "'tnum'" }}
                       className={`
@@ -234,6 +209,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                   </div>
                 </motion.button>
 
+
                 {/* Paused Controls - Right */}
                 <AnimatePresence>
                   {isPaused && (
@@ -241,11 +217,11 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                       initial={{ opacity: 0, x: 20 }}
                       animate={{ opacity: 1, x: 0 }}
                       exit={{ opacity: 0, x: 20 }}
-                      className="absolute right-4"
+                      className="absolute right-3"
                     >
                       <button 
                         onClick={onResume}
-                        className="w-12 h-12 rounded-full flex items-center justify-center text-star-accent hover:bg-star-accent/10 active:scale-90 transition-all"
+                        className="w-12 h-12 rounded-full flex items-center justify-center text-blue-400 hover:bg-blue-400/10 active:scale-90 transition-all"
                       >
                         <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="currentColor" className="w-7 h-7">
                           <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
@@ -254,22 +230,6 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                     </motion.div>
                   )}
                 </AnimatePresence>
-
-                {/* Pulse effect for active state */}
-                {!isPaused && !isFinished && (
-                  <motion.div
-                    className="absolute inset-0 rounded-full pointer-events-none border-2 border-star-accent/20"
-                    animate={{
-                      scale: [1, 1.05, 1],
-                      opacity: [0, 0.5, 0],
-                    }}
-                    transition={{
-                      duration: 2,
-                      repeat: Infinity,
-                      ease: "easeInOut",
-                    }}
-                  />
-                )}
               </motion.div>
             )}
           </AnimatePresence>

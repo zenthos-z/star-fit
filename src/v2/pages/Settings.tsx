@@ -8,7 +8,7 @@
  * @version 2.0.0
  */
 
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { ProfileContainer } from '../components/profile/ProfileContainer';
 import { LimitationContainer } from '../components/profile/LimitationContainer';
@@ -16,6 +16,7 @@ import { BasicInfoForm } from '../components/profile/BasicInfoForm';
 import { LoadAnchorsForm } from '../components/profile/LoadAnchorsForm';
 import { LimitationsManager } from '../components/profile/LimitationsManager';
 import { staggerContainer, staggerItem } from '../lib/animations';
+import { SuggestionService, type SuggestionSyncStatus } from '../../services/suggestionService';
 
 // ============================================================================
 // Types
@@ -48,6 +49,74 @@ function ErrorAlert({ error }: { error: Error }): JSX.Element {
     <div className="bg-red-50 border border-red-200 rounded-xl p-4 text-red-700">
       <p className="font-semibold">加载失败</p>
       <p className="text-sm">{error.message}</p>
+    </div>
+  );
+}
+
+// ============================================================================
+// AI Suggestion Sync Status Card（防静默失效无感知的反馈位）
+// ============================================================================
+
+function formatSyncTime(ts: number | null): string {
+  if (!ts) return '从未';
+  const diff = Date.now() - ts;
+  if (diff < 60 * 1000) return '刚刚';
+  if (diff < 60 * 60 * 1000) return `${Math.floor(diff / 60000)} 分钟前`;
+  if (diff < 24 * 60 * 60 * 1000) return `${Math.floor(diff / 3600000)} 小时前`;
+  return `${Math.floor(diff / 86400000)} 天前`;
+}
+
+function SuggestionSyncCard(): JSX.Element {
+  const [status, setStatus] = useState<SuggestionSyncStatus | null>(null);
+
+  const refresh = useCallback(() => {
+    SuggestionService.getSyncStatus().then(setStatus).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    refresh();
+    return SuggestionService.subscribe(refresh);
+  }, [refresh]);
+
+  const onManualRefresh = async () => {
+    await SuggestionService.forceRefresh();
+    refresh();
+  };
+
+  // 三态：在线云端 / 缓存（离线或标脏）/ 无数据
+  const state = !status?.hasCache
+    ? { label: '本地估算模式', desc: '暂无缓存数据，建议值由本地启发式估算', dot: 'bg-amber-400', tone: 'text-amber-600' }
+    : status.serverOnline === false
+      ? { label: '后端离线，使用缓存', desc: '恢复连接后将自动批量更新', dot: 'bg-gray-400', tone: 'text-gray-500' }
+      : status.stale
+        ? { label: '缓存（待更新）', desc: '训练数据已变化，将在后台自动刷新', dot: 'bg-gray-400', tone: 'text-gray-500' }
+        : { label: '云端', desc: '建议值与后端公式同步', dot: 'bg-blue-400', tone: 'text-blue-500' };
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5">
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <span className={`w-2 h-2 rounded-full ${state.dot} ${status?.isSyncing ? 'animate-pulse' : ''}`} />
+          <h3 className="text-sm font-black text-star-dark">AI 建议</h3>
+          <span className={`text-[10px] font-bold ${state.tone}`}>{state.label}</span>
+        </div>
+        <button
+          onClick={onManualRefresh}
+          disabled={status?.isSyncing}
+          className="text-[10px] font-bold text-gray-400 hover:text-star-dark disabled:opacity-40 transition-colors flex items-center gap-1"
+        >
+          <svg className={`w-3 h-3 ${status?.isSyncing ? 'animate-spin' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" />
+          </svg>
+          {status?.isSyncing ? '同步中' : '立即刷新'}
+        </button>
+      </div>
+      <p className="text-xs text-gray-500">{state.desc}</p>
+      <div className="flex items-center gap-4 mt-3 text-[10px] font-bold text-gray-400">
+        <span>最近同步 {formatSyncTime(status?.lastSyncTime ?? null)}</span>
+        {status?.count ? <span>{status.count} 个动作</span> : null}
+        {status?.lastError ? <span className="text-amber-500">上次错误：{status.lastError}</span> : null}
+      </div>
     </div>
   );
 }
@@ -129,6 +198,11 @@ export function SettingsPage({ userId, onClose }: SettingsPageProps): JSX.Elemen
               renderError={(error) => <ErrorAlert error={error} />}
               renderProfileStatic={undefined as any}
             />
+          </motion.div>
+
+          {/* AI Suggestion Sync Status Card */}
+          <motion.div variants={staggerItem}>
+            <SuggestionSyncCard />
           </motion.div>
 
           {/* Limitations Card */}

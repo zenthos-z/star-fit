@@ -8,6 +8,7 @@ import { VideoAsset } from '../../../types/video';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, Maximize2, Minimize2, ZoomIn } from 'lucide-react';
+import { setTabBarHidden } from '../../../lib/nativeTabBar';
 
 interface ExerciseTutorialModalProps {
   exercise: ExerciseAction & { name?: string; targetRpe?: number; libraryId?: string };
@@ -134,6 +135,12 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
     FORBID_TAGS: ['script', 'style', 'form', 'input', 'video', 'source', 'track'],
     FORBID_ATTR: ['onerror', 'onload', 'onclick', 'onmouseover'],
   };
+
+  // iOS sheet 规范：sheet 呈现时盖住原生 tab bar，关闭恢复
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
 
   useEffect(() => {
     let mounted = true;

@@ -85,6 +85,14 @@ const BASE_SYSTEM_PROMPT = [
   'Multiple skills are available to you simultaneously; choose which to apply',
   'based on the user intent — do NOT ask which skill to use.',
   '',
+  '## Output length (soft guidance)',
+  'As a general guideline, aim to keep prose replies under about 1000 Chinese',
+  'characters (~600 English words). Prioritize what matters: if trimming would',
+  'cut important safety or health information, keep it — completeness wins',
+  'over brevity. Lead with the conclusion, drop filler and repetition.',
+  'Structured cards do not count toward the limit, but keep their prose',
+  'wrapper to a sentence or two.',
+  '',
   'You also have domain data tools (load_history, list_exercises,',
   'get_exercise_detail, write_session, update_profile, write_memory). Use them',
   'to ground answers in THIS user real data and the real exercise library — see',
@@ -103,12 +111,75 @@ const BASE_SYSTEM_PROMPT = [
 ].join('\n');
 
 /**
- * Build the single systemPrompt: base + the M5a uiHint card-format skill (so the
- * agent emits cards in the exact validated shape). No scenario branching — one
- * generic agent serves every intent.
+ * Per-scenario data interpretation addendum for the systemPrompt. The agent
+ * stays single and generic (修订①) — the scenario only teaches it how to READ
+ * the pre-formatted training records stored by POST /api/sessions per exercise
+ * type, so load_history output is interpreted correctly.
  */
-function buildSystemPrompt(): string {
-  return [BASE_SYSTEM_PROMPT, '', loadUiHintFormatSkill()].join('\n');
+const SCENARIO_DATA_GUIDES: Record<string, string> = {
+  workout_complete: [
+    '## Reading pre-formatted workout records (workout_complete)',
+    'Each persisted session row under history_summary.sessions contains:',
+    '- start_time / end_time (ISO) — actual workout window.',
+    '- exercises[]: ONE AGGREGATE ROW PER EXERCISE (not raw sets). Fields are',
+    "  type-dependent — always read them by the row's `type`:",
+    '  * resistance/unilateral/assisted/bodyweight → weight (avg kg), reps',
+    '    (avg per set), sets (planned), completed_sets (done). The session',
+    '    total is already in stats.totalVolume — do NOT recompute from',
+    '    incomplete data.',
+    '  * cardio/outdoor → duration (total seconds), distance (total meters),',
+    '    avg_hr (bpm). Session-level cardio stats: stats.totalCardioDurationSec,',
+    '    stats.totalDistanceM, stats.avgHr.',
+    '  * isometric → duration (total seconds), optional weight.',
+    '- stats: { totalVolume (kg), setsCount, totalCardioDurationSec (s),',
+    '  totalDistanceM (m), durationMinutes?, avgHr? }.',
+    'A missing field means the type does not record it (e.g. no distance for',
+    'general cardio) or no HR device was connected — treat it as absent data,',
+    'never as zero performance, and never invent numbers.',
+    '',
+    'When analyzing the latest session (last element of sessions[]): compare',
+    'completed_sets vs sets for incomplete work, weight vs profile_dynamic',
+    'load_anchors for PRs/down-regulation, and report cardio minutes /',
+    'distance / avg HR when present. Then follow the workout-complete-handler',
+    'skill for survey questions and profile updates.',
+  ].join('\n'),
+
+  update_profile: [
+    '## User-profile update confirmation flow (update_profile)',
+    'The user-profile auto-update feature is gated by explicit user consent.',
+    'Follow the profile-update-reviewer skill exactly:',
+    '',
+    '1. TRIGGER detected (day training wrap-up, injury report, or a change to',
+    '   a key profile parameter) -> call `load_history` to read the CURRENT',
+    '   profile_dynamic and the relevant sessions FIRST.',
+    '2. PROPOSE, never write: emit a `profile_update_confirm` card listing',
+    '   each intended change (field / label / change description / value',
+    '   preview). Do NOT call `update_profile` in this turn.',
+    '3. On the NEXT user turn, if the user confirmed (explicitly or via the',
+    '   confirm bubble action), re-check `load_history` for the current values,',
+    '   merge the confirmed changes, then call `update_profile` and reply with',
+    '   an `audit_complete` card summarizing what was written (updates[] with',
+    '   field/label/count). If the user declined, acknowledge briefly and',
+    '   change nothing.',
+    '4. Only propose changes grounded in real tool data — never invent',
+    '   anchors, limitations, or recovery values.',
+  ].join('\n'),
+};
+
+/**
+ * Build the single systemPrompt: base + scenario data guide (when known) + the
+ * M5a uiHint card-format skill (so the agent emits cards in the exact validated
+ * shape). No scenario branching of the agent itself — one generic agent serves
+ * every intent; the scenario only adds data-interpretation guidance.
+ */
+function buildSystemPrompt(scenario?: string): string {
+  const parts = [BASE_SYSTEM_PROMPT];
+  const guide = scenario ? SCENARIO_DATA_GUIDES[scenario] : undefined;
+  if (guide) {
+    parts.push(guide);
+  }
+  parts.push(loadUiHintFormatSkill());
+  return parts.join('\n\n');
 }
 
 // ---------------------------------------------------------------------------
@@ -144,11 +215,12 @@ function ensureRuntimeReady(): Promise<void> {
  */
 export class DeepAgentService implements AgentService {
   /**
-   * The single cached agent instance. The value is a PROMISE so two concurrent
+   * Cached agent instances, keyed by scenario (the ONLY per-scenario state is
+   * the systemPrompt data guide). The value is a PROMISE so two concurrent
    * `chat` calls share a single construction (no duplicate model loads /
-   * checkpointer wiring). `resetAgentCache` drops it.
+   * checkpointer wiring). `resetAgentCache` drops them all.
    */
-  private cached: Promise<CompiledStatefulAgent> | null = null;
+  private cached: Map<string, Promise<CompiledStatefulAgent>> = new Map();
 
   /**
    * Return the cached single agent, constructing it on first call.
@@ -156,17 +228,19 @@ export class DeepAgentService implements AgentService {
    * Generic (修订①): the SAME agent serves every intent — there is no
    * per-scenario assembly and no runtime routing.
    */
-  async buildAgent(): Promise<CompiledStatefulAgent> {
-    if (this.cached) {
-      return this.cached;
+  async buildAgent(scenario?: string): Promise<CompiledStatefulAgent> {
+    const key = scenario ?? 'default';
+    const existing = this.cached.get(key);
+    if (existing) {
+      return existing;
     }
     // Cache the PROMISE so concurrent callers join the same construction.
-    const building = this.assembleAgent().catch((err) => {
+    const building = this.assembleAgent(scenario).catch((err) => {
       // Drop the failed construction so the next call can retry.
-      this.cached = null;
+      this.cached.delete(key);
       throw err;
     });
-    this.cached = building;
+    this.cached.set(key, building);
     return building;
   }
 
@@ -178,7 +252,7 @@ export class DeepAgentService implements AgentService {
    * SkillsMiddleware) are orthogonal and coexist in one `createDeepAgent` call.
    * Tool names do not collide with the built-in filesystem tools.
    */
-  private async assembleAgent(): Promise<CompiledStatefulAgent> {
+  private async assembleAgent(scenario?: string): Promise<CompiledStatefulAgent> {
     // P006: model loaded via loadModel (no provider hardcoded). 'default' is
     // equivalent to chat/plan/tutorial in current config (same provider+model).
     const model = await loadModel('default');
@@ -188,7 +262,7 @@ export class DeepAgentService implements AgentService {
     await ensureRuntimeReady();
     const checkpointer = getAgentRuntimeCheckpointer();
 
-    const systemPrompt = buildSystemPrompt();
+    const systemPrompt = buildSystemPrompt(scenario);
 
     // R3: the Agent-only data adapter (read user/exercise data, write sessions/
     // profile). Parameterless — userId is resolved per-request via configurable.
@@ -240,7 +314,7 @@ export class DeepAgentService implements AgentService {
 
     let agent: CompiledStatefulAgent;
     try {
-      agent = await this.buildAgent();
+      agent = await this.buildAgent(req.scenario);
     } catch (err) {
       yield toErrorEvent(err);
       return;
@@ -278,7 +352,7 @@ export class DeepAgentService implements AgentService {
    * rebuilds a fresh single agent (AC3 / B3).
    */
   resetAgentCache(): void {
-    this.cached = null;
+    this.cached.clear();
   }
 }
 

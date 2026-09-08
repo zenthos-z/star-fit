@@ -28,8 +28,8 @@ const VALID_CARDS: Record<string, unknown> = {
   plan_card: {
     type: 'plan_card',
     data: [
-      { exerciseId: 'sq-001', name: 'Back Squat', sets: 3, reps: 8 },
-      { exerciseId: 'bp-001', name: 'Bench Press', sets: 4, reps: 6, weight: 60 },
+      { exerciseId: 'sq-001', name: 'Back Squat', exercise_type: 'resistance', sets: 3, reps: 8, weight: 80 },
+      { exerciseId: 'bp-001', name: 'Bench Press', exercise_type: 'resistance', sets: 4, reps: 6, weight: 60 },
     ],
   },
   summary_card: {
@@ -52,6 +52,20 @@ const VALID_CARDS: Record<string, unknown> = {
     data: {
       preview: 'New mesocycle emphasising posterior chain.',
       fullContent: '# Mesocycle 3\nFocus: posterior chain progression.',
+    },
+  },
+  profile_update_confirm: {
+    type: 'profile_update_confirm',
+    data: {
+      message: '你提到右肩有刺痛感，建议更新训练画像。',
+      trigger: 'injury_report',
+      proposals: [
+        {
+          field: 'active_limitations',
+          label: '活动限制',
+          change: '新增右肩限制，严重度 4/10，7 天后自动过期',
+        },
+      ],
     },
   },
 };
@@ -128,6 +142,39 @@ describe('validateUiHint — B2 invalid cards rejected (P012 vacuity probe)', ()
       card: { type: 'strategy_confirm', data: { preview: 'p' } },
     },
     {
+      name: 'profile_update_confirm missing required proposals',
+      card: { type: 'profile_update_confirm', data: { message: 'm', trigger: 'day_end' } },
+    },
+    {
+      name: 'profile_update_confirm empty proposals array',
+      card: {
+        type: 'profile_update_confirm',
+        data: { message: 'm', trigger: 'day_end', proposals: [] },
+      },
+    },
+    {
+      name: 'profile_update_confirm invalid trigger value',
+      card: {
+        type: 'profile_update_confirm',
+        data: {
+          message: 'm',
+          trigger: 'random_trigger',
+          proposals: [{ field: 'memories', label: 'l', change: 'c' }],
+        },
+      },
+    },
+    {
+      name: 'profile_update_confirm proposal with unknown field',
+      card: {
+        type: 'profile_update_confirm',
+        data: {
+          message: 'm',
+          trigger: 'day_end',
+          proposals: [{ field: 'not_a_field', label: 'l', change: 'c' }],
+        },
+      },
+    },
+    {
       name: 'unknown type',
       card: { type: 'mystery_card', data: {} },
     },
@@ -161,8 +208,8 @@ describe('validateUiHint — B2 invalid cards rejected (P012 vacuity probe)', ()
 // ---------------------------------------------------------------------------
 
 describe('validateUiHint — B3 HC-4 HITL blacklist', () => {
-  it('rejects survey_card even though it is schema-valid', () => {
-    // survey_card IS a valid member of UIHintSchema; HC-4 must refuse it anyway.
+  it('accepts survey_card (v3 amendment: allowed for workout_complete)', () => {
+    // v3: survey_card was un-blacklisted — the agent emits it after training.
     const surveyCard = {
       type: 'survey_card',
       data: {
@@ -171,12 +218,7 @@ describe('validateUiHint — B3 HC-4 HITL blacklist', () => {
       },
     };
     const result = validateUiHint(surveyCard);
-    assert.equal(result.ok, false, 'survey_card must be blacklisted (HC-4)');
-    if (!result.ok) {
-      const hitl = result.errors.find((e: StructuredError) => e.code === HITL_BLACKLIST_CODE);
-      assert.ok(hitl, 'must surface a hitl_blacklist error');
-      assert.deepEqual(hitl.path, ['type']);
-    }
+    assert.equal(result.ok, true, JSON.stringify(result.ok ? [] : result.errors));
   });
 
   it('rejects hitl_confirm', () => {
@@ -189,7 +231,7 @@ describe('validateUiHint — B3 HC-4 HITL blacklist', () => {
   });
 
   it('blacklist fires before schema parsing (precise code, not generic enum error)', () => {
-    const result = validateUiHint({ type: 'survey_card', data: { questions: [] } });
+    const result = validateUiHint({ type: 'hitl_confirm', data: {} });
     assert.equal(result.ok, false);
     if (!result.ok) {
       // HC-4 rejection, not a generic invalid_union/enum issue.

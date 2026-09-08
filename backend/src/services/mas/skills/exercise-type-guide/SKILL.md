@@ -1,5 +1,5 @@
 ---
-name: "exercise_type_guide"
+name: "exercise-type-guide"
 description: "动作类型指南 - 提供动作类型规范查询和参数设置指导"
 category: "knowledge"
 version: "1.1.0"
@@ -46,53 +46,29 @@ version: "1.1.0"
 
 | 工具 | 说明 | 类别 |
 |------|------|------|
-| load_skill | 按需加载技能知识文档 | 查询 |
+| read_file | 按需读取本技能知识文档（原生文件系统工具） | 查询 |
 
-## 按需加载 (Progressive Loading)
+## 按需读取 (Progressive Loading)
 
-本技能支持通过 `load_skill` 工具按需加载详细知识：
+本技能的详细知识通过原生文件系统工具 `read_file` 按需读取（R5 起 `load_skill` 已移除）：
 
-### 加载完整技能文档
-```javascript
-load_skill({ skillName: "exercise_type_guide" })
+### 读取知识索引（轻量级）
+```
+read_file("/exercise-type-guide/knowledge-index.md")
 ```
 
-### 加载知识索引（轻量级）
-```javascript
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge-index.md" })
+### 读取特定动作类型的详细知识
 ```
-
-### 加载特定动作类型的详细知识
-```javascript
-// 抗阻力训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/resistance.md" })
-
-// 自重训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/bodyweight.md" })
-
-// 等长收缩
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/isometric.md" })
-
-// 有氧训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/cardio.md" })
-
-// 户外运动
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/outdoor.md" })
-
-// 单侧训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/unilateral.md" })
-
-// 辅助训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/assisted.md" })
-
-// 柔韧性训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/flexibility.md" })
-
-// 大重量训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/heavy_weight.md" })
-
-// 次数训练
-load_skill({ skillName: "exercise_type_guide", knowledgePath: "knowledge/rep_training.md" })
+read_file("/exercise-type-guide/knowledge/resistance.md")   // 抗阻力训练
+read_file("/exercise-type-guide/knowledge/bodyweight.md")   // 自重训练
+read_file("/exercise-type-guide/knowledge/isometric.md")    // 等长收缩
+read_file("/exercise-type-guide/knowledge/cardio.md")       // 有氧训练
+read_file("/exercise-type-guide/knowledge/outdoor.md")      // 户外运动
+read_file("/exercise-type-guide/knowledge/unilateral.md")   // 单侧训练
+read_file("/exercise-type-guide/knowledge/assisted.md")     // 辅助训练
+read_file("/exercise-type-guide/knowledge/flexibility.md")  // 柔韧性训练
+read_file("/exercise-type-guide/knowledge/heavy_weight.md") // 大重量训练
+read_file("/exercise-type-guide/knowledge/rep_training.md") // 次数训练
 ```
 
 ### Token 使用估算
@@ -154,5 +130,6 @@ exercise-type-guide/
 
 ## 版本历史
 
-- **1.1.0** (2026-03-01) - 迁移到 DeepAgents Skills 模式，支持 load_skill 工具按需加载
+- **1.1.0** (2026-03-01) - 迁移到 DeepAgents Skills 模式，按需加载详细知识
+- **1.1.1** (2026-09-08) - frontmatter name 规范为连字符；load_skill（已移除的 MAS 工具）改为原生 read_file 按需读取
 - **1.0.0** (2026-02-22) - 初始版本，实现按需加载架构

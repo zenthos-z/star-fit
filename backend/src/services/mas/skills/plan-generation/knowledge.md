@@ -134,7 +134,7 @@
 当动作库中没有合适的动作时，必须使用 create_exercise 工具创建：
 
 **创建步骤**：
-1. 调用 `load_skill({ skillName: "exercise_creation" })`
+1. 调用 `list_exercises` 核对动作库（动作创建走管理端，非 Agent 职责）
 2. 使用 `create_exercise` 工具创建动作，获取 NanoID
 3. 在计划中使用返回的 NanoID
 

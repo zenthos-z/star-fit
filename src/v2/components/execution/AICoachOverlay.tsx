@@ -9,6 +9,7 @@ import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatMessage, ProgressItem } from '../../hooks/useAICoach';
 import type { ChatThread } from '@/storage';
 import { API_BASE, getHeaders } from '../../../services/geminiService';
+import { setTabBarHidden } from '../../../lib/nativeTabBar';
 
 interface MessageProgressIndicatorProps {
   items: ProgressItem[];
@@ -164,10 +165,17 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   formatRelativeTime = (t: number) => new Date(t).toLocaleDateString()
 }) => {
   const [showContent, setShowContent] = useState(true);
+  const [showAttachPanel, setShowAttachPanel] = useState(false);
   const [isStrategyActive, setIsStrategyActive] = useState(false);
   const [chatHistoryWithProgress, setChatHistoryWithProgress] = useState<ChatMessage[]>(chatHistory);
 
   // Reset strategy active state when message is sent (isLoading becomes true)
+  // iOS sheet 规范：sheet 呈现时盖住原生 tab bar，关闭恢复
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
+
   useEffect(() => {
     if (isLoading && isStrategyActive) {
       setIsStrategyActive(false);
@@ -297,55 +305,43 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   };
 
   return (
-    <div className={`
-      fixed inset-0 z-50 flex flex-col h-full
-      ${isOpen ? 'opacity-100 scale-100' : 'opacity-0 scale-95 pointer-events-none'}
-      ${!isTransitioning ? 'backdrop-blur-2xl bg-white/90 transition-all duration-500' : 'bg-white'}
-    `}>
-      {/* Dynamic Background Gradients */}
-      <div className={`absolute top-[-20%] left-[-20%] w-[80vw] h-[80vw] bg-blue-100/30 rounded-full blur-[120px] pointer-events-none ${showContent ? 'animate-pulse' : ''}`}></div>
-      <div className="absolute bottom-[-20%] right-[-20%] w-[80vw] h-[80vw] bg-indigo-100/30 rounded-full blur-[120px] pointer-events-none"></div>
-
-      {/* Header with MAS Status */}
-      <div className={`flex-shrink-0 z-20 px-6 pt-12 pb-4 flex justify-between items-center relative border-b border-gray-100/30 transition-opacity duration-300 ${showContent ? 'opacity-100' : 'opacity-0'}`}>
-        <div className={`flex items-center gap-3 transition-all duration-500 ${chatHistory.length === 0 ? 'opacity-0 -translate-x-4 pointer-events-none' : 'opacity-100 translate-x-0'}`}>
-          <div className="relative flex items-center justify-center">
-            <div className={`absolute w-3 h-3 rounded-full bg-blue-500/20 ${isBusy ? 'animate-[ping_1.5s_infinite] opacity-75 scale-150' : ''}`}></div>
-            <div className={`relative w-2 h-2 rounded-full ${isBusy ? 'bg-blue-600 shadow-[0_0_8px_rgba(37,99,235,0.5)]' : 'bg-gray-400'}`}></div>
-          </div>
-          <div>
-            <span className="font-black text-lg text-gray-900 tracking-tighter block leading-none">
-              STARFIT <span className="text-blue-600">MAS</span>
-            </span>
-            <span className="text-[9px] text-gray-400 font-bold uppercase tracking-[0.15em] mt-1 block">
-              {isBusy ? '正在同步云端智能...' : '多智能体协作系统已就绪'}
-            </span>
+    <div
+      style={{
+        // iOS sheet 观感：从底部滑入/滑出（系统 search 呈现的近似）
+        transition: 'transform 420ms cubic-bezier(0.32,0.72,0,1), opacity 300ms ease',
+        transform: isOpen ? 'translateY(0)' : 'translateY(100%)',
+        opacity: isOpen ? 1 : 0,
+        pointerEvents: isOpen ? 'auto' : 'none',
+      }}
+      className={`fixed inset-0 z-50 flex flex-col h-full rounded-t-[14px] shadow-[0_-8px_40px_rgba(0,0,0,0.18)] overflow-hidden bg-[#F6F6F8]`}
+    >
+      {/* Header — iMessage 风格：左关闭 / 中标题 / 右历史 */}
+      <div className="flex-shrink-0 z-20 px-4 pt-2 pb-3 flex items-center justify-between" style={{ paddingTop: 'calc(var(--safe-top) + 8px)' }}>
+        <button
+          onClick={onClose}
+          className="h-11 px-4 rounded-full bg-white shadow-sm flex items-center gap-1.5 text-gray-800 active:scale-95 transition-all"
+          aria-label="关闭"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+          <span className="text-[15px] font-medium">教练</span>
+        </button>
+        <div className="text-center">
+          <div className="text-[17px] font-semibold text-gray-900 leading-tight">AI 教练</div>
+          <div className="text-[11px] text-gray-400">
+            {isBusy ? '正在输入…' : '多智能体系统已就绪'}
           </div>
         </div>
-
-        {/* Header Actions */}
-        <div className="flex items-center gap-2">
-          {/* [NEW] History Button */}
-          <button
-            onClick={() => setShowHistoryPanel(true)}
-            className="h-10 px-3 rounded-2xl bg-gray-100/80 flex items-center gap-2 text-gray-500 hover:bg-gray-200 hover:text-black transition-all active:scale-95 backdrop-blur-md"
-            title="历史对话"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-            <span className="text-xs font-bold hidden sm:inline">历史</span>
-          </button>
-
-          <button
-            onClick={onClose}
-            className="w-10 h-10 rounded-2xl bg-gray-100/80 flex items-center justify-center text-gray-500 hover:bg-gray-200 hover:text-black transition-all active:scale-95 backdrop-blur-md shadow-sm"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
+        <button
+          onClick={() => setShowHistoryPanel(true)}
+          className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 active:scale-95 transition-all"
+          aria-label="历史对话"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        </button>
       </div>
 
       {/* Chat Body */}
@@ -353,7 +349,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         {chatHistory.length === 0 ? (
           <WelcomeScreen />
         ) : (
-          <div className="space-y-8 pt-6 pb-12">
+          <div className="space-y-2.5 pt-4 pb-6 px-1">
             {chatHistoryWithProgress.map((msg, i) => (
               <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} ${showContent ? 'animate-in fade-in slide-in-from-bottom-4 duration-500' : 'opacity-0'}`}>
 
@@ -370,13 +366,18 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                   <ReasoningTrace trace={msg.agentTrace} />
                 )}
 
-                {/* Message Bubble */}
+                {/* 被质量门打回轮次的思考文本：折叠显示，不与正文争夺层级 */}
+                {msg.role === 'ai' && msg.thinkingText && (
+                  <ThinkingBlock text={msg.thinkingText} streaming={!!msg.isThinking} />
+                )}
+
+                {/* Message Bubble（内容层用实色卡片：HIG 禁止 content 层玻璃化/glass-on-glass） */}
                 {(!msg.isThinking || msg.text) && (
                   <div className={`
-                    px-5 py-4 rounded-2xl text-sm leading-relaxed max-w-[92%] shadow-sm overflow-hidden markdown-body
+                    px-4 py-2.5 text-[16px] leading-[1.35] max-w-[78%] markdown-body
                     ${msg.role === 'user'
-                      ? 'bg-gray-900 text-white rounded-tr-sm'
-                      : 'bg-white border border-gray-100 text-gray-800 rounded-tl-sm'
+                      ? 'bg-[#0A84FF] text-white rounded-[20px] rounded-br-[6px]'
+                      : 'bg-[#E9E9EB] text-gray-900 rounded-[20px] rounded-bl-[6px]'
                     }
                   `}>
                     <ReactMarkdown
@@ -461,83 +462,95 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         )}
       </div>
 
-      <div className={`p-6 pb-10 flex-shrink-0 z-20 bg-white/50 backdrop-blur-lg border-t border-gray-100/50 transition-all duration-300 ${showContent ? 'translate-y-0 opacity-100' : 'translate-y-4 opacity-0'}`}>
-
-        <div className="flex items-center justify-between gap-4 mb-4">
-          <div className="flex-1 flex items-center gap-3">
-             {/* Mode Toggle as a sleek pill */}
-             <button
-              onClick={() => setIsPlanMode(!isPlanMode)}
-              className={`
-                h-8 px-4 rounded-full flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all active:scale-95
-                ${isPlanMode
-                  ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/20'
-                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}
-              `}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${isPlanMode ? 'bg-white animate-pulse' : 'bg-gray-300'}`} />
-              {isPlanMode ? '计划模式' : '标准模式'}
-            </button>
-
-            {/* Update Strategy Button - toggle style matching mode button */}
-            <button
-              onClick={() => {
-                if (isStrategyActive) {
-                  // Cancel: clear message and deactivate
-                  setChatMessage('');
-                  setIsStrategyActive(false);
-                } else {
-                  // Activate: fill message and focus
-                  setChatMessage('更新策略');
-                  setIsStrategyActive(true);
-                  textareaRef.current?.focus();
-                }
-              }}
-              className={`
-                h-8 px-4 rounded-full flex items-center gap-2 text-[9px] font-black uppercase tracking-widest transition-all active:scale-95
-                ${isStrategyActive
-                  ? 'bg-purple-600 text-white shadow-lg shadow-purple-500/20'
-                  : 'bg-gray-100 text-gray-400 hover:bg-gray-200'}
-              `}
-            >
-              <div className={`w-1.5 h-1.5 rounded-full ${isStrategyActive ? 'bg-white animate-pulse' : 'bg-gray-300'}`} />
-              {isStrategyActive ? '更新策略' : '更新策略'}
-            </button>
-          </div>
-        </div>
-
-        <form onSubmit={(e) => { e.preventDefault(); handleChatSubmit(); }} className="relative group">
-          <div className="absolute inset-0 bg-blue-500/5 rounded-2xl blur-2xl opacity-0 group-focus-within:opacity-100 transition-opacity pointer-events-none"></div>
-          <textarea
-            ref={textareaRef}
-            rows={1}
-            value={chatMessage}
-            onChange={handleInputChange}
-            onKeyDown={handleKeyDown}
-            placeholder={
-              isAnalyzing
-                ? "MAS 正在根据本次训练生成问题，请稍候..."
-                : isPlanMode
-                  ? "Agent 正在等待您的调整指令..."
-                  : "向您的 AI 教练提问..."
-            }
-            disabled={isBusy}
-            className="relative w-full min-h-[64px] py-5 bg-gray-50/80 border border-gray-200/50 backdrop-blur-md rounded-2xl pl-8 pr-16 text-sm font-medium outline-none focus:ring-2 focus:ring-blue-500/20 focus:bg-white transition-all placeholder-gray-400 text-gray-800 shadow-inner resize-none custom-scrollbar"
-          />
-          <button
-            type="submit"
-            disabled={isBusy}
-            className="absolute right-2.5 bottom-2.5 w-11 h-11 bg-gray-900 text-white rounded-2xl flex items-center justify-center hover:scale-105 active:scale-95 transition-all shadow-xl shadow-gray-200 disabled:bg-gray-300 z-10"
+      {/* Input Bar — iMessage 风格：[+] [胶囊输入框] [🎤/↑] */}
+      <div className="relative flex-shrink-0 z-20 px-3 pt-2 pb-3" style={{ paddingTop: 8, paddingBottom: 'calc(var(--safe-bottom) + 8px)' }}>
+        {/* iOS 26 Menu：参考信息 App——大型白色圆角浮层，大图标+大字，无分隔线 */}
+        {showAttachPanel && (
+          <motion.div
+            initial={{ opacity: 0, y: 24, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 16, scale: 0.97 }}
+            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
+            className="fixed inset-x-4 bottom-[120px] top-auto z-40 rounded-[40px] bg-white/80 backdrop-blur-2xl shadow-[0_12px_48px_rgba(0,0,0,0.16)] overflow-hidden px-4 py-3"
           >
-            {isBusy ? (
-              <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-            ) : (
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 10l7-7m0 0l7 7m-7-7v18" />
-              </svg>
-            )}
+            {[
+              { key: 'plan', label: '生成训练计划', bg: 'linear-gradient(135deg,#34C759,#30B350)', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
+              { key: 'stats', label: '附上训练数据', bg: 'linear-gradient(135deg,#FF9F0A,#FF7A00)', icon: 'M13 7h3l2 4m0 0l-2-4-2 4m2 0v9m-9-9h3l2 4m0 0l-2-4-2 4m2 0V4m-6 5h18' },
+              { key: 'photo', label: '照片', bg: 'linear-gradient(135deg,#0A84FF,#0066CC)', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
+            ].map((a) => (
+              <button
+                key={a.key}
+                onClick={() => {
+                  if (a.key === 'plan') setIsPlanMode(true);
+                  setShowAttachPanel(false);
+                }}
+                className="w-full flex items-center gap-5 px-2 py-3.5 text-left active:bg-black/5 rounded-2xl transition-colors"
+              >
+                <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-white shadow-sm" style={{ background: a.bg }}>
+                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d={a.icon} />
+                  </svg>
+                </div>
+                <span className="text-[19px] text-gray-900">{a.label}</span>
+              </button>
+            ))}
+          </motion.div>
+        )}
+
+        <div className="relative flex items-end gap-2">
+          {/* + 附件按钮 */}
+          <button
+            onClick={() => setShowAttachPanel(!showAttachPanel)}
+            className={`w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0 transition-all active:scale-90 text-gray-800 ${showAttachPanel ? 'rotate-45' : ''}`}
+            aria-label="附件"
+          >
+            <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
           </button>
-        </form>
+
+          {/* 胶囊输入框 */}
+          <form onSubmit={(e) => { e.preventDefault(); handleChatSubmit(); }} className="flex-1 flex items-end gap-1 bg-white rounded-[22px] pl-4 pr-1.5 py-1.5">
+            <textarea
+              ref={textareaRef}
+              rows={1}
+              value={chatMessage}
+              onChange={handleInputChange}
+              onKeyDown={handleKeyDown}
+              placeholder={
+                isAnalyzing
+                  ? "正在分析本次训练…"
+                  : isPlanMode
+                    ? "描述你想调整的内容…"
+                    : "iMessage 风格输入"
+              }
+              disabled={isBusy}
+              className="flex-1 resize-none bg-transparent outline-none text-[16px] leading-[1.4] py-1.5 max-h-24 text-gray-900 placeholder-gray-400 custom-scrollbar"
+            />
+            {/* 发送 / 麦克风：空文本=麦克风，有文本=蓝色发送箭头 */}
+            <button
+              type="submit"
+              disabled={isBusy || !chatMessage.trim()}
+              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 ${
+                chatMessage.trim() && !isBusy
+                  ? 'bg-[#0A84FF] text-white shadow-sm'
+                  : 'bg-gray-200 text-gray-400'
+              }`}
+              aria-label={chatMessage.trim() ? '发送' : '语音输入'}
+            >
+              {chatMessage.trim() && !isBusy ? (
+                <svg className="w-4.5 h-4.5 w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
+                </svg>
+              ) : (
+                <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                  <path d="M6 12v.75a6 6 0 0012 0V12m-6 9v-3.75" stroke="currentColor" strokeWidth={1.8} fill="none" strokeLinecap="round" />
+                </svg>
+              )}
+            </button>
+          </form>
+        </div>
       </div>
 
       {/* [NEW] Chat History Panel */}
@@ -565,6 +578,58 @@ const ReasoningTrace: React.FC<{ trace?: string }> = ({ trace }) => {
           MAS 核心: {trace.toUpperCase()}
         </span>
       </div>
+    </div>
+  );
+};
+
+/**
+ * ThinkingBlock — 折叠的 Agent 思考区（主流 Agent UX 模式）：
+ * - 默认收起，只显示一行状态标签（不与答案争夺视觉层级）；
+ * - 流式生成中自动展开实时预览，结束后自动收起；
+ * - 用户手动展开/收起后尊重用户选择。
+ */
+const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text, streaming }) => {
+  const [manuallyToggled, setManuallyToggled] = useState(false);
+  const [expanded, setExpanded] = useState(false);
+
+  if (!text) return null;
+
+  // 流式中默认展开；结束后默认收起；用户手动操作后以用户为准
+  const isOpen = manuallyToggled ? expanded : streaming;
+
+  return (
+    <div className="mb-3 w-full max-w-[92%]">
+      <button
+        onClick={() => { setManuallyToggled(true); setExpanded(!isOpen); }}
+        className="flex items-center gap-2 px-3 py-1.5 bg-gray-50/80 backdrop-blur-sm border border-gray-100 rounded-lg hover:bg-gray-100/80 transition-colors active:scale-[0.98]"
+      >
+        {streaming ? (
+          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
+        ) : (
+          <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+          </svg>
+        )}
+        <span className="text-[10px] font-bold text-gray-400 tracking-wide">
+          {streaming ? '思考中…' : '已深度思考（点击展开）'}
+        </span>
+        <svg
+          className={`w-3 h-3 text-gray-300 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
+          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+        </svg>
+      </button>
+      <motion.div
+        initial={false}
+        animate={{ height: isOpen ? 'auto' : 0, opacity: isOpen ? 1 : 0 }}
+        transition={{ duration: 0.2, ease: 'easeOut' }}
+        className="overflow-hidden"
+      >
+        <div className="mt-2 px-4 py-3 bg-gray-50/50 border-l-2 border-gray-200 rounded-r-lg text-xs leading-relaxed text-gray-500 whitespace-pre-wrap">
+          {text}
+        </div>
+      </motion.div>
     </div>
   );
 };

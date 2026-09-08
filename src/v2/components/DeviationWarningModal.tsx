@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
+import { setTabBarHidden } from '../../lib/nativeTabBar';
 
 interface DeviationWarningModalProps {
   isOpen: boolean;
@@ -21,6 +22,12 @@ export const DeviationWarningModal: React.FC<DeviationWarningModalProps> = ({
 }) => {
   if (!isOpen) return null;
 
+  // iOS sheet 规范：盖住原生 tab bar
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
+
   const [selectedReason, setSelectedReason] = useState('');
   const reasons = ['状态极佳', '感到疲劳', '受伤预防', '器械限制'];
 
@@ -32,10 +39,10 @@ export const DeviationWarningModal: React.FC<DeviationWarningModalProps> = ({
 
   return createPortal(
     <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/60 backdrop-blur-sm">
-      <div className="bg-white w-full max-w-sm rounded-3xl shadow-2xl p-8 animate-in fade-in zoom-in-95 duration-300">
+      <div className="bg-white/95 backdrop-blur-xl w-[270px] rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300">
         {/* Warning Icon */}
-        <div className="flex justify-center mb-6">
-          <svg className="w-16 h-16 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <div className="flex justify-center pt-5 mb-3">
+          <svg className="w-10 h-10 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
           </svg>
         </div>
@@ -85,19 +92,19 @@ export const DeviationWarningModal: React.FC<DeviationWarningModalProps> = ({
           ))}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3">
+        {/* Action Buttons - iOS Alert grouped style */}
+        <div className="border-t border-gray-200">
           <button
             onClick={onClose}
-            className="flex-1 py-3 rounded-xl font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 transition-all"
+            className="w-full py-3 text-[17px] font-normal text-star-accent active:bg-gray-100 transition-colors border-b border-gray-200"
           >
             返回修改
           </button>
           <button
             onClick={() => onConfirm(selectedReason)}
-            className="flex-1 py-3 rounded-xl font-bold text-white bg-star-dark hover:bg-black transition-all shadow-lg"
+            className="w-full py-3 text-[17px] font-semibold text-star-accent active:bg-gray-100 transition-colors"
           >
-            确认并保存
+            确认保存
           </button>
         </div>
       </div>

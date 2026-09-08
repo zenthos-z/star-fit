@@ -366,28 +366,18 @@ export class PostgresClient {
   private static sanitizeParams(params: QueryParams): QueryParams {
     const sanitized: QueryParams = {};
     const sensitiveKeys = ['password', 'token', 'secret', 'apiKey', 'auth'];
-    const truncateKeys = ['embedding', 'vector'];
     const MAX_ARRAY_DISPLAY = 5;
 
     for (const [key, value] of Object.entries(params)) {
       if (sensitiveKeys.some((k) => key.toLowerCase().includes(k))) {
         sanitized[key] = '***REDACTED***';
-      } else if (truncateKeys.some((k) => key.toLowerCase().includes(k))) {
-        // Truncate long arrays for vector/embedding params
-        if (Array.isArray(value) && value.length > MAX_ARRAY_DISPLAY) {
-          sanitized[key] = `[${value.slice(0, MAX_ARRAY_DISPLAY).join(', ')}... +${value.length - MAX_ARRAY_DISPLAY} more]`;
-        } else if (typeof value === 'string' && value.startsWith('[') && value.length > 100) {
-          // Handle string representation of arrays (e.g., "[0.1,0.2,...]")
-          const parsed = value.match(/^[\[\]]/);
-          if (parsed) {
-            const parts = value.slice(1, -1).split(',');
-            sanitized[key] = `[${parts.slice(0, MAX_ARRAY_DISPLAY).join(', ')}... +${parts.length - MAX_ARRAY_DISPLAY} more]`;
-          } else {
-            sanitized[key] = value.length > 50 ? value.slice(0, 50) + '...' : value;
-          }
-        } else {
-          sanitized[key] = value;
-        }
+      } else if (Array.isArray(value) && value.length > MAX_ARRAY_DISPLAY) {
+        sanitized[key] = `[${value.slice(0, MAX_ARRAY_DISPLAY).join(', ')}... +${value.length - MAX_ARRAY_DISPLAY} more]`;
+      } else if (typeof value === 'string' && value.startsWith('[') && value.length > 100) {
+        const parts = value.slice(1, -1).split(',');
+        sanitized[key] = `[${parts.slice(0, MAX_ARRAY_DISPLAY).join(', ')}... +${parts.length - MAX_ARRAY_DISPLAY} more]`;
+      } else if (typeof value === 'string' && value.length > 50) {
+        sanitized[key] = value.slice(0, 50) + '...';
       } else {
         sanitized[key] = value;
       }

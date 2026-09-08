@@ -25,20 +25,9 @@
 
 - PostgreSQL 14+
 - Node.js 18+
-- pgvector 扩展 (用于向量搜索)
 - 足够的磁盘空间 (至少 2x 当前数据库大小)
 
-### 2. 安装 pgvector 扩展
-
-```sql
--- 连接到 PostgreSQL
-CREATE EXTENSION IF NOT EXISTS vector;
-
--- 验证安装
-SELECT * FROM pg_extension WHERE extname = 'vector';
-```
-
-### 3. 创建数据库
+### 2. 创建数据库
 
 ```sql
 CREATE DATABASE starfit_prod
@@ -49,9 +38,6 @@ CREATE DATABASE starfit_prod
 
 -- 连接到新数据库
 \c starfit_prod
-
--- 创建扩展
-CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 ---
@@ -323,16 +309,7 @@ ON user_profiles_v2(fitness_level, updated_at DESC);
 
 ### 常见问题
 
-#### 1. pgvector 扩展未安装
-
-**错误**: `type "vector" does not exist`
-
-**解决**:
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
-```
-
-#### 2. UUID 生成失败
+#### 1. UUID 生成失败
 
 **错误**: `function gen_random_uuid() does not exist`
 

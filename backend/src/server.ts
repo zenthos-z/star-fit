@@ -98,6 +98,7 @@ import {
   getImportList
 } from './controllers/exerciseLibraryIOController.js';
 import { WebSocketProgressBroadcaster } from './services/websocketProgressService.js';
+import { MissingUserIdError } from './utils/requestUtils.js';
 
 const ACCESS_LOG = path.join(process.cwd(), 'access.log');
 
@@ -112,6 +113,14 @@ const server = Fastify({
     },
   },
   bodyLimit: 10 * 1024 * 1024 // 10MB global limit for JSON etc.
+});
+
+// Missing X-User-Id is a client error (400), not a server fault (500).
+server.setErrorHandler((error, request, reply) => {
+  if (error instanceof MissingUserIdError) {
+    return reply.status(400).send({ error: error.message });
+  }
+  throw error;
 });
 
 // Helper for access logging
@@ -162,6 +171,17 @@ const start = async () => {
         message: 'Starfit Agent Backend is running',
         version: '2.0.0',
         ws_endpoints: ['/api/ws/sync', '/api/videos/progress']
+      };
+    });
+
+    // LAN discovery health probe — 客户端扫描用。区分于 404（其他服务的随机响应），
+    // 带 app 标识让前端确认发现的是 Starfit 而非碰巧占用 43111 的别的服务。
+    server.get('/health', async (req, reply) => {
+      return {
+        ok: true,
+        app: 'starfit',
+        version: '2.0.0',
+        ts: Date.now(),
       };
     });
 

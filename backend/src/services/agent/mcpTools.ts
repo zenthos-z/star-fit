@@ -13,7 +13,7 @@
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, description}].
  *                                 The library is small enough to fit in context, so the agent
- *                                 picks actions itself — no vector/semantic search. `description`
+ *                                 picks actions itself. `description`
  *                                 carries pattern/targets/equipment/impact so the agent can
  *                                 respect the user equipment + injuries in-context.
  * - `get_exercise_detail` (read)  full record of one exercise (attributes, tutorials, content)
@@ -251,14 +251,13 @@ export class UserScopedWriteRepository extends BaseRepository {
 
 /**
  * Read-only accessor for the `exercises` table (HC-2: thin read-only wrapper;
- * no `ExerciseRepository` exists yet). SELECT only — no writes, no vector search.
+ * no `ExerciseRepository` exists yet). SELECT only — no writes.
  */
 export class ExerciseQuery extends BaseRepository {
   /**
    * Return the whole exercise library (id/name/type/difficulty/attributes). The
    * library is small enough to fit in the model context, so the agent filters
-   * and picks actions in-context — no SQL filtering or vector/semantic search.
-   * Does not touch the removed `embedding` column.
+   * and picks actions in-context — no SQL filtering.
    */
   async listAll(): Promise<ExerciseListRow[]> {
     return this.queryMany<ExerciseListRow>(

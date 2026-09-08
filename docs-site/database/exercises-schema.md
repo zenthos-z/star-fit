@@ -51,10 +51,6 @@ CREATE TABLE IF NOT EXISTS exercises (
 CREATE INDEX idx_exercises_type ON exercises(exercise_type);
 CREATE INDEX idx_exercises_difficulty ON exercises(difficulty);
 CREATE INDEX idx_exercises_targets ON exercises USING GIN(targets);
-
--- 向量搜索
-CREATE INDEX idx_exercises_embedding ON exercises USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
 ```
 
 ---
@@ -254,7 +250,6 @@ export interface Exercise {
   protocol_version?: string;
   version?: number;
   metadata?: Record<string, any>; // JSONB
-  embedding?: number[];            // VECTOR(1536)
 }
 ```
 

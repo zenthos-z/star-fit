@@ -3,8 +3,9 @@ import {
   X, Upload, Download, FileUp, AlertTriangle, 
   CheckCircle, Loader2, FileArchive, ChevronRight 
 } from 'lucide-react';
-import { 
-  ExerciseLibraryIOService, 
+import { setTabBarHidden } from '../../src/lib/nativeTabBar';
+import {
+  ExerciseLibraryIOService,
   PrecheckResponse, 
   ConflictStrategy, 
   ImportStatus, 
@@ -23,6 +24,12 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ open, onClose }) => 
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
+
+  // iOS sheet 规范：sheet 呈现时盖住原生 tab bar，关闭恢复
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
 
   const handleExport = async () => {
     setLoading(true);
@@ -44,10 +51,18 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ open, onClose }) => 
     <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black/40 backdrop-blur-sm animate-in fade-in">
       <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl overflow-hidden flex flex-col m-4 animate-in zoom-in-95 duration-200 text-gray-900">
         
-        <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
-          <h2 className="text-xl font-black text-gray-900">导出动作库</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-black transition-colors">
-            <X size={24} />
+        <div className="px-6 py-4 flex items-center justify-between border-b border-gray-100">
+          <button onClick={onClose} className="text-star-accent font-bold min-w-[52px] text-left active:opacity-50 transition-opacity">
+            关闭
+          </button>
+          <h2 className="text-base font-bold text-gray-900">导出动作库</h2>
+          <button
+            onClick={handleExport}
+            disabled={loading}
+            aria-label="确认导出"
+            className="w-9 h-9 bg-star-dark text-white rounded-full flex items-center justify-center shadow-md active:scale-95 transition-transform disabled:opacity-40 disabled:pointer-events-none"
+          >
+            {loading ? <Loader2 className="animate-spin" size={16} /> : <Download size={16} />}
           </button>
         </div>
 
@@ -103,16 +118,7 @@ export const ExportDialog: React.FC<ExportDialogProps> = ({ open, onClose }) => 
           )}
         </div>
 
-        <div className="p-6 pt-0">
-          <button
-            onClick={handleExport}
-            disabled={loading}
-            className="w-full py-4 bg-star-dark text-white rounded-xl font-bold shadow-lg hover:bg-black active:scale-[0.98] transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2"
-          >
-            {loading ? <Loader2 className="animate-spin" size={20} /> : <Download size={20} />}
-            {loading ? '正在导出...' : '确认导出'}
-          </button>
-        </div>
+        {/* Footer removed: export moved to header (iOS style) */}
 
       </div>
     </div>
@@ -162,7 +168,12 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({ open, onClose, onSuc
     }
   };
 
-  if (!open) return null;
+  
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
+if (!open) return null;
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const selected = e.target.files?.[0];
@@ -481,9 +492,9 @@ export const ImportDialog: React.FC<ImportDialogProps> = ({ open, onClose, onSuc
       <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden flex flex-col m-4 animate-in zoom-in-95 duration-200 max-h-[90vh]">
         
         <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between bg-white sticky top-0 z-10">
-          <h2 className="text-xl font-black text-gray-900">导入动作库</h2>
-          <button onClick={handleClose} className="text-gray-400 hover:text-black transition-colors">
-            <X size={24} />
+          <h2 className="text-base font-bold text-gray-900">导入动作库</h2>
+          <button onClick={handleClose} aria-label="关闭" className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-colors">
+            <X size={16} />
           </button>
         </div>
 

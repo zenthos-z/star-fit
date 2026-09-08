@@ -6,6 +6,7 @@ export interface ExerciseSet {
   distance?: number; // in meters (Actual recorded distance)
   targetDuration?: number; // [NEW] Target duration in seconds
   targetDistance?: number; // [NEW] Target distance in meters
+  heartRate?: number; // [NEW] Average heart rate bpm recorded for this set (cardio/wearable)
   // [NEW] Flexible Intensity Parameters (for Cardio, Rowing, etc.)
   intensityParams?: {
     incline?: number;     // For Treadmill

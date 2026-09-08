@@ -60,6 +60,7 @@ export const ExerciseActionSchema = z.object({
     weight: z.number().optional(),
     duration: z.number().optional(), // seconds
     distance: z.number().optional(), // meters
+    heartRate: z.number().min(0).optional(), // avg bpm recorded for this set (cardio/wearable)
     rpe: z.number().min(0).max(10).optional(),
     status: z.enum(['UNKNOWN', 'PLANNED', 'COMPLETED', 'SKIPPED']).default('UNKNOWN'),
     timestamp: z.string().datetime().optional(),

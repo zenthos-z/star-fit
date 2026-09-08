@@ -1,5 +1,7 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getUserId } from '@/services';
+import { getHeaders } from '@/services/geminiService';
+import { buildSessionPayload } from '../utils/workoutSummary';
 // P010 signature-frozen seam: hooks program only against chat(req): AsyncIterable<AgentEvent>.
 // The kernel swap (legacy multi-agent one-shot POST) is absorbed inside the
 // seam; this hook consumes the SSE stream and synthesizes renderable uiHint
@@ -20,6 +22,8 @@ export interface ChatMessage {
   role: 'user' | 'ai';
   text: string;
   isThinking?: boolean;
+  /** Agent 自我修订过程的思考文本（质量门打回重试轮次）——折叠显示，非正文 */
+  thinkingText?: string;
   uiHint?: any;
   agentTrace?: string;
   explanation?: string;  // 训练计划说明（由 Agent 生成）
@@ -519,6 +523,7 @@ ${JSON.stringify(uploadData, null, 2)}`
       //  uiHint 卡片**只暂存、不渲染**——卡片必须加载完整才能显示，故流过程中这条消息
       //  的 uiHint 始终为 undefined，直到本轮流结束定型时才挂上 card 触发渲染。
       let accumulated = '';
+      let thinkingAccumulated = '';
       let card: UiHintCard | undefined;
       let error: { code: string; message: string } | undefined;
 
@@ -532,6 +537,10 @@ ${JSON.stringify(uploadData, null, 2)}`
           accumulated += ev.text;
           // 逐字追加：只更新 thinking 气泡的 text；uiHint 保持 undefined（不渲染卡片）
           setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, text: accumulated } : m)));
+        } else if (ev.type === 'thinking' && ev.text) {
+          // 被质量门打回轮次的自我修订文本 → 折叠思考区，不进正文
+          thinkingAccumulated += (thinkingAccumulated ? '\n\n' : '') + ev.text;
+          setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, thinkingText: thinkingAccumulated } : m)));
         } else if (ev.type === 'uiHint' && ev.card) {
           card = ev.card; // 暂存，流结束后才渲染
         } else if (ev.type === 'error' && ev.error && !error) {
@@ -543,6 +552,7 @@ ${JSON.stringify(uploadData, null, 2)}`
       setChatHistory(prev => prev.map(m => (m.isThinking ? {
         role: 'ai',
         text: error ? `[诊断] agent 返回错误 — ${error.code}: ${error.message}` : accumulated,
+        thinkingText: thinkingAccumulated || undefined,
         uiHint: synthesizeUiHint(card),
         explanation: undefined,
         isThinking: false,
@@ -616,22 +626,26 @@ ${JSON.stringify(uploadData, null, 2)}`
           });
         }, 0);
 
-        // Phase 1: Persist session to DB first
+        // Phase 1: Persist session to DB first (pre-formatted payload)
         try {
-          const sessionPayload = {
-            sessionId: attachment.sessionId,
+          // Pre-process: raw Exercise[] → formatted training record
+          // (per-exercise aggregate rows + type-aware session stats)
+          const sessionPayload = buildSessionPayload({
+            id: attachment.sessionId,
             startTime: attachment.data?.startTime,
             endTime: attachment.data?.endTime,
             exercises: attachment.data?.exercises,
-            stats: attachment.data?.stats,
-            notes: attachment.data?.notes
-          };
+          });
+
+          if (!sessionPayload) {
+            throw new Error('No persistable workout data (empty exercises or invalid timestamps)');
+          }
 
           console.log('[useAICoach] POST /api/sessions with payload:', sessionPayload);
 
           const response = await fetch('/api/sessions', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: getHeaders(), // X-User-Id + Content-Type
             body: JSON.stringify(sessionPayload)
           });
 

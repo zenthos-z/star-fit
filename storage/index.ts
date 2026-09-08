@@ -30,7 +30,8 @@ const STORAGE_WHITELIST = [
   'chat_thread_list:',
   'chat_messages:',
   Keys.pendingSummary,
-  Keys.nextPlan
+  Keys.nextPlan,
+  'starfit_day_plan:'
 ];
 
 export async function storageGet<T = any>(key: string): Promise<T | null> {
@@ -184,6 +185,36 @@ export async function loadNextPlan(): Promise<any[] | null> {
 
 export async function clearNextPlan(): Promise<void> {
   await storageRemove(Keys.nextPlan);
+}
+
+// ========== 按天训练计划（AI Agent hub 7 天计划墙） ==========
+
+export interface DayPlan {
+  date: string; // yyyy-mm-dd
+  plan: any[];
+  savedAt: number;
+}
+
+export async function saveDayPlan(date: string, plan: any[]): Promise<void> {
+  await storageSet(Keys.dayPlan + date, { date, plan, savedAt: Date.now() });
+}
+
+export async function loadDayPlan(date: string): Promise<any[] | null> {
+  const payload = await storageGet<{ date: string; plan?: any[] }>(Keys.dayPlan + date);
+  if (payload && Array.isArray(payload.plan)) return payload.plan;
+  return null;
+}
+
+export async function loadDayPlans(dates: string[]): Promise<Record<string, any[] | null>> {
+  const out: Record<string, any[] | null> = {};
+  for (const d of dates) {
+    out[d] = await loadDayPlan(d);
+  }
+  return out;
+}
+
+export async function clearDayPlan(date: string): Promise<void> {
+  await storageRemove(Keys.dayPlan + date);
 }
 
 // ========== Login and Authentication ==========

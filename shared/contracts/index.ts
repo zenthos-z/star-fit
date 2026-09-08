@@ -883,93 +883,6 @@ export const UsernameUpdateResponseSchema = z.object({
 export type UsernameUpdateResponse = z.infer<typeof UsernameUpdateResponseSchema>;
 
 // ============================================================================
-// Exercise Embedding Schemas (New for Vector Search Management)
-// ============================================================================
-
-/**
- * Embedding Status Enum
- * Represents the vectorization state of an exercise
- */
-export const EmbeddingStatusSchema = z.enum([
-  'not_vectorized',
-  'partial',
-  'outdated',
-  'current',
-]);
-
-export type EmbeddingStatus = z.infer<typeof EmbeddingStatusSchema>;
-
-/**
- * Exercise Embedding Info Schema
- * Information about an exercise's embedding status
- */
-export const ExerciseEmbeddingInfoSchema = z.object({
-  exerciseId: z.string(),
-  name: z.string(),
-  status: EmbeddingStatusSchema,
-  embeddingUpdatedAt: z.string().datetime().nullable(),
-  contentUpdatedAt: z.string().datetime(),
-});
-
-export type ExerciseEmbeddingInfo = z.infer<typeof ExerciseEmbeddingInfoSchema>;
-
-/**
- * Embedding Stats Schema
- * Statistics about exercise embeddings
- */
-export const EmbeddingStatsSchema = z.object({
-  total: z.number().catch(0),
-  notVectorized: z.number().catch(0),
-  partial: z.number().catch(0),
-  outdated: z.number().catch(0),
-  current: z.number().catch(0),
-  lastVectorizedAt: z.string().datetime().nullable().catch(null),
-});
-
-export type EmbeddingStats = z.infer<typeof EmbeddingStatsSchema>;
-
-/**
- * Batch Vectorize Request Schema
- */
-export const BatchVectorizeRequestSchema = z.object({
-  exerciseIds: z.array(z.string()),
-  forceRegenerate: z.boolean().default(false),
-});
-
-export type BatchVectorizeRequest = z.infer<typeof BatchVectorizeRequestSchema>;
-
-/**
- * Batch Vectorize Response Schema
- */
-export const BatchVectorizeResponseSchema = z.object({
-  success: z.boolean().catch(false),
-  total: z.number().catch(0),
-  succeeded: z.number().catch(0),
-  failed: z.number().catch(0),
-  results: z.array(z.object({
-    exerciseId: z.string().catch(''),
-    success: z.boolean().catch(false),
-    error: z.string().optional().catch(undefined),
-  })).catch([]),
-  durationMs: z.number().catch(0),
-});
-
-export type BatchVectorizeResponse = z.infer<typeof BatchVectorizeResponseSchema>;
-
-/**
- * Embedding Config Schema
- * Configuration for embedding model
- */
-export const EmbeddingConfigSchema = z.object({
-  provider: z.enum(['openai', 'gemini']).catch('openai'),
-  model: z.string().catch('text-embedding-3-small'),
-  baseURL: z.string().optional().catch(undefined),
-  hasApiKey: z.boolean().catch(false),
-});
-
-export type EmbeddingConfig = z.infer<typeof EmbeddingConfigSchema>;
-
-// ============================================================================
 // Exercise Schemas (New for Exercise Library Management)
 // ============================================================================
 
@@ -1145,9 +1058,11 @@ export interface PlanContext {
 // NOT a runtime route and NOT a method.
 
 /**
- * AgentScenario — kept on `ChatRequest` for the P010 frozen seam but NO LONGER
- * used by the generic DeepAgent (which mounts all skills + tools on ONE agent
- * and lets the loop pick by intent). Accepted in transit; ignored at assembly.
+ * AgentScenario — P010 frozen seam field. The agent stays single and generic
+ * (one loop picks skills by intent), but `scenario` now selects a per-scenario
+ * data-interpretation guide in the systemPrompt (see DeepAgentService
+ * SCENARIO_DATA_GUIDES): e.g. workout_complete teaches the agent to read the
+ * pre-formatted training records persisted by POST /api/sessions.
  * `tutorial` was removed — exercise tutorials are a fixed-workflow WS bypass,
  * not an agent mode.
  */
@@ -1192,6 +1107,14 @@ export type ChatRequest = z.infer<typeof ChatRequestSchema>;
  * Forward-compatible v3 card (the HC-1 uiHint skill + validation loop in M5b
  * and the frontend AgentClient in M8FE consume this). Field names deliberately
  * echo the legacy UIHint for migration continuity without coupling to MAS.
+ *
+ * `profile_update_confirm` (2026-09): the "user profile auto-update" consent
+ * bubble — the agent PROPOSES a profile change (injury report, end-of-day
+ * training digest, ...) and the frontend renders it as a special
+ * confirm-action bubble. Nothing is written until the user confirms; the
+ * confirmation turn (scenario=update_profile) carries the approved changes
+ * and the agent applies them via `update_profile`, then replies with an
+ * `audit_complete` card.
  */
 export const UiHintCardSchema = z.object({
   type: z.enum([
@@ -1200,6 +1123,7 @@ export const UiHintCardSchema = z.object({
     'survey',
     'instruction',
     'deviation',
+    'profile_update_confirm',
     'unknown',
   ]).default('unknown'),
   title: z.string().optional(),
@@ -1232,9 +1156,11 @@ export type AgentError = z.infer<typeof AgentErrorSchema>;
 /**
  * AgentEvent — the single streaming element yielded by AgentService.chat.
  * The `type` union literal is frozen verbatim: 'token' | 'uiHint' | 'done' | 'error'.
+ * 'thinking' (2026-09): agent self-revision prose from rejected validation
+ * rounds — supporting context for a collapsible thinking UI, NEVER the answer.
  */
 export const AgentEventSchema = z.object({
-  type: z.enum(['token', 'uiHint', 'done', 'error']),
+  type: z.enum(['token', 'uiHint', 'done', 'error', 'thinking']),
   text: z.string().optional(),
   card: UiHintCardSchema.optional(),
   error: AgentErrorSchema.optional(),
@@ -1267,3 +1193,56 @@ export {
   formatLogTag,
   parseLogTag,
 } from './logging/index.js';
+
+// ============================================================================
+// Exercise Suggestion Contracts (动作建议值)
+// ============================================================================
+
+export {
+  // Constants
+  SUGGESTION_FORMULA_VERSION,
+  SUGGESTION_EXERCISE_TYPES,
+  ADJUSTMENT_BOUNDS,
+  RPE_PERCENT_1RM,
+  GOAL_REP_RANGES,
+  BODYWEIGHT_COEFFICIENTS,
+  TYPE_DEFAULT_WEIGHT,
+  DEFAULT_SET_COUNT,
+  FIELDS_BY_TYPE,
+
+  // Schemas
+  SuggestionValuesSchema,
+  SuggestionModifiersSchema,
+  CapabilityProfileSchema,
+  AdjustmentActionSchema,
+  AdjustmentIntentSchema,
+  SuggestionAdjustmentCardSchema,
+  SuggestionRequestSchema,
+  ExerciseSuggestionSchema,
+  SuggestionResponseSchema,
+
+  // Types
+  type SuggestionExerciseType,
+  type SuggestionValues,
+  type SuggestionModifiers,
+  type CapabilityProfile,
+  type AdjustmentAction,
+  type AdjustmentIntent,
+  type SuggestionAdjustmentCard,
+  type SuggestionRequest,
+  type ExerciseSuggestion,
+  type SuggestionResponse,
+  type SuggestionFingerprintInput,
+
+  // Functions
+  normalizeSuggestionExerciseType,
+  rpeToPercent1RM,
+  repsForRpe,
+  estimate1RM,
+  distanceFromPace,
+  computeBaseline,
+  applyAdjustment,
+  finalizeValues,
+  deriveSuggestion,
+  computeContextFingerprint,
+} from './suggestions.js';

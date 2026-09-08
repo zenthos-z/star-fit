@@ -1,5 +1,5 @@
 ---
-name: "plan_generation"
+name: "plan-generation"
 description: "计划生成能力包 - 训练容量计算、历史数据加载、计划格式验证"
 category: "planning"
 version: "3.0.0"
@@ -27,7 +27,7 @@ version: "3.0.0"
 | submit_plan | 验证并提交计划（终止器） | `exercise_list`, `explanation` | 验证 |
 
 **注意**: `calculate_capacity` 已移至 `strength_training_designer` skill。
-如需三大项容量计算，请先激活 `load_skill({ skillName: "strength_training_designer" })`。
+如需三大项容量计算，请先激活 strength-training-designer 技能（按其 SKILL.md 指引读取知识文件）。
 
 ### submit_plan 参数说明
 
@@ -62,7 +62,7 @@ Agent 通过调用这些工具来完成计划生成，最后必须调用 `submit
   ↓
 load_history (获取历史负荷锚点)
   ↓
-load_skill({ skillName: "strength_training_designer" }) (如涉及三大项)
+strength-training-designer 技能 (如涉及三大项)
   ↓
 calculate_capacity (计算三大项容量)
   ↓

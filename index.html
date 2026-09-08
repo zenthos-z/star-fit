@@ -59,8 +59,10 @@
         scrollbar-width: none;
       }
 
+      html { background-color: #F3F3F3; }
       body {
-        background-color: #FAFAFA;
+        /* 底色统一 #F3F3F3：底部安全区/tab bar 后区域与内容无色差分割线 */
+        background-color: #F3F3F3;
         color: #18181B;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
@@ -68,6 +70,133 @@
         padding-top: env(safe-area-inset-top);
         padding-bottom: env(safe-area-inset-bottom);
       }
+      /* 原生玻璃模式：React 根容器背景透明，露出下方原生玻璃层 */
+      body.native-glass .bg-star-white,
+      body.native-glass .bg-\[\#FAFAFA\] {
+        background-color: transparent !important;
+      }
+
+      /* ============================================
+         Liquid Glass Design Tokens (Apple LIQUID GLASS style)
+         安全区变量：fixed 元素按视口定位，必须自行使用 env()
+         ============================================ */
+      :root {
+        --safe-top: env(safe-area-inset-top, 0px);
+        --safe-bottom: env(safe-area-inset-bottom, 0px);
+        --safe-left: env(safe-area-inset-left, 0px);
+        --safe-right: env(safe-area-inset-right, 0px);
+      }
+
+      /* 浅色玻璃：悬浮控件默认材质
+         Apple 三层模型：highlight（顶部内高光）+ shadow（前景/背景分离）+ illumination（折射增亮） */
+      .liquid-glass {
+        background: linear-gradient(135deg, rgba(255,255,255,0.72) 0%, rgba(255,255,255,0.5) 100%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.08);
+        backdrop-filter: blur(20px) saturate(180%) brightness(1.08);
+        border: 0.5px solid rgba(255,255,255,0.7);
+        box-shadow:
+          0 8px 24px rgba(0,0,0,0.10),
+          0 2px 6px rgba(0,0,0,0.05),
+          0 0 0 0.5px rgba(0,0,0,0.03),
+          inset 0 1px 0.5px rgba(255,255,255,0.9),
+          inset 0 -1px 1px rgba(255,255,255,0.3);
+      }
+
+      /* 深色玻璃：主行动按钮等强调材质 */
+      .liquid-glass-dark {
+        background: linear-gradient(135deg, rgba(32,32,38,0.82) 0%, rgba(24,24,28,0.66) 100%);
+        -webkit-backdrop-filter: blur(24px) saturate(180%);
+        backdrop-filter: blur(24px) saturate(180%);
+        border: 0.5px solid rgba(255,255,255,0.16);
+        box-shadow:
+          0 12px 40px rgba(0,0,0,0.22),
+          inset 0 1px 0.5px rgba(255,255,255,0.22),
+          inset 0 -1px 0.5px rgba(255,255,255,0.06);
+      }
+
+      /* 全屏沉浸层（对话窗口等）：整面磨砂，不再依赖局部白底 */
+      .liquid-glass-canvas {
+        background: rgba(250,250,250,0.82);
+        -webkit-backdrop-filter: blur(28px) saturate(150%);
+        backdrop-filter: blur(28px) saturate(150%);
+      }
+
+      /* 色散玻璃选框 v2 —— 按 Apple glassEffect(.regular) 官方配方：
+         中性清透玻璃体 + 白色 specular rim + 极轻色差边缘。
+         （彩虹描边是误读，Apple 无此设计；真正的折射需 SVG backdrop-filter，WebKit 不支持） */
+      .glass-ring {
+        position: relative;
+        background: linear-gradient(160deg, rgba(255,255,255,0.66) 0%, rgba(255,255,255,0.32) 100%);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        backdrop-filter: blur(20px) saturate(160%);
+        box-shadow:
+          0 8px 24px rgba(0,0,0,0.10),
+          inset 0 0 0 1px rgba(255,255,255,0.5),
+          inset 0 1.5px 1px rgba(255,255,255,0.95),
+          inset 0 -1px 1px rgba(255,255,255,0.3),
+          inset 1.5px 0 2px rgba(255,170,170,0.16),
+          inset -1.5px 0 2px rgba(150,185,255,0.2);
+      }
+      .glass-ring::before {
+        content: '';
+        position: absolute;
+        inset: 2px 2px 50% 2px;
+        border-radius: inherit;
+        background: linear-gradient(180deg, rgba(255,255,255,0.45) 0%, rgba(255,255,255,0) 100%);
+        pointer-events: none;
+      }
+      /* 选中态 tint：颜色染在玻璃里（.regular.tint 同款），材质不变 */
+      .glass-ring-tinted {
+        background:
+          linear-gradient(165deg, rgba(79,132,240,0.82) 0%, rgba(37,99,235,0.86) 100%),
+          linear-gradient(160deg, rgba(255,255,255,0.4) 0%, rgba(255,255,255,0.1) 100%);
+        box-shadow:
+          0 10px 26px rgba(37,99,235,0.35),
+          inset 0 0 0 1px rgba(255,255,255,0.4),
+          inset 0 1.5px 1px rgba(255,255,255,0.75),
+          inset 0 -1px 1px rgba(255,255,255,0.2);
+      }
+      .glass-ring-tinted::before {
+        background: linear-gradient(180deg, rgba(255,255,255,0.35) 0%, rgba(255,255,255,0) 100%);
+      }
+
+      /* Siri 风格边缘流光：conic-gradient 旋转 + blur 晕开，光沿轮廓流动而非扫过表面 */
+      @property --siri-angle {
+        syntax: '<angle>';
+        initial-value: 0deg;
+        inherits: false;
+      }
+      @keyframes siri-rotate {
+        to { --siri-angle: 360deg; }
+      }
+      .siri-glow {
+        position: absolute;
+        /* 故意大于按钮：靠按钮的 overflow-hidden 圆角裁切，光只存在于胶囊内部 */
+        inset: -45%;
+        border-radius: 999px;
+        background: conic-gradient(
+          from var(--siri-angle),
+          rgba(59,130,246,0) 0%,
+          rgba(59,130,246,0.6) 10%,
+          rgba(147,197,253,0.28) 20%,
+          rgba(59,130,246,0) 32%,
+          rgba(59,130,246,0) 52%,
+          rgba(125,211,252,0.45) 66%,
+          rgba(59,130,246,0.22) 76%,
+          rgba(59,130,246,0) 88%
+        );
+        filter: blur(13px);
+        animation: siri-rotate 7s linear infinite;
+        pointer-events: none;
+      }
+      /* 尊重系统减弱动态偏好 */
+      @media (prefers-reduced-motion: reduce) {
+        .siri-glow { animation: none; opacity: 0.6; }
+      }
+
+      /* 顶部/底部安全区工具类 */
+      .pt-safe { padding-top: var(--safe-top); }
+      .pb-safe { padding-bottom: var(--safe-bottom); }
       
       /* Markdown Table Styles specific to AI Chat */
       .markdown-body table {

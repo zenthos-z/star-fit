@@ -1,5 +1,5 @@
 ---
-name: "strength_training_designer"
+name: "strength-training-designer"
 description: "三大项训练容量科学计算 - 基于MEV/MRV算法"
 category: "planning"
 version: "3.1.0"

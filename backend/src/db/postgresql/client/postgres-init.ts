@@ -137,7 +137,7 @@ async function initializeDatabase(options: InitOptions = {}): Promise<void> {
     const extensions = await client.query(`
       SELECT extname
       FROM pg_extension
-      WHERE extname IN ('uuid-ossp', 'vector')
+      WHERE extname IN ('uuid-ossp')
       ORDER BY extname
     `);
 

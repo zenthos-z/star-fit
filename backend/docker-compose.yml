@@ -1,24 +1,76 @@
-version: "3.9"
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-starfit}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-starfit}
+      - POSTGRES_DB=${POSTGRES_DB:-starfit}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-starfit} -d ${POSTGRES_DB:-starfit}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
   backend:
     build:
-      context: .
-      dockerfile: Dockerfile
+      context: ..
+      dockerfile: backend/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+    env_file:
+      - ./.env.local
     environment:
       - NODE_ENV=production
       - PORT=43111
       - HOST=0.0.0.0
+      - DATABASE_URL=postgres://${POSTGRES_USER:-starfit}:${POSTGRES_PASSWORD:-starfit}@postgres:5432/${POSTGRES_DB:-starfit}
       - GOOGLE_API_KEY=${GOOGLE_API_KEY}
       - APP_ORIGIN=${APP_ORIGIN}
     ports:
       - "43111:43111"
+    volumes:
+      - uploads:/app/uploads
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:43111/api/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
+
+  # 一次性数据库迁移：建表 + 增量迁移（001..009），跑完即退出。
+  # 首次部署或 schema 变更后手动执行：docker compose run --rm migrate
+  migrate:
+    build:
+      context: ..
+      dockerfile: backend/Dockerfile
+      target: builder
+    profiles: ["tools"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgres://${POSTGRES_USER:-starfit}:${POSTGRES_PASSWORD:-starfit}@postgres:5432/${POSTGRES_DB:-starfit}
+    # MigrationRunner 以「仓库根 + backend/src/...」定位迁移目录，故工作目录必须是 /app
+    working_dir: /app
+    command: ["npx", "tsx", "backend/src/db/postgresql/migrations/run.ts", "migrate"]
+    restart: "no"
+
   nginx:
     image: nginx:1.25-alpine
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     volumes:
       - ./infra/nginx.conf:/etc/nginx/nginx.conf:ro
     ports:
       - "80:80"
     restart: unless-stopped
+
+volumes:
+  pgdata:
+  uploads:

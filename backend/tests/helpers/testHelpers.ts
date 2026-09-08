@@ -110,14 +110,6 @@ export async function nextTick(): Promise<void> {
 }
 
 /**
- * Create a mock embedding vector for testing
- * Generates a 1536-dimensional vector (OpenAI default)
- */
-export function createMockEmbedding(dimension: number = 1536): number[] {
-  return Array.from({ length: dimension }, () => Math.random() * 2 - 1);
-}
-
-/**
  * Create mock exercise data for testing
  */
 export function createMockExercise(overrides: Partial<any> = {}) {

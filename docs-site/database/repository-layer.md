@@ -58,8 +58,7 @@ Repository 层是 Starfit 系统中应用层与数据库层之间的**唯一数�
 │  │  │  ExerciseRepository                              │  │  │
 │  │  │    - findByFilters() → ExerciseInfo[]           │  │  │
 │  │  │    - getById() → ExerciseInfo                   │  │  │
-│  │  │    - vectorSearch() → VectorSearchResult[]      │  │  │
-│  │  │    - 向量搜索 + 规则过滤                          │  │  │
+│  │  │    - 规则过滤                                    │  │  │
 │  │  └─────────────────────────────────────────────────┘  │  │
 │  └───────────────────────────────────────────────────────┘  │
 │                         │ snake_case                          │

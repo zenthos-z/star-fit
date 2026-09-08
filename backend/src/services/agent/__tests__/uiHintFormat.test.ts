@@ -71,4 +71,12 @@ describe('loadUiHintFormatSkill — M5a skill text', () => {
     // summary_card required field.
     assert.match(skill, /summary/i);
   });
+
+  it('documents profile_update_confirm consent-gate rules', () => {
+    // proposals array + trigger enum + the never-write-in-the-same-turn rule.
+    assert.match(skill, /proposals/i);
+    assert.match(skill, /day_end/);
+    assert.match(skill, /injury_report/);
+    assert.match(skill, /NEVER call[\s\S]*?update_profile/i);
+  });
 });

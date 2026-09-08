@@ -49,26 +49,23 @@ describe('Layer 1: Database Foundation', () => {
       expect(columns).toContain('name');
       expect(columns).toContain('exercise_type');
       expect(columns).toContain('difficulty');
-      expect(columns).toContain('embedding');
       expect(columns).toContain('attributes');
     });
 
-    it('pgvector 扩展应该已安装', async () => {
-      const result = await postgresClient.query(`
+    it('embedding 列和 pgvector 扩展应该已卸载（008/009 迁移）', async () => {
+      const columns = await postgresClient.query(`
+        SELECT column_name
+        FROM information_schema.columns
+        WHERE table_name = 'exercises' AND column_name = 'embedding'
+      `);
+      expect(columns.rows).toHaveLength(0);
+
+      const extension = await postgresClient.query(`
         SELECT extname
         FROM pg_extension
         WHERE extname = 'vector'
       `);
-      expect(result.rows).toHaveLength(1);
-    });
-
-    it('应该存在 HNSW 索引用于向量搜索', async () => {
-      const result = await postgresClient.query(`
-        SELECT indexname
-        FROM pg_indexes
-        WHERE tablename = 'exercises' AND indexname LIKE '%embedding%'
-      `);
-      expect(result.rows.length).toBeGreaterThan(0);
+      expect(extension.rows).toHaveLength(0);
     });
   });
 
@@ -135,44 +132,6 @@ describe('Layer 1: Database Foundation', () => {
 
       const types = result.rows.map((r: any) => r.exercise_type);
       expect(types.length).toBeGreaterThan(0);
-    });
-  });
-
-  describe('embedding 数据验证', () => {
-    it('应该能统计有 embedding 的动作数量', async () => {
-      const result = await postgresClient.query(`
-        SELECT
-          COUNT(*) as total,
-          COUNT(embedding) as with_embedding
-        FROM exercises
-      `);
-
-      const row = result.rows[0];
-      expect(row.total).toBeDefined();
-      expect(row.with_embedding).toBeDefined();
-    });
-
-    it('embedding 维度应该是 1536 (如果有数据)', async () => {
-      const result = await postgresClient.query(`
-        SELECT id, embedding
-        FROM exercises
-        WHERE embedding IS NOT NULL
-        LIMIT 1
-      `);
-
-      if (result.rows.length > 0) {
-        const embedding = result.rows[0].embedding;
-        let dimensions = 0;
-
-        if (Array.isArray(embedding)) {
-          dimensions = embedding.length;
-        } else if (typeof embedding === 'string') {
-          const values = embedding.slice(1, -1).split(',');
-          dimensions = values.length;
-        }
-
-        expect(dimensions).toBe(1536);
-      }
     });
   });
 });

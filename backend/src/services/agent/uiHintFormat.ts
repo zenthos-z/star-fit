@@ -7,9 +7,10 @@
  * producer (no IO) so it can be unit-tested and injected into any scenario's
  * systemPrompt assembly.
  *
- * The six allowed `type` values match the migrated canonical schema
+ * The seven allowed `type` values match the migrated canonical schema
  * (`./schemas/uiHintSchemas.js`):
- * plan_card, summary_card, survey_card, deviation_card, audit_complete, strategy_confirm.
+ * plan_card, summary_card, survey_card, deviation_card, audit_complete,
+ * strategy_confirm, profile_update_confirm.
  *
  * Note: `survey_card` is now allowed for workout_complete scenario (v3 amendment).
  */
@@ -25,6 +26,7 @@ export const ALLOWED_UIHINT_TYPES = [
   'deviation_card',
   'audit_complete',
   'strategy_confirm',
+  'profile_update_confirm',  // 2026-09: user-profile auto-update consent bubble
 ] as const;
 
 /**
@@ -98,17 +100,29 @@ export function loadUiHintFormatSkill(): string {
     '- `strategy_confirm` — training strategy for confirmation. `data`: `preview`',
     '  (non-empty string), `fullContent` (non-empty string), optional `title`,',
     '  `message`, `actionLabel`, `updatedAt` (ISO 8601 datetime).',
+    '- `profile_update_confirm` — user-profile auto-update CONSENT bubble',
+    '  (HITL gate for profile writes). Emit this BEFORE calling `update_profile`',
+    '  when a trigger fires (day_end / injury_report / key_parameter_change).',
+    '  `data`: `message` (non-empty string), `trigger` (one of: day_end |',
+    '  injury_report | key_parameter_change | user_request), `proposals` (array,',
+    '  1+ items), optional `title`, `confirmLabel`, `cancelLabel`. Each proposal:',
+    '  `field` (one of: load_anchors | active_limitations | recovery_state |',
+    '  memories), `label` (string), `change` (human-readable description of the',
+    '  intended edit), optional `value` (preview of the new value). NEVER call',
+    '  `update_profile` in the same turn that emits this card — wait for the',
+    '  user confirmation.',
     '',
     '### Common shape rules',
-    '- `type` is REQUIRED and must be one of the six values above (whitelist).',
+    '- `type` is REQUIRED and must be one of the SEVEN values above (whitelist).',
     '- `data` shape MUST match its type (discriminated by `type`).',
     '- For `plan_card`, `data` MUST be a JSON array, never an object/map.',
     '- For `survey_card`, `questions` MUST be an array (1-3 questions max).',
+    '- For `profile_update_confirm`, `proposals` MUST be an array (1+ items).',
     '- Emit the card as a single JSON object.',
     '',
     '### HARD CONSTRAINT (HC-4)',
     `NEVER emit ${BLACKLISTED_UIHINT_TYPES.map((t) => `\`${t}\``).join(' or ')}.`,
     'This HITL card type is blacklisted and will always be rejected. Use one',
-    'of the six allowed types instead.',
+    'of the allowed types above instead.',
   ].join('\n');
 }

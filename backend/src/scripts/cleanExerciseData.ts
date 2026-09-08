@@ -4,7 +4,7 @@
  * This script performs the following cleanup operations:
  * 1. Clears all exercises from the exercises table
  * 2. Clears load_anchors from all user profiles
- * 3. Refreshes materialized views to reset vector indices
+ * 3. Refreshes materialized views
  *
  * IMPORTANT: This script is destructive and should only be run when
  * transitioning to the new NanoID-based exercise system.

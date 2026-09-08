@@ -58,6 +58,8 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
         reps: s.reps,
         weight: s.weight,
         duration: s.duration,
+        distance: s.distance,
+        heartRate: s.heartRate,
         status: s.completed ? 'COMPLETED' : 'PLANNED',
         rpe: s.rpe,
         restEndTime: s.restEndTime
@@ -86,10 +88,11 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
                 const statusChanged = (s.status === 'COMPLETED') !== oldSet.completed;
                 const durationChanged = s.duration !== undefined && s.duration !== oldSet.duration;
                 const distanceChanged = s.distance !== undefined && s.distance !== oldSet.distance;
+                const heartRateChanged = s.heartRate !== undefined && s.heartRate !== oldSet.heartRate;
                 
-                // 只要有任何显式更新（包括状态、时长、距离等），就触发父组件更新
+                // 只要有任何显式更新（包括状态、时长、距离、心率等），就触发父组件更新
                 // 这对于触发 App.tsx 中的 session 自动恢复至关重要
-                if (statusChanged || durationChanged || distanceChanged || 
+                if (statusChanged || durationChanged || distanceChanged || heartRateChanged || 
                     s.reps !== oldSet.reps || s.weight !== oldSet.weight || 
                     s.restEndTime !== oldSet.restEndTime || s.status !== undefined) {
                     onUpdateSet(exercise.id, oldSet.id, {
@@ -98,6 +101,7 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
                         weight: s.weight,
                         duration: s.duration,
                         distance: s.distance,
+                        heartRate: s.heartRate,
                         rpe: s.rpe,
                         restEndTime: s.restEndTime
                     });

@@ -88,7 +88,8 @@ export interface HealthCheckResult {
  */
 export async function checkServerHealth(
   baseUrl: string,
-  timeout = 1500
+  timeout = 1500,
+  exact = false
 ): Promise<HealthCheckResult> {
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), timeout);
@@ -113,9 +114,20 @@ export async function checkServerHealth(
 
     console.log('[ServerDetector] Health check response:', response.status, 'latency:', latency);
 
-    // Any HTTP response means the server exists!
-    // Even 404 means the server is running, just the path is wrong
+    // 扫描场景要求精确命中：只有返回 Starfit 标识的 /health 才算发现，
+    // 避免把局域网里碰巧占用 43111 的其他服务当成本服务器。
+    // （对已知历史 URL 的直查则放宽：任何 <600 的响应都算在线。）
     if (response.status >= 200 && response.status < 600) {
+      if (exact) {
+        try {
+          const body = await response.json();
+          if (body?.app !== 'starfit') {
+            return { ok: false, message: 'not a starfit server' };
+          }
+        } catch {
+          return { ok: false, message: 'unrecognized response' };
+        }
+      }
       return { ok: true, message: 'Server is online', latency };
     }
     return { ok: false, message: `HTTP ${response.status}` };
@@ -188,55 +200,55 @@ async function getCandidates(): Promise<ServerCandidate[]> {
 }
 
 /**
- * Generate LAN subnet scan candidates (optimized for speed)
- * Strategy:
- * 1. Priority scan: Gateway addresses (.1, .254) + common server IPs (.100, .200)
- * 2. Range scan: .2-.99 (skipping .100-.254 where user devices usually are)
- * 3. Only scan the SAME subnet as client (e.g., 192.168.31.x)
- *
- * @param subnet - Subnet to scan (e.g., "192.168.31")
- * @param scanAllRanges - If true, scan full range; if false, only scan priority addresses
+ * 竞速扫描：一轮并发探测全部候选（不限批次），任一命中立即 resolve。
+ * 局域网 /24 = 256 个地址，90 并发 + 700ms 超时 → 最坏 ~2s 出结果；
+ * 服务器在线时通常 <1s（第一个批次内的命中立刻返回，不等其余请求）。
  */
-function generateLanCandidates(subnet: string, scanAllRanges = false): ServerCandidate[] {
-  const candidates: ServerCandidate[] = [];
+async function raceScanCandidates(
+  candidates: ServerCandidate[],
+  onProgress?: (current: ServerCandidate, total: number) => void,
+  concurrency = 90,
+  timeoutMs = 700,
+): Promise<DetectionResult | null> {
+  return new Promise((resolve) => {
+    let settled = 0;
+    let nextIndex = 0;
+    let done = false;
+    const total = candidates.length;
 
-  // Priority 1: Gateway addresses (most servers run on gateway IPs)
-  candidates.push({
-    url: `http://${subnet}.1:43111/api`,
-    source: 'scan',
-    priority: 100
-  });
-  candidates.push({
-    url: `http://${subnet}.254:43111/api`,
-    source: 'scan',
-    priority: 95
-  });
+    const finish = (result: DetectionResult | null) => {
+      if (!done) {
+        done = true;
+        resolve(result);
+      }
+    };
 
-  // Priority 2: Common static IPs for servers (.100, .200)
-  for (const ip of [100, 200]) {
-    candidates.push({
-      url: `http://${subnet}.${ip}:43111/api`,
-      source: 'scan',
-      priority: 90
-    });
-  }
+    const launchNext = (): void => {
+      if (done) return;
+      if (nextIndex >= total) {
+        if (settled >= total) finish(null);
+        return;
+      }
+      const candidate = candidates[nextIndex++];
+      onProgress?.(candidate, total);
+      checkServerHealth(candidate.url, timeoutMs, true)
+        .then((result) => {
+          if (result.ok) {
+            finish({ url: candidate.url, source: candidate.source, latency: result.latency });
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          settled++;
+          if (!done && settled >= total) finish(null);
+          launchNext();
+        });
+    };
 
-  // Priority 3: Range scan .2-.99 (only if scanAllRanges is true)
-  // This is for exhaustive scan when priority scan fails
-  if (scanAllRanges) {
-    for (let i = 2; i <= 99; i++) {
-      // Skip already scanned addresses
-      if ([1, 100, 200, 254].includes(i)) continue;
-
-      candidates.push({
-        url: `http://${subnet}.${i}:43111/api`,
-        source: 'scan',
-        priority: 50
-      });
+    for (let i = 0; i < Math.min(concurrency, total); i++) {
+      launchNext();
     }
-  }
-
-  return candidates;
+  });
 }
 
 /**
@@ -287,77 +299,62 @@ async function checkCandidatesInBatches(
 }
 
 /**
+ * 生成全网段候选：.1–.254 全覆盖（排除网段地址 .0 与广播 .255）。
+ * 竞速模式下不需要按优先级分批——任一命中立即返回，排前面的只是先发请求。
+ * 43111 是固定冷门端口（与后端约定），命中即 Starfit。
+ */
+function generateFullSubnetCandidates(subnet: string): ServerCandidate[] {
+  const candidates: ServerCandidate[] = [];
+  for (let i = 1; i <= 254; i++) {
+    candidates.push({
+      url: `http://${subnet}.${i}:43111/api`,
+      source: 'scan',
+      // 高频服务器位排前面：网关、DHCP 常用段（竞速模式下只是先发请求）
+      priority: [1, 100, 254, 2, 200].includes(i) ? 100 - i : 50 - (i % 50),
+    });
+  }
+  return candidates.sort((a, b) => b.priority - a.priority);
+}
+
+/**
  * Detect available Starfit server (optimized for first-time users)
  * @param onProgress - Callback for progress updates
  * @returns Detection result or null if no server found
  *
- * Strategy:
- * 1. Get client's local IP → determine subnet (e.g., 192.168.31)
- * 2. Priority scan: Gateway (.1, .254) + common IPs (.100, .200) in SAME subnet only
- * 3. If priority fails, scan remaining range (.2-.99) in SAME subnet
- * 4. Fallback to history if all scans fail
+ * Strategy（2026-09 优化：一轮竞速扫描替代三阶段分批）：
+ * 0. 已知地址直查（history / 本机 dev server）——最快路径，通常 <100ms
+ * 1. WebRTC 拿本机 IP → 定位网段 → **全网段 .1-.254 一轮并发竞速扫描**
+ *    （90 并发、700ms 超时、命中即返回；固定端口 43111 + /health starfit 标识精确识别）
  */
 export async function detectServer(
   onProgress?: (current: ServerCandidate, total: number) => void
 ): Promise<DetectionResult | null> {
   console.log('[ServerDetector] Starting server detection...');
 
-  // Phase 0: Get client's local IP to determine subnet
+  // Phase 0: 已知地址直查（上次连过的服务器几乎总是本次的服务器）
+  console.log('[ServerDetector] Phase 0: known addresses...');
+  const knownCandidates = await getCandidates();
+  for (const candidate of knownCandidates) {
+    const result = await checkServerHealth(candidate.url, 800);
+    if (result.ok) {
+      console.log('[ServerDetector] Known address hit:', candidate.url);
+      return { url: candidate.url, source: candidate.source, latency: result.latency };
+    }
+  }
+
+  // Phase 1: 全网段竞速扫描
   console.log('[ServerDetector] Getting client IP address...');
   const localIp = await getLocalIpAddress();
   console.log('[ServerDetector] Client IP:', localIp);
 
-  let subnet = '192.168.1'; // fallback
-  if (localIp) {
-    subnet = extractSubnet(localIp);
-    console.log('[ServerDetector] Detected subnet:', subnet);
-  }
+  const subnet = localIp ? extractSubnet(localIp) : '192.168.1';
+  console.log(`[ServerDetector] Race-scanning ${subnet}.1-.254 ...`);
+  const lanCandidates = generateFullSubnetCandidates(subnet);
 
-  // Phase 1: Priority scan (gateway + common IPs) in SAME subnet only
-  console.log(`[ServerDetector] Phase 1: Priority scan on ${subnet}.x`);
-  const priorityCandidates = generateLanCandidates(subnet, false);
-  priorityCandidates.sort((a, b) => b.priority - a.priority);
-
-  const priorityResult = await checkCandidatesInBatches(
-    priorityCandidates,
-    onProgress,
-    20,    // 20 concurrent requests
-    800    // 800ms timeout for local network scan
-  );
-
-  if (priorityResult) {
-    console.log('[ServerDetector] Server found in priority scan:', priorityResult);
-    return priorityResult;
-  }
-
-  // Phase 2: Exhaustive scan (.2-.99) in SAME subnet only (if priority failed)
-  console.log(`[ServerDetector] Phase 2: Exhaustive scan on ${subnet}.x`);
-  const exhaustiveCandidates = generateLanCandidates(subnet, true);
-  exhaustiveCandidates.sort((a, b) => b.priority - a.priority);
-
-  const exhaustiveResult = await checkCandidatesInBatches(
-    exhaustiveCandidates,
-    onProgress,
-    20,    // 20 concurrent requests
-    800    // 800ms timeout for local network scan
-  );
-
-  if (exhaustiveResult) {
-    console.log('[ServerDetector] Server found in exhaustive scan:', exhaustiveResult);
-    return exhaustiveResult;
-  }
-
-  // Phase 3: Fallback to history candidates (if LAN scan failed)
-  console.log('[ServerDetector] Phase 3: Checking history...');
-  const historyCandidates = await getCandidates();
-  console.log('[ServerDetector] History candidates:', historyCandidates);
-
-  if (historyCandidates.length > 0) {
-    const historyResult = await checkCandidatesInBatches(historyCandidates, onProgress, 20);
-    if (historyResult) {
-      console.log('[ServerDetector] History found server:', historyResult);
-      return historyResult;
-    }
+  const scanResult = await raceScanCandidates(lanCandidates, onProgress, 60, 800);
+  if (scanResult) {
+    console.log('[ServerDetector] Server found:', scanResult);
+    return scanResult;
   }
 
   console.log('[ServerDetector] No server found');

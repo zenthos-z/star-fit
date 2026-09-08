@@ -13,7 +13,7 @@
  *   etc., per langgraph-checkpoint-postgres sql.js). Every runtime query is
  *   schema-qualified, so the checkpointer can never leak into public/business
  *   schemas regardless of the session search_path.
- * - The business schema SQL files (schema.sql / schema-no-vector.sql) are NOT
+ * - The business schema SQL files (schema.sql) are NOT
  *   modified by this module (zero-intrusion red line, AF2/L010).
  *
  * P006 injectable-side-effect-boundary:

@@ -232,15 +232,75 @@ export const DeviationCardDataSchema = z.object({
 export type DeviationCardData = z.infer<typeof DeviationCardDataSchema>;
 
 // ============================================================================
+// PROFILE_UPDATE_CONFIRM Schemas
+// ============================================================================
+
+/**
+ * One PROPOSED profile change inside a profile_update_confirm card.
+ * `field` uses the profile_dynamic keys the `update_profile` MCP tool writes;
+ * `change` is a short human-readable description of the intended edit; the
+ * optional `value` preview is the proposed new value (or a summary fragment).
+ */
+export const ProfileUpdateProposalSchema = z.object({
+  field: z.enum([
+    'load_anchors',
+    'active_limitations',
+    'recovery_state',
+    'memories',
+  ]),
+  label: z.string().min(1, 'Proposal label cannot be empty'),
+  change: z.string().min(1, 'Proposal change description cannot be empty'),
+  value: z.unknown().optional(),
+});
+
+export type ProfileUpdateProposal = z.infer<typeof ProfileUpdateProposalSchema>;
+
+/**
+ * Profile Update Confirm Data Schema
+ *
+ * Shown when the agent PROPOSES a user-profile update (trigger: end-of-day
+ * training wrap-up, or an injury / key-parameter report) and must obtain
+ * explicit user consent BEFORE calling `update_profile`. Nothing is written
+ * until the user confirms; the confirmation turn re-enters with
+ * scenario=update_profile and the agent applies exactly the approved items.
+ */
+export const ProfileUpdateConfirmDataSchema = z.object({
+  title: z.string().optional(),
+  message: z.string().min(1, 'Message cannot be empty'),
+  trigger: z.enum(['day_end', 'injury_report', 'key_parameter_change', 'user_request']),
+  proposals: z
+    .array(ProfileUpdateProposalSchema)
+    .min(1, 'At least one proposal is required'),
+  confirmLabel: z.string().default('确认更新'),
+  cancelLabel: z.string().default('暂不更新'),
+});
+
+export type ProfileUpdateConfirmData = z.infer<typeof ProfileUpdateConfirmDataSchema>;
+
+// ============================================================================
 // AUDIT_COMPLETE Schemas
 // ============================================================================
 
 /**
  * Profile Update Item Schema
  * Represents a single field that was updated in the user profile
+ *
+ * `field` enum covers both profile_static paths (loadAnchors etc. — kept for
+ * backward compatibility with earlier audits) and the profile_dynamic fields
+ * the `update_profile` MCP tool actually writes (load_anchors,
+ * active_limitations, recovery_state, memories).
  */
 export const ProfileUpdateItemSchema = z.object({
-  field: z.enum(['loadAnchors', 'physiological', 'preferences', 'basicInfo']),
+  field: z.enum([
+    'loadAnchors',
+    'physiological',
+    'preferences',
+    'basicInfo',
+    'load_anchors',
+    'active_limitations',
+    'recovery_state',
+    'memories',
+  ]),
   label: z.string(),
   count: z.number().int().min(0).default(0),
   details: z.array(z.string()).optional(),
@@ -278,6 +338,7 @@ export const UIHintTypeEnum = z.enum([
   'deviation_card',
   'audit_complete',
   'strategy_confirm',
+  'profile_update_confirm',
 ]);
 
 export type UIHintType = z.infer<typeof UIHintTypeEnum>;
@@ -326,6 +387,11 @@ export const UIHintSchema = z.discriminatedUnion('type', [
       fullContent: z.string().min(1, 'Full strategy content cannot be empty'),
       updatedAt: z.string().datetime().optional(),
     }),
+  }),
+  // profile_update_confirm
+  z.object({
+    type: z.literal('profile_update_confirm'),
+    data: ProfileUpdateConfirmDataSchema,
   }),
 ]);
 
@@ -427,6 +493,23 @@ export function getFallbackUIHint(type: UIHintType): UIHint {
         preview: '基于您的目标和当前水平，我们为您定制了新的训练计划...',
         fullContent: '# 训练策略\n\n基于您的目标和当前水平，我们为您定制了新的训练计划。',
         updatedAt: new Date().toISOString(),
+      },
+    },
+    profile_update_confirm: {
+      type: 'profile_update_confirm',
+      data: {
+        title: '用户画像更新确认',
+        message: '根据最近的训练情况，建议更新您的用户画像。',
+        trigger: 'day_end',
+        proposals: [
+          {
+            field: 'recovery_state',
+            label: '恢复状态',
+            change: '根据今日训练负荷调整恢复评分',
+          },
+        ],
+        confirmLabel: '确认更新',
+        cancelLabel: '暂不更新',
       },
     },
   };

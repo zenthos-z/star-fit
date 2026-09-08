@@ -9,7 +9,7 @@ import ReorderMode from './src/v2/components/execution/ReorderMode';
 import SettlementV2 from './src/v2/components/settlement/SettlementV2';
 import History from './components/History';
 import TimeEditor from './components/TimeEditor';
-import ActionSlider, { SliderOption } from './components/ActionSlider';
+import MainTabBar, { MainTab } from './components/MainTabBar';
 import ExerciseSettingsModal from './components/ExerciseSettingsModal';
 import { ExerciseAction } from './src/v2/types/protocol';
 
@@ -25,6 +25,7 @@ import {
   socketService,
   ExerciseLibraryService
 } from './services';
+import { SuggestionService } from './src/services/suggestionService';
 import { App as CapacitorApp } from '@capacitor/app';
 import { eventTracking, TrackingEvent } from './services/eventTracking';
 import { DEFAULT_REST_TIME, RPE_COLORS, DEFAULT_AI_CONFIG } from './constants';
@@ -41,6 +42,7 @@ import {
   setPendingSummary,
   hasPendingSummary,
   saveNextPlan,
+  saveDayPlan,
   loadNextPlan,
   clearNextPlan,
   migrateLegacyLoginData
@@ -129,6 +131,8 @@ const App: React.FC = () => {
   useEffect(() => {
     SyncService.init();
     ExerciseLibraryService.init();
+    // 动作建议缓存：online/可见性/history-updated 触发后台批量刷新
+    SuggestionService.init();
 
     // WebSocket auto-connects on import, no manual connect needed
 
@@ -347,6 +351,8 @@ const App: React.FC = () => {
 
   const [isTransitioning, setIsTransitioning] = useState(false);
   const [currentRoute, setCurrentRoute] = useState<AppRoute>(AppRoute.HOME);
+
+
   const [transitionOrigin, setTransitionOrigin] = useState<{ x: number, y: number } | null>(null);
   
   // Viewer State for History Detail
@@ -474,6 +480,10 @@ const App: React.FC = () => {
       setNextPlan(prev => {
         const merged = mode === 'append' && prev && prev.length > 0 ? [...prev, ...safePlan] : safePlan;
         saveNextPlan(merged).catch(console.error);
+        const tomorrow = new Date(Date.now() + 86400000);
+        const d = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth()+1).padStart(2,'0')}-${String(tomorrow.getDate()).padStart(2,'0')}`;
+        saveDayPlan(d, merged).catch(console.error);
+        window.dispatchEvent(new CustomEvent('starfit:dayplans-changed'));
         return merged;
       });
       showToast(mode === 'replace' ? `已保存为明日训练计划 (${newExercises.length} 个动作)` : `已将动作追加到明日训练计划 (${newExercises.length} 个动作)`);
@@ -513,6 +523,38 @@ const App: React.FC = () => {
       switchToThread,
       formatRelativeTime
   } = useAICoach(session, handleConfirmPlan);
+
+  // ===== 3 页签导航（历史 / 开始运动 / AI Agent，默认中间）=====
+  const [mainTab, setMainTab] = useState<MainTab>(1);
+  const mainTabRef = useRef(mainTab);
+  mainTabRef.current = mainTab;
+
+  /** Tab 选择 → 路由切换。运动页签=回到主页；历史/AI=对应路由。 */
+  const handleTabSelect = useCallback((tab: MainTab) => {
+    setMainTab(tab);
+    if (tab === 1) {
+      // 回运动主页（关历史详情/AI 浮层）
+      if (viewHistorySession) setViewHistorySession(null);
+      if (currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS) setCurrentRoute(AppRoute.HOME);
+      if (isAiOverlayOpen) setIsAiOverlayOpen(false);
+      return;
+    }
+    if (tab === 0) {
+      setViewHistorySession(null);
+      if (isAiOverlayOpen) setIsAiOverlayOpen(false);
+      setTransitionOrigin(null);
+      setCurrentRoute(AppRoute.HISTORY);
+      return;
+    }
+}, [currentRoute, isAiOverlayOpen, viewHistorySession]);
+
+  // 路由侧变化反向同步 tab 高亮（结算完成回主页等场景）
+  useEffect(() => {
+    if (currentRoute === AppRoute.SETTLEMENT) return;
+    if (currentRoute === AppRoute.HISTORY || viewHistorySession) { if (mainTabRef.current !== 0) setMainTab(0); return; }
+    // AI 对话现在是独立按钮（非 tab），打开时保持当前 tab 高亮不动
+    if (mainTabRef.current !== 1) setMainTab(1);
+  }, [currentRoute, viewHistorySession, isAiOverlayOpen]);
 
   // Back button handler for Android
   useEffect(() => {
@@ -948,18 +990,16 @@ const App: React.FC = () => {
 
     // 3. Build local SUMMARY_CARD data (for quick display while Agent processes)
     const localSummaryData = {
+      startTime: session.startTime,
+      endTime: finishedSession.endTime,
+      pausedDuration: finishedSession.pausedDuration,
       stats: {
         totalVolume: stats.totalVolume,
         setsCount: stats.setsCount,
         durationMinutes,
         avgHr: stats.avgHr
       },
-      exercises: session.exercises.map(ex => ({
-        name: ex.name,
-        type: ex.type,
-        sets: ex.sets,
-        metadata: ex.metadata  // ✅ Include metadata for SummaryCard display
-      })),
+      exercises: session.exercises,  // raw sets preserved; useAICoach pre-formats via workoutSummary
       anomalies: trainingAnomalies
     };
 
@@ -971,44 +1011,12 @@ const App: React.FC = () => {
     // Close Settlement route to prevent z-index conflict with AICoachOverlay
     setCurrentRoute(AppRoute.HOME);
 
-    // 4. [Phase 1] Persist session to DB first via POST /api/sessions
-    const persistSession = async () => {
-      try {
-        const userId = localStorage.getItem('starfit_user_id') || 'global';
-        const response = await fetch('/api/sessions', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'X-User-Id': userId  // 必须传入，否则后端取到 'global'
-          },
-          body: JSON.stringify({
-            sessionId: session.id,
-            startTime: session.startTime,
-            endTime: finishedSession.endTime,
-            exercises: session.exercises.map(ex => ({
-              name: ex.name,
-              type: ex.type,
-              sets: ex.sets,
-              reps: undefined, // reps handled per-set in metadata
-              weight: undefined,
-              metadata: ex.metadata
-            })),
-            stats: localSummaryData.stats
-          })
-        });
+    // 4. [Phase 1] Session persistence is owned by useAICoach (openAiCoach →
+    // workout_complete). It POSTs the pre-formatted payload (workoutSummary)
+    // with the X-User-Id header — do NOT also POST here (double-persist bug).
 
-        if (!response.ok) {
-          console.error('[App] Failed to persist session:', await response.text());
-        } else {
-          const result = await response.json();
-          console.log('[App] Session persisted:', result);
-        }
-      } catch (err) {
-        console.error('[App] Session persistence error:', err);
-        // Non-fatal: Agent can still read local data
-      }
-    };
-    persistSession();
+    // 训练结束 → 锚点/历史变化 → 建议缓存失效（在线时后台自动重算）
+    SuggestionService.invalidate().catch(console.error);
 
     // 5. [Phase 2] Trigger Agent analysis (Agent reads from DB via load_history)
     console.log('[App] Calling openAiCoach with:', {
@@ -1090,37 +1098,6 @@ const App: React.FC = () => {
   }
 
   const isSessionActive = session.status === 'active' || session.status === 'paused';
-
-  const leftAction: SliderOption = isSessionActive 
-    ? { 
-        label: '结束', 
-        icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-full h-full"><path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" /></svg>,
-        action: (e) => handleEndSession(),
-        variant: 'danger'
-      }
-    : { 
-        label: '历史', 
-        icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-full h-full"><path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" /></svg>,
-        action: (e) => {
-          setTransitionOrigin({ x: e.clientX, y: e.clientY });
-          setCurrentRoute(AppRoute.HISTORY);
-        },
-        variant: 'default'
-      };
-
-  const rightAction: SliderOption = {
-    label: 'AI Agent',
-    icon: (
-      <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-full h-full">
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-      </svg>
-    ),
-    action: (e) => {
-      setTransitionOrigin({ x: e.clientX, y: e.clientY });
-      openAiCoach();
-    },
-    variant: 'accent'
-  };
 
   return (
     <div className={`min-h-screen bg-star-white text-star-dark relative ${isAiOverlayOpen || currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession ? 'h-screen overflow-hidden' : 'overflow-x-hidden'}`}>
@@ -1221,19 +1198,7 @@ const App: React.FC = () => {
         className="fixed inset-0 pointer-events-none z-40"
       >
         <div className="pointer-events-auto contents">
-          {/* Settings Button - Top Right */}
-          {!(isAiOverlayOpen || currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession || reorderMode) && (
-            <button
-              onClick={() => setCurrentRoute(AppRoute.SETTINGS)}
-              className="fixed top-4 right-4 z-50 p-3 rounded-full bg-white/80 backdrop-blur-md shadow-lg border border-gray-100 text-gray-600 hover:text-star-primary hover:bg-white transition-all active:scale-95"
-              aria-label="打开设置"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.324.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 011.37.49l1.296 2.247a1.125 1.125 0 01-.26 1.431l-1.003.827c-.293.24-.438.613-.431.992a6.759 6.759 0 010 .255c-.007.378.138.75.43.99l1.005.828c.424.35.534.954.26 1.43l-1.298 2.247a1.125 1.125 0 01-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.57 6.57 0 01-.22.128c-.331.183-.581.495-.644.869l-.212 1.28c-.09.543-.56.941-1.11.941h-2.594c-.55 0-1.02-.398-1.11-.94l-.213-1.281c-.063-.374-.313-.686-.645-.87a6.519 6.519 0 01-.22-.127c-.324-.196-.72-.257-1.075-.124l-1.217.456a1.125 1.125 0 01-1.37-.49l-1.296-2.247a1.125 1.125 0 01.26-1.431l1.003-.827c.293-.24.438-.613.431-.992a6.75 6.75 0 010-.255c.007-.378-.138-.75-.43-.99l-1.005-.828a1.125 1.125 0 01-.26-1.43l1.298-2.247a1.125 1.125 0 011.369-.491l1.217.456c.355.133.75.072 1.076-.124.073-.044.146-.087.22-.128c.332-.184.582-.496.644-.87l.212-1.281z" />
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
-            </button>
-          )}
+          {/* 设置入口已移至「运动记录」页导航栏 */}
 
           <TimerCapsule
             status={session.status}
@@ -1244,6 +1209,7 @@ const App: React.FC = () => {
             onPause={handlePauseSession}
             onResume={handleResumeSession}
             onOpenManual={() => setShowTimeEditor(true)}
+            onEnd={() => handleEndSession()}
           />
 
           {session.exercises.length === 0 && (
@@ -1294,13 +1260,12 @@ const App: React.FC = () => {
             </div>
           )}
 
-          {!(isAiOverlayOpen || currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession) && (
-            <ActionSlider
-                isLoading={isLoading}
-                left={leftAction}
-                right={rightAction}
-            />
-          )}
+          <MainTabBar
+              tab={mainTab}
+              onSelect={handleTabSelect}
+              onAiTap={() => openAiCoach()}
+              hidden={(currentRoute as AppRoute) === AppRoute.SETTLEMENT || isAiOverlayOpen}
+          />
         </div>
       </motion.div>
 
@@ -1342,6 +1307,7 @@ const App: React.FC = () => {
                 onSelect={(s) => setViewHistorySession(s)}
                 onImport={handleImportHistory}
                 onDelete={handleDeleteSession}
+                onOpenSettings={() => setCurrentRoute(AppRoute.SETTINGS)}
               />
             )}
 
@@ -1349,7 +1315,7 @@ const App: React.FC = () => {
               <SettingsPage
                 key="settings"
                 userId={userId || ''}
-                onClose={() => setCurrentRoute(AppRoute.HOME)}
+                onClose={() => setCurrentRoute(AppRoute.HISTORY)}
               />
             )}
 
@@ -1361,6 +1327,8 @@ const App: React.FC = () => {
                 onReuse={() => handleReuseSession(viewHistorySession)}
               />
             )}
+
+            
 
             {isAiOverlayOpen && (
               <AICoachOverlay
@@ -1510,7 +1478,8 @@ const App: React.FC = () => {
             initial={{ opacity: 0, y: 20, x: "-50%" }}
             animate={{ opacity: 1, y: 0, x: "-50%" }}
             exit={{ opacity: 0, y: 20, x: "-50%" }}
-            className="fixed bottom-24 left-1/2 z-[200] px-6 py-3 bg-star-dark/90 text-white text-sm font-bold rounded-2xl shadow-2xl backdrop-blur-md max-w-[85vw] text-center border border-white/10"
+            className="fixed left-1/2 z-[200] px-6 py-3 liquid-glass-dark text-white text-sm font-bold rounded-2xl max-w-[85vw] text-center"
+            style={{ bottom: 'calc(var(--safe-bottom) + 96px)' }}
           >
             {toast.msg}
           </motion.div>

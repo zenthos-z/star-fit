@@ -17,26 +17,42 @@ import { getPostgresClient } from '../db/postgresql/client/postgres-client.js';
 // ============================================
 
 /**
- * 单个动作记录
+ * 单个动作记录（格式化训练条目）
+ *
+ * 前端 workoutSummary.ts 预处理后的形态：一行 = 一个动作的汇总
+ * （组数/完成组数/重量/次数/时长/距离/心率按动作类型可选）。
+ * `type` 决定哪些字段有意义：cardio/outdoor → duration/distance/avg_hr；
+ * resistance 类 → weight/reps；isometric → duration。
  */
 const ExerciseEntrySchema = z.object({
   name: z.string().min(1, 'Exercise name is required'),
   type: z.string().optional(),
-  sets: z.number().int().positive().optional(),
+  /** 计划组数 */
+  sets: z.number().int().min(0).optional(),
+  /** 实际完成组数 */
+  completed_sets: z.number().int().min(0).optional(),
   reps: z.number().int().positive().optional(),
-  weight: z.number().min(0).optional(),
-  duration: z.number().positive().optional(), // For cardio/hiit
-  distance: z.number().min(0).optional(), // For cardio
+  // assisted 动作用负重量表示助力（如 -10kg），所以不设 min(0)
+  weight: z.number().optional(),
+  duration: z.number().positive().optional(), // For cardio/hiit/isometric (seconds)
+  distance: z.number().min(0).optional(), // For cardio/outdoor (meters)
+  /** 组级平均心率 bpm（来自心率带/穿戴设备，可选） */
+  avg_hr: z.number().min(0).optional(),
   metadata: z.any().optional(),
 });
 
 /**
  * 训练统计数据
+ * 抗阻类看 totalVolume/setsCount；有氧类看 totalCardioDurationSec/totalDistanceM/avgHr。
  */
 const StatsSchema = z.object({
   totalVolume: z.number().min(0),
   setsCount: z.number().int().min(0),
-  durationMinutes: z.number().int().min(0),
+  /** 有氧/户外实际时长合计（秒），可选以兼容旧客户端 */
+  totalCardioDurationSec: z.number().min(0).optional(),
+  /** 有氧/户外实际距离合计（米），可选以兼容旧客户端 */
+  totalDistanceM: z.number().min(0).optional(),
+  durationMinutes: z.number().int().min(0).optional(),
   avgHr: z.number().min(0).optional(),
 }).optional();
 

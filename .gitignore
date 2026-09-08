@@ -55,3 +55,9 @@ backend/.env
 android/local.properties
 android/keystore.properties
 *.keystore
+
+# Xcode build artifacts
+build/
+DerivedData/
+ios/**/*.xcuserdata/
+*.xcuserstate

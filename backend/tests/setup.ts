@@ -52,13 +52,6 @@ global.wait = (ms: number): Promise<void> => {
   return new Promise(resolve => setTimeout(resolve, ms));
 };
 
-/**
- * Create a mock embedding vector for testing (1536 dimensions - OpenAI default)
- */
-global.createMockEmbedding = (dimension: number = 1536): number[] => {
-  return Array.from({ length: dimension }, () => Math.random() * 2 - 1);
-};
-
 // ============================================================================
 // Test Timeout Configuration
 // ============================================================================
@@ -121,7 +114,6 @@ declare global {
   var generateTestUserId: () => string;
   var generateTestExerciseId: () => string;
   var wait: (ms: number) => Promise<void>;
-  var createMockEmbedding: (dimension?: number) => number[];
 }
 
 // ============================================================================

@@ -59,10 +59,10 @@ const baseReq: ChatRequest = {
 /** A valid plan card (passes the M5b validator). */
 const VALID_PLAN: unknown = {
   type: 'plan_card',
-  data: [{ exerciseId: 'sq', name: 'Squat', sets: 3, reps: 8 }],
+  data: [{ exerciseId: 'sq', name: 'Squat', exercise_type: 'resistance', sets: 3, reps: 8, weight: 80 }],
 };
 
-/** An invalid plan card (missing required sets/reps). */
+/** An invalid plan card (missing required fields). */
 const INVALID_PLAN: unknown = {
   type: 'plan_card',
   data: [{ exerciseId: 'sq', name: 'Squat' }],
@@ -147,6 +147,34 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     assert.equal(events.some((e) => e.type === 'uiHint'), false);
   });
 
+  it('emits rejected-round prose as thinking, never as answer tokens', async () => {
+    const agent = new ScriptedAgent([
+      // attempt 0: prose around the bad card — must NOT leak as answer text
+      [{ type: 'token', text: '让我重新算一下…' }, uiHint(INVALID_PLAN)],
+      // attempt 1: clean answer + valid card
+      [{ type: 'token', text: '最终分析：' }, uiHint(VALID_PLAN), { type: 'done' }],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    assert.equal(agent.calls.length, 2);
+    const thinkings = events.filter((e) => e.type === 'thinking');
+    assert.equal(thinkings.length, 1, 'rejected prose surfaces once as thinking');
+    assert.equal(thinkings[0].text, '让我重新算一下…');
+
+    // Answer tokens contain ONLY the final attempt's prose.
+    const tokens = events.filter((e) => e.type === 'token');
+    assert.equal(tokens.length, 1);
+    assert.equal(tokens[0].text, '最终分析：');
+    assert.equal(
+      events.some((e) => e.type === 'token' && e.text?.includes('让我重新算')),
+      false,
+      'rejected-round prose must never appear as answer text',
+    );
+  });
+
   it('passes a valid card through on the first attempt with no retry', async () => {
     const agent = new ScriptedAgent([
       [uiHint(VALID_PLAN), { type: 'done' }],
@@ -164,7 +192,7 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     assert.equal(events.some((e) => e.type === 'error'), false);
   });
 
-  it('passes token / done / error through untouched when no uiHint card is present', async () => {
+  it('passes token / done / error through when no uiHint card is present (tokens coalesced per attempt)', async () => {
     const agent = new ScriptedAgent([
       [{ type: 'token', text: 'Hello' }, { type: 'token', text: ' world' }, { type: 'done' }],
     ]);
@@ -176,11 +204,11 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     assert.equal(agent.calls.length, 1);
     assert.deepEqual(
       events.map((e) => e.type),
-      ['token', 'token', 'done'],
+      ['token', 'done'],
     );
-    // Token text preserved verbatim (raw-stream contract intact).
-    assert.equal(events[0].text, 'Hello');
-    assert.equal(events[1].text, ' world');
+    // Tokens are buffered per attempt and flushed on the terminal event, so
+    // prose written around a rejected card can never leak to the user.
+    assert.equal(events[0].text, 'Hello world');
   });
 
   it('passes an upstream error event through (does not retry on error)', async () => {

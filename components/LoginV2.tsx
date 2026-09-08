@@ -122,7 +122,9 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isServerValid, setIsServerValid] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
+  const [autoLoginStatus, setAutoLoginStatus] = useState<'idle' | 'connecting' | 'failed'>('idle');
   const userDropdownRef = useRef<HTMLDivElement>(null);
+  const autoLoginAttemptedRef = useRef(false);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -159,6 +161,19 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       if (timeoutId) clearTimeout(timeoutId);
     };
   }, []);
+
+  // 自动登录：有保存的凭据（= 非第一次使用）时静默直连上次服务器。
+  // 第一次使用（无凭据）不受影响 —— 手动输入 / 点放大镜扫描。
+  useEffect(() => {
+    if (!hydrated || autoLoginAttemptedRef.current) return;
+    autoLoginAttemptedRef.current = true;
+    if (!serverIp.trim() || !userId.trim()) return; // 第一次使用：什么都不做
+    setAutoLoginStatus('connecting');
+    loginWithCredentials(serverIp, userId, true).then((ok) => {
+      if (!ok) setAutoLoginStatus('failed'); // 失败停在已填好的表单，等用户手动
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   // Fetch users when server IP changes and is valid
   useEffect(() => {
@@ -248,33 +263,36 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
     setServerIp(formatServerUrl(scannedUrl));
   };
 
-  const handleLogin = async () => {
-    if (!serverIp.trim()) {
-      setError('请输入服务器 IP');
-      return;
-    }
-    if (!userId.trim()) {
-      setError('请输入用户名或选择用户');
-      return;
+  /**
+   * 登录核心：健康检查 → login-or-create → 保存凭据 → onLogin。
+   * @param silent true = 自动登录路径（上次凭据直连）：失败不弹红色错误，
+   *               只标记 autoLoginStatus 让用户看到"自动连接失败"，停在已填好的表单前。
+   */
+  const loginWithCredentials = async (rawServerIp: string, rawUserId: string, silent = false): Promise<boolean> => {
+    const ip = rawServerIp.trim();
+    const uid = rawUserId.trim();
+    if (!ip || !uid) return false;
+
+    if (!silent) {
+      const validation = validateUsernameInput(uid);
+      if (!validation.valid) {
+        setError(validation.error || '输入格式无效');
+        return false;
+      }
     }
 
-    // Validate input format
-    const validation = validateUsernameInput(userId);
-    if (!validation.valid) {
-      setError(validation.error || '输入格式无效');
-      return;
-    }
+    const serverUrl = parseServerInput(ip);
 
-    const serverUrl = parseServerInput(serverIp);
-    const trimmedUserId = userId.trim();
-
-    // Verify server is reachable
-    setError('');
-    const healthCheck = await checkServerHealth(serverUrl, 5000);
+    if (!silent) setError('');
+    const healthCheck = await checkServerHealth(serverUrl, silent ? 3000 : 5000);
 
     if (!healthCheck.ok) {
+      if (silent) {
+        setAutoLoginStatus('failed');
+        return false;
+      }
       setError(`无法连接到服务器: ${healthCheck.message}`);
-      return;
+      return false;
     }
 
     try {
@@ -282,7 +300,7 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       const response = await fetch(`${serverUrl}/admin/login-or-create`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: trimmedUserId })
+        body: JSON.stringify({ userId: uid })
       });
 
       if (!response.ok) {
@@ -293,17 +311,25 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       const data = await response.json();
 
       // 使用后端返回的 userId（可能是新创建的）
-      const finalUserId = data.userId || trimmedUserId;
+      const finalUserId = data.userId || uid;
 
       // 保存凭据
       await saveLoginCredentials(finalUserId, serverUrl);
       await addServerToHistory(serverUrl, healthCheck.latency);
 
       onLogin(finalUserId, serverUrl);
+      return true;
     } catch (e) {
+      if (silent) {
+        setAutoLoginStatus('failed');
+        return false;
+      }
       setError((e as Error).message);
+      return false;
     }
   };
+
+  const handleLogin = () => loginWithCredentials(serverIp, userId);
 
   if (!hydrated) {
     return (
@@ -479,12 +505,32 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
             </motion.div>
           )}
 
+          {/* Auto-login status（自动直连反馈：连接中禁点，失败后可手动重试） */}
+          {autoLoginStatus !== 'idle' && (
+            <motion.div
+              initial={{ opacity: 0, y: -6 }}
+              animate={{ opacity: 1, y: 0 }}
+              className={`text-xs font-bold p-3 rounded-2xl text-center ${
+                autoLoginStatus === 'connecting'
+                  ? 'bg-star-gray text-gray-500'
+                  : 'bg-amber-50 text-amber-600'
+              }`}
+            >
+              {autoLoginStatus === 'connecting'
+                ? '正在连接上次的服务器…'
+                : '自动连接上次服务器失败，请检查后重试或重新扫描'}
+            </motion.div>
+          )}
+
           {/* Login Button */}
           <button
             onClick={handleLogin}
-            className="w-full bg-star-dark text-white font-black py-5 rounded-2xl shadow-floating active:scale-95 transition-all"
+            disabled={autoLoginStatus === 'connecting'}
+            className={`w-full bg-star-dark text-white font-black py-5 rounded-2xl shadow-floating transition-all ${
+              autoLoginStatus === 'connecting' ? 'opacity-60 cursor-wait' : 'active:scale-95'
+            }`}
           >
-            开始同步与训练
+            {autoLoginStatus === 'connecting' ? '正在连接…' : '开始同步与训练'}
           </button>
         </div>
 

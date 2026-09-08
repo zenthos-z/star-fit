@@ -1,6 +1,7 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import path from 'path';
 import fs from 'fs-extra';
+import { readdir } from 'fs/promises';
 import { pipeline } from 'stream';
 import util from 'util';
 import { ProxyAgent, request } from 'undici';
@@ -923,7 +924,7 @@ async function getStorageInfo(): Promise<{ used: number; total: number; percent:
 
 async function getDirectorySize(dirPath: string): Promise<number> {
   let totalSize = 0;
-  const files = await fs.readdir(dirPath, { withFileTypes: true });
+  const files = await readdir(dirPath, { withFileTypes: true });
   
   for (const file of files) {
     const filePath = path.join(dirPath, file.name);
@@ -1968,9 +1969,4 @@ export const updateUserDisplayName = async (req: FastifyRequest, reply: FastifyR
     return reply.status(500).send({ success: false, error: e.message });
   }
 };
-
-// ============================================================================
-// Embedding Configuration API — REMOVED (vector search for exercises dropped;
-// the agent now loads the whole library via the list_exercises MCP tool).
-// ============================================================================
 

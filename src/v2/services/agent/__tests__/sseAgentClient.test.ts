@@ -178,8 +178,9 @@ describe('createSseAgentClient (B3 — SSE fixture → AgentEvent)', () => {
 
   it('surfaces a non-2xx HTTP response as a terminal error event', async () => {
     const { out } = await drain({ message: 'x' }, [], { ok: false, status: 503 });
+    // 实现带 @url 诊断后缀（DIAG: wrong-prefix visibility）
     expect(out).toEqual([
-      { type: 'error', error: { code: 'INTERNAL', message: 'HTTP 503' } },
+      { type: 'error', error: { code: 'INTERNAL', message: 'HTTP 503 @ /api/chat' } },
     ]);
   });
 
