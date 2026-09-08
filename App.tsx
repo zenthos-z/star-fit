@@ -1,7 +1,8 @@
-import React, { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
 import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiScenario } from './types';
+import { navigationReducer, initialNavigation } from './src/v2/lib/navigation';
 import { LoadAnchors } from './src/v2/types/protocol';
 import TimerCapsule from './components/TimerCapsule';
 import { ExerciseCardV2 } from './src/v2/components/execution/ExerciseCardV2';
@@ -351,13 +352,20 @@ const App: React.FC = () => {
   }, []);
 
   const [isTransitioning, setIsTransitioning] = useState(false);
-  const [currentRoute, setCurrentRoute] = useState<AppRoute>(AppRoute.HOME);
-
-
+  // [nav-state-machine] screen 层（home/history/settings/history-detail/settlement）由
+  // navigationReducer 统一承载；currentRoute/viewHistorySession 为下方派生的兼容层，
+  // 供既有渲染分支与 effect 继续使用。AI 浮层仍由 useAICoach hook 自治（内部含自动打开逻辑）。
+  const [navigation, dispatchNav] = useReducer(navigationReducer, initialNavigation);
+  const currentRoute: AppRoute =
+    navigation.screen === 'settings' ? AppRoute.SETTINGS
+    : navigation.screen === 'history' || navigation.screen === 'history-detail' ? AppRoute.HISTORY
+    : navigation.screen === 'settlement' ? AppRoute.SETTLEMENT
+    : AppRoute.HOME;
+  const viewHistorySession: Session | null =
+    navigation.screen === 'history-detail'
+      ? history.find(s => s.id === navigation.sessionId) ?? null
+      : null;
   const [transitionOrigin, setTransitionOrigin] = useState<{ x: number, y: number } | null>(null);
-  
-  // Viewer State for History Detail
-  const [viewHistorySession, setViewHistorySession] = useState<Session | null>(null);
 
   // Overlays
   const [showSettingsId, setShowSettingsId] = useState<string | null>(null);
@@ -535,16 +543,15 @@ const App: React.FC = () => {
     setMainTab(tab);
     if (tab === 1) {
       // 回运动主页（关历史详情/AI 浮层）
-      if (viewHistorySession) setViewHistorySession(null);
-      if (currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS) setCurrentRoute(AppRoute.HOME);
+      if (viewHistorySession) dispatchNav({ type: 'BACK' });
+      else if (currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS) dispatchNav({ type: 'HOME' });
       if (isAiOverlayOpen) setIsAiOverlayOpen(false);
       return;
     }
     if (tab === 0) {
-      setViewHistorySession(null);
       if (isAiOverlayOpen) setIsAiOverlayOpen(false);
       setTransitionOrigin(null);
-      setCurrentRoute(AppRoute.HISTORY);
+      dispatchNav({ type: 'OPEN_HISTORY' });
       return;
     }
 }, [currentRoute, isAiOverlayOpen, viewHistorySession]);
@@ -583,15 +590,15 @@ const App: React.FC = () => {
         // [FIX] Thread-based system auto-saves, no need to clear
         if (session.status === 'finished') {
             setSession({ id: uuidv4(), startTime: 0, pausedDuration: 0, status: 'idle', exercises: [] });
-            setCurrentRoute(AppRoute.HOME);
+            dispatchNav({ type: 'HOME' });
             setPendingSummary(false).catch(console.error);
         }
       } else if (showTimeEditor) {
         setShowTimeEditor(false);
       } else if (viewHistorySession) {
-        setViewHistorySession(null);
+        dispatchNav({ type: 'BACK' });
       } else if (currentRoute !== AppRoute.HOME) {
-        setCurrentRoute(AppRoute.HOME);
+        dispatchNav({ type: 'BACK' });
       } else {
         // We are on HOME screen
         const now = Date.now();
@@ -876,8 +883,7 @@ const App: React.FC = () => {
           exercises: newExercises
       });
 
-      setViewHistorySession(null);
-      setCurrentRoute(AppRoute.HOME);
+      dispatchNav({ type: 'HOME' });
       showToast("已复用训练计划");
   };
 
@@ -1011,7 +1017,7 @@ const App: React.FC = () => {
     setSession(finishedSession);
 
     // Close Settlement route to prevent z-index conflict with AICoachOverlay
-    setCurrentRoute(AppRoute.HOME);
+    dispatchNav({ type: 'HOME' });
 
     // 4. [Phase 1] Session persistence is owned by useAICoach (openAiCoach →
     // workout_complete). It POSTs the pre-formatted payload (workoutSummary)
@@ -1092,7 +1098,7 @@ const App: React.FC = () => {
         session={session}
         onClose={() => {
             setSession({id: uuidv4(), startTime: 0, pausedDuration: 0, status: 'idle', exercises: []});
-            setCurrentRoute(AppRoute.HOME);
+            dispatchNav({ type: 'HOME' });
             // [NEW] Clear pending summary flag
             setPendingSummary(false).catch(console.error);
         }}
@@ -1305,11 +1311,11 @@ const App: React.FC = () => {
               <History
                 key="history"
                 sessions={history}
-                onClose={() => setCurrentRoute(AppRoute.HOME)}
-                onSelect={(s) => setViewHistorySession(s)}
+                onClose={() => dispatchNav({ type: 'HOME' })}
+                onSelect={(s) => dispatchNav({ type: 'OPEN_HISTORY_DETAIL', sessionId: s.id })}
                 onImport={handleImportHistory}
                 onDelete={handleDeleteSession}
-                onOpenSettings={() => setCurrentRoute(AppRoute.SETTINGS)}
+                onOpenSettings={() => dispatchNav({ type: 'OPEN_SETTINGS' })}
               />
             )}
 
@@ -1317,7 +1323,7 @@ const App: React.FC = () => {
               <SettingsPage
                 key="settings"
                 userId={userId || ''}
-                onClose={() => setCurrentRoute(AppRoute.HISTORY)}
+                onClose={() => dispatchNav({ type: 'BACK' })}
               />
             )}
 
@@ -1325,7 +1331,7 @@ const App: React.FC = () => {
               <SettlementV2
                 key="settlement"
                 session={viewHistorySession}
-                onClose={() => setViewHistorySession(null)}
+                onClose={() => dispatchNav({ type: 'BACK' })}
                 onReuse={() => handleReuseSession(viewHistorySession)}
               />
             )}
@@ -1341,7 +1347,7 @@ const App: React.FC = () => {
                   setIsPlanMode(false);
                   if (session.status === 'finished') {
                     setSession({ id: uuidv4(), startTime: 0, pausedDuration: 0, status: 'idle', exercises: [] });
-                    setCurrentRoute(AppRoute.HOME);
+                    dispatchNav({ type: 'HOME' });
                     setPendingSummary(false).catch(console.error);
                   }
                 }}
@@ -1359,7 +1365,7 @@ const App: React.FC = () => {
                 onRemoveAttachment={() => setAttachedContext(null)}
                 onViewDetails={() => {
                   if (session.status === 'finished') {
-                    setViewHistorySession(session);
+                    dispatchNav({ type: 'OPEN_HISTORY_DETAIL', sessionId: session.id });
                   }
                 }}
                 sessionStatus={session.status}
