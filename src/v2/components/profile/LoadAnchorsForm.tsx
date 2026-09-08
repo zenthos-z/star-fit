@@ -196,7 +196,7 @@ export function LoadAnchorsForm({
         </motion.div>
       )}
 
-      {/* Edit Modal Placeholder - Would integrate with LoadAnchorsEditor */}
+      {/* Edit Modal Placeholder */}
       <AnimatePresence>
         {editingId && (
           <motion.div

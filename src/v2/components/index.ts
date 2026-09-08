@@ -12,7 +12,6 @@ export {
   LimitationContainer,
   BasicInfoForm,
   LoadAnchorsForm,
-  LoadAnchorsEditor,
   AnchorCard,
   AnchorTypeForm,
   LimitationsManager,

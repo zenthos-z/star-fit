@@ -14,7 +14,6 @@ export { BasicInfoForm } from './BasicInfoForm.js';
 export { LoadAnchorsForm } from './LoadAnchorsForm.js';
 
 // Load Anchor Editor Components
-export { LoadAnchorsEditor } from './LoadAnchorsEditor.js';
 export { AnchorCard } from './AnchorCard.js';
 export { AnchorTypeForm } from './AnchorTypeForm.js';
 

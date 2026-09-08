@@ -227,7 +227,7 @@ export function AnchorTypeForm({ anchor, type, onChange }: AnchorTypeFormProps):
       return (
         <div className="p-4 bg-gray-50 rounded-xl text-sm text-gray-500 text-center">
           <p>无法识别该锚点类型</p>
-          <p className="text-xs mt-1">请使用 LoadAnchorsEditor 进行编辑</p>
+          <p className="text-xs mt-1">请在下方表单中编辑</p>
         </div>
       );
   }
