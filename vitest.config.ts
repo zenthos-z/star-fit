@@ -10,6 +10,7 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       'backend/**',      // 后端测试归 backend 自己的 runner（tsx --test / jest）
+      'packages/**',     // e2e-link-checker 等子包有自己的 runner（jest / playwright）
       'android/**',
       'dist/**',
     ],
