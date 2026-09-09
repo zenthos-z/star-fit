@@ -124,7 +124,7 @@ uiHint 多态卡片渲染，以及一个可自托管的全栈管理台。
 - **动作库管理**：可视化编辑、富文本（TipTap）、视频关联
 - **用户数据管理**：用户画像查看、数据导出
 - **视频资源管理**：上传、转码、缩略图生成
-- **系统配置**：AI 模型多 provider 配置（gemini / openai / deepseek…）
+- **系统配置**：AI 模型多 provider 配置（glm / deepseek / openai / google）
 
 ---
 
@@ -156,10 +156,10 @@ graph TD
         SKILL["📚 Skill 路由<br/>(chat/plan/diagnose/card)"]
         KNOW["🧠 领域技能知识<br/>(动作指南/计划生成/力量设计)"]
         HINT["🎴 uiHint 提取 + 校验回路"]
-        LLM["✨ 多 Provider LLM<br/>(Gemini/OpenAI/DeepSeek…)"]
+        LLM["✨ 多 Provider LLM<br/>(GLM/DeepSeek/OpenAI/Gemini)"]
     end
 
-    subgraph Storage ["💾 PostgreSQL + pgvector"]
+    subgraph Storage ["💾 PostgreSQL 16 (双容器)"]
         direction TB
         DB[("🗄️ 结构化数据<br/>Hard Track")]
         VEC[("🧠 用户洞察<br/>Soft Track")]
@@ -210,13 +210,14 @@ graph LR
 | **前端框架** | React 19 + Vite 6 | UI 渲染与构建 |
 | **状态管理** | React Context | 全局状态管理 |
 | **本地存储** | IndexedDB + Dexie | 离线数据持久化 |
-| **移动端** | Capacitor 8 | Android 打包 |
+| **iOS 壳** | Capacitor 8 + Swift 原生层 | 原生 Liquid Glass / 原生 TabBar / 灵动岛 Live Activity |
+| **移动端** | Capacitor 8 | iOS / Android 打包 |
 | **富文本编辑** | TipTap | 管理控制台内容编辑 |
 | **动画库** | Framer Motion | 卡片流畅动画 |
 | **后端框架** | Fastify 5 | API 服务 |
 | **Agent 内核** | Deep Agents | 单 Agent + Skill 路由 + SSE 流式 |
-| **LLM** | Gemini / OpenAI / DeepSeek（多 provider adapter） | 大语言模型 |
-| **数据库** | PostgreSQL + pgvector | 结构化数据与向量检索 |
+| **LLM** | GLM / DeepSeek / OpenAI / Google Gemini（多 provider，DB 配置 > 环境变量 > 默认） | 大语言模型 |
+| **数据库** | PostgreSQL 16 | 结构化数据与语义化洞察（未使用 pgvector；无 Redis，后端为无状态服务） |
 | **测试** | Vitest + Playwright | 单元测试与 E2E |
 | **文档** | VitePress | 文档站点 |
 | **视频处理** | FFmpeg | 视频转码与压缩 |
@@ -228,7 +229,7 @@ graph LR
 ### 环境要求
 
 - **Node.js**: v18 或更高版本
-- **PostgreSQL**（含 pgvector 扩展；仅 AI 分析与云同步功能需要）
+- **Docker + Docker Compose**（推荐，用于拉起 PostgreSQL 16；也可自备数据库）
 - **Git**
 
 ### 安装步骤
@@ -244,18 +245,34 @@ graph LR
 
     ```bash
     npm install
+    cd backend && npm install
     ```
 
 3. **配置环境:**
 
     进入 `backend/` 目录，将 `.env.local.example` 复制为 `.env.local`，
-    填入你的 API 密钥与数据库连接：
+    改好最小可启动的 4 项即可（完整变量说明见该示例文件内注释）：
 
     ```env
-    AI_PROVIDER=gemini
-    GOOGLE_API_KEY=your_api_key_here
-    DATABASE_URL=postgresql://user:pass@localhost:5432/starfit
+    DATABASE_URL=postgresql://starfit:CHANGE_ME@localhost:5432/starfit
+    STARFIT_ACCESS_TOKEN=CHANGE_ME          # 任意随机长字符串
+    DEEPSEEK_API_KEY=CHANGE_ME              # 默认 LLM provider 的密钥
+    DEEPSEEK_BASE_URL=CHANGE_ME             # DeepSeek 兼容网关
     ```
+
+    > LLM provider 通过 `AI_PROVIDER` 切换，支持 `glm | deepseek | openai | google`，
+    > 切换后按示例文件内对应段落填该 provider 的密钥/网关/模型。
+
+### 一键起数据库（可选）
+
+仓库自带 `backend/docker-compose.yml`（PostgreSQL 16 + 后端 + 迁移/网关 profile）：
+
+```bash
+cd backend
+docker compose up -d postgres   # 只起数据库，后端本地跑
+```
+
+完整自部署（源码构建、服务器一键起整套）见 [deploy/ 引导包](deploy/README.md)。
 
 ### 运行应用
 
@@ -293,6 +310,20 @@ cd android
 > Release 签名：在 `android/` 下放置 `keystore.properties`（不进 git）并在
 > `android/app/build.gradle` 中已读取。没有该文件时自动退回 debug 签名，便于本地安装测试。
 
+### iOS 构建
+
+> iOS 是产品主形态：Capacitor 8 Web 层 + 手写 Swift 原生层（Liquid Glass 玻璃 UI、
+> 原生 TabBar、灵动岛 Live Activity）。需要 macOS + Xcode。
+
+```bash
+npm run build
+npx cap sync ios
+open ios/App/App.xcworkspace   # Xcode 中选真机/模拟器运行
+```
+
+> 开发热更新：`CAP_DEV_URL=http://localhost:43112 npx cap sync ios` 后，App 直连本地
+> Vite dev server 获得 HMR；不设置该变量时默认加载打包内 web 资源，出包无需手工改配置。
+
 ---
 
 ## 📁 项目结构
@@ -315,6 +346,7 @@ star-fit/
 │       ├── db/postgresql/  #   schema、migrations、repository
 │       └── schemas/        #   Zod 数据校验
 ├── shared/contracts/       # 前后端数据契约（唯一来源）
+├── ios/                    # Capacitor iOS 壳（含手写 Swift 原生插件：LiquidGlass/AppPlugin）
 ├── android/                # Capacitor Android 壳
 ├── docs-site/              # VitePress 文档站点
 ├── docs/                   # 领域知识与分析资料
@@ -346,6 +378,18 @@ star-fit/
 
 ---
 
+## 🚢 自部署
+
+想在服务器上跑一套自己的 Starfit？`deploy/` 引导包提供源码构建的一键部署：
+`deploy/.env.example`（环境变量模板）、`deploy/docker-compose.prod.yml`（生产编排：
+PostgreSQL 16 + 后端 + 可选迁移/网关 profile）和 `deploy/AGENT_DEPLOY.md`
+（可交给任意 AI Agent 执行的自包含部署任务书）。
+
+> 该目录正在完善中（即将发布），落地前可先参考
+> [部署文档](docs-site/development/deployment.md) 了解架构与端口约定。
+
+---
+
 ## 📚 文档
 
 完整文档在 VitePress 文档站：**https://zenthos-z.github.io/star-fit/**（本地 `npm run docs:dev`）：
@@ -353,9 +397,10 @@ star-fit/
 - [项目简介](docs-site/getting-started/introduction.md) · [快速开始](docs-site/getting-started/quick-start.md) · [设计理念](docs-site/getting-started/design-philosophy.md)
 - [数据协议](docs-site/concepts/data-protocol.md) · [同步系统](docs-site/concepts/sync-system.md) · [AI 教练](docs-site/concepts/ai-coach.md) · [视频管理](docs-site/concepts/video-management.md)
 - [数据流](docs-site/architecture/data-flow.md) · [三态数据流](docs-site/architecture/three-state-data-flow.md)
-- [PostgreSQL Schema](docs-site/database/postgresql-schema.md) · [Repository 层](docs-site/database/repository-layer.md) · [迁移指南](docs-site/database/migration-guide.md)
+- [PostgreSQL Schema](docs-site/database/postgresql-schema.md) · [Repository 层](docs-site/database/repository-layer.md)
 - [UI 设计系统](docs-site/ui-guides/README.md)（颜色 / 字体 / 间距 / 动效 / 卡片 / 气泡）
 - [贡献指南](docs-site/development/contributing.md) · [目录规范](docs-site/development/directory-conventions.md) · [部署](docs-site/development/deployment.md)
+- 历史文档（早期迁移时代，仅供参考）：[docs/archive/](docs/archive/)
 
 ---
 

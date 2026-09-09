@@ -58,8 +58,8 @@ Starfit — 移动端优先的健身记录与 AI 教练应用。前端 React 19 
 裁决序: 可执行事实 > 代码 > 文档
 证据链: "完成"必须附Network截图或测试脚本
 
-- docs-site/ 是唯一真理源
-- shared/contracts/ 是数据契约唯一定义源
+- 真源：backend 代码 + shared/contracts/（数据契约唯一定义源）
+- docs-site/ 是衍生文档，可能滞后于代码，冲突时以上述真源为准
 
 ────────────────────────────────────────
 │ 2. 常用命令
@@ -93,7 +93,7 @@ npm run build && npx cap sync android
 cd android && ./gradlew assembleRelease
 ```
 
-**调试端口表（源自 `dev.ps1`）**
+**调试端口速查**
 
 | 服务 | 端口 |
 | --- | --- |
@@ -132,7 +132,7 @@ cd android && ./gradlew assembleRelease
 | webapp-testing | 浏览器调试, UI 测试, 表单验证 |
 | systematic-debugging | 系统调试, 根因分析 |
 
-> 完整列表见 `.claude/skills/`（另含 frontend-design / mcp-builder / mermaid-visualizer / backend-dev-guidelines 等）。
+> 完整列表见 `.claude/skills/`（另含 frontend-design / mcp-builder / mermaid-visualizer 等）。
 
 ────────────────────────────────────────
 │ 5. 协作规范
