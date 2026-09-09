@@ -1,5 +1,11 @@
 /* Global styles for Project Starfit */
 
+/* Tailwind 构建时编译入口（原为 index.html/admin.html 的 CDN script） */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+
 /* ============================================
    教程内容样式 (Exercise Tutorial)
    ============================================ */
