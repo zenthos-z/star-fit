@@ -141,39 +141,6 @@
           inset 0 -1px 0.5px rgba(255,255,255,0.05);
       }
 
-      /* Clear 玻璃：.glassEffect(.clear) 官方配方 —— 高透体，其下压黑 0.3 暗层保文字可读 */
-      .liquid-glass-clear {
-        background: rgba(0, 0, 0, 0.30);
-        -webkit-backdrop-filter: blur(20px) saturate(160%);
-        backdrop-filter: blur(20px) saturate(160%);
-        border: 0.5px solid rgba(255,255,255,0.35);
-        box-shadow:
-          0 8px 24px rgba(0,0,0,0.18),
-          inset 0 1px 0.5px rgba(255,255,255,0.55),
-          inset 0 -1px 1px rgba(255,255,255,0.12);
-      }
-
-      /* Clear + tint：颜色染在玻璃里（.clear.tint 同款），材质与暗层不变 */
-      .liquid-glass-clear-tinted {
-        background:
-          linear-gradient(165deg, rgba(79,132,240,0.45) 0%, rgba(37,99,235,0.50) 100%),
-          rgba(0, 0, 0, 0.30);
-        -webkit-backdrop-filter: blur(20px) saturate(160%);
-        backdrop-filter: blur(20px) saturate(160%);
-        border: 0.5px solid rgba(255,255,255,0.45);
-        box-shadow:
-          0 10px 26px rgba(37,99,235,0.30),
-          inset 0 1px 0.5px rgba(255,255,255,0.65),
-          inset 0 -1px 1px rgba(255,255,255,0.15);
-      }
-
-      /* 全屏沉浸层（对话窗口等）：整面磨砂，不再依赖局部白底 */
-      .liquid-glass-canvas {
-        background: rgba(250,250,250,0.82);
-        -webkit-backdrop-filter: blur(28px) saturate(150%);
-        backdrop-filter: blur(28px) saturate(150%);
-      }
-
       /* 色散玻璃选框 v2 —— 按 Apple glassEffect(.regular) 官方配方：
          中性清透玻璃体 + 白色 specular rim + 极轻色差边缘。
          （彩虹描边是误读，Apple 无此设计；真正的折射需 SVG backdrop-filter，WebKit 不支持） */
