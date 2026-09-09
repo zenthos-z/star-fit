@@ -242,5 +242,5 @@ type ExerciseType =
 
 ## 相关文档
 
-- [运动卡片技术规格](../specifications/exercise-card-technical-specs.md)
-- [UI 指南 - 运动卡片系统](../ui-guides/exercise-card-system.md)
+- [运动卡片技术规格](../../../specifications/exercise-card-technical-specs.md)
+- [UI 指南 - 运动卡片系统](../../exercise-card-system.md)

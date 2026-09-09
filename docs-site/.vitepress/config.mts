@@ -9,8 +9,8 @@ export default withMermaid(
   // Base URL for GitHub Pages deployment (project site)
   base: '/star-fit/',
 
-  // Temporarily ignore dead links while fixing link references
-  ignoreDeadLinks: true,
+  // Dead links are build errors; fix them rather than ignore
+  ignoreDeadLinks: false,
 
   locales: {
     root: {

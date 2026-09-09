@@ -172,7 +172,7 @@
 ### 相关文档
 
 - **[运动卡片技术规格](../specifications/exercise-card-technical-specs.md)** - 数据结构定义、类型转换规范
-- **[运动卡片参数参考](../components/ExerciseCardV2/params-reference.md)** - 每种卡片的详细参数说明
+- **[运动卡片参数参考](./components/ExerciseCardV2/params-reference.md)** - 每种卡片的详细参数说明
 
 ### 数据格式更新 (v2.1)
 

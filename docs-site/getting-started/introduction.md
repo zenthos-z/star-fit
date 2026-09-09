@@ -7,17 +7,20 @@ Starfit 是一个移动端优先的健身记录与 AI 教练应用：快乐至�
 - **健身记录**：组数、次数、重量、RPE，流畅的计时器与录入体验
 - **AI 教练**：基于 [Deep Agents](https://github.com/langchain-ai/deepagents) 的单 Agent + Skill 路由内核，SSE 流式输出，把健身领域技能知识（动作类型指南、计划生成、力量训练设计）挂载给模型
 - **多态卡片**：`uiHint` 驱动的卡片协议，AI 可以渲染训练计划、总结、调查、指导等交互组件
+- **iOS 原生体验**：产品主形态是 iOS App——Capacitor 8 + Swift 原生层（Liquid Glass 玻璃 UI、原生 TabBar、灵动岛 Live Activity）
 - **本地优先**：L1 React State → L2 IndexedDB → L3 PostgreSQL 三层存储，健身房断网也能记录
 - **数据主权**：训练数据可导出为 Markdown，永远属于你自己
 
 ## 架构一览
 
 ```
-前端 (React 19 + Vite, Capacitor 打包 Android)
+iOS App 壳 (Capacitor 8 + Swift 原生层: 玻璃 UI / 原生 TabBar / 灵动岛)
+  │
+前端 Web 层 (React 19 + Vite)
   ├─ uiHint 卡片渲染（核心交互协议）
   └─ SSE 流式消费 /api/chat
         │
-后端 (Fastify 5 + PostgreSQL/pgvector)
+后端 (Fastify 5 + PostgreSQL 16，无 Redis，无状态)
   ├─ AgentService 端口 ── DeepAgentService（Deep Agents 内核）
   │    ├─ Skill 路由（chat / plan / diagnose / card）
   │    ├─ 领域技能知识（挂载 services/mas/skills/ 下的 knowledge）
@@ -25,6 +28,9 @@ Starfit 是一个移动端优先的健身记录与 AI 教练应用：快乐至�
   ├─ MCP 式工具层：Repository 能力暴露为 Agent 工具
   └─ 动作库 / 用户画像 / 训练会话 / 视频处理 / 同步
 ```
+
+LLM 多 provider 支持：GLM / DeepSeek / OpenAI / Google Gemini，
+配置优先级为 DB 配置 > 环境变量 > 代码默认。
 
 ## 下一步
 

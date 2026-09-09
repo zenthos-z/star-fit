@@ -722,8 +722,7 @@ export type VideoMetadata = z.infer<typeof VideoMetadataSchema>;
 ## 13. 参考文档
 
 - [数据协议](../concepts/data-protocol.md)
-- [Starfit 技术标准规范](./technical-standards.md)
-- [视频故障排除指南](./video-troubleshooting.md)
+- [视频故障排除指南](../development/video-troubleshooting.md)
 
 ---
 

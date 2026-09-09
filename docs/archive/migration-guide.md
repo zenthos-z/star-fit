@@ -1,3 +1,5 @@
+> **历史文档**：成文于 SQLite→PostgreSQL 迁移 / MAS 多智能体时代，部分内容已不反映当前架构，仅作历史参考。
+
 # PostgreSQL Migration Guide
 
 **版本**: v2.0.0

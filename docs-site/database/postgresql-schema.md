@@ -710,7 +710,7 @@ CI/CD 自动检测违规并阻止合并。
 
 ### 从 SQLite 迁移到 PostgreSQL
 
-详见 `docs-site/database/migration-guide.md`
+详见仓库 `docs/archive/migration-guide.md`（历史文档）
 
 ### 数据流图
 

@@ -117,5 +117,4 @@ archive/
 ## 参考资源
 
 - [目录规范](./directory-conventions.md)
-- [项目结构](./project-structure.md)
 - [数据流](../architecture/data-flow.md)
