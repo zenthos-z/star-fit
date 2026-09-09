@@ -9,9 +9,9 @@ const config: CapacitorConfig = {
     androidScheme: 'http',
     cleartext: true,
     allowNavigation: ['*'],
-    // [DEV-ONLY 热更新] 指向 Vite dev server：app 直接加载开发服务器，前端保存即 HMR。
-    // 提交/出包前必须注释掉这一行（否则 app 离开本机开发环境就白屏），然后 npx cap sync。
-    url: 'http://localhost:43112'
+    // [DEV-ONLY 热更新] 设置 CAP_DEV_URL 环境变量时 app 直连该 dev server 获得 HMR；
+    // 不设置则默认加载打包内 web 资源，出包/分发无需手工注释。改动后执行 npx cap sync。
+    ...(process.env.CAP_DEV_URL ? { url: process.env.CAP_DEV_URL } : {})
   },
   // 手写原生插件（iOS: LiquidGlassPlugin.swift）注册进桥
   includePlugins: ['AppPlugin', 'LiquidGlassPlugin', '@capacitor/keyboard', '@capacitor/camera'],
