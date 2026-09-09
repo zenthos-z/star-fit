@@ -9,7 +9,7 @@
     "build": "npm run build:shared && tsc -p tsconfig.json",
     "build:shared": "cd ../shared && npm run build",
     "start": "node dist/preload.js",
-    "test": "tsx --test tests/*.ts",
+    "test": "jest",
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration",
     "test:coverage": "jest --coverage",

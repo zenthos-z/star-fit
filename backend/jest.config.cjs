@@ -17,8 +17,6 @@ module.exports = {
     '^(\\.{1,2}/.*)\\.js$': '$1',
     // Shared contracts import path
     '^shared/(.*)$': '<rootDir>/../shared/$1',
-    // Handle better-sqlite3 ESM import
-    '^better-sqlite3$': 'better-sqlite3',
   },
   transform: {
     '^.+\\.tsx?$': [
@@ -28,16 +26,15 @@ module.exports = {
       },
     ],
   },
-  transformIgnorePatterns: [
-    'node_modules/(?!(better-sqlite3)/)',
-    '/node_modules/(?!(better-sqlite3)/)',  // Exclude better-sqlite3 from node_modules
-  ],
   testMatch: [
     '**/tests/unit/**/*.test.ts',
-    '**/tests/integration/**/*.test.ts',
-    '**/__tests__/**/*.test.ts',
   ],
-  setupFilesAfterEnv: ['<rootDir>/tests/setup.ts'],
+  // node:test 语法套件 jest 无法承载，排除（由 tsx --test 单独运行）：
+  // - tests/unit/services/sessionSchema.test.ts（契约镜像，8 例）
+  // - src/services/agent/__tests__/*（118 例，跑 `npx tsx --test src/services/agent/__tests__/*.test.ts`）
+  testPathIgnorePatterns: [
+    'tests/unit/services/sessionSchema.test.ts',
+  ],
   collectCoverageFrom: [
     'src/**/*.ts',
     '!src/**/*.d.ts',
