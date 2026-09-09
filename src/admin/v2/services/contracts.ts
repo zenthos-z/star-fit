@@ -15,14 +15,8 @@ export const zAdminHealth = z.object({
       latency: zNumber.optional().catch(undefined),
     })
     .catch({ status: 'disconnected', provider: '' }),
-  storage: z
-    .object({
-      used: zNumber.catch(0),
-      total: zNumber.catch(0),
-      percent: zNumber.catch(0),
-      available: zNumber.optional().catch(undefined),
-    })
-    .catch({ used: 0, total: 0, percent: 0 }),
+  // storage field removed — the fake 10GB capacity display was deleted.
+  emergency_stop_active: z.boolean().optional().catch(undefined),
   uptime: zNumber.optional().catch(undefined),
 });
 
@@ -42,17 +36,23 @@ export const zAdminProxyConfig = z
     GLOBAL_PROXY: z.string().catch(''),
     GEMINI_PROXY: z.string().catch(''),
     OPENAI_PROXY: z.string().catch(''),
-    AI_PROVIDER: z.string().catch('gemini'),
+    AI_PROVIDER: z.string().catch('glm'),
     GOOGLE_API_KEY_SET: z.boolean().catch(false),
     OPENAI_API_KEY_SET: z.boolean().catch(false),
+    DEEPSEEK_API_KEY_SET: z.boolean().catch(false),
+    GLM_API_KEY_SET: z.boolean().catch(false),
+    IMAGE_GEN_API_KEY_SET: z.boolean().catch(false),
   })
   .catch({
     GLOBAL_PROXY: '',
     GEMINI_PROXY: '',
     OPENAI_PROXY: '',
-    AI_PROVIDER: 'gemini',
+    AI_PROVIDER: 'glm',
     GOOGLE_API_KEY_SET: false,
     OPENAI_API_KEY_SET: false,
+    DEEPSEEK_API_KEY_SET: false,
+    GLM_API_KEY_SET: false,
+    IMAGE_GEN_API_KEY_SET: false,
   });
 
 export type AdminProxyConfig = z.infer<typeof zAdminProxyConfig>;
@@ -70,7 +70,7 @@ export type AdminAIConfig = z.infer<typeof zAdminAIConfig>;
 
 // Model Configuration Schema (Single default config only)
 const zModelConfigItem = z.object({
-  provider: z.union([z.literal('gemini'), z.literal('openai'), z.literal('deepseek')]).catch('gemini'),
+  provider: z.union([z.literal('gemini'), z.literal('openai'), z.literal('deepseek'), z.literal('glm')]).catch('glm'),
   model: z.string().catch(''),
   baseURL: z.string().optional().catch(undefined),
   source: z.union([z.literal('db'), z.literal('env'), z.literal('default')]).catch('default'),
@@ -88,12 +88,13 @@ export const zModelConfigResponse = z.object({
     gemini: z.array(z.string()).catch([]),
     openai: z.array(z.string()).catch([]),
     deepseek: z.array(z.string()).catch([]),
-  }).catch({ gemini: [], openai: [], deepseek: [] }),
+    glm: z.array(z.string()).catch([]),
+  }).catch({ gemini: [], openai: [], deepseek: [], glm: [] }),
 }).catch({
   tasks: {
-    default: { provider: 'gemini', model: '', source: 'default' },
+    default: { provider: 'glm', model: '', source: 'default' },
   },
-  availableModels: { gemini: [], openai: [], deepseek: [] },
+  availableModels: { gemini: [], openai: [], deepseek: [], glm: [] },
 });
 
 export type ModelConfigResponse = z.infer<typeof zModelConfigResponse>;

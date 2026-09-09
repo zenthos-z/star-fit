@@ -55,9 +55,22 @@ export function setCurrentTab(index: number): void {
   void callPlugin('setCurrentTab', { selection: index });
 }
 
+/**
+ * 层叠安全的 tab bar 隐藏（引用计数）：
+ * sheet 会叠开（战报页 → 海报 sheet → 结果 viewer），内层 sheet 卸载时
+ * 不能无条件恢复显示，否则会把底下还开着的 sheet 的隐藏状态吹掉。
+ * 只有「最后一个隐藏者卸载」才真正恢复。
+ */
+let hiddenCount = 0;
+let lastSentHidden = false;
 export function setTabBarHidden(hidden: boolean): void {
   if (!isNativeTabBar) return;
-  void callPlugin('setTabBarDimmed', { dimmed: hidden });
+  hiddenCount = Math.max(0, hiddenCount + (hidden ? 1 : -1));
+  const next = hiddenCount > 0;
+  if (next !== lastSentHidden) {
+    lastSentHidden = next;
+    void callPlugin('setTabBarDimmed', { dimmed: next });
+  }
 }
 
 export function hideTabBar(): void {

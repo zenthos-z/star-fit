@@ -287,7 +287,7 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
         <motion.button
           {...buttonPress}
           onClick={handleAiGen}
-          className="liquid-glass-clear flex-1 h-[50px] text-white font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
+          className="liquid-glass flex-1 h-[50px] text-gray-900 font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
         >
           <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
@@ -299,7 +299,7 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
           {...tapScale}
           onClick={handleSaveCard}
           disabled={isSaving}
-          className="liquid-glass-clear-tinted flex-1 h-[50px] text-white font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform disabled:opacity-60"
+          className="liquid-glass-dark flex-1 h-[50px] text-white font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform disabled:opacity-60"
         >
           {isSaving ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

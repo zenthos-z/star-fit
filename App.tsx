@@ -1436,6 +1436,7 @@ const App: React.FC = () => {
                 chatEndRef={chatEndRef}
                 textareaRef={textareaRef}
                 attachedContext={attachedContext}
+                setAttachedContext={setAttachedContext}
                 onRemoveAttachment={() => setAttachedContext(null)}
                 onViewDetails={() => {
                   if (session.status === 'finished') {

@@ -359,6 +359,7 @@ export async function updateExercise(
       content_html?: string;
       assets?: any;
       assets_json?: string;
+      tutorials?: any;
       tags?: any;
       change_reason?: string;
     };
@@ -419,6 +420,11 @@ export async function updateExercise(
       data.assets_json = body.assets_json;
     } else if (body.assets !== undefined) {
       data.assets_json = JSON.stringify(body.assets);
+    }
+
+    // 处理 tutorials（JSONB 列：对象或已序列化字符串均可，Service 层校验结构）
+    if (body.tutorials !== undefined) {
+      data.tutorials = body.tutorials;
     }
 
     if (body.tags !== undefined) {

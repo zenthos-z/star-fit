@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 
 function formatBytes(bytes: number) {
+  // Kept for potential future real usage; currently unused after the fake
+  // storage display was removed.
   const v = Number.isFinite(bytes) ? bytes : 0;
   const units = ['B', 'KB', 'MB', 'GB', 'TB'];
   if (v <= 0) return '0 B';
@@ -16,6 +18,7 @@ function formatBytes(bytes: number) {
   const num = v / Math.pow(1024, i);
   return `${num.toFixed(num >= 10 || i === 0 ? 0 : 1)} ${units[i]}`;
 }
+void formatBytes;
 
 export const Cockpit: React.FC = () => {
   const [systemStatus, setSystemStatus] = useState<any>(null);
@@ -102,7 +105,7 @@ export const Cockpit: React.FC = () => {
   return (
     <div className="flex flex-col h-full space-y-6">
       {/* System Health Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         <StatusCard 
           icon={Server} 
           title="API 服务" 
@@ -117,13 +120,7 @@ export const Cockpit: React.FC = () => {
           status={systemStatus?.ai.status === 'connected' ? 'ok' : 'error'}
           subtext={`提供商: ${systemStatus?.ai.provider}`}
         />
-        <StatusCard 
-          icon={Database} 
-          title="存储空间" 
-          value={`${systemStatus?.storage.percent}%`} 
-          status={systemStatus?.storage.percent > 80 ? 'warning' : 'ok'}
-          subtext={`已用: ${formatBytes(systemStatus?.storage.used)} / ${formatBytes(systemStatus?.storage.total)}`}
-        />
+        {/* 存储空间 StatusCard 已删除 — 后端不再上报伪造的 storage 容量 */}
       </div>
 
       <div className="grid grid-cols-12 gap-6 flex-1 min-h-0">
@@ -210,17 +207,19 @@ export const Cockpit: React.FC = () => {
             </Card>
           )}
 
-          {systemStatus?.storage?.percent > 80 && (
-            <Card className="p-4 bg-yellow-50 border-yellow-200">
+          {systemStatus?.emergency_stop_active && (
+            <Card className="p-4 bg-red-50 border-red-200">
               <div className="flex items-start gap-3">
-                <AlertCircle size={20} className="text-yellow-500 flex-shrink-0 mt-0.5" />
+                <AlertCircle size={20} className="text-red-500 flex-shrink-0 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-yellow-900">存储空间不足</h4>
-                  <p className="text-sm text-yellow-700 mt-1">当前使用 {systemStatus.storage.percent}%，建议清理或扩展存储</p>
+                  <h4 className="font-medium text-red-900">紧急停止已激活</h4>
+                  <p className="text-sm text-red-700 mt-1">AI 对话服务已暂停（/api/chat 返回 503），可在快速操作中解除</p>
                 </div>
               </div>
             </Card>
           )}
+
+          {/* storage>80 警告卡已删除 — 后端不再上报伪造的 storage 容量 */}
 
           <Card className="flex-1 p-6 bg-gradient-to-br from-star-accent/10 to-transparent border-star-accent/20">
             <div className="h-full flex flex-col justify-center items-center text-center">

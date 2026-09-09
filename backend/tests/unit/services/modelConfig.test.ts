@@ -50,6 +50,10 @@ const ENV_KEYS = [
   "DEEPSEEK_BASE_URL",
   "GOOGLE_API_KEY",
   "OPENAI_API_KEY",
+  "GLM_API_KEY",
+  "GLM_MODEL",
+  "GLM_MODEL_DEFAULT",
+  "GLM_BASE_URL",
 ];
 
 let savedEnv: Record<string, string | undefined> = {};
@@ -102,16 +106,27 @@ describe("M8 DeepSeek model config", () => {
 
   // --- B1: default flash -------------------------------------------------
   describe("B1 default flash", () => {
-    it("resolveDeepSeekModel('flash') returns deepseek-v4-flash", async () => {
+    it("resolveDeepSeekModel('flash') returns deepseek-v4-flash-ga-260731 (volcano ark default)", async () => {
       const cfg = await resolveDeepSeekModel("flash");
-      expect(cfg.model).toContain(DEFAULT_DEEPSEEK_FLASH);
-      expect(cfg.model).toBe("deepseek-v4-flash");
+      expect(cfg.model).toBe(DEFAULT_DEEPSEEK_FLASH);
+      expect(cfg.model).toBe("deepseek-v4-flash-ga-260731");
     });
 
-    it("loadModel() returns a model whose id contains deepseek-v4-flash", async () => {
+    it("loadModel() with AI_PROVIDER=deepseek returns a deepseek flash model", async () => {
+      process.env.AI_PROVIDER = "deepseek";
       process.env.DEEPSEEK_API_KEY = "test-key";
       const model = await loadModel();
-      expect(extractModel(model)).toContain("deepseek-v4-flash");
+      expect(extractModel(model)).toContain("deepseek-v4-flash-ga-260731");
+    });
+
+    it("loadModel() defaults to glm-5.3-flash when no provider is configured", async () => {
+      process.env.GLM_API_KEY = "test-glm-key";
+      const model = await loadModel();
+      expect(extractModel(model)).toContain("glm-5.3-flash");
+    });
+
+    it("loadModel() with glm and no GLM_API_KEY throws MissingApiKeyError('glm')", async () => {
+      await expect(loadModel()).rejects.toThrow(/GLM_API_KEY missing/);
     });
   });
 
@@ -153,7 +168,7 @@ describe("M8 DeepSeek model config", () => {
       expect(viaConfigService.provider).toBe("deepseek");
       expect(viaRouter.provider).toBe("deepseek");
       expect(viaConfigService.model).toBe(viaRouter.model);
-      expect(viaConfigService.model).toBe("deepseek-v4-flash");
+      expect(viaConfigService.model).toBe("deepseek-v4-flash-ga-260731");
     });
 
     it("DB > env > default hierarchy: a DB value wins on both paths (L100)", async () => {
@@ -184,9 +199,9 @@ describe("M8 DeepSeek model config", () => {
     });
 
     it("restoring the key makes loadModel succeed (probe green)", async () => {
-      process.env.DEEPSEEK_API_KEY = "test-key";
+      process.env.GLM_API_KEY = "test-glm-key";
       const model = await loadModel();
-      expect(extractModel(model)).toContain("deepseek-v4-flash");
+      expect(extractModel(model)).toContain("glm-5.3-flash");
     });
   });
 });

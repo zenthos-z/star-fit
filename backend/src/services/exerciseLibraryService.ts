@@ -342,6 +342,8 @@ export const ExerciseLibraryService = {
     }
 
     // JSON 字段验证
+    // targets: 提供时验证结构；未提供不强制（部分更新如仅回写 tutorials 时无 targets，
+    // 新建路径由 controller 层保证 targets 必填）
     if (data.targets !== undefined) {
       try {
         // 处理两种情况：targets 可能是字符串或对象
@@ -363,9 +365,6 @@ export const ExerciseLibraryService = {
       } catch (e) {
         throw new Error('Invalid targets JSON format');
       }
-    } else {
-      // targets 是必填字段，如果没有提供则抛出错误
-      throw new Error('targets is required');
     }
 
     if (data.equipment_required !== undefined) {
@@ -393,6 +392,19 @@ export const ExerciseLibraryService = {
     if (data.tags_json !== undefined) validated.tags_json = data.tags_json;
     if (data.content_html !== undefined) validated.content_html = data.content_html;
     if (data.assets_json !== undefined) validated.assets_json = data.assets_json;
+    if (data.tutorials !== undefined) {
+      // tutorials 为 JSONB 列：接受对象（序列化）或已序列化字符串，结构非法则拒
+      if (typeof data.tutorials === 'string') {
+        try {
+          JSON.parse(data.tutorials);
+          validated.tutorials = data.tutorials;
+        } catch {
+          throw new Error('Invalid tutorials JSON format');
+        }
+      } else if (typeof data.tutorials === 'object' && data.tutorials !== null) {
+        validated.tutorials = JSON.stringify(data.tutorials);
+      }
+    }
 
     return validated;
   },

@@ -54,5 +54,11 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>用于拍摄训练动作照片，向 AI 教练咨询动作/表单问题</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于选择训练照片，向 AI 教练咨询动作/表单问题</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于保存训练照片</string>
 </dict>
 </plist>

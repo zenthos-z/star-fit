@@ -1,5 +1,5 @@
 import { outboxManager } from './OutboxManager';
-import { API_BASE, getUserId } from '@/services/geminiService';
+import { API_BASE, getUserId, getAccessToken } from '@/services/geminiService';
 
 /**
  * WebSocketClient: Unified transport gateway with automatic reconnection and outbox integration
@@ -242,7 +242,7 @@ export const socketService = new WebSocketClient(
           ? httpBase 
           : `ws://${httpBase}`;
           
-    return `${wsBase.replace(/\/$/, '')}/api/ws/sync?userId=${userId}&deviceId=web`;
+    return `${wsBase.replace(/\/$/, '')}/api/ws/sync?userId=${userId}&deviceId=web&token=${encodeURIComponent(getAccessToken() || '')}`;
   })()
 );
 

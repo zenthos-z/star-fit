@@ -27,18 +27,28 @@ export async function getProviderForTask(task: string) {
     providerRaw = process.env.AI_PROVIDER;
   }
 
-  const provider = (providerRaw?.trim() || "gemini") as Provider;
+  // glm is the final default (single source of truth with
+  // modelConfigService.resolveDefaultedProvider / resolveTaskConfig).
+  const provider = (providerRaw?.trim() || "glm") as Provider;
 
   let model = "";
-  if (provider === "gemini") {
+  if (provider === "glm") {
+    // GLM: task-scoped (GLM_MODEL_<TASK>) > global (GLM_MODEL, DB then env) >
+    // default; mirrors modelConfigService.resolveGLMModel / DEFAULT_GLM_MODEL.
+    const taskModelDb = await safeGetConfig(`GLM_MODEL_${task.toUpperCase()}`);
+    const taskModelEnv = process.env[`GLM_MODEL_${task.toUpperCase()}`]?.trim();
+    const globalModelDb = await safeGetConfig("GLM_MODEL");
+    const globalModelEnv = process.env.GLM_MODEL?.trim();
+    model = (taskModelDb || taskModelEnv || globalModelDb || globalModelEnv || "glm-5.3-flash").trim();
+  } else if (provider === "gemini") {
     const globalModel = await ConfigRepo.getConfig('system', 'GEMINI_MODEL');
     model = (await pick(`GEMINI_MODEL_${task.toUpperCase()}`, `GEMINI_MODEL_${task.toUpperCase()}`, globalModel || (process.env.GOOGLE_GENAI_MODEL || "gemini-3-flash-preview").trim()))!;
   } else if (provider === "deepseek") {
     // L004: model id single source of truth via ConfigRepo key DEEPSEEK_MODEL_FLASH;
     // default literal mirrors modelConfigService.DEFAULT_DEEPSEEK_FLASH
-    // ("deepseek-v4-flash"), dodging the deprecated legacy DeepSeek ids.
+    // (deepseek-v4-flash-ga-260731, the volcano ark coding-plan default).
     const globalModel = await safeGetConfig("DEEPSEEK_MODEL_FLASH");
-    const fallback = (globalModel ?? process.env.DEEPSEEK_MODEL_FLASH ?? "deepseek-v4-flash").trim();
+    const fallback = (globalModel ?? process.env.DEEPSEEK_MODEL_FLASH ?? "deepseek-v4-flash-ga-260731").trim();
     model = (await pick(`DEEPSEEK_MODEL_${task.toUpperCase()}`, `DEEPSEEK_MODEL_${task.toUpperCase()}`, fallback))!;
   } else {
     const globalModel = await ConfigRepo.getConfig('system', 'OPENAI_MODEL');

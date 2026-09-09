@@ -12,7 +12,8 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { UserSelectorBar } from './UserSelectorBar';
 import { UserProfilePanelV2 } from './UserProfilePanel.v2';
-import { TrainingHistoryPanel } from './TrainingHistoryPanel';
+import { UserAgentChat } from './UserAgentChat';
+import { SessionTimeline } from './SessionTimeline';
 import { UserManagementDialog } from './dialogs/UserManagementDialog';
 import { AdminService } from '../../services/api';
 import { Button } from '../ui/Button';
@@ -167,6 +168,13 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ onOpenSe
     setSelectedUserId(userId);
   }, []);
 
+  // Agent/行内编辑写完画像后只重拉画像数据（不闪整个面板）
+  const handleProfileUpdated = useCallback(async () => {
+    if (selectedUserId) {
+      await loadUserProfile(selectedUserId);
+    }
+  }, [selectedUserId]);
+
   const handleTogglePin = async (userId: string) => {
     isUpdatingPinnedRef.current = true; // Mark start of update (using ref)
     setIsUpdatingPinned(true); // Also update state for UI if needed
@@ -303,12 +311,12 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ onOpenSe
         onOpenManagementDialog={() => setManagementDialogOpen(true)}
       />
 
-      {/* Main Content Area - Split View */}
+      {/* Main Content Area - 两列：画像摘要 | 训练记录流；Agent = 页面级悬浮窗 */}
       <div className="flex-1 flex overflow-hidden">
         {selectedUserId ? (
           <>
-            {/* Left Panel - User Profile (Expanded width) */}
-            <div className="w-[55%] min-w-[600px] border-r border-gray-200 overflow-hidden">
+            {/* Col 1 - 用户画像摘要 */}
+            <div className="w-[380px] shrink-0 border-r border-gray-200 overflow-hidden bg-white">
               <UserProfilePanelV2
                 userId={selectedUserId}
                 username={selectedUser?.username}
@@ -318,12 +326,13 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ onOpenSe
                 stats={stats}
                 loading={loadingProfile}
                 onStatsUpdate={setStats}
+                onProfileUpdate={handleProfileUpdated}
               />
             </div>
 
-            {/* Right Panel - Training History */}
-            <div className="flex-1 overflow-hidden">
-              <TrainingHistoryPanel
+            {/* Col 2 - 训练记录流（精简时间线，铺满剩余空间） */}
+            <div className="flex-1 min-w-0 overflow-hidden bg-white" data-testid="session-timeline-column">
+              <SessionTimeline
                 userId={selectedUserId}
                 loading={loadingProfile}
                 onSessionDeleted={handleUserDeleted}
@@ -348,6 +357,14 @@ export const UserManagementPage: React.FC<UserManagementPageProps> = ({ onOpenSe
           </div>
         )}
       </div>
+
+      {/* Agent 悬浮窗（页面级，随选中用户切换身份；不占布局列） */}
+      {selectedUserId && (
+        <UserAgentChat
+          targetUserId={selectedUserId}
+          targetUserName={selectedUser?.display_name || selectedUser?.username || selectedUser?.short_id || selectedUserId.slice(0, 8)}
+        />
+      )}
 
       {/* User Management Dialog */}
       {managementDialogOpen && (

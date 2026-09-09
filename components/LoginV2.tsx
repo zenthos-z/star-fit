@@ -14,6 +14,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { isNativeTabBar, hideTabBar } from '../src/lib/nativeTabBar';
 import {
   detectServer,
   checkServerHealth,
@@ -26,6 +27,7 @@ import {
   loadServerHistory,
   addServerToHistory
 } from '../storage';
+import { getAccessToken, setAccessToken } from '../services/geminiService';
 import QRScanner from './QRScanner';
 
 interface LoginProps {
@@ -41,7 +43,12 @@ interface DiscoveredServer {
 interface User {
   id: string;
   username?: string;
+  /** GET /admin/users 实际返回的人类可读 ID（无 username 字段） */
+  display_name?: string;
 }
+
+/** 下拉列表展示/登录用的用户标识：username 兜底 display_name */
+const getUserLabel = (u: User): string => u.username || u.display_name || '';
 
 // Chevron Down Icon
 const ChevronDownIcon = ({ className }: { className?: string }) => (
@@ -112,6 +119,7 @@ const validateUsernameInput = (value: string): { valid: boolean; error?: string 
 const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
   const [userId, setUserId] = useState('');
   const [serverIp, setServerIp] = useState('');
+  const [accessToken, setAccessTokenState] = useState('');
   const [error, setError] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [discoveredServers, setDiscoveredServers] = useState<DiscoveredServer[]>([]);
@@ -125,6 +133,90 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
   const [autoLoginStatus, setAutoLoginStatus] = useState<'idle' | 'connecting' | 'failed'>('idle');
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const autoLoginAttemptedRef = useRef(false);
+
+  // 登录页隐藏原生 Tab Bar：
+  // MainTabBar 只在登录后的分支渲染，注销 reload 后没人调 hideTabBar()，
+  // 原生 SwiftUI TabBar 会常驻在登录页上——挂载时主动隐藏 + 撤掉底部让位。
+  useEffect(() => {
+    if (!isNativeTabBar) return;
+    hideTabBar();
+    document.body.classList.remove('native-tabbar');
+    return () => { document.body.classList.add('native-tabbar'); };
+  }, []);
+
+  // 键盘避让（HIG：正在编辑的输入框必须保持可见）：
+  // 全局 KeyboardResize.None（capacitor.config.ts，防整页顶上灵动岛），
+  // webview 不缩放，可见性由页面自管——键盘高度注入 paddingBottom 推起表单。
+  // keyboardHeight 是键盘净高，中文输入法的候选联想条会再高一截，
+  // 故补 ACCESSORY_INSET 余量；另加聚焦框 scrollIntoView 居中兜底（不依赖高度猜准）。
+  const [kbHeight, setKbHeight] = useState(0);
+  const focusedElRef = useRef<HTMLElement | null>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  // 记录正在编辑的输入框（聚焦切换时键盘已弹起、不会再发 willShow，须单独跟）
+  useEffect(() => {
+    const onFocusIn = (e: FocusEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA')) {
+        focusedElRef.current = t;
+        // 键盘已开着时的聚焦切换：按当前 kbHeight 做确定性避让
+        if (kbHeight > 0) {
+          const tryReveal = () => {
+            const el = focusedElRef.current;
+            const container = scrollContainerRef.current;
+            if (!el || !container) return;
+            const elBottom = el.getBoundingClientRect().bottom + 40;
+            const visibleBottom = container.getBoundingClientRect().bottom;
+            const delta = elBottom - visibleBottom;
+            if (delta > 0) container.scrollTop += delta;
+          };
+          [320, 550, 850].forEach((ms) => setTimeout(tryReveal, ms));
+        }
+      }
+    };
+    window.addEventListener('focusin', onFocusIn, true);
+    return () => window.removeEventListener('focusin', onFocusIn, true);
+  }, [kbHeight]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const handles: import('@capacitor/core').PluginListenerHandle[] = [];
+    // 确定性避让：聚焦框底边(含 helper 文案 ~40px)与「可视区底线 = viewport 高 - 键盘总高」直接求差，
+    // 差多少滚多少——不猜输入法候选条高度。可视区 = scrollContainer 自身高度（fixed inset-0 被压缩后）。
+    // 直接赋值 scrollTop（WKWebView 对嵌套容器 smooth scrollBy 常被吞），
+    // 键盘动画期间布局在变，320/550/850ms 三次重试直到滚够
+    const revealFocused = () => {
+      const tryReveal = () => {
+        const el = focusedElRef.current;
+        const container = scrollContainerRef.current;
+        if (!el || !container) return false;
+        const elBottom = el.getBoundingClientRect().bottom + 40; // 输入框 + 下方 helper 文案
+        const visibleBottom = container.getBoundingClientRect().bottom; // 容器底边=键盘顶
+        const delta = elBottom - visibleBottom;
+        if (delta > 0) container.scrollTop += delta;
+      };
+      [320, 550, 850].forEach((ms) => setTimeout(() => { tryReveal(); }, ms));
+    };
+    (async () => {
+      try {
+        const { Keyboard } = await import('@capacitor/keyboard');
+        if (cancelled) return;
+        handles.push(
+          await Keyboard.addListener('keyboardWillShow', (info) => {
+            // +56：中文输入法候选条在键盘净高之外
+            const total = (info?.keyboardHeight ?? 0) + 56;
+            setKbHeight(total);
+            revealFocused();
+          }),
+          await Keyboard.addListener('keyboardWillHide', () => setKbHeight(0)),
+        );
+      } catch { /* 非 Capacitor 环境（纯浏览器调试）：静默降级 */ }
+    })();
+    return () => {
+      cancelled = true;
+      handles.forEach(h => h.remove());
+    };
+  }, []);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -151,6 +243,7 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
         if (creds.serverUrl) {
           setServerIp(formatServerUrl(creds.serverUrl));
         }
+        setAccessTokenState(getAccessToken() || '');
       } catch (e) {
         console.warn('[LoginV2] Failed to load credentials:', e);
       } finally {
@@ -194,7 +287,10 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
         // Quick health check + fetch users
         const response = await fetch(`${serverUrl}/admin/users`, {
           method: 'GET',
-          headers: { 'Accept': 'application/json' },
+          headers: {
+            'Accept': 'application/json',
+            ...(getAccessToken() ? { 'X-Access-Token': getAccessToken()! } : {})
+          },
           signal: AbortSignal.timeout(3000)
         });
 
@@ -234,11 +330,11 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       if (result) {
         setDiscoveredServers([result]);
         setShowServerList(true);
-      } else {
-        setError('未发现可用的服务器，请手动输入 IP 地址');
       }
+      // 未命中：静默收场，不弹错误——用户直接在输入框手输 IP 即可
     } catch (e) {
-      setError('扫描失败: ' + (e as Error).message);
+      console.warn('[LoginV2] Scan failed:', e);
+      setDiscoveredServers([]);
     } finally {
       setIsScanning(false);
     }
@@ -254,8 +350,8 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
   };
 
   const handleSelectUser = (user: User) => {
-    // Use username for login
-    setUserId(user.username || user.id);
+    // Use username (or display_name returned by /admin/users) for login
+    setUserId(getUserLabel(user) || user.id);
     setShowUserDropdown(false);
   };
 
@@ -299,9 +395,16 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       // 调用登录或创建用户的 API
       const response = await fetch(`${serverUrl}/admin/login-or-create`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(accessToken.trim() ? { 'X-Access-Token': accessToken.trim() } : {})
+        },
         body: JSON.stringify({ userId: uid })
       });
+
+      if (response.status === 401) {
+        throw new Error('访问令牌错误或未填写，请检查后重试');
+      }
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ error: '登录失败' }));
@@ -313,7 +416,8 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       // 使用后端返回的 userId（可能是新创建的）
       const finalUserId = data.userId || uid;
 
-      // 保存凭据
+      // 保存凭据（token 存 localStorage，getHeaders 自动携带）
+      setAccessToken(accessToken.trim() || null);
       await saveLoginCredentials(finalUserId, serverUrl);
       await addServerToHistory(serverUrl, healthCheck.latency);
 
@@ -340,20 +444,34 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
   }
 
   return (
-    <div className="fixed inset-0 z-[100] bg-star-white flex flex-col items-center justify-center p-6">
+    <div
+      ref={scrollContainerRef}
+      className={`fixed left-0 right-0 top-0 z-[100] bg-star-white flex flex-col items-center px-6 overflow-y-auto ${
+        kbHeight > 0 ? 'justify-start' : 'justify-center'
+      }`}
+      style={{
+        // 键盘弹出：容器底边直接提到键盘顶（+56 候选条余量）——WebKit 里容器自身的
+        // padding-bottom 不产生可滚动溢出（实测 scrollHeight==clientHeight），padding 路线无效。
+        bottom: kbHeight > 0 ? `${kbHeight}px` : '0px',
+        paddingTop: 'calc(env(safe-area-inset-top, 0px) + 24px)',
+        paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+      }}
+    >
       <div className="w-full max-w-md space-y-8">
-        {/* Header */}
+        {/* Header — STARFIT 文字标志（对齐 AI 教练 Welcome 屏终版） */}
         <div className="text-center space-y-2">
-          <h1 className="text-4xl font-black text-star-dark tracking-tighter">PROJECT STARFIT</h1>
-          <p className="text-gray-400 font-bold text-sm tracking-widest uppercase">Agent Data Isolation</p>
+          <h1 className="text-4xl font-black tracking-tighter text-star-dark">
+            STAR<span className="text-star-accent">FIT</span>
+          </h1>
+          <p className="text-gray-400 text-[13px] font-medium">登录到你的训练服务器</p>
         </div>
 
         {/* Login Form */}
         <div className="bg-white p-8 rounded-3xl shadow-white-model space-y-6">
           <div className="space-y-4">
             {/* Server IP Input with Integrated Scan Buttons - NOW FIRST */}
-            <div className="space-y-1">
-              <label className="text-xs font-black text-gray-400 uppercase ml-1">服务器 IP</label>
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-gray-500 ml-1">服务器地址</label>
               <div className="relative">
                 <input
                   type="text"
@@ -413,14 +531,30 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
                   </button>
                 </div>
               </div>
-              <p className="text-[10px] text-gray-400 font-bold mt-1 ml-1 uppercase">
-                系统将自动连接到 http://IP:43111/api
+              <p className="text-[11px] text-gray-400 font-medium mt-1 ml-1">
+                将自动连接 http://IP:43111/api
+              </p>
+            </div>
+
+            {/* Access Token Input — 服务器启用鉴权时必填 */}
+            <div className="space-y-1.5">
+              <label className="text-[13px] font-medium text-gray-500 ml-1">访问令牌</label>
+              <input
+                type="password"
+                value={accessToken}
+                onChange={(e) => setAccessTokenState(e.target.value)}
+                placeholder="未开启令牌验证时可留空"
+                autoComplete="off"
+                className="w-full bg-star-gray border-none rounded-2xl px-5 py-4 text-star-dark font-semibold placeholder:text-gray-300 placeholder:font-medium focus:ring-2 focus:ring-star-accent transition-all outline-none"
+              />
+              <p className="text-[11px] text-gray-400 font-medium mt-1 ml-1">
+                向服务器管理员获取，用于公网访问验证
               </p>
             </div>
 
             {/* User ID Input with Dropdown - NOW SECOND */}
-            <div className="space-y-1 relative" ref={userDropdownRef}>
-              <label className="text-xs font-black text-gray-400 uppercase ml-1">用户名</label>
+            <div className="space-y-1.5 relative" ref={userDropdownRef}>
+              <label className="text-[13px] font-medium text-gray-500 ml-1">用户名</label>
               <div className="relative">
                 <input
                   type="text"
@@ -451,8 +585,8 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
                 )}
               </div>
 
-              <p className="text-[10px] text-gray-400 font-bold mt-1 ml-1 uppercase">
-                用户名：2-20字符，支持字母、数字、下划线和中文
+              <p className="text-[11px] text-gray-400 font-medium mt-1 ml-1">
+                2-20 字符，支持字母、数字、下划线和中文
               </p>
 
               {/* User Dropdown List */}
@@ -469,14 +603,14 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
                       <div className="p-4 text-center text-gray-400 text-sm font-bold">
                         加载用户列表...
                       </div>
-                    ) : users.filter(u => u.username).length > 0 ? (
-                      users.filter(u => u.username).map((user) => (
+                    ) : users.filter(u => getUserLabel(u)).length > 0 ? (
+                      users.filter(u => getUserLabel(u)).map((user) => (
                         <button
                           key={user.id}
                           onClick={() => handleSelectUser(user)}
                           className="w-full text-left px-5 py-3 hover:bg-star-gray transition-all"
                         >
-                          <span className="font-bold text-star-dark text-sm">{user.username}</span>
+                          <span className="font-bold text-star-dark text-sm">{getUserLabel(user)}</span>
                         </button>
                       ))
                     ) : isServerValid ? (
@@ -522,23 +656,16 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
             </motion.div>
           )}
 
-          {/* Login Button */}
+          {/* Login Button — 胶囊主行动钮（对齐 SettlementV2 双钮规范） */}
           <button
             onClick={handleLogin}
             disabled={autoLoginStatus === 'connecting'}
-            className={`w-full bg-star-dark text-white font-black py-5 rounded-2xl shadow-floating transition-all ${
+            className={`w-full h-[50px] bg-star-dark text-white font-semibold text-[17px] rounded-full shadow-floating transition-all ${
               autoLoginStatus === 'connecting' ? 'opacity-60 cursor-wait' : 'active:scale-95'
             }`}
           >
-            {autoLoginStatus === 'connecting' ? '正在连接…' : '开始同步与训练'}
+            {autoLoginStatus === 'connecting' ? '正在连接…' : '登录'}
           </button>
-        </div>
-
-        {/* Footer */}
-        <div className="text-center">
-          <p className="text-[10px] text-gray-300 font-bold uppercase tracking-widest">
-            Starfit v2.0 - Deep Isolation Protocol
-          </p>
         </div>
       </div>
 

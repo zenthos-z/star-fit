@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { getUserId } from '@/services';
-import { getHeaders } from '@/services/geminiService';
+import { getHeaders, API_BASE } from '@/services/geminiService';
 import { buildSessionPayload } from '../utils/workoutSummary';
 // P010 signature-frozen seam: hooks program only against chat(req): AsyncIterable<AgentEvent>.
 // The kernel swap (legacy multi-agent one-shot POST) is absorbed inside the
@@ -511,6 +511,33 @@ ${JSON.stringify(uploadData, null, 2)}`
 
     const currentAttachment = attachedContext;
 
+    // 照片附件：先把本地 dataUrl 上传到图床拿 mediaId，再以干净引用进 intent_context。
+    // 上传失败则保留附件、中断发送（不丢用户刚拍的图），如实提示。
+    let sendAttachment = currentAttachment;
+    if (currentAttachment?.type === 'image' && currentAttachment.dataUrl && !currentAttachment.mediaId) {
+      try {
+        const up = await fetch(`${API_BASE}/media/uploadData`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify({ dataUrl: currentAttachment.dataUrl, mime: currentAttachment.mime || 'image/jpeg' }),
+        });
+        if (!up.ok) throw new Error(`HTTP ${up.status}`);
+        const meta = await up.json();
+        sendAttachment = {
+          type: 'image',
+          title: currentAttachment.title || '照片',
+          mediaId: meta.id,
+          mime: currentAttachment.mime || meta.mime || 'image/jpeg',
+        };
+      } catch (err) {
+        console.error('[useAICoach] Photo upload failed:', err);
+        setIsLoading(false);
+        setChatHistory(prev => prev.filter(m => !m.isThinking));
+        alert('图片上传失败，请重试。');
+        return;
+      }
+    }
+
     setChatMessage("");
     setAttachedContext(null); // Clear attachment after send
     // 静默轮（画像确认等系统回传）：不把指令文本推入聊天流，用户只看到 Agent 的回复
@@ -545,7 +572,7 @@ ${JSON.stringify(uploadData, null, 2)}`
         userId: getUserId(),
         message: userMsg,
         scenario,
-        metadata: currentAttachment ? { intent_context: currentAttachment } : undefined,
+        metadata: sendAttachment ? { intent_context: sendAttachment } : undefined,
       })) {
         if (ev.type === 'token' && ev.text) {
           accumulated += ev.text;

@@ -65,6 +65,24 @@ export const getUserId = () => {
 };
 
 /**
+ * Access token（同步读 localStorage，与 getUserId 同模式）。
+ * 登录成功时写入，getHeaders 自动携带；后端未启用鉴权时该头被忽略。
+ */
+export const getAccessToken = (): string | null => {
+  if (typeof window === 'undefined') return null;
+  return localStorage.getItem('starfit_access_token');
+};
+
+export const setAccessToken = (token: string | null) => {
+  if (typeof window === 'undefined') return;
+  if (token) {
+    localStorage.setItem('starfit_access_token', token);
+  } else {
+    localStorage.removeItem('starfit_access_token');
+  }
+};
+
+/**
  * Async version of getUserId that reads from IDB
  * Use this for initial load where async is acceptable
  */
@@ -102,6 +120,10 @@ export const getHeaders = (extra: Record<string, string> = {}, includeContentTyp
     'X-User-Id': encodeURIComponent(userId),
     ...extra
   };
+  const token = getAccessToken();
+  if (token) {
+    headers['X-Access-Token'] = token;
+  }
   if (includeContentType) {
     headers['Content-Type'] = 'application/json';
   }

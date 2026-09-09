@@ -17,6 +17,51 @@ interface MessageProgressIndicatorProps {
   isGenerating: boolean;
 }
 
+/**
+ * 拍照 / 相册取图 → 压缩 dataUrl 附件。
+ * 原生：@capacitor/camera（source: Prompt 系统 action sheet：拍照 / 照片图库）。
+ * Web：文件选择器降级（accept="image/*" 同样支持移动端拍照/相册）。
+ * 用户取消 → 静默；其他错误 → alert 提示（不挂假附件）。
+ */
+async function pickPhoto(setCtx: (c: any) => void) {
+  try {
+    const { Capacitor } = await import('@capacitor/core');
+    if (Capacitor.isNativePlatform()) {
+      const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const photo = await Camera.getPhoto({
+        source: CameraSource.Prompt,
+        resultType: CameraResultType.DataUrl,
+        quality: 80,
+        width: 1600,
+        correctOrientation: true,
+      });
+      if (photo?.dataUrl) {
+        setCtx({ type: 'image', title: '照片', dataUrl: photo.dataUrl, mime: `image/${photo.format || 'jpeg'}` });
+      }
+    } else {
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = 'image/*';
+      input.onchange = () => {
+        const f = input.files?.[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = () => {
+          setCtx({ type: 'image', title: '照片', dataUrl: String(reader.result), mime: f.type || 'image/jpeg' });
+        };
+        reader.readAsDataURL(f);
+      };
+      input.click();
+    }
+  } catch (err: any) {
+    // 用户取消（"User cancelled"）静默；真实错误才提示
+    const msg = err?.message || '';
+    if (/cancel/i.test(msg)) return;
+    console.error('[AICoachOverlay] pickPhoto failed:', err);
+    alert(`无法获取照片：${err?.message || err || '未知错误'}`);
+  }
+}
+
 const MessageProgressIndicator: React.FC<MessageProgressIndicatorProps> = ({ items, isGenerating }) => {
   const [isExpanded, setIsExpanded] = useState(false);
 
@@ -121,6 +166,7 @@ interface AICoachOverlayProps {
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   attachedContext?: any;
+  setAttachedContext?: (ctx: any) => void;
   onRemoveAttachment?: () => void;
   onViewDetails?: () => void;
   sessionStatus: 'idle' | 'active' | 'paused' | 'finished';
@@ -156,6 +202,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   chatEndRef,
   textareaRef,
   attachedContext,
+  setAttachedContext,
   onRemoveAttachment,
   onViewDetails,
   sessionStatus,
@@ -172,6 +219,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
 }) => {
   const [showContent, setShowContent] = useState(true);
   const [showAttachPanel, setShowAttachPanel] = useState(false);
+  const [isFetchingStats, setIsFetchingStats] = useState(false);
   const [isStrategyActive, setIsStrategyActive] = useState(false);
   const [chatHistoryWithProgress, setChatHistoryWithProgress] = useState<ChatMessage[]>(chatHistory);
 
@@ -181,6 +229,70 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
     setTabBarHidden(true);
     return () => setTabBarHidden(false);
   }, []);
+
+  // ★键盘安全区冻结（修复导航栏顶进灵动岛）：iOS 26 WebKit 在输入框聚焦/键盘状态切换时
+  // 会把 env(safe-area-inset-top) 坍缩为 0（Apple Forums FB20386257 同源问题），
+  // 透明 Header 的 padding-top(calc(var(--safe-top)+8px)) 随之归零 → 标题/返回钮顶进灵动岛。
+  // 本 sheet 挂载时把 --safe-top / --safe-bottom 钉死在进入时的基线值，卸载时还原。
+  useEffect(() => {
+    const root = document.documentElement;
+    const inlineTop = root.style.getPropertyValue('--safe-top');
+    const inlineBottom = root.style.getPropertyValue('--safe-bottom');
+    const computedTop = parseFloat(getComputedStyle(root).getPropertyValue('--safe-top')) || 0;
+    const computedBottom = parseFloat(getComputedStyle(root).getPropertyValue('--safe-bottom')) || 0;
+    const freeze = (name: string, px: number) => {
+      if (px > 0) root.style.setProperty(name, `${px}px`);
+    };
+    freeze('--safe-top', computedTop);
+    freeze('--safe-bottom', computedBottom);
+    return () => {
+      if (inlineTop) root.style.setProperty('--safe-top', inlineTop);
+      else root.style.removeProperty('--safe-top');
+      if (inlineBottom) root.style.setProperty('--safe-bottom', inlineBottom);
+      else root.style.removeProperty('--safe-bottom');
+    };
+  }, []);
+
+  // ★键盘视口反顶（第二道防线）：即使 Keyboard 插件配了 resize:'none'，
+  // WKWebView 聚焦输入框时内部 scrollView 仍会自动滚动以"露出"输入框，
+  // 把 fixed inset-0 的整个 sheet（含导航栏）顶出安全区、推进灵动岛。
+  // 监听原生键盘事件，在滚动发生前后把 window/document 的滚动位置强制归零。
+  const [kbHeight, setKbHeight] = useState(0);
+  useEffect(() => {
+    if (!isOpen) return;
+    const pin = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      if (document.scrollingElement && document.scrollingElement.scrollTop !== 0) {
+        document.scrollingElement.scrollTop = 0;
+      }
+    };
+    let cancelled = false;
+    const nativeHandles: import('@capacitor/core').PluginListenerHandle[] = [];
+    (async () => {
+      try {
+        const { Keyboard } = await import('@capacitor/keyboard');
+        if (cancelled) return;
+        nativeHandles.push(
+          await Keyboard.addListener('keyboardWillShow', (info) => {
+            pin();
+            setKbHeight(info?.keyboardHeight ?? 0);
+          }),
+          await Keyboard.addListener('keyboardWillHide', () => setKbHeight(0)),
+          await Keyboard.addListener('keyboardDidShow', pin)
+        );
+      } catch {
+        // 非 Capacitor 环境（纯浏览器调试）：静默降级，聚焦归零仍生效
+      }
+    })();
+    window.addEventListener('focusin', pin, true);
+    window.addEventListener('scroll', pin, true); // capture: 接住 webview 的自动滚动
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focusin', pin, true);
+      window.removeEventListener('scroll', pin, true);
+      nativeHandles.forEach(h => h.remove());
+    };
+  }, [isOpen]);
 
   useEffect(() => {
     if (isLoading && isStrategyActive) {
@@ -347,7 +459,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         <div className="text-center">
           <div className="text-[17px] font-semibold text-gray-900 leading-tight">AI 教练</div>
           <div className="text-[11px] text-gray-400">
-            {isBusy ? '正在输入…' : '多智能体系统已就绪'}
+            {isBusy ? '正在输入…' : 'Agent 系统已就绪'}
           </div>
         </div>
         <button
@@ -391,7 +503,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 {/* Message Bubble（内容层用实色卡片：HIG 禁止 content 层玻璃化/glass-on-glass） */}
                 {(!msg.isThinking || msg.text) && (
                   <div className={`
-                    px-4 py-2.5 text-[16px] leading-[1.35] markdown-body
+                    px-4 py-2.5 text-[16px] leading-[1.35] markdown-body break-words [overflow-wrap:anywhere] min-w-0
                     ${msg.role === 'user'
                       ? 'max-w-[78%] bg-[#0A84FF] text-white rounded-[20px] rounded-br-[6px]'
                       : 'w-full bg-[#E9E9EB] text-gray-900 rounded-[20px] rounded-bl-[6px]'
@@ -513,7 +625,15 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
       </div>
 
       {/* Input Bar — iMessage 风格：[+] [胶囊输入框] [🎤/↑]，玻璃悬浮层（透明底，内容从后穿过） */}
-      <div className="absolute bottom-0 inset-x-0 z-20 px-4 pt-2 pb-3" style={{ paddingTop: 8, paddingBottom: 'calc(var(--safe-bottom) + 8px)' }}>
+      <div
+        className="absolute bottom-0 inset-x-0 z-20 px-4 pt-2 pb-3 transition-transform duration-250 ease-out"
+        style={{
+          paddingTop: 8,
+          paddingBottom: 'calc(var(--safe-bottom) + 8px)',
+          // 键盘弹出时把输入栏抬到键盘上沿（resize:none 下 webview 不缩放，需自管）
+          transform: kbHeight > 0 ? `translateY(-${kbHeight}px)` : 'translateY(0)'
+        }}
+      >
         {/* iOS 26 Menu：参考信息 App——大型白色圆角浮层，大图标+大字，无分隔线 */}
         {showAttachPanel && (
           <motion.div
@@ -530,9 +650,46 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
             ].map((a) => (
               <button
                 key={a.key}
-                onClick={() => {
-                  if (a.key === 'plan') setIsPlanMode(true);
+                type="button"
+                disabled={a.key === 'stats' && isFetchingStats}
+                onClick={async () => {
                   setShowAttachPanel(false);
+                  if (a.key === 'plan') {
+                    setIsPlanMode(true);
+                  } else if (a.key === 'stats') {
+                    // 拉最近一次训练 session 挂为附件，Agent 经 intent_context 读取
+                    try {
+                      setIsFetchingStats(true);
+                      // API_BASE 本身以 /api 结尾（geminiService），故只需拼 /sessions/recent
+                      const res = await fetch(`${API_BASE}/sessions/recent?limit=1`, { headers: getHeaders() });
+                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                      const data = await res.json();
+                      const s = data?.sessions?.[0];
+                      if (s) {
+                        setAttachedContext({
+                          type: 'workout_data',
+                          title: '最近训练数据',
+                          data: s,
+                        });
+                      } else {
+                        // 无已持久化 session：仍挂附件，指示 Agent 用 load_history 自查 DB
+                        setAttachedContext({
+                          type: 'workout_data',
+                          title: '最近训练数据',
+                          data: null,
+                          hint: '前端无已持久化的 session，请调用 load_history 读取我最近的训练记录后再回答',
+                        });
+                      }
+                    } catch (err) {
+                      console.error('[AICoachOverlay] Fetch recent session failed:', err);
+                    } finally {
+                      setIsFetchingStats(false);
+                    }
+                  } else if (a.key === 'photo') {
+                    // 拍照/相册：原生走 @capacitor/camera（iOS 弹系统 action sheet：
+                    // 拍照 / 照片图库）；Web 降级为系统文件选择（同样支持拍照/相册）。
+                    await pickPhoto(setAttachedContext);
+                  }
                 }}
                 className="w-full flex items-center gap-5 px-2 py-3.5 text-left active:bg-black/5 rounded-2xl transition-colors"
               >
@@ -550,6 +707,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         <div className="flex items-end gap-2">
           {/* + 附件按钮：Liquid Glass（Apple glassEffect(.regular) 配方材质） */}
           <button
+            type="button"
             onClick={() => setShowAttachPanel(!showAttachPanel)}
             className={`glass-ring w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 text-gray-800 ${showAttachPanel ? 'rotate-45' : ''}`}
             aria-label="附件"
@@ -559,42 +717,58 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
             </svg>
           </button>
 
-          {/* 胶囊输入框列：附件 chip 贴在输入胶囊正上方、与胶囊同宽同缘（iMessage 官方布局） */}
+          {/* 胶囊输入框：iMessage 官方「胶囊内增高」布局——附件悬浮在胶囊内部上层，
+              一条发丝分割线隔开下方文字区（Apple Messages 原版行为，非外部浮层） */}
           <div className="relative flex-1">
-            {/* 附件 chip（iMessage 风格）：教学页「咨询教练」等入口挂入的上下文，可点 × 移除 */}
-            <AnimatePresence>
+            <form onSubmit={(e) => { e.preventDefault(); handleChatSubmit(); }} className="glass-ring flex flex-col rounded-[22px] overflow-hidden">
+            {/* 附件区（胶囊内部上层）：可点 × 移除；出现/消失时胶囊平滑增高/回落 */}
+            <AnimatePresence initial={false}>
               {attachedContext && (
                 <motion.div
-                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
-                  animate={{ opacity: 1, y: 0, scale: 1 }}
-                  exit={{ opacity: 0, y: 6, scale: 0.97 }}
-                  transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
-                  className="absolute bottom-full left-0 right-0 mb-2 flex items-center gap-2 bg-white rounded-[22px] shadow-sm border border-gray-100 pl-3 pr-2 py-2"
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.25, ease: [0.32, 0.72, 0, 1] }}
+                  className="overflow-hidden"
                 >
-                  <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
-                    <svg className="w-3 h-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.375m4.875 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm0 0h-.375" />
-                    </svg>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] font-medium text-gray-800 truncate leading-tight">
-                      {attachedContext.title || attachedContext.exerciseName || '上下文附件'}
+                  <div className="flex items-center gap-2.5 pl-4 pr-3 pt-2.5 pb-2.5">
+                    {attachedContext?.type === 'image' && attachedContext.dataUrl ? (
+                      <img
+                        src={attachedContext.dataUrl}
+                        alt="附件照片"
+                        className="w-8 h-8 rounded-md object-cover shrink-0 border border-black/5"
+                      />
+                    ) : (
+                    <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.375m4.875 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm0 0h-.375" />
+                      </svg>
                     </div>
+                    )}
+                    <div className="flex-1 min-w-0">
+                      <div className="text-[14px] font-medium text-gray-800 truncate leading-tight">
+                        {attachedContext.title || attachedContext.exerciseName || '上下文附件'}
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={onRemoveAttachment}
+                      className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 active:bg-gray-300 active:scale-90 transition-all shrink-0"
+                      aria-label="移除附件"
+                    >
+                      <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
                   </div>
-                  <button
-                    onClick={onRemoveAttachment}
-                    className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 active:bg-gray-300 active:scale-90 transition-all shrink-0"
-                    aria-label="移除附件"
-                  >
-                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  {/* 发丝分割线：附件区与文字区之间（Messages 原版样式，两侧留边） */}
+                  <div className="h-px bg-black/10 mx-4" />
                 </motion.div>
               )}
             </AnimatePresence>
 
-            <form onSubmit={(e) => { e.preventDefault(); handleChatSubmit(); }} className="glass-ring flex items-end gap-1 rounded-[22px] pl-4 pr-1.5 py-1.5">
+            {/* 文字输入行 */}
+            <div className="flex items-end gap-1 pl-4 pr-1.5 py-1.5">
             <textarea
               ref={textareaRef}
               rows={1}
@@ -633,6 +807,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 </svg>
               )}
             </button>
+            </div>
             </form>
           </div>
         </div>
@@ -660,7 +835,7 @@ const ReasoningTrace: React.FC<{ trace?: string }> = ({ trace }) => {
       <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50/50 backdrop-blur-sm border border-gray-100/50 rounded-lg w-fit">
         <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
         <span className="font-mono text-[9px] font-bold text-gray-400 tracking-widest uppercase">
-          MAS 核心: {trace.toUpperCase()}
+          {trace.toUpperCase()}
         </span>
       </div>
     </div>
@@ -720,26 +895,15 @@ const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text,
 };
 
 const WelcomeScreen: React.FC = () => (
-  <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
-    <motion.div
-      initial={{ opacity: 0, scale: 0.9 }}
-      animate={{ opacity: 1, scale: 1 }}
-      className="relative mb-8"
-    >
-      <div className="absolute inset-0 bg-blue-500/10 blur-3xl rounded-full animate-pulse"></div>
-      <div className="relative w-20 h-20 bg-gray-900 rounded-[2rem] flex items-center justify-center shadow-2xl transform rotate-3">
-        <svg className="w-10 h-10 text-white" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
-        </svg>
-      </div>
-    </motion.div>
-
+  // min-h-full 而非 flex-1：父容器是 absolute inset-0 的滚动容器，
+  // flex-1 会被内容高度塌缩（欢迎语贴在导航栏下），min-h-full 才能真正垂直居中
+  <div className="min-h-full flex flex-col items-center justify-center p-8 pt-[calc(var(--safe-top)+64px)] pb-[calc(var(--safe-bottom)+120px)] text-center">
     <div className="text-center space-y-3">
       <h3 className="text-4xl font-black text-gray-900 tracking-tighter">
-        STARFIT <span className="text-blue-600">MAS</span>
+        STAR<span className="text-blue-600">FIT</span>
       </h3>
       <p className="text-gray-400 text-sm font-medium leading-relaxed max-w-[260px] mx-auto">
-        您的多智能体个人教练系统，为高性能训练而生。
+        您的个人 AI 训练教练，基于您的训练记录与目标，为每一次训练保驾护航。
       </p>
     </div>
   </div>

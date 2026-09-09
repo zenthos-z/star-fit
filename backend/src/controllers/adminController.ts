@@ -1,7 +1,6 @@
 import { FastifyRequest, FastifyReply } from 'fastify';
 import path from 'path';
 import fs from 'fs-extra';
-import { readdir } from 'fs/promises';
 import { pipeline } from 'stream';
 import util from 'util';
 import { ProxyAgent, request } from 'undici';
@@ -39,6 +38,7 @@ import {
   resolveImageModelConfig,
   updateImageGenConfig as updateImageGenConfigService,
   getAvailableImageModels,
+  getImageGenApiKey,
   testImageGenConnection as testImageGenConnectionService
 } from '../services/modelConfigService.js';
 import { AdminConfigService } from '../services/AdminConfigService.js';
@@ -96,11 +96,14 @@ export const loginOrCreate = async (req: FastifyRequest, reply: FastifyReply) =>
     const { getPostgresClient } = await import('../db/postgresql/client/postgres-client.js');
     const client = getPostgresClient();
 
-    // Check if user exists by device_id (which stores the login userId)
+    // Check if user exists by device_id (which stores the login userId),
+    // falling back to display_name (the human-readable ID shown in the login
+    // dropdown). Older user rows have device_id NULL — without the fallback
+    // every returning user would silently get a duplicate account.
     const existingUser = await client.query(`
       SELECT id, device_id, display_name
       FROM users
-      WHERE device_id = $userId
+      WHERE device_id = $userId OR (display_name IS NOT NULL AND display_name = $userId)
       LIMIT 1
     `, { userId });
 
@@ -299,15 +302,22 @@ export const getProxyConfig = async (req: FastifyRequest, reply: FastifyReply) =
     const googleApiKey = await ConfigRepo.getConfig('system', 'GOOGLE_API_KEY');
     const openaiApiKey = await ConfigRepo.getConfig('system', 'OPENAI_API_KEY');
     const deepseekApiKey = await ConfigRepo.getConfig('system', 'DEEPSEEK_API_KEY');
+    const glmApiKey = await ConfigRepo.getConfig('system', 'GLM_API_KEY');
+    const imageGenApiKey = await ConfigRepo.getConfig('system', 'IMAGE_GEN_API_KEY');
+
+    const keySet = (dbVal: string | null, envName: string) =>
+      Boolean(((dbVal !== null ? dbVal : (process.env[envName] || '')) as string).trim());
 
     return reply.send({
       GLOBAL_PROXY: globalProxy !== null ? globalProxy : (process.env.GLOBAL_PROXY || ''),
       GEMINI_PROXY: geminiProxy !== null ? geminiProxy : (process.env.GEMINI_PROXY || ''),
       OPENAI_PROXY: openaiProxy !== null ? openaiProxy : (process.env.OPENAI_PROXY || ''),
-      AI_PROVIDER: aiProvider !== null ? aiProvider : (process.env.AI_PROVIDER || 'gemini'),
-      GOOGLE_API_KEY_SET: Boolean((googleApiKey !== null ? googleApiKey : (process.env.GOOGLE_API_KEY || '')).trim()),
-      OPENAI_API_KEY_SET: Boolean((openaiApiKey !== null ? openaiApiKey : (process.env.OPENAI_API_KEY || '')).trim()),
-      DEEPSEEK_API_KEY_SET: Boolean((deepseekApiKey !== null ? deepseekApiKey : (process.env.DEEPSEEK_API_KEY || '')).trim())
+      AI_PROVIDER: aiProvider !== null ? aiProvider : (process.env.AI_PROVIDER || 'glm'),
+      GOOGLE_API_KEY_SET: keySet(googleApiKey, 'GOOGLE_API_KEY'),
+      OPENAI_API_KEY_SET: keySet(openaiApiKey, 'OPENAI_API_KEY'),
+      DEEPSEEK_API_KEY_SET: keySet(deepseekApiKey, 'DEEPSEEK_API_KEY'),
+      GLM_API_KEY_SET: keySet(glmApiKey, 'GLM_API_KEY'),
+      IMAGE_GEN_API_KEY_SET: keySet(imageGenApiKey, 'IMAGE_GEN_API_KEY')
     });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -317,7 +327,8 @@ export const getProxyConfig = async (req: FastifyRequest, reply: FastifyReply) =
 export const updateProxyConfig = async (req: FastifyRequest, reply: FastifyReply) => {
   const {
     GLOBAL_PROXY, GEMINI_PROXY, OPENAI_PROXY,
-    AI_PROVIDER, GOOGLE_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY
+    AI_PROVIDER, GOOGLE_API_KEY, OPENAI_API_KEY, DEEPSEEK_API_KEY,
+    GLM_API_KEY, GLM_BASE_URL, GLM_MODEL, IMAGE_GEN_API_KEY
   } = req.body as any;
   try {
     if (GLOBAL_PROXY !== undefined) await ConfigRepo.setConfig('system', 'GLOBAL_PROXY', GLOBAL_PROXY);
@@ -328,6 +339,10 @@ export const updateProxyConfig = async (req: FastifyRequest, reply: FastifyReply
     if (GOOGLE_API_KEY !== undefined) await ConfigRepo.setConfig('system', 'GOOGLE_API_KEY', GOOGLE_API_KEY);
     if (OPENAI_API_KEY !== undefined) await ConfigRepo.setConfig('system', 'OPENAI_API_KEY', OPENAI_API_KEY);
     if (DEEPSEEK_API_KEY !== undefined) await ConfigRepo.setConfig('system', 'DEEPSEEK_API_KEY', DEEPSEEK_API_KEY);
+    if (GLM_API_KEY !== undefined) await ConfigRepo.setConfig('system', 'GLM_API_KEY', GLM_API_KEY);
+    if (GLM_BASE_URL !== undefined) await ConfigRepo.setConfig('system', 'GLM_BASE_URL', GLM_BASE_URL);
+    if (GLM_MODEL !== undefined) await ConfigRepo.setConfig('system', 'GLM_MODEL', GLM_MODEL);
+    if (IMAGE_GEN_API_KEY !== undefined) await ConfigRepo.setConfig('system', 'IMAGE_GEN_API_KEY', IMAGE_GEN_API_KEY);
     
     return reply.send({ success: true });
   } catch (e: any) {
@@ -511,7 +526,12 @@ export const testProxy = async (req: FastifyRequest, reply: FastifyReply) => {
 
 async function getApiKey(provider: string): Promise<string> {
   const upper = provider.toUpperCase();
-  const keyName = upper === 'OPENAI' ? 'OPENAI_API_KEY' : upper === 'DEEPSEEK' ? 'DEEPSEEK_API_KEY' : 'GOOGLE_API_KEY';
+  const keyName =
+    upper === 'OPENAI' ? 'OPENAI_API_KEY'
+      : upper === 'DEEPSEEK' ? 'DEEPSEEK_API_KEY'
+        : upper === 'GLM' ? 'GLM_API_KEY'
+          : upper === 'IMAGE_GEN' ? 'IMAGE_GEN_API_KEY'
+            : 'GOOGLE_API_KEY';
   const dbKey = await ConfigRepo.getConfig('system', keyName);
   if (dbKey) return dbKey;
   return process.env[keyName] || "";
@@ -736,15 +756,16 @@ export const getSystemHealth = async (req: FastifyRequest, reply: FastifyReply) 
     // Check API latency
     const apiLatency = Date.now() - start;
     
-    // Check AI connection status. resolveDefaultedProvider() reads DB > env and
-    // defaults to the actual runtime provider (deepseek under the new kernel),
-    // so the admin header reflects what /api/chat really uses — not a stale
-    // process.env default.
-    const aiProvider = await resolveDefaultedProvider('default');
-    const aiStatus = await checkAIConnection(aiProvider);
-    
-    // Check storage usage
-    const storageInfo = await getStorageInfo();
+    // Check AI connection status. resolveTaskConfig('default') reads the real
+    // config chain (DB > env > default) — same path /api/chat uses — so the
+    // admin header reflects the effective provider/model/baseURL, not a stale
+    // process.env hand-copy.
+    const resolved = await resolveTaskConfig('default');
+    const aiStatus = await checkAIConnection(resolved);
+
+    // Emergency stop flag (real ConfigRepo state).
+    const emergencyStopFlag = await ConfigRepo.getConfig('system', 'EMERGENCY_STOP');
+    const emergencyStopActive = emergencyStopFlag === true || emergencyStopFlag === 'true';
     
     return reply.send({
       api: {
@@ -753,15 +774,10 @@ export const getSystemHealth = async (req: FastifyRequest, reply: FastifyReply) 
       },
       ai: {
         status: aiStatus.connected ? 'connected' : 'disconnected',
-        provider: aiProvider,
-        model: aiStatus.model
+        provider: resolved.provider,
+        model: aiStatus.model || resolved.model
       },
-      storage: {
-        used: storageInfo.used,
-        total: storageInfo.total,
-        percent: storageInfo.percent,
-        available: storageInfo.available
-      },
+      emergency_stop_active: emergencyStopActive,
       uptime: process.uptime()
     });
   } catch (e: any) {
@@ -771,42 +787,69 @@ export const getSystemHealth = async (req: FastifyRequest, reply: FastifyReply) 
 };
 
 export const getAdminCapabilities = async (_req: FastifyRequest, reply: FastifyReply) => {
-  return reply.send({
-    protocol_version: '2.0.0',
-    features: {
-      dashboard: {
-        health: true,
-        logs: true,
-        quick_actions: true
-      },
-      settings: {
-        proxy: true,
-        ai_config: true
-      },
-      users: {
-        list: true,
-        profile: true,
-        stats: true,
-        delete_user: true,
-        delete_session: true,
-        health_integrations: false
-      },
-      content: {
-        exercises: true,
-        videos_upload: true,
-        media_upload: true
-      }
+  try {
+    // Real state probes — each failure degrades to false instead of failing
+    // the whole endpoint.
+    const imageGenKey = await getImageGenApiKey().catch(() => '');
+    const emergencyStopFlag = await ConfigRepo.getConfig('system', 'EMERGENCY_STOP').catch(() => null);
+    const emergencyStopActive = emergencyStopFlag === true || emergencyStopFlag === 'true';
+    const logsAvailable = await fs.pathExists(path.join(process.cwd(), 'logs', 'app.log')).catch(() => false);
+    let dbConnected = false;
+    try {
+      const { getPostgresClient } = await import('../db/postgresql/client/postgres-client.js');
+      const client = getPostgresClient();
+      await client.query('SELECT 1');
+      dbConnected = true;
+    } catch {
+      dbConnected = false;
     }
-  });
+
+    return reply.send({
+      protocol_version: '2.0.0',
+      features: {
+        dashboard: {
+          health: true,
+          logs: logsAvailable,
+          quick_actions: true
+        },
+        settings: {
+          proxy: true,
+          ai_config: true
+        },
+        users: {
+          list: dbConnected,
+          profile: dbConnected,
+          stats: dbConnected,
+          delete_user: dbConnected,
+          delete_session: dbConnected,
+          health_integrations: false
+        },
+        content: {
+          exercises: dbConnected,
+          videos_upload: true,
+          media_upload: true
+        },
+        image_generation: imageGenKey.trim().length > 0,
+        emergency_stop_active: emergencyStopActive
+      }
+    });
+  } catch (e: any) {
+    console.error('[Capabilities] Error:', e);
+    return reply.status(500).send({ error: e.message });
+  }
 };
 
-async function checkAIConnection(provider: string): Promise<{ connected: boolean; model: string }> {
+async function checkAIConnection(resolved: {
+  provider: string;
+  model: string;
+  baseURL?: string;
+}): Promise<{ connected: boolean; model: string }> {
   const timeout = new Promise<{ connected: boolean; model: string; timeout?: boolean }>((resolve) => {
     setTimeout(() => resolve({ connected: false, model: '', timeout: true }), 15000);
   });
 
   try {
-    const result = await Promise.race([checkAIConnectionInternal(provider), timeout]) as { connected: boolean; model: string; timeout?: boolean };
+    const result = await Promise.race([checkAIConnectionInternal(resolved), timeout]) as { connected: boolean; model: string; timeout?: boolean };
     
     if ('timeout' in result && result.timeout) {
       console.warn('[AIConnection] Check timed out after 15s');
@@ -820,14 +863,25 @@ async function checkAIConnection(provider: string): Promise<{ connected: boolean
   }
 }
 
-async function checkAIConnectionInternal(provider: string): Promise<{ connected: boolean; model: string }> {
+/**
+ * Ping the effective AI endpoint using the already-resolved config
+ * (provider/model/baseURL from resolveTaskConfig — the same chain /api/chat
+ * uses). Gemini keeps its own branch but only runs when the resolved provider
+ * is actually gemini.
+ */
+async function checkAIConnectionInternal(resolved: {
+  provider: string;
+  model: string;
+  baseURL?: string;
+}): Promise<{ connected: boolean; model: string }> {
   try {
+    const { provider, model } = resolved;
+
     if (provider === 'gemini') {
       const apiKey = await getApiKey('gemini');
       if (!apiKey) return { connected: false, model: '' };
-      
-      const model = process.env.GEMINI_MODEL || 'gemini-3-flash-preview';
-      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(apiKey)}`;
       
       const response = await request(url, {
         method: 'POST',
@@ -838,56 +892,37 @@ async function checkAIConnectionInternal(provider: string): Promise<{ connected:
       });
       
       return { connected: response.statusCode === 200, model };
-    } else if (provider === 'openai') {
-      const apiKey = await getApiKey('openai');
-      if (!apiKey) return { connected: false, model: '' };
-
-      const model = process.env.OPENAI_MODEL || 'gpt-4o-mini';
-      // 使用 OPENAI_BASE_URL 环境变量以支持 OpenAI 兼容 API（如 DMXAPI）
-      const baseUrl = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1';
-      const url = `${baseUrl}/chat/completions`.replace(/\/+/g, '/'); // 规范化路径
-
-      const response = await request(url, {
-        method: 'POST',
-        headers: { 
-          'content-type': 'application/json',
-          'authorization': `Bearer ${apiKey}`
-        },
-        headersTimeout: 15000,
-        bodyTimeout: 15000,
-        body: JSON.stringify({ 
-          model, 
-          messages: [{ role: "user", content: "ping" }], 
-          max_tokens: 5 
-        })
-      });
-      
-      return { connected: response.statusCode === 200, model };
-    } else if (provider === 'deepseek') {
-      const apiKey = await getApiKey('deepseek');
-      if (!apiKey) return { connected: false, model: '' };
-
-      const model = process.env.DEEPSEEK_MODEL_FLASH || 'deepseek-v4-flash';
-      const baseUrl = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
-      const url = `${baseUrl}/chat/completions`;
-
-      const response = await request(url, {
-        method: 'POST',
-        headers: {
-          'content-type': 'application/json',
-          'authorization': `Bearer ${apiKey}`
-        },
-        headersTimeout: 15000,
-        bodyTimeout: 15000,
-        body: JSON.stringify({
-          model,
-          messages: [{ role: "user", content: "ping" }],
-          max_tokens: 5
-        })
-      });
-
-      return { connected: response.statusCode === 200, model };
     }
+
+    // OpenAI-compatible providers: openai / deepseek / glm (chat/completions).
+    const apiKey = await getApiKey(provider as 'openai' | 'deepseek' | 'glm');
+    if (!apiKey) return { connected: false, model: '' };
+
+    const defaultBaseURL =
+      provider === 'glm'
+        ? 'https://api.z.ai/api/paas/v4'
+        : provider === 'deepseek'
+          ? 'https://ark.cn-beijing.volces.com/api/coding/v3'
+          : 'https://api.openai.com/v1';
+    const baseUrl = resolved.baseURL || defaultBaseURL;
+    const url = `${baseUrl.replace(/\/+$/, '')}/chat/completions`;
+
+    const response = await request(url, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        'authorization': `Bearer ${apiKey}`
+      },
+      headersTimeout: 15000,
+      bodyTimeout: 15000,
+      body: JSON.stringify({
+        model,
+        messages: [{ role: "user", content: "ping" }],
+        max_tokens: 5
+      })
+    });
+
+    return { connected: response.statusCode === 200, model };
   } catch (e) {
     const err = e as any;
     // 统一使用 warn 级别，因为健康检查失败不是严重错误
@@ -900,44 +935,8 @@ async function checkAIConnectionInternal(provider: string): Promise<{ connected:
   return { connected: false, model: '' };
 }
 
-async function getStorageInfo(): Promise<{ used: number; total: number; percent: number; available: number }> {
-  try {
-    const uploadDir = path.join(process.cwd(), 'uploads');
-    await fs.ensureDir(uploadDir);
-    
-    const totalSize = await getDirectorySize(uploadDir);
-    const totalCapacity = 10 * 1024 * 1024 * 1024; // 10 GB default
-    const available = totalCapacity - totalSize;
-    const percent = Math.round((totalSize / totalCapacity) * 100);
-    
-    return {
-      used: totalSize,
-      total: totalCapacity,
-      percent,
-      available
-    };
-  } catch (e) {
-    console.error('[StorageInfo] Error:', e);
-    return { used: 0, total: 10 * 1024 * 1024 * 1024, percent: 0, available: 10 * 1024 * 1024 * 1024 };
-  }
-}
-
-async function getDirectorySize(dirPath: string): Promise<number> {
-  let totalSize = 0;
-  const files = await readdir(dirPath, { withFileTypes: true });
-  
-  for (const file of files) {
-    const filePath = path.join(dirPath, file.name);
-    if (file.isDirectory()) {
-      totalSize += await getDirectorySize(filePath);
-    } else {
-      const stats = await fs.stat(filePath);
-      totalSize += stats.size;
-    }
-  }
-  
-  return totalSize;
-}
+// (getStorageInfo / getDirectorySize removed — the fake 10GB capacity display
+// was deleted; the health endpoint no longer reports a storage field.)
 
 // System Logs API
 export const getSystemLogs = async (req: FastifyRequest, reply: FastifyReply) => {
@@ -1018,20 +1017,73 @@ async function readSystemLogs(limit: number, level: string): Promise<LogEntry[]>
 export const restartService = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
     console.log('[QuickAction] Restart service requested');
-    
-    return reply.send({ success: true, message: 'Service restart initiated' });
+
+    // Real restart: if the container runs with restart: always/unless-stopped,
+    // exiting the process makes Docker restart the container = true restart.
+    const composeCandidates = [
+      path.join(process.cwd(), 'docker-compose.yml'),
+      path.join(process.cwd(), 'backend', 'docker-compose.yml'),
+      path.join(process.cwd(), '..', 'backend', 'docker-compose.yml')
+    ];
+    let restartPolicy = '';
+    for (const p of composeCandidates) {
+      if (await fs.pathExists(p)) {
+        const raw = await fs.readFile(p, 'utf-8');
+        // Find the restart: line inside the backend service block (crude but
+        // sufficient: policy value itself).
+        const m = raw.match(/restart:\s*["']?(always|unless-stopped|no|on-failure[^"'\n]*)["']?/g);
+        if (m && m.length > 0) {
+          // Take the last match belonging to backend if present; policies seen:
+          // postgres: unless-stopped, backend: unless-stopped, tools: "no".
+          const backendMatch = raw.match(/backend:[\s\S]*?restart:\s*["']?(always|unless-stopped|no|on-failure[^"'\n]*)["']?/);
+          restartPolicy = (backendMatch ? backendMatch[1] : m[m.length - 1]).replace(/["']/g, '').trim();
+        }
+        break;
+      }
+    }
+
+    if (restartPolicy === 'always' || restartPolicy === 'unless-stopped') {
+      console.log(`[QuickAction] restart policy=${restartPolicy} — exiting so Docker restarts the container`);
+      // Respond first so the admin UI gets an honest answer, then exit.
+      reply.send({ success: true, message: `Restarting now: container restart policy is "${restartPolicy}", the backend process is exiting and Docker will bring it back up.` });
+      // Give the response a moment to flush before dying.
+      setTimeout(() => process.exit(0), 300);
+      return;
+    }
+
+    // No auto-restart policy — record the request and answer honestly.
+    await ConfigRepo.setConfig('system', 'RESTART_REQUESTED', true);
+    return reply.send({
+      success: false,
+      message: `Cannot self-restart: container restart policy is "${restartPolicy || 'unknown'}" (not always/unless-stopped). RESTART_REQUESTED=true has been recorded; restart the service manually.`
+    });
   } catch (e: any) {
     console.error('[QuickAction] Restart error:', e);
     return reply.status(500).send({ error: e.message });
   }
 };
 
+// Rows per table cap for the SQL export (prevents memory blowups on huge tables).
+const BACKUP_MAX_ROWS_PER_TABLE = 5000;
+
+// SQL string literal escaping for replayable INSERT statements.
+function sqlQuote(v: unknown, isJsonbColumn = false): string {
+  if (v === null || v === undefined) return 'NULL';
+  if (v instanceof Date) return `'${v.toISOString()}'`; // pg parses timestamptz to Date
+  if (typeof v === 'object') return `'${JSON.stringify(v).replace(/'/g, "''")}'::jsonb`;
+  // Scalars living in a jsonb column need the explicit cast (PG rejects a bare
+  // boolean/number literal for jsonb), plain columns stay literal.
+  if (isJsonbColumn && typeof v !== 'string') {
+    return `'${JSON.stringify(v).replace(/'/g, "''")}'::jsonb`;
+  }
+  if (typeof v === 'number' || typeof v === 'boolean') return String(v);
+  return `'${String(v).replace(/'/g, "''")}'`;
+}
+
 export const backupDatabase = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
     console.log('[QuickAction] Database backup requested');
 
-    // PostgreSQL backup requires pg_dump, which should be done at infrastructure level
-    // For now, we'll create a SQL export using the client
     const { getPostgresClient } = await import('../db/postgresql/client/postgres-client.js');
     const client = getPostgresClient();
 
@@ -1045,22 +1097,50 @@ export const backupDatabase = async (req: FastifyRequest, reply: FastifyReply) =
       SELECT tablename FROM pg_tables WHERE schemaname = 'public'
     `);
 
-    let sqlContent = `-- Starfit PostgreSQL Backup\n-- Generated: ${new Date().toISOString()}\n\n`;
+    let sqlContent = `-- Starfit PostgreSQL Backup\n-- Generated: ${new Date().toISOString()}\n-- Replay with: psql "$DATABASE_URL" -f <this file>\n\n`;
+    let totalRows = 0;
 
     for (const table of tables) {
-      const rows = await client.queryMany(`SELECT * FROM "${table.tablename}" LIMIT 1000`);
-      if (rows.length > 0) {
-        sqlContent += `-- Table: ${table.tablename}\n`;
-        sqlContent += `-- Rows: ${rows.length}\n\n`;
+      const t = table.tablename;
+      const rows = await client.queryMany<Record<string, unknown>>(
+        `SELECT * FROM "${t}" LIMIT ${BACKUP_MAX_ROWS_PER_TABLE}`
+      );
+      sqlContent += `-- Table: ${t} (${rows.length} rows)\n`;
+      if (rows.length === 0) {
+        sqlContent += `-- (empty)\n\n`;
+        continue;
       }
+      // Column types matter for replay: scalars stored in jsonb columns need an
+      // explicit ::jsonb cast, and timestamptz arrives as a JS Date.
+      // t comes from pg_tables (identifier-safe via quoting below); the client
+      // does not support parameterized information_schema queries here.
+      const jsonbCols = new Set(
+        (
+          await client.queryMany<{ column_name: string }>(
+            `SELECT column_name FROM information_schema.columns\n` +
+            `WHERE table_schema = 'public' AND table_name = '${t.replace(/'/g, "''")}' AND data_type = 'jsonb'`
+          )
+        ).map(r => r.column_name)
+      );
+      const cols = Object.keys(rows[0]);
+      const colList = cols.map(c => `"${c}"`).join(', ');
+      for (const row of rows) {
+        const vals = cols.map(c => sqlQuote(row[c], jsonbCols.has(c))).join(', ');
+        sqlContent += `INSERT INTO "${t}" (${colList}) VALUES (${vals});\n`;
+      }
+      totalRows += rows.length;
+      sqlContent += `\n`;
     }
 
     await fs.writeFile(backupFile, sqlContent);
+    const stats = await fs.stat(backupFile);
 
     return reply.send({
       success: true,
-      message: 'Database backup completed (metadata export)',
+      message: `Database backup completed: ${totalRows} rows across ${tables.length} tables -> ${path.basename(backupFile)} (${stats.size} bytes). Note: capped at ${BACKUP_MAX_ROWS_PER_TABLE} rows per table.`,
       file: backupFile,
+      size_bytes: stats.size,
+      rows: totalRows,
       tables: tables.length
     });
   } catch (e: any) {
@@ -1071,9 +1151,20 @@ export const backupDatabase = async (req: FastifyRequest, reply: FastifyReply) =
 
 export const emergencyStop = async (req: FastifyRequest, reply: FastifyReply) => {
   try {
-    console.log('[QuickAction] Emergency stop requested');
-    
-    return reply.send({ success: true, message: 'Emergency stop executed' });
+    const body = (req.body ?? {}) as { active?: boolean };
+    // Default: activate the stop if not specified.
+    const active = body.active !== undefined ? Boolean(body.active) : true;
+
+    await ConfigRepo.setConfig('system', 'EMERGENCY_STOP', active);
+    console.log(`[QuickAction] Emergency stop set: active=${active}`);
+
+    return reply.send({
+      success: true,
+      active,
+      message: active
+        ? 'Emergency stop ACTIVATED: /api/chat now returns 503 EMERGENCY_STOP_ACTIVE until it is deactivated.'
+        : 'Emergency stop DEACTIVATED: /api/chat is serving again.'
+    });
   } catch (e: any) {
     console.error('[QuickAction] Emergency stop error:', e);
     return reply.status(500).send({ error: e.message });
@@ -1147,7 +1238,8 @@ export const getModelConfig = async (req: FastifyRequest, reply: FastifyReply) =
       availableModels: {
         gemini: getAvailableModels('gemini'),
         openai: getAvailableModels('openai'),
-        deepseek: getAvailableModels('deepseek')
+        deepseek: getAvailableModels('deepseek'),
+        glm: getAvailableModels('glm')
       }
     };
     console.log('[ModelConfig] Sending response:', JSON.stringify(response, null, 2));
@@ -1162,7 +1254,7 @@ export const updateModelConfig = async (req: FastifyRequest, reply: FastifyReply
   try {
     const { task, provider, model, baseURL } = req.body as {
       task: string;
-      provider: 'gemini' | 'openai' | 'deepseek';
+      provider: 'gemini' | 'openai' | 'deepseek' | 'glm';
       model: string;
       baseURL?: string;
     };
@@ -1193,7 +1285,7 @@ export const testModelConnection = async (req: FastifyRequest, reply: FastifyRep
   try {
     const query = req.query as any;
     const { provider, model, baseURL } = query as {
-      provider?: 'gemini' | 'openai' | 'deepseek';
+      provider?: 'gemini' | 'openai' | 'deepseek' | 'glm';
       model?: string;
       baseURL?: string;
     };

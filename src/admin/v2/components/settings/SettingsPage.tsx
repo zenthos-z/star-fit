@@ -13,17 +13,27 @@ interface ProxyConfig {
   GOOGLE_API_KEY_SET: boolean;
   OPENAI_API_KEY_SET: boolean;
   DEEPSEEK_API_KEY_SET: boolean;
+  GLM_API_KEY_SET: boolean;
+  IMAGE_GEN_API_KEY_SET: boolean;
 }
 
 type SaveStatus = 'idle' | 'saving' | 'success' | 'error';
 
 // Map a provider to its API key field on the proxy config (read *_SET status /
-// write the raw key). Lets the model-config UI treat deepseek the same as
+// write the raw key). Lets the model-config UI treat glm/deepseek the same as
 // gemini/openai without per-call ternaries.
 const apiKeySetField = (provider: string): string =>
-  provider === 'openai' ? 'OPENAI_API_KEY_SET' : provider === 'deepseek' ? 'DEEPSEEK_API_KEY_SET' : 'GOOGLE_API_KEY_SET';
+  provider === 'openai' ? 'OPENAI_API_KEY_SET'
+    : provider === 'deepseek' ? 'DEEPSEEK_API_KEY_SET'
+      : provider === 'glm' ? 'GLM_API_KEY_SET'
+        : 'GOOGLE_API_KEY_SET';
 const apiKeyField = (provider: string): string =>
-  provider === 'openai' ? 'OPENAI_API_KEY' : provider === 'deepseek' ? 'DEEPSEEK_API_KEY' : 'GOOGLE_API_KEY';
+  provider === 'openai' ? 'OPENAI_API_KEY'
+    : provider === 'deepseek' ? 'DEEPSEEK_API_KEY'
+      : provider === 'glm' ? 'GLM_API_KEY'
+        : 'GOOGLE_API_KEY';
+
+type LLMProvider = 'gemini' | 'openai' | 'deepseek' | 'glm';
 
 export const SettingsPage: React.FC = () => {
   // Proxy Config State
@@ -31,10 +41,12 @@ export const SettingsPage: React.FC = () => {
     GLOBAL_PROXY: '',
     GEMINI_PROXY: '',
     OPENAI_PROXY: '',
-    AI_PROVIDER: 'gemini',
+    AI_PROVIDER: 'glm',
     GOOGLE_API_KEY_SET: false,
     OPENAI_API_KEY_SET: false,
-    DEEPSEEK_API_KEY_SET: false
+    DEEPSEEK_API_KEY_SET: false,
+    GLM_API_KEY_SET: false,
+    IMAGE_GEN_API_KEY_SET: false
   });
   const [googleApiKeyInput, setGoogleApiKeyInput] = useState('');
   const [openaiApiKeyInput, setOpenaiApiKeyInput] = useState('');
@@ -43,7 +55,7 @@ export const SettingsPage: React.FC = () => {
   // Language Model Config (Agent)
   // ==========================================
   const [modelConfig, setModelConfig] = useState<ModelConfigResponse | null>(null);
-  const [defaultProvider, setDefaultProvider] = useState<'gemini' | 'openai' | 'deepseek'>('deepseek');
+  const [defaultProvider, setDefaultProvider] = useState<LLMProvider>('glm');
   const [defaultModel, setDefaultModel] = useState('');
   const [defaultCustomModel, setDefaultCustomModel] = useState('');
   const [defaultBaseURL, setDefaultBaseURL] = useState('');
@@ -169,13 +181,21 @@ export const SettingsPage: React.FC = () => {
     }
   };
 
-  const handleDefaultProviderChange = async (newProvider: 'gemini' | 'openai' | 'deepseek') => {
+  const handleDefaultProviderChange = async (newProvider: LLMProvider) => {
     setDefaultProvider(newProvider);
     setDefaultIsCustomModel(false);
     setDefaultApiKeyInput('');
-    setDefaultBaseURL(newProvider === 'deepseek' ? 'https://api.deepseek.com' : '');
+    setDefaultBaseURL(
+      newProvider === 'deepseek' ? 'https://api.deepseek.com'
+        : newProvider === 'glm' ? 'https://api.z.ai/api/paas/v4'
+          : ''
+    );
 
-    const fallbackModel = newProvider === 'gemini' ? 'gemini-3-flash-preview' : newProvider === 'deepseek' ? 'deepseek-v4-flash' : 'gpt-4o-mini';
+    const fallbackModel =
+      newProvider === 'gemini' ? 'gemini-3-flash-preview'
+        : newProvider === 'deepseek' ? 'deepseek-v4-flash-ga-260731'
+          : newProvider === 'glm' ? 'glm-5.3-flash'
+            : 'gpt-4o-mini';
     if (modelConfig) {
       setDefaultModel(modelConfig.availableModels[newProvider]?.[0] || fallbackModel);
     }
@@ -210,7 +230,7 @@ export const SettingsPage: React.FC = () => {
     setSaveStatus('saving');
 
     try {
-      const needsBaseUrl = defaultProvider === 'openai' || defaultProvider === 'deepseek';
+      const needsBaseUrl = defaultProvider === 'openai' || defaultProvider === 'deepseek' || defaultProvider === 'glm';
       await AdminService.system.updateModelConfig(
         'default',
         defaultProvider,
@@ -251,7 +271,7 @@ export const SettingsPage: React.FC = () => {
       const result = await AdminService.system.testModelConnection(
         provider,
         finalModel,
-        provider === 'openai' ? defaultBaseURL.trim() || undefined : undefined
+        (provider === 'openai' || provider === 'glm') ? defaultBaseURL.trim() || undefined : undefined
       );
 
       if (result.success) {
@@ -284,6 +304,15 @@ export const SettingsPage: React.FC = () => {
 
       const providerModels = config.availableModels[currentConfig.provider] || [];
       setImageGenIsCustomModel(!providerModels.includes(currentConfig.model));
+
+      // Backfill IMAGE_GEN_API_KEY set-status from the proxy config
+      // (IMAGE_GEN_API_KEY_SET is now exposed by GET /api/admin/proxy).
+      try {
+        const proxy = await AdminService.system.getProxy();
+        setImageGenApiKeySetState(Boolean((proxy as Record<string, unknown>).IMAGE_GEN_API_KEY_SET));
+      } catch {
+        setImageGenApiKeySetState(false);
+      }
     } catch (e: any) {
       console.error('[SettingsPage] Failed to load image gen config:', e);
       setImageGenError(e?.message || 'Failed to load image generation config');
@@ -325,6 +354,15 @@ export const SettingsPage: React.FC = () => {
         finalModel,
         imageGenBaseURL.trim() || undefined
       );
+
+      // If a new image-gen API key was entered, submit it via the proxy config
+      // endpoint (IMAGE_GEN_API_KEY is now accepted by updateProxyConfig).
+      if (imageGenApiKeyInput.trim()) {
+        await AdminService.system.updateProxy({
+          IMAGE_GEN_API_KEY: imageGenApiKeyInput.trim()
+        });
+        setImageGenApiKeyInput('');
+      }
 
       setImageSaveStatus('success');
       setTimeout(() => setImageSaveStatus('idle'), 2000);
@@ -421,11 +459,12 @@ export const SettingsPage: React.FC = () => {
                 </label>
                 <select
                   value={defaultProvider}
-                  onChange={e => handleDefaultProviderChange(e.target.value as 'gemini' | 'openai' | 'deepseek')}
+                  onChange={e => handleDefaultProviderChange(e.target.value as LLMProvider)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg outline-none bg-white"
                   data-testid="default-provider-select"
                 >
-                  <option value="deepseek">DeepSeek（官方）</option>
+                  <option value="glm">GLM（智谱 Z.ai，默认）</option>
+                  <option value="deepseek">DeepSeek（官方 / 火山 ark）</option>
                   <option value="gemini">Google Gemini</option>
                   <option value="openai">OpenAI / 兼容模式</option>
                 </select>
@@ -464,7 +503,10 @@ export const SettingsPage: React.FC = () => {
             {/* API Key */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                {defaultProvider === 'gemini' ? 'Google API Key' : defaultProvider === 'deepseek' ? 'DeepSeek API Key' : 'OpenAI API Key'}
+                {defaultProvider === 'gemini' ? 'Google API Key'
+                  : defaultProvider === 'deepseek' ? 'DeepSeek API Key'
+                    : defaultProvider === 'glm' ? 'GLM API Key'
+                      : 'OpenAI API Key'}
               </label>
               <div className="text-xs text-gray-500 mb-1">
                 {defaultApiKeySet ? '已配置' : '未配置'}
@@ -479,22 +521,28 @@ export const SettingsPage: React.FC = () => {
               />
             </div>
 
-            {/* Base URL for OpenAI-compatible providers (OpenAI / DeepSeek) */}
-            {(defaultProvider === 'openai' || defaultProvider === 'deepseek') && (
+            {/* Base URL for OpenAI-compatible providers (OpenAI / DeepSeek / GLM) */}
+            {(defaultProvider === 'openai' || defaultProvider === 'deepseek' || defaultProvider === 'glm') && (
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Base URL</label>
                 <input
                   type="text"
                   value={defaultBaseURL}
                   onChange={e => setDefaultBaseURL(e.target.value)}
-                  placeholder={defaultProvider === 'deepseek' ? 'https://api.deepseek.com' : 'https://api.openai.com/v1'}
+                  placeholder={
+                    defaultProvider === 'deepseek' ? 'https://api.deepseek.com'
+                      : defaultProvider === 'glm' ? 'https://api.z.ai/api/paas/v4'
+                        : 'https://api.openai.com/v1'
+                  }
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-star-accent/20 outline-none"
                   data-testid="default-base-url"
                 />
                 <p className="text-xs text-gray-500 mt-1">
                   {defaultProvider === 'deepseek'
-                    ? 'DeepSeek 官方端点（默认 https://api.deepseek.com，OpenAI 兼容）'
-                    : '用于国产模型（智谱GLM、通义千问等）的兼容端点'}
+                    ? 'DeepSeek 官方端点（默认 https://api.deepseek.com，火山 ark coding 套餐为 https://ark.cn-beijing.volces.com/api/coding/v3，OpenAI 兼容）'
+                    : defaultProvider === 'glm'
+                      ? 'GLM (Z.ai) OpenAI 兼容端点，默认 https://api.z.ai/api/paas/v4'
+                      : '用于国产模型（智谱GLM、通义千问等）的兼容端点'}
                 </p>
               </div>
             )}

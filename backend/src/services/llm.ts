@@ -4,6 +4,7 @@ import { ConfigRepo } from "./knowledgeRepo.js";
 // L004: provider set + DeepSeek resolution owned by modelConfigService (single source).
 import {
   resolveDeepSeekModel,
+  resolveGLMModel,
   resolveDefaultedProvider,
   resolveTaskConfig,
   isKnownProvider,
@@ -20,7 +21,10 @@ export type Scenario = "default" | "chat" | "plan" | "tutorial" | "image" | (str
 // modelConfigService.DEFAULT_DEEPSEEK_FLASH (single source of truth via ConfigRepo
 // key DEEPSEEK_MODEL_FLASH, L004). Used as a defensive default for the deepseek
 // branch when no override is configured.
-const DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash";
+const DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash-ga-260731";
+
+// Default GLM model (mirrors modelConfigService.DEFAULT_GLM_MODEL).
+const GLM_DEFAULT_MODEL = "glm-5.3-flash";
 
 // LLM 超时配置（统一管理）
 const LLM_TIMEOUT_CONFIG = {
@@ -31,14 +35,22 @@ const LLM_TIMEOUT_CONFIG = {
 } as const;
 
 async function getProxyUrl(provider: string): Promise<string> {
-  const specificKey = provider.toUpperCase() === 'OPENAI' ? 'OPENAI_PROXY' : 'GEMINI_PROXY';
+  // glm: no provider-specific proxy key — go straight to GLOBAL_PROXY.
+  const upper = provider.toUpperCase();
+  if (upper === 'GLM') {
+    const dbGlobal = await ConfigRepo.getConfig('system', 'GLOBAL_PROXY');
+    if (dbGlobal) return dbGlobal;
+    return process.env.GLOBAL_PROXY || "";
+  }
+
+  const specificKey = upper === 'OPENAI' ? 'OPENAI_PROXY' : 'GEMINI_PROXY';
   const dbSpecific = await ConfigRepo.getConfig('system', specificKey);
   if (dbSpecific) return dbSpecific;
 
   const dbGlobal = await ConfigRepo.getConfig('system', 'GLOBAL_PROXY');
   if (dbGlobal) return dbGlobal;
 
-  const envSpecific = provider.toUpperCase() === 'OPENAI' ? process.env.OPENAI_PROXY : process.env.GEMINI_PROXY;
+  const envSpecific = upper === 'OPENAI' ? process.env.OPENAI_PROXY : process.env.GEMINI_PROXY;
   return envSpecific || process.env.GLOBAL_PROXY || "";
 }
 
@@ -107,19 +119,34 @@ async function getBaseURL(): Promise<string> {
 /**
  * Load a langchain BaseChatModel for a scenario.
  *
- * Default provider is DeepSeek (model "deepseek-v4-flash", flash tier); gemini
- * and openai are honored when configured via DB/env (P009: their defaults are
- * unchanged). thinking is off by default.
- * B1: default resolves to deepseek-v4-flash.
- * B6 (P012): unknown provider / missing API key fail explicitly (no silent
- * gemini fallback).
+ * Default provider is GLM (Z.ai, model "glm-5.3-flash", OpenAI-compatible);
+ * deepseek / gemini / openai are honored when configured via DB/env. thinking
+ * is off by default (glm/openai have no thinking kwargs; deepseek explicitly
+ * disables it). Unknown provider / missing API key fail explicitly (no silent
+ * fallback).
  */
 export async function loadModel(scenario: Scenario = "default"): Promise<BaseChatModel> {
   const provider = await resolveDefaultedProvider(scenario);
-
   // B6 (P012): unknown provider must fail explicitly, not silently fall back.
   if (!isKnownProvider(provider)) {
     throw new UnknownProviderError(provider);
+  }
+
+  if (provider === "glm") {
+    const resolved = await resolveGLMModel(scenario);
+    const apiKey = await resolveApiKey("glm");
+    if (!apiKey) {
+      throw new MissingApiKeyError("glm");
+    }
+    const { ChatOpenAI } = await import("@langchain/openai");
+    // Z.ai GLM is OpenAI-compatible. No thinking kwargs (GLM-5.3-flash default
+    // behaves fine for tool calls without extra request-body fields).
+    return new ChatOpenAI({
+      model: resolved.model || GLM_DEFAULT_MODEL,
+      apiKey,
+      configuration: { baseURL: resolved.baseURL },
+      temperature: 1.0,
+    });
   }
 
   if (provider === "deepseek") {
@@ -170,6 +197,36 @@ export async function loadModel(scenario: Scenario = "default"): Promise<BaseCha
     apiKey,
     temperature: 1.0,
     maxOutputTokens: 8192,
+  });
+}
+
+/**
+ * loadVisionModel — 多模态（视觉）模型加载，供带图 Agent 轮次使用。
+ *
+ * 选型：火山 ark 套餐内 doubao-seed-2.1-turbo（实测可看图：BENCH PRESS / 27.5kg /
+ * 11次 / 4组 全部准确读出），OpenAI 兼容。配置位 VISION_MODEL / VISION_BASE_URL /
+ * VISION_API_KEY（DB > env > 默认复用 DEEPSEEK 的 ark key/baseURL）。与主模型
+ * （deepseek 纯文本）并存：带图请求才切视觉模型，无图保持原 provider 不变。
+ */
+export async function loadVisionModel(): Promise<BaseChatModel> {
+  const dbModel = await ConfigRepo.getConfig("system", "VISION_MODEL");
+  const model =
+    dbModel || process.env.VISION_MODEL || "doubao-seed-2-1-turbo-260628";
+  const dbURL = await ConfigRepo.getConfig("system", "VISION_BASE_URL");
+  const baseURL =
+    dbURL || process.env.VISION_BASE_URL || process.env.DEEPSEEK_BASE_URL || "";
+  const dbKey = await ConfigRepo.getConfig("system", "VISION_API_KEY");
+  const apiKey =
+    dbKey || process.env.VISION_API_KEY || process.env.DEEPSEEK_API_KEY || "";
+  if (!apiKey) {
+    throw new MissingApiKeyError("vision");
+  }
+  const { ChatOpenAI } = await import("@langchain/openai");
+  return new ChatOpenAI({
+    model,
+    apiKey,
+    configuration: { baseURL: baseURL || undefined },
+    temperature: 0.5,
   });
 }
 
@@ -273,6 +330,53 @@ export async function generateTextUnified(input: string, log: any, task: string 
         e.body = errBody;
         e.provider = providerTrim;
         e.model = ds.model;
+        e.task = task;
+        e.endpoint = endpoint;
+        e.proxy = proxy;
+        throw e;
+      }
+      const j = (await r.json()) as { choices?: Array<{ message?: { content?: string } }> };
+      return String(j?.choices?.[0]?.message?.content || "").trim() || "抱歉，当前无法生成回复，请稍后再试。";
+    } else if (providerTrim === "glm") {
+      const key = await resolveApiKey('glm');
+      if (!key) {
+        throw new MissingApiKeyError('glm');
+      }
+      const proxyUrl = (await getProxyUrl('glm')).trim();
+      const dispatcher = createDispatcher(proxyUrl);
+      proxy = proxyUrl;
+      // Z.ai GLM is OpenAI-compatible (chat/completions).
+      const glm = await resolveGLMModel(task);
+      const baseURL = glm.baseURL;
+      endpoint = baseURL.replace(/\/+$/, "") + "/chat/completions";
+
+      const messages: Array<{ role: string; content: string }> = [];
+      if (systemPrompt) {
+        messages.push({ role: "system", content: systemPrompt });
+      }
+      messages.push({ role: "user", content: input });
+
+      const r = await fetchWithRetry(endpoint, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${key}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          model: glm.model || GLM_DEFAULT_MODEL,
+          messages,
+        }),
+        dispatcher,
+        signal: controller.signal
+      }, log);
+      clearTimeout(timeoutId);
+      if (!r.ok) {
+        const errBody = await r.text();
+        const e = new Error(`glm_http_${r.status}`) as Error & Record<string, unknown>;
+        e.status = r.status;
+        e.body = errBody;
+        e.provider = providerTrim;
+        e.model = glm.model;
         e.task = task;
         e.endpoint = endpoint;
         e.proxy = proxy;

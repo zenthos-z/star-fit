@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Wifi, Cpu, HardDrive, RotateCw } from 'lucide-react';
+import { Wifi, Cpu, RotateCw } from 'lucide-react';
 import { AdminService } from '../../services/api';
 
 interface HeaderProps {
@@ -71,17 +71,7 @@ export const Header: React.FC<HeaderProps> = ({ title }) => {
               </div>
             </div>
 
-            <div className="flex items-center gap-2 text-xs font-medium">
-              <div className={`p-1.5 ${systemStatus.storage.percent > 80 ? 'bg-red-50 text-red-600' : 'bg-gray-100 text-gray-600'} rounded-md`}>
-                <HardDrive size={14} />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-gray-500">存储占用</span>
-                <span className={systemStatus.storage.percent > 80 ? 'text-red-600' : 'text-gray-700'}>
-                  {systemStatus.storage.percent}%
-                </span>
-              </div>
-            </div>
+            {/* (存储占用小组件已删除 — 后端不再上报伪造的 storage 容量) */}
 
             {/* 手动刷新按钮 */}
             <button

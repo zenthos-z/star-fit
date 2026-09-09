@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence, useDragControls } from 'framer-motion';
 import { ExerciseAction } from '../../types/protocol';
 import { socketService } from '../../services/transport/WebSocketClient';
-import { API_BASE } from '../../../services/geminiService';
+import { API_BASE, getHeaders } from '../../../services/geminiService';
 import { VideoPlayerModal } from './VideoPlayerModal';
 import { VideoAsset } from '../../../types/video';
 import { MarkdownRenderer } from '../../../components/MarkdownRenderer';
@@ -39,6 +39,9 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showAiButton, setShowAiButton] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  // 离线备份：本地缓存内容但服务器还没有该内容（断网时生成过），可上传回服务器
+  const [offlineBackup, setOfflineBackup] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
 
   // UI States
   const [previewImage, setPreviewImage] = useState<string | null>(null);
@@ -72,6 +75,17 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
   };
 
   const TUTORIAL_CACHE_KEY = `tutorial_cache_${getExerciseId() || getExerciseName()}`;
+
+  /** 解析 exerciseData 里的 tutorials JSONB（对象或字符串两种形态） */
+  const parseServerTutorials = (data: any): Record<string, any> => {
+    if (!data) return {};
+    let raw = data.tutorials;
+    if (raw === null || raw === undefined) return {};
+    if (typeof raw === 'string') {
+      try { raw = JSON.parse(raw); } catch { return {}; }
+    }
+    return (raw && typeof raw === 'object') ? raw : {};
+  };
 
   const getCachedTutorial = (): string | null => {
     try {
@@ -168,17 +182,24 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
         let response: Response | null = null;
 
         if (exerciseId) {
-          response = await fetch(`${API_BASE}/exercises/${encodeURIComponent(exerciseId)}`);
+          response = await fetch(`${API_BASE}/exercises/${encodeURIComponent(exerciseId)}`, {
+            headers: getHeaders({}, false)
+          });
         }
 
         if (!response || !response.ok) {
-          response = await fetch(`${API_BASE}/exercises/by-name/${encodeURIComponent(exerciseName)}`);
+          response = await fetch(`${API_BASE}/exercises/by-name/${encodeURIComponent(exerciseName)}`, {
+            headers: getHeaders({}, false)
+          });
         }
 
         if (response.ok) {
           const data = await response.json();
           setExerciseData(data);
 
+          // 内容优先级：① content_html（admin 官方版，最高）
+          // ② tutorials.ai（服务器上的 AI 生成版，无需重新生成）
+          // ③ localStorage 缓存（离线备份：断网时生成的，后端可能没有）
           const hasContent = data.content_html !== null && data.content_html !== undefined && data.content_html.trim() !== '';
 
           if (mounted && hasContent) {
@@ -188,15 +209,38 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
             setIsLoading(false);
             return;
           }
-        }
 
-        const cachedContent = getCachedTutorial();
-        if (cachedContent && mounted) {
-          setContent(cachedContent);
-          setIsAiGenerated(true);
-          setShowAiButton(false);
-          setIsLoading(false);
-          return;
+          const serverAi = parseServerTutorials(data).ai;
+          const serverAiMd: string | undefined = serverAi?.content_md;
+
+          if (mounted && serverAiMd && serverAiMd.trim().length > 50) {
+            setContent(serverAiMd);
+            setIsAiGenerated(true);
+            // 服务器已有 AI 版：本地缓存使命完成，清掉（避免旧缓存今后误导「待上传」逻辑）
+            clearCachedTutorial();
+            setIsLoading(false);
+            return;
+          }
+
+          // 服务器两槽皆空 → 检查离线备份
+          const cachedContent = getCachedTutorial();
+          if (cachedContent && mounted) {
+            setContent(cachedContent);
+            setIsAiGenerated(true);
+            setOfflineBackup(cachedContent);
+            setIsLoading(false);
+            return;
+          }
+        } else {
+          // 网络失败（后端连不上）→ 走离线备份
+          const cachedContent = getCachedTutorial();
+          if (cachedContent && mounted) {
+            setContent(cachedContent);
+            setIsAiGenerated(true);
+            setOfflineBackup(cachedContent);
+            setIsLoading(false);
+            return;
+          }
         }
 
         if (mounted) {
@@ -221,6 +265,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
     const exerciseId = getExerciseId();
 
     setIsGenerating(true);
+    setOfflineBackup(null); // 重新生成即放弃旧备份
     clearCachedTutorial(); // 清除旧缓存，防止读取到过期内容
 
     socketService.send('tutor.generate_tutorial', {
@@ -258,6 +303,33 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
       console.warn('[ExerciseTutorialModal] AI generation timeout after 60s');
       unsubscribe();
     }, 60000);
+  };
+
+  // 离线备份恢复：把本地缓存（断网时生成）的 AI 教程上传回服务器 tutorials.ai。
+  // 只写 tutorials 槽，不碰 content_html（官方版永远归 admin 管）。
+  const handleUploadBackup = async () => {
+    const exerciseId = getExerciseId();
+    if (!exerciseId || !offlineBackup || isUploading) return;
+
+    setIsUploading(true);
+    try {
+      const res = await fetch(`${API_BASE}/exercises/${encodeURIComponent(exerciseId)}`, {
+        method: 'PUT',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          tutorials: { ai: { content_md: offlineBackup, lang: 'zh', generated_at: new Date().toISOString() } }
+        })
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      // 上传成功 → 备份使命完成
+      setOfflineBackup(null);
+      setIsAiGenerated(true);
+    } catch (e) {
+      console.warn('[ExerciseTutorialModal] Failed to upload backup:', e);
+      // 失败保留 offlineBackup，下次打开还能再传
+    } finally {
+      setIsUploading(false);
+    }
   };
 
   const handleAsk = () => {
@@ -432,6 +504,25 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
             </div>
           ) : (
             <div className="px-5 pb-8">
+              {/* 离线备份提示：本地有缓存但服务器没有，提醒上传（琥珀色=待处理，与全局同步失败提示同语言） */}
+              {offlineBackup && (
+                <div className="mt-4 flex items-center gap-3 px-4 py-3 rounded-2xl bg-amber-50 border border-amber-100">
+                  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4 text-amber-500 shrink-0">
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                  </svg>
+                  <span className="flex-1 text-[12px] text-amber-700 leading-snug">
+                    此教程是离线时生成的，还未同步到服务器
+                  </span>
+                  <button
+                    onClick={() => { haptic('light'); handleUploadBackup(); }}
+                    disabled={isUploading}
+                    className="shrink-0 px-3 py-1.5 rounded-full bg-amber-500 text-white text-[12px] font-semibold active:bg-amber-600 active:scale-95 transition-all disabled:opacity-60"
+                  >
+                    {isUploading ? '上传中…' : '上传'}
+                  </button>
+                </div>
+              )}
+
               {/* 封面配图：点击放大；无封面时灰阶字母占位（不裸露空白） */}
               {assets.cover ? (
                 <div

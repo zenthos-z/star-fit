@@ -2,8 +2,10 @@ import { ConfigRepo } from "./knowledgeRepo.js";
 import { ProxyAgent, request } from "undici";
 
 // L004: provider set is the single source of truth. DeepSeek added additively
-// (P009) — existing gemini/openai default behavior is unchanged.
-export const KNOWN_PROVIDERS = ["gemini", "openai", "deepseek"] as const;
+// (P009); GLM (Z.ai, OpenAI-compatible chat/completions) added as the new
+// default provider. Gemini remains an ordinary selectable option but is no
+// longer the default for anything.
+export const KNOWN_PROVIDERS = ["gemini", "openai", "deepseek", "glm"] as const;
 export type Provider = typeof KNOWN_PROVIDERS[number];
 
 /**
@@ -34,7 +36,9 @@ export class MissingApiKeyError extends Error {
         ? "OPENAI_API_KEY"
         : provider === "deepseek"
           ? "DEEPSEEK_API_KEY"
-          : "GOOGLE_API_KEY";
+          : provider === "glm"
+            ? "GLM_API_KEY"
+            : "GOOGLE_API_KEY";
     super(`${keyName} missing for provider "${provider}"`);
     this.name = "MissingApiKeyError";
     this.code = `${keyName}_MISSING`;
@@ -117,18 +121,28 @@ const DEFAULT_GEMINI_MODEL = "gemini-3-flash-preview";
 const DEFAULT_OPENAI_MODEL = "gpt-4o-mini";
 const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 
-// DeepSeek default model (flash tier). New default to dodge the 2026/07/24
-// deprecation of the old legacy DeepSeek model ids. Pro tier is
-// opt-in only (DEEPSEEK_MODEL_PRO) — never bound to an expensive default.
-export const DEFAULT_DEEPSEEK_FLASH = "deepseek-v4-flash";
-// L015: official DeepSeek base URL (no /v1). DeepSeek is OpenAI-compatible and
-// accepts both forms, but https://api.deepseek.com is the documented canonical
-// value (api-docs.deepseek.com, 2026/07). testConnection appends /chat/completions.
-const DEFAULT_DEEPSEEK_BASE_URL = "https://api.deepseek.com";
-const DEEPSEEK_MODELS = ["deepseek-v4-flash", "deepseek-v4-pro"];
+// DeepSeek default model (flash tier). The default endpoint below points at the
+// Volcano Engine (火山 ark) *coding plan* bundle the deployment actually pays for
+// — it serves deepseek models through an OpenAI-compatible API. Official
+// DeepSeek API users can override both via env (DEEPSEEK_MODEL_FLASH /
+// DEEPSEEK_BASE_URL) or the admin DB config (DB > env > default).
+export const DEFAULT_DEEPSEEK_FLASH = "deepseek-v4-flash-ga-260731";
+const DEFAULT_DEEPSEEK_BASE_URL = "https://ark.cn-beijing.volces.com/api/coding/v3";
+const DEEPSEEK_MODELS = [DEFAULT_DEEPSEEK_FLASH, "deepseek-v4-pro"];
+
+// ----------------------------------------------------------------------------
+// GLM (Z.ai) — the default LLM provider. OpenAI-compatible chat/completions.
+// All three defaults are overridable via env or DB config (DB > env > default).
+// ----------------------------------------------------------------------------
+export const DEFAULT_GLM_MODEL = "glm-5.3-flash";
+export const DEFAULT_GLM_BASE_URL = "https://api.z.ai/api/paas/v4";
+const GLM_MODELS = ["glm-5.3-flash", "glm-4.7", "glm-4.5-air"];
 
 // Default image generation config (DMX API - OpenAI compatible)
 const DEFAULT_IMAGE_MODEL = "";
+// DMX is the default image-gen provider; its OpenAI-compatible base URL is
+// baked in as a default (overridable via IMAGE_GEN_BASE_URL env/DB).
+export const DEFAULT_DMX_BASE_URL = "https://www.dmxapi.cn/v1";
 const DEFAULT_IMAGE_BASE_URL = "";
 const DEFAULT_IMAGE_PROVIDER = "dmx";
 const IMAGE_MODELS: Record<string, string[]> = {
@@ -140,6 +154,35 @@ export interface DeepSeekModelConfig {
   model: string;
   baseURL: string;
   thinking: false; // B3: thinking disabled by default for both tiers
+}
+
+export interface GLMModelConfig {
+  model: string;
+  baseURL: string;
+}
+
+/**
+ * Resolve the GLM (Z.ai) model config. Hierarchy: DB (ConfigRepo) > env > default.
+ * Keys: GLM_MODEL (default "glm-5.3-flash"), GLM_BASE_URL
+ * (default https://api.z.ai/api/paas/v4). OpenAI-compatible chat/completions.
+ */
+export async function resolveGLMModel(task: string = "default"): Promise<GLMModelConfig> {
+  const taskUpper = task.toUpperCase();
+
+  // DB > env, task-scoped first (GLM_MODEL_<TASK>), then global (GLM_MODEL).
+  const taskModelDb = await safeGetConfig(`GLM_MODEL_${taskUpper}`);
+  const taskModelEnv = process.env[`GLM_MODEL_${taskUpper}`]?.trim();
+  const globalModelDb = await safeGetConfig("GLM_MODEL");
+  const globalModelEnv = process.env.GLM_MODEL?.trim();
+
+  const model = taskModelDb || taskModelEnv || globalModelDb || globalModelEnv || DEFAULT_GLM_MODEL;
+
+  const baseURL =
+    (await safeGetConfig("GLM_BASE_URL")) ||
+    process.env.GLM_BASE_URL?.trim() ||
+    DEFAULT_GLM_BASE_URL;
+
+  return { model, baseURL };
 }
 
 /**
@@ -169,9 +212,8 @@ export async function resolveDeepSeekModel(
 }
 
 /**
- * Resolve the effective provider for a scenario. Defaults to "deepseek" (the new
- * default for the loadModel entry point) when neither DB nor env sets AI_PROVIDER.
- * Legacy resolveTaskConfig() still defaults to "gemini" (P009: unchanged).
+ * Resolve the effective provider for a scenario. GLM is the final fallback
+ * (single source of truth with resolveTaskConfig / modelRouter / getProxyConfig).
  */
 export async function resolveDefaultedProvider(scenario: string = "default"): Promise<string> {
   const taskUpper = scenario.toUpperCase();
@@ -191,7 +233,7 @@ export async function resolveDefaultedProvider(scenario: string = "default"): Pr
   if (envGlobal) {
     return envGlobal;
   }
-  return "deepseek";
+  return "glm";
 }
 
 /**
@@ -203,7 +245,9 @@ export async function getApiKey(provider: Provider): Promise<string> {
       ? "OPENAI_API_KEY"
       : provider === "deepseek"
         ? "DEEPSEEK_API_KEY"
-        : "GOOGLE_API_KEY";
+        : provider === "glm"
+          ? "GLM_API_KEY"
+          : "GOOGLE_API_KEY";
   const dbKey = await ConfigRepo.getConfig("system", keyName);
   if (dbKey) return dbKey;
   return process.env[keyName] || "";
@@ -246,7 +290,7 @@ export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSo
       provider = (process.env.AI_PROVIDER.trim() as Provider);
       providerSource = "env";
     } else {
-      provider = "gemini";
+      provider = "glm";
       providerSource = "default";
     }
   }
@@ -298,6 +342,29 @@ export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSo
       modelSource = "env";
     } else {
       model = DEFAULT_DEEPSEEK_FLASH;
+      modelSource = "default";
+    }
+  } else if (provider === "glm") {
+    // GLM model: DB > env, task-scoped (GLM_MODEL_<TASK>) then global
+    // (GLM_MODEL); mirrors resolveGLMModel / DEFAULT_GLM_MODEL.
+    const taskModelDb = await safeGetConfig(`GLM_MODEL_${taskUpper}`);
+    const taskModelEnv = process.env[`GLM_MODEL_${taskUpper}`]?.trim();
+    const globalModelDb = await safeGetConfig("GLM_MODEL");
+    const globalModelEnv = process.env.GLM_MODEL?.trim();
+    if (taskModelDb) {
+      model = taskModelDb;
+      modelSource = "db";
+    } else if (taskModelEnv) {
+      model = taskModelEnv;
+      modelSource = "env";
+    } else if (globalModelDb) {
+      model = globalModelDb;
+      modelSource = "db";
+    } else if (globalModelEnv) {
+      model = globalModelEnv;
+      modelSource = "env";
+    } else {
+      model = DEFAULT_GLM_MODEL;
       modelSource = "default";
     }
   } else {
@@ -352,6 +419,18 @@ export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSo
       baseURL = DEFAULT_DEEPSEEK_BASE_URL;
       baseURLSource = "default";
     }
+  } else if (provider === "glm") {
+    const dbBaseURL = await safeGetConfig("GLM_BASE_URL");
+    if (dbBaseURL) {
+      baseURL = dbBaseURL;
+      baseURLSource = "db";
+    } else if (process.env.GLM_BASE_URL) {
+      baseURL = process.env.GLM_BASE_URL.trim();
+      baseURLSource = "env";
+    } else {
+      baseURL = DEFAULT_GLM_BASE_URL;
+      baseURLSource = "default";
+    }
   }
 
   // Return with the highest priority source
@@ -400,16 +479,21 @@ export async function updateTaskConfig(
   } else if (config.provider === "deepseek") {
     const modelDbKey = `DEEPSEEK_MODEL_${taskUpper}`;
     await ConfigRepo.setConfig("system", modelDbKey, config.model);
+  } else if (config.provider === "glm") {
+    const modelDbKey = `GLM_MODEL_${taskUpper}`;
+    await ConfigRepo.setConfig("system", modelDbKey, config.model);
   } else {
     const modelDbKey = `OPENAI_MODEL_${taskUpper}`;
     await ConfigRepo.setConfig("system", modelDbKey, config.model);
   }
 
-  // Update Base URL for OpenAI-compatible providers (OpenAI and DeepSeek)
+  // Update Base URL for OpenAI-compatible providers (OpenAI / DeepSeek / GLM)
   if (config.provider === "openai" && config.baseURL) {
     await ConfigRepo.setConfig("system", "OPENAI_BASE_URL", config.baseURL);
   } else if (config.provider === "deepseek" && config.baseURL) {
     await ConfigRepo.setConfig("system", "DEEPSEEK_BASE_URL", config.baseURL);
+  } else if (config.provider === "glm" && config.baseURL) {
+    await ConfigRepo.setConfig("system", "GLM_BASE_URL", config.baseURL);
   }
 }
 
@@ -424,17 +508,27 @@ export async function testConnection(config: ModelConfig): Promise<{
   const start = Date.now();
 
   try {
-    if (config.provider === "openai" || config.provider === "deepseek") {
+    if (config.provider === "openai" || config.provider === "deepseek" || config.provider === "glm") {
       const isDeepSeek = config.provider === "deepseek";
+      const isGLM = config.provider === "glm";
       const apiKey = await getApiKey(config.provider);
       if (!apiKey) {
         return {
           success: false,
-          error: isDeepSeek ? "DeepSeek API Key not configured" : "OpenAI API Key not configured"
+          error: isDeepSeek
+            ? "DeepSeek API Key not configured"
+            : isGLM
+              ? "GLM API Key not configured"
+              : "OpenAI API Key not configured"
         };
       }
 
-      const baseURL = config.baseURL || (isDeepSeek ? DEFAULT_DEEPSEEK_BASE_URL : DEFAULT_BASE_URL);
+      const defaultBaseURL = isDeepSeek
+        ? DEFAULT_DEEPSEEK_BASE_URL
+        : isGLM
+          ? DEFAULT_GLM_BASE_URL
+          : DEFAULT_BASE_URL;
+      const baseURL = config.baseURL || defaultBaseURL;
       const endpoint = `${baseURL}/chat/completions`;
 
       const response = await request(endpoint, {
@@ -504,6 +598,7 @@ export async function testConnection(config: ModelConfig): Promise<{
 export function getAvailableModels(provider: Provider): string[] {
   if (provider === "gemini") return GEMINI_MODELS;
   if (provider === "deepseek") return DEEPSEEK_MODELS;
+  if (provider === "glm") return GLM_MODELS;
   return OPENAI_MODELS;
 }
 
@@ -567,6 +662,11 @@ export async function resolveImageModelConfig(): Promise<ImageModelConfigWithSou
   } else if (process.env.IMAGE_GEN_BASE_URL?.trim()) {
     baseURL = process.env.IMAGE_GEN_BASE_URL.trim();
     baseURLSource = "env";
+  } else if (provider === "dmx") {
+    // DMX is the default provider; bake in its OpenAI-compatible endpoint so
+    // generateImage() has a working default without any configuration.
+    baseURL = DEFAULT_DMX_BASE_URL;
+    baseURLSource = "default";
   } else {
     baseURL = DEFAULT_IMAGE_BASE_URL;
     baseURLSource = "default";

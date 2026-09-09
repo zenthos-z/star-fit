@@ -39,10 +39,12 @@
 
 import { createDeepAgent, type DeepAgent } from 'deepagents';
 import type { AIMessageChunk } from '@langchain/core/messages';
+import { HumanMessage } from '@langchain/core/messages';
+import { createMiddleware } from 'langchain';
 
 import type { AgentEvent, ChatRequest } from 'shared/contracts';
 import type { AgentService } from './AgentService.js';
-import { loadModel } from '../llm.js';
+import { loadModel, loadVisionModel } from '../llm.js';
 // P006: inject the checkpointer; no business pool handle crosses this import.
 import {
   ensureAgentRuntimeSchema,
@@ -238,15 +240,18 @@ export class DeepAgentService implements AgentService {
    *
    * Generic (修订①): the SAME agent serves every intent — there is no
    * per-scenario assembly and no runtime routing.
+   *
+   * `hasImage`：带图轮次用多模态视觉模型（doubao-seed-2.1-turbo）构建 agent，
+   * 与无图（deepseek 文本）实例分开缓存，互不污染。
    */
-  async buildAgent(scenario?: string): Promise<CompiledStatefulAgent> {
-    const key = scenario ?? 'default';
+  async buildAgent(scenario?: string, hasImage = false): Promise<CompiledStatefulAgent> {
+    const key = `${scenario ?? 'default'}::${hasImage ? 'img' : 'txt'}`;
     const existing = this.cached.get(key);
     if (existing) {
       return existing;
     }
     // Cache the PROMISE so concurrent callers join the same construction.
-    const building = this.assembleAgent(scenario).catch((err) => {
+    const building = this.assembleAgent(scenario, hasImage).catch((err) => {
       // Drop the failed construction so the next call can retry.
       this.cached.delete(key);
       throw err;
@@ -263,10 +268,16 @@ export class DeepAgentService implements AgentService {
    * SkillsMiddleware) are orthogonal and coexist in one `createDeepAgent` call.
    * Tool names do not collide with the built-in filesystem tools.
    */
-  private async assembleAgent(scenario?: string): Promise<CompiledStatefulAgent> {
+  private async assembleAgent(scenario?: string, hasImage = false): Promise<CompiledStatefulAgent> {
     // P006: model loaded via loadModel (no provider hardcoded). 'default' is
     // equivalent to chat/plan/tutorial in current config (same provider+model).
-    const model = await loadModel('default');
+    // hasImage → 多模态视觉模型（doubao-seed-2.1-turbo @ ark），图片直接进模型。
+    // 文本模型（DeepSeek）不吃图：thread 的 checkpoint 里会留着带图轮次的
+    // image_url 块，若不清洗，带图轮之后的下一个纯文本轮会 400
+    // "Model do not support image input"。stripImageMiddleware 在每次模型调用前
+    // 把历史消息里的 image 块替换为文字占位（checkpoint 保留原图不丢上下文）。
+    const model = hasImage ? await loadVisionModel() : await loadModel('default');
+    const middleware = hasImage ? undefined : [stripImageMiddleware];
 
     // P006: checkpointer injected from M-RT (agent_runtime schema). Ensure the
     // schema exists before the graph first reads/writes checkpoint state.
@@ -286,6 +297,8 @@ export class DeepAgentService implements AgentService {
       model,
       tools,
       systemPrompt,
+      // 文本轮洗历史图块（见 stripImageMiddleware 注释）；带图轮不需要。
+      middleware,
       // DeepSeek V4 (current default provider) rejects structured-output
       // `response_format`; the plan card is driven by the M5a skill in the
       // systemPrompt and peeled out by uiHintExtractor instead.
@@ -323,9 +336,13 @@ export class DeepAgentService implements AgentService {
   async *chat(req: ChatRequest): AsyncIterable<AgentEvent> {
     const threadId = req.threadId ?? req.userId;
 
+    // 提取照片附件（metadata.intent_context type='image'，mediaId 已上传图床）。
+    // 带图 → 多模态 content 直接进视觉模型（doubao-seed-2.1-turbo），零转写无损。
+    const imageAttachments = extractImageAttachments(req);
+
     let agent: CompiledStatefulAgent;
     try {
-      agent = await this.buildAgent(req.scenario);
+      agent = await this.buildAgent(req.scenario, imageAttachments.length > 0);
     } catch (err) {
       yield toErrorEvent(err);
       return;
@@ -350,8 +367,11 @@ export class DeepAgentService implements AgentService {
         `${now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Shanghai' })}). ` +
         'All "today / tomorrow / this week" references and any auto-heal / expiry ' +
         'dates must be computed from this timestamp.\n\n';
+
+      const userContent = await buildUserContent(req, timeContext, imageAttachments);
+
       const result = (await agent.invoke(
-        { messages: [{ role: 'user', content: `${timeContext}${req.message}` }] },
+        { messages: [{ role: 'user', content: userContent }] },
         {
           configurable: {
             thread_id: threadId,
@@ -449,6 +469,64 @@ function finalAnswerText(messages: unknown[]): string {
   return '';
 }
 
+/**
+ * 从请求 metadata.intent_context 提取照片附件（type='image' 且有 mediaId）。
+ * 兼容单对象与数组两种形态。
+ */
+function extractImageAttachments(
+  req: ChatRequest
+): Array<{ mediaId: string; mime?: string }> {
+  const ic = (req.metadata ?? {})['intent_context'] as unknown;
+  const items = Array.isArray(ic) ? ic : ic ? [ic] : [];
+  return items.filter(
+    (x: any) => x && typeof x === 'object' && x.type === 'image' && x.mediaId
+  ) as Array<{ mediaId: string; mime?: string }>;
+}
+
+/**
+ * 组装 user content：无图 → 纯文本；带图 → 多模态 content 数组
+ * [{type:'text'}, {type:'image_url', image_url:{url:dataUrl}}...] 直接进视觉模型。
+ * 图片下载失败 → 降级为纯文本 + 提示，不阻塞主链路。
+ */
+async function buildUserContent(
+  req: ChatRequest,
+  timeContext: string,
+  images: Array<{ mediaId: string; mime?: string }>
+): Promise<string | Array<Record<string, unknown>>> {
+  if (images.length === 0) {
+    return `${timeContext}${req.message}`;
+  }
+  const { getObject } = await import('../mediaStorage.js');
+  const blocks: Array<Record<string, unknown>> = [
+    { type: 'text', text: `${timeContext}${req.message}` },
+  ];
+  let failed = 0;
+  for (const img of images) {
+    try {
+      const found = await getObject(img.mediaId);
+      if (!found?.content) {
+        failed++;
+        continue;
+      }
+      const b64 = Buffer.from(found.content).toString('base64');
+      const mime = img.mime || found.mime || 'image/jpeg';
+      blocks.push({
+        type: 'image_url',
+        image_url: { url: `data:${mime};base64,${b64}` },
+      });
+    } catch {
+      failed++;
+    }
+  }
+  if (failed > 0) {
+    blocks.push({
+      type: 'text',
+      text: `（注意：有 ${failed} 张图片读取失败，无法展示，请如实告知用户。）`,
+    });
+  }
+  return blocks;
+}
+
 /** Normalise a thrown value into an `AgentEvent` error element. */
 function toErrorEvent(err: unknown): AgentEvent {
   const message =
@@ -462,6 +540,42 @@ function toErrorEvent(err: unknown): AgentEvent {
     error: { code: 'INTERNAL', message },
   };
 }
+
+/**
+ * 文本模型的"洗图"中间件：deepagents 每次（每步）模型调用前触发 wrapModelCall，
+ * 把消息序列里的多模态 image 块替换为纯文本占位。只影响喂给模型的输入；
+ * LangGraph checkpointer 持久化的仍是原始消息（带图轮的视觉上下文不丢）。
+ * 背景：DeepSeek 文本模型收到历史里的 image_url 块会 400
+ * "Model do not support image input"（带图轮用视觉模型、后续文本轮回文本模型的
+ * 混合 thread 场景）。
+ */
+const stripImageMiddleware = createMiddleware({
+  name: 'stripImageForTextModel',
+  wrapModelCall: async (request, handler) => {
+    const { messages } = request;
+    let touched = false;
+    const cleaned = messages.map((msg) => {
+      const content = (msg as { content?: unknown }).content;
+      if (!Array.isArray(content)) return msg;
+      const hasImage = content.some(
+        (part) => (part as { type?: string })?.type === 'image_url',
+      );
+      if (!hasImage) return msg;
+      touched = true;
+      const textParts = content
+        .filter((part) => (part as { type?: string })?.type === 'text')
+        .map((part) => (part as { text?: string }).text ?? '');
+      return new HumanMessage({
+        content:
+          textParts.join('\n') +
+          '\n（此前的图片附件内容已在当时由视觉模型读取并分析，图片本身不再附带。）',
+        additional_kwargs: (msg as { additional_kwargs?: Record<string, unknown> })
+          .additional_kwargs,
+      });
+    });
+    return touched ? handler({ ...request, messages: cleaned }) : handler(request);
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Default export: a shared singleton instance (consumers inject this as needed).

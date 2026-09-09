@@ -7,6 +7,7 @@ import { getUserId } from "../utils/requestUtils.js";
 // INT: card extraction + M5 validation loop compose the production agent stream.
 import { extractUiHintEvents } from "../services/agent/uiHintExtractor.js";
 import { chatWithValidationLoop } from "../services/agent/uiHintValidationLoop.js";
+import { ConfigRepo } from "../services/knowledgeRepo.js";
 
 // P010: /api/chat crosses ONLY the frozen `AgentService.chat(req): AsyncIterable<AgentEvent>`
 // seam. The MAS->Deep Agents kernel swap is absorbed inside that seam; this
@@ -100,6 +101,14 @@ export function setAgentServiceResolver(resolver: AgentServiceResolver | null): 
  * the `AsyncIterable<AgentEvent>` from the seam, and hands both to the transport.
  */
 export async function postChat(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+  // Emergency stop circuit breaker: checked FIRST, before any parsing or agent
+  // work. Set via POST /api/admin/emergency-stop { active: true|false }.
+  const emergencyStopFlag = await ConfigRepo.getConfig("system", "EMERGENCY_STOP").catch(() => null);
+  if (emergencyStopFlag === true || emergencyStopFlag === "true") {
+    reply.status(503).send({ error: "EMERGENCY_STOP_ACTIVE" });
+    return;
+  }
+
   const userId = getUserId(req);
   const parsed = ChatSchema.safeParse(req.body ?? {});
   if (!parsed.success) {

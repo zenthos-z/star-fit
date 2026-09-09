@@ -1,64 +1,34 @@
 /**
- * User Profile Panel Component V2 - 时间轴更新流视图 (方案C)
+ * UserProfilePanel.v2 — 精简版用户画像主面板（2026-09 三列布局重写）
  *
- * 布局结构：
- * 1. 顶部状态快照 + 更新频率说明
- * 2. 中部时间轴更新流（横向滚动，左右滑动）
- * 3. 底部三栏完整档案（静态/动态/历史）
- * 4. 编辑弹窗（独立Modal，不受卡片限制）
+ * 重构定位（用户拍板）：
+ * - admin = 训练素材管理 + 用户画像查看 + Agent 配置；本页 = 用户画像**查看**。
+ * - 去掉一切手动编辑子弹窗——复杂数据的错误修法 = 选中 → 附加给 Agent 让它改；
+ *   仅最基础参数（年龄/身高/体重/体脂）保留行内快速编辑。
+ * - Agent 对话**不做悬浮小窗**：给它一整列，与画像列并排。
+ * - 完整画像 → 全页 sheet（ProfileFullSheet），sheet 内任意数据块可「+」
+ *   加入 Agent 对话上下文。
  *
- * 视觉规范：
- * - 背景: star-white (#FAFAFA)
- * - 卡片: white + shadow-sm
- * - 主色: blue-500 (#3B82F6)
- * - 文字: gray-900(标题) / gray-500(次要)
- *
- * 数据契约: shared/contracts/index.ts
+ * 布局（本组件 = 页面**左列**，Agent 对话由父层作为独立列渲染）：
+ *   ┌ 头像/名称/等级/更新时间
+ *   ├ 基本参数行内编辑条
+ *   ├ 状态快照 4 格
+ *   └ [查看完整画像 →] 入口卡
  *
  * @module UserProfilePanelV2
- * @version 3.1.0
+ * @version 5.0.0
  */
 
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
-  Edit,
-  Dumbbell,
-  Activity,
-  TrendingUp,
-  AlertCircle,
-  Save,
-  X,
-  Plus,
-  Trash2,
-  Target,
-  Clock,
-  RotateCcw,
-  Zap,
-  Weight,
-  ChevronLeft,
-  ChevronRight,
-  FileText,
-  Layers,
-  User,
+  AlertCircle, User, ChevronRight, Check, X,
 } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
 import { AdminService } from '../../services/api';
 import type { FlattenedProfile } from '../../services/api';
-import type {
-  LoadAnchors,
-  LoadAnchor,
-  ActiveLimitation,
-  BasicInfo,
-  Preferences,
-  Physiological,
-  Psychological,
-} from 'shared/contracts';
+import { ProfileFullSheet } from './ProfileFullSheet';
 import { parseJSONSafe } from '../../../../types/validation';
-
-// ============================================================================
-// Types
-// ============================================================================
-
-type AdminUserProfile = FlattenedProfile;
+import { transitions } from '../../../../v2/lib/animations';
 
 interface UserStats {
   session_count?: number;
@@ -71,357 +41,98 @@ interface UserProfilePanelProps {
   username?: string | null;
   short_id?: string | null;
   display_name?: string;
-  profile: AdminUserProfile | null;
+  profile: FlattenedProfile | null;
   stats: UserStats | null;
   loading: boolean;
   onStatsUpdate?: (stats: UserStats) => void;
+  /** 画像更新后通知父层刷新 */
+  onProfileUpdate?: () => void;
 }
 
-interface UpdateEvent {
-  id: string;
-  timestamp: number;
-  type: 'static' | 'dynamic' | 'history';
-  title: string;
-  description: string;
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-const formatDate = (timestamp: number | string | undefined): string => {
-  if (!timestamp) return '-';
-  const date = typeof timestamp === 'string' ? new Date(timestamp) : new Date(timestamp);
-  return date.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
+const FITNESS_LEVEL_TEXT: Record<string, string> = {
+  beginner: '初学者', intermediate: '进阶', advanced: '高级', UNKNOWN: '未知',
 };
 
 const formatDateTime = (timestamp: number | string | undefined): string => {
   if (!timestamp) return '-';
-  const date = typeof timestamp === 'string' ? new Date(timestamp) : new Date(timestamp);
-  return date.toLocaleString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return new Date(timestamp).toLocaleString('zh-CN', {
+    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit',
+  });
 };
-
-const formatRelativeTime = (timestamp: number): string => {
-  const now = Date.now();
-  const diff = now - timestamp;
-  const minutes = Math.floor(diff / 60000);
-  const hours = Math.floor(diff / 3600000);
-  const days = Math.floor(diff / 86400000);
-
-  if (minutes < 1) return '刚刚';
-  if (minutes < 60) return `${minutes}分钟前`;
-  if (hours < 24) return `${hours}小时前`;
-  if (days < 7) return `${days}天前`;
-  return formatDate(timestamp);
-};
-
-const getFitnessLevelText = (level: string): string => {
-  const map: Record<string, string> = {
-    beginner: '初学者',
-    intermediate: '进阶',
-    advanced: '高级',
-  };
-  return map[level] || level;
-};
-
-const getDataTypeLabel = (type: UpdateEvent['type']): string => {
-  const map: Record<string, string> = {
-    static: '静态档案',
-    dynamic: '动态状态',
-    history: '历史摘要',
-  };
-  return map[type];
-};
-
-const getDataTypeColor = (type: UpdateEvent['type']): string => {
-  const map: Record<string, string> = {
-    static: 'bg-slate-500',
-    dynamic: 'bg-amber-500',
-    history: 'bg-indigo-500',
-  };
-  return map[type];
-};
-
-const getDataTypeBadge = (type: UpdateEvent['type']): string => {
-  const map: Record<string, string> = {
-    static: 'bg-slate-100 text-slate-700 border-slate-200',
-    dynamic: 'bg-amber-100 text-amber-700 border-amber-200',
-    history: 'bg-indigo-100 text-indigo-700 border-indigo-200',
-  };
-  return map[type];
-};
-
-// Generate update events from profile data
-const generateUpdateEvents = (profile: AdminUserProfile | null): UpdateEvent[] => {
-  if (!profile) return [];
-
-  const events: UpdateEvent[] = [];
-
-  if (profile.updated_at) {
-    events.push({
-      id: 'profile-updated',
-      timestamp: new Date(profile.updated_at).getTime(),
-      type: 'static',
-      title: '档案更新',
-      description: '用户画像数据已更新',
-    });
-  }
-
-  if (profile.load_anchors) {
-    const anchors = Object.entries(profile.load_anchors);
-    if (anchors.length > 0) {
-      const mostRecent = anchors.reduce((latest, [name, anchor]) => {
-        const anchorTime = anchor.last_updated || 0;
-        return anchorTime > latest.time ? { time: anchorTime, name } : latest;
-      }, { time: 0, name: '' });
-
-      if (mostRecent.time > 0) {
-        events.push({
-          id: 'anchor-updated',
-          timestamp: mostRecent.time,
-          type: 'dynamic',
-          title: '负荷锚点更新',
-          description: `${mostRecent.name} 数据已更新`,
-        });
-      }
-    }
-  }
-
-  if (profile.active_limitations && profile.active_limitations.length > 0) {
-    const mostRecent = profile.active_limitations.reduce((latest, limitation) => {
-      const loggedTime = limitation.logged_at ? new Date(limitation.logged_at).getTime() : 0;
-      return loggedTime > latest ? loggedTime : latest;
-    }, 0);
-
-    if (mostRecent > 0) {
-      events.push({
-        id: 'limitation-added',
-        timestamp: mostRecent,
-        type: 'dynamic',
-        title: '伤病限制记录',
-        description: `新增 ${profile.active_limitations.length} 处限制`,
-      });
-    }
-  }
-
-  return events.sort((a, b) => b.timestamp - a.timestamp).slice(0, 5);
-};
-
-// ============================================================================
-// Component
-// ============================================================================
 
 export const UserProfilePanelV2: React.FC<UserProfilePanelProps> = ({
-  userId,
-  username,
-  short_id,
-  display_name,
-  profile,
-  stats,
-  loading,
-  onStatsUpdate,
+  userId, username, short_id, display_name, profile, stats, loading, onStatsUpdate, onProfileUpdate,
 }) => {
-  const [localProfile, setLocalProfile] = useState<AdminUserProfile | null>(null);
-  const [localStats, setLocalStats] = useState<UserStats | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [editingSection, setEditingSection] = useState<string | null>(null);
+  const [localProfile, setLocalProfile] = useState<FlattenedProfile | null>(null);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
 
-  // Edit form states
-  const [editBasic, setEditBasic] = useState<Partial<BasicInfo>>({});
-  const [editPreferences, setEditPreferences] = useState<Partial<Preferences>>({});
-  const [editPhysiological, setEditPhysiological] = useState<Partial<Physiological>>({});
-  const [editPsychological, setEditPsychological] = useState<Partial<Psychological>>({});
-  const [editAnchors, setEditAnchors] = useState<LoadAnchors>({});
-  const [editLimitations, setEditLimitations] = useState<ActiveLimitation[]>([]);
-  const [editTrainingStrategy, setEditTrainingStrategy] = useState<string>('');
-  const [newLimitationPart, setNewLimitationPart] = useState('');
-  const [newLimitationSeverity, setNewLimitationSeverity] = useState(5);
-  const [newAnchorName, setNewAnchorName] = useState('');
+  // 行内编辑：仅基本参数
+  const [editingBasic, setEditingBasic] = useState(false);
+  const [basicDraft, setBasicDraft] = useState<{ age: string; height: string; weight: string; body_fat: string }>({
+    age: '', height: '', weight: '', body_fat: '',
+  });
+  const [savingBasic, setSavingBasic] = useState(false);
 
   useEffect(() => {
-    if (profile) {
-      setLocalProfile(profile);
-    }
+    if (profile) setLocalProfile(profile);
   }, [profile]);
 
-  useEffect(() => {
-    if (stats) {
-      setLocalStats(stats);
-    }
-  }, [stats]);
+  const p = localProfile;
+  const basic = (p?.basic_info ?? {}) as Record<string, unknown>;
 
-  const updateEvents = React.useMemo(() => generateUpdateEvents(localProfile), [localProfile]);
-
-  const handleUpdateProfile = useCallback(async (updates: Partial<AdminUserProfile>) => {
-    if (!localProfile) return;
-
-    const previousProfile = localProfile;
-    setLocalProfile({ ...localProfile, ...updates });
-    setSaving(true);
-
-    try {
-      const response = await AdminService.users.updateProfile(userId, updates);
-      if (response.profile) {
-        const parsedProfile: any = {
-          ...response.profile as any,
-          basic_info: (parseJSONSafe(response.profile.basic_info as string, "handleUpdateProfile basic_info") || {}) as Record<string, unknown>,
-          preferences: (parseJSONSafe(response.profile.preferences as string, 'handleUpdateProfile preferences') || {}) as Record<string, unknown>,
-          physiological: (parseJSONSafe(response.profile.physiological as string, 'handleUpdateProfile physiological') || {}) as Record<string, unknown>,
-          psychological: (parseJSONSafe(response.profile.psychological as string, 'handleUpdateProfile psychological') || {}) as Record<string, unknown>,
-          load_anchors: (parseJSONSafe(response.profile.load_anchors as unknown as string, 'handleUpdateProfile load_anchors') || {}) as unknown as Record<string, unknown>,
-          red_flags: Array.isArray(response.profile.red_flags)
-            ? response.profile.red_flags
-            : parseJSONSafe(response.profile.red_flags, 'handleUpdateProfile red_flags') || [],
-        };
-        setLocalProfile(parsedProfile as any);
-
-        if (onStatsUpdate) {
-          const newStats = await AdminService.users.getStats(userId);
-          setLocalStats(newStats);
-          onStatsUpdate(newStats);
-        }
-      }
-    } catch (error) {
-      setLocalProfile(previousProfile);
-      alert('保存失败: ' + (error as Error).message);
-    } finally {
-      setSaving(false);
-    }
-  }, [localProfile, userId, onStatsUpdate]);
-
-  const startEdit = (section: string) => {
-    if (!localProfile) return;
-
-    switch (section) {
-      case 'basic':
-        setEditBasic(localProfile.basic_info || {});
-        break;
-      case 'preferences':
-        setEditPreferences(localProfile.preferences || {});
-        break;
-      case 'physiological':
-        setEditPhysiological(localProfile.physiological || {});
-        break;
-      case 'psychological':
-        setEditPsychological(localProfile.psychological || {});
-        break;
-      case 'anchors':
-        setEditAnchors(localProfile.load_anchors || {});
-        break;
-      case 'limitations':
-        setEditLimitations(localProfile.active_limitations || []);
-        break;
-      case 'training_strategy':
-        setEditTrainingStrategy(localProfile.training_strategy || '');
-        break;
-    }
-    setEditingSection(section);
-  };
-
-  const saveEdit = async () => {
-    let updates: Partial<AdminUserProfile> = {};
-
-    switch (editingSection) {
-      case 'basic':
-        updates = { basic_info: editBasic };
-        break;
-      case 'preferences':
-        updates = { preferences: editPreferences };
-        break;
-      case 'physiological':
-        updates = { physiological: editPhysiological };
-        break;
-      case 'psychological':
-        updates = { psychological: editPsychological };
-        break;
-      case 'anchors':
-        updates = { load_anchors: editAnchors };
-        break;
-      case 'limitations':
-        updates = { active_limitations: editLimitations };
-        break;
-      case 'training_strategy':
-        updates = { training_strategy: editTrainingStrategy };
-        break;
-    }
-
-    await handleUpdateProfile(updates);
-    setEditingSection(null);
-  };
-
-  const cancelEdit = () => {
-    setEditingSection(null);
-    setNewLimitationPart('');
-    setNewLimitationSeverity(5);
-    setNewAnchorName('');
-    setEditTrainingStrategy('');
-  };
-
-  const updateAnchor = (exercise: string, field: keyof LoadAnchor, value: string | number) => {
-    setEditAnchors(prev => ({
-      ...prev,
-      [exercise]: {
-        ...prev[exercise],
-        [field]: typeof value === 'string' && field !== ('unit' as keyof LoadAnchor) ? Number(value) : value,
-        last_updated: Date.now(),
-      },
-    }));
-  };
-
-  const removeAnchor = (exercise: string) => {
-    setEditAnchors(prev => {
-      const { [exercise]: _, ...rest } = prev;
-      return rest;
+  const startEditBasic = () => {
+    setBasicDraft({
+      age: basic.age !== undefined && basic.age !== null ? String(basic.age) : '',
+      height: basic.height !== undefined && basic.height !== null ? String(basic.height) : '',
+      weight: basic.weight !== undefined && basic.weight !== null ? String(basic.weight) : '',
+      body_fat: basic.body_fat !== undefined && basic.body_fat !== null ? String(basic.body_fat) : '',
     });
+    setEditingBasic(true);
   };
 
-  const addAnchor = () => {
-    if (!newAnchorName.trim()) return;
-    setEditAnchors(prev => ({
-      ...prev,
-      [newAnchorName.trim()]: { last_updated: Date.now() },
-    }));
-    setNewAnchorName('');
+  const saveBasic = async () => {
+    if (!p) return;
+    const nextBasicInfo = { ...basic };
+    const num = (s: string) => (s.trim() === '' ? undefined : Number(s));
+    nextBasicInfo.age = num(basicDraft.age);
+    nextBasicInfo.height = num(basicDraft.height);
+    nextBasicInfo.weight = num(basicDraft.weight);
+    nextBasicInfo.body_fat = num(basicDraft.body_fat);
+
+    const prev = p;
+    setLocalProfile({ ...p, basic_info: nextBasicInfo } as FlattenedProfile);
+    setSavingBasic(true);
+    try {
+      await AdminService.users.updateProfile(userId, { basic_info: nextBasicInfo });
+      setEditingBasic(false);
+      onProfileUpdate?.();
+    } catch (err) {
+      setLocalProfile(prev);
+      alert('保存失败: ' + (err as Error).message);
+    } finally {
+      setSavingBasic(false);
+    }
   };
 
-  const removeLimitation = (part: string) => {
-    setEditLimitations(prev => prev.filter(l => l.part !== part));
-  };
-
-  const addLimitation = () => {
-    if (!newLimitationPart.trim()) return;
-    const now = new Date().toISOString();
-    const expireDays = Math.ceil(newLimitationSeverity * 0.8);
-    const expireAt = new Date();
-    expireAt.setDate(expireAt.getDate() + expireDays);
-
-    setEditLimitations(prev => [
-      ...prev,
-      {
-        part: newLimitationPart.trim(),
-        severity: newLimitationSeverity,
-        logged_at: now,
-        expire_at: expireAt.toISOString(),
-        auto_heal: true,
-      },
-    ]);
-    setNewLimitationPart('');
-    setNewLimitationSeverity(5);
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 2200);
   };
 
   if (loading) {
     return (
       <div className="h-full bg-star-white p-6">
         <div className="animate-pulse space-y-4">
-          <div className="h-24 bg-gray-200 rounded-xl" />
-          <div className="h-32 bg-gray-200 rounded-xl" />
-          <div className="h-64 bg-gray-200 rounded-xl" />
+          <div className="h-20 bg-gray-200 rounded-2xl" />
+          <div className="h-16 bg-gray-200 rounded-2xl" />
+          <div className="h-24 bg-gray-200 rounded-2xl" />
         </div>
       </div>
     );
   }
 
-  if (!localProfile) {
+  if (!p) {
     return (
       <div className="h-full bg-star-white flex items-center justify-center">
         <div className="text-center text-gray-500">
@@ -432,558 +143,166 @@ export const UserProfilePanelV2: React.FC<UserProfilePanelProps> = ({
     );
   }
 
-  const p = localProfile;
-  const s = localStats;
+  const displayName = display_name || username || short_id || userId.slice(0, 8);
+  const limitationsCount = (p.active_limitations ?? []).length;
+  const hasRedFlags = (p.red_flags ?? []).length > 0;
 
   return (
-    <div className="h-full bg-star-white overflow-y-auto" data-testid="user-profile-panel-v2">
-      <div className="p-6 space-y-6">
-
-        {/* ============================================
-            SECTION 1: 状态快照 + 更新频率说明
-            ============================================ */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-          <div className="flex items-start justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-16 h-16 rounded-2xl bg-blue-500 flex items-center justify-center text-white text-2xl font-bold">
-                <User size={32} />
-              </div>
-              <div>
-                <h1 className="text-xl font-bold text-gray-900">
-                  {display_name || username || short_id || userId.slice(0, 8)}
-                </h1>
-                <p className="text-sm text-gray-500">
-                  {(username || short_id) && <span className="mr-2">{short_id || userId.slice(0, 8)} · </span>}
-                  最后更新: {formatDateTime(p.updated_at || p.created_at)}
-                </p>
-              </div>
-            </div>
-            <span className="px-3 py-1.5 rounded-full text-sm font-medium bg-blue-100 text-blue-700 border border-blue-200">
-              {getFitnessLevelText(p.fitness_level)}
-            </span>
+    <div className="h-full bg-star-white flex flex-col overflow-hidden" data-testid="user-profile-panel-v2">
+      <div className="flex-1 min-h-0 flex flex-col p-5 gap-4 overflow-y-auto">
+        {/* ============ 头部：身份 ============ */}
+        <div className="flex items-center gap-3 shrink-0">
+          <div className="w-11 h-11 rounded-xl bg-gray-100 border border-gray-200 flex items-center justify-center text-gray-600 shrink-0">
+            <User size={20} />
           </div>
-
-          <div className="grid grid-cols-4 gap-4 mb-6">
-            <SnapshotCard
-              icon={<Target size={18} className="text-blue-500" />}
-              label="训练次数"
-              value={s?.session_count?.toString() || '0'}
-            />
-            <SnapshotCard
-              icon={<Weight size={18} className="text-blue-500" />}
-              label="总容量"
-              value={`${((s?.total_volume || 0) / 1000).toFixed(1)}k`}
-            />
-            <SnapshotCard
-              icon={<Activity size={18} className={p.active_limitations?.length ? 'text-red-500' : 'text-green-500'} />}
-              label="当前限制"
-              value={p.active_limitations?.length?.toString() || '0'}
-              alert={!!p.active_limitations?.length}
-            />
-            <SnapshotCard
-              icon={<Zap size={18} className="text-blue-500" />}
-              label="恢复评分"
-              value={p.recovery_state?.total_score?.toString() || '-'}
-            />
-          </div>
-
-          <div className="flex items-center gap-6 pt-4 border-t border-gray-100">
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-3 h-3 rounded-full bg-slate-400" />
-              <span className="text-gray-500">静态档案: 6-12月</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-center gap-2">
+              <h1 className="text-base font-semibold text-gray-900 truncate">{displayName}</h1>
+              <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-50 text-gray-500 border border-gray-200 shrink-0">
+                {FITNESS_LEVEL_TEXT[p.fitness_level] ?? p.fitness_level}
+              </span>
             </div>
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-3 h-3 rounded-full bg-amber-400" />
-              <span className="text-gray-500">动态状态: 每次训练后</span>
-            </div>
-            <div className="flex items-center gap-2 text-sm">
-              <div className="w-3 h-3 rounded-full bg-indigo-400" />
-              <span className="text-gray-500">历史摘要: 每周</span>
-            </div>
+            <p className="text-[11px] text-gray-400">
+              {(short_id || userId.slice(0, 8)) + ' · 更新于 ' + formatDateTime(p.updated_at || p.created_at)}
+              {hasRedFlags && <span className="text-red-500 ml-1.5">· {p.red_flags!.length} 项红旗</span>}
+            </p>
           </div>
         </div>
 
-        {/* ============================================
-            SECTION 2: 时间轴更新流（横向滚动）
-            ============================================ */}
-        <div className="bg-white rounded-2xl p-6 border border-gray-100 shadow-sm">
-          <div className="flex items-center justify-between mb-6">
-            <h2 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-              <Clock size={20} className="text-blue-500" />
-              最近更新记录
-            </h2>
-            <button
-              onClick={() => window.location.reload()}
-              className="flex items-center gap-1 text-sm text-gray-500 hover:text-blue-500 transition-colors"
-            >
-              <RotateCcw size={14} />
-              刷新
-            </button>
-          </div>
-
-          {/* Horizontal Timeline */}
-          <div className="relative">
-            {/* Timeline Track */}
-            <div className="absolute top-8 left-0 right-0 h-0.5 bg-gray-200" />
-
-            {/* Scrollable Container */}
-            <div className="overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-300 scrollbar-track-gray-100">
-              <div className="flex items-start gap-8 min-w-max px-4">
-                {updateEvents.length > 0 ? (
-                  updateEvents.map((event, index) => (
-                    <div key={event.id} className="relative flex flex-col items-center" style={{ minWidth: '160px' }}>
-                      {/* Time Label */}
-                      <div className="text-xs text-gray-400 mb-2">
-                        {formatRelativeTime(event.timestamp)}
-                      </div>
-
-                      {/* Node */}
-                      <div className={`relative z-10 w-4 h-4 rounded-full border-2 border-white shadow-md ${getDataTypeColor(event.type)}`} />
-
-                      {/* Content Card */}
-                      <div className="mt-4 bg-gray-50 rounded-xl p-4 border border-gray-100 w-full">
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="font-medium text-gray-900 text-sm">{event.title}</span>
-                        </div>
-                        <p className="text-xs text-gray-500 mb-2">{event.description}</p>
-                        <span className={`inline-block text-xs px-2 py-0.5 rounded-full border ${getDataTypeBadge(event.type)}`}>
-                          {getDataTypeLabel(event.type)}
-                        </span>
-                      </div>
-
-                      {/* Arrow to next (if not last) */}
-                      {index < updateEvents.length - 1 && (
-                        <div className="absolute top-8 -right-6 text-gray-300">
-                          <ChevronRight size={16} />
-                        </div>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-center text-gray-400 py-8 w-full">暂无更新记录</p>
-                )}
-              </div>
-            </div>
-
-            {/* Scroll Hints */}
-            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-white to-transparent pointer-events-none" />
-            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-white to-transparent pointer-events-none" />
-          </div>
-        </div>
-
-        {/* ============================================
-            SECTION 3: 三栏完整档案
-            ============================================ */}
-        <div className="grid grid-cols-3 gap-6">
-
-          {/* ---- 静态档案 ---- */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-slate-700">
-              <Layers size={20} />
-              <h2 className="text-lg font-semibold text-gray-900">静态档案</h2>
-              <span className="text-xs text-gray-400">6-12月更新</span>
-            </div>
-
-            <DataCard title="基础信息" editable onEdit={() => startEdit('basic')}>
-              <div className="space-y-2">
-                <DataRow label="年龄" value={p.basic_info?.age ? `${p.basic_info.age} 岁` : '-'} />
-                <DataRow label="体重" value={p.basic_info?.weight ? `${p.basic_info.weight} kg` : '-'} />
-                <DataRow label="身高" value={p.basic_info?.height ? `${p.basic_info.height} cm` : '-'} />
-                <DataRow label="体脂率" value={p.basic_info?.body_fat ? `${p.basic_info.body_fat}%` : '-'} />
-              </div>
-            </DataCard>
-
-            <DataCard title="训练偏好" editable onEdit={() => startEdit('preferences')}>
-              <div className="space-y-2">
-                <DataRow label="训练目标" value={p.preferences?.goal || '-'} />
-                <DataRow label="可用器械" value={p.preferences?.equipment?.join(', ') || '-'} />
-                <DataRow label="训练方法" value={p.preferences?.method?.join(', ') || '-'} />
-                <DataRow label="时间限制" value={p.preferences?.time_constraint ? `${p.preferences.time_constraint} 分钟` : '-'} />
-                <DataRow label="避免动作" value={p.preferences?.avoided?.join(', ') || '-'} />
-              </div>
-            </DataCard>
-
-            <DataCard title="生理 / 心理特征" editable onEdit={() => startEdit('physiological')}>
-              <div className="space-y-2">
-                <DataRow label="睡眠" value={p.physiological?.sleep_hours ? `${p.physiological.sleep_hours}h` : '-'} />
-                <DataRow label="压力" value={p.physiological?.stress_level || '-'} />
-                <DataRow label="自律性" value={p.psychological?.accountability || '-'} />
-                <DataRow label="风险偏好" value={p.psychological?.risk_preference || '-'} />
-              </div>
-            </DataCard>
-          </div>
-
-          {/* ---- 动态状态 ---- */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-amber-600">
-              <Zap size={20} />
-              <h2 className="text-lg font-semibold text-gray-900">动态状态</h2>
-              <span className="text-xs text-gray-400">每次训练后更新</span>
-            </div>
-
-            <DataCard title="负荷锚点" editable onEdit={() => startEdit('anchors')}>
-              <div className="space-y-2">
-                {p.load_anchors && Object.entries(p.load_anchors).length > 0 ? (
-                  Object.entries(p.load_anchors).map(([exercise, anchor]) => (
-                    <div key={exercise} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0">
-                      <span className="text-sm font-medium text-gray-900">{exercise}</span>
-                      <span className="text-sm text-gray-500">
-                        {anchor.best_weight && anchor.best_reps
-                          ? `${anchor.best_weight}kg × ${anchor.best_reps}`
-                          : anchor.best_reps
-                          ? `${anchor.best_reps} reps`
-                          : anchor.best_duration
-                          ? `${anchor.best_duration}s`
-                          : '-'}
-                      </span>
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-400 italic">暂无负荷锚点</p>
-                )}
-              </div>
-            </DataCard>
-
-            <DataCard title="当前限制" editable onEdit={() => startEdit('limitations')}>
-              <div className="space-y-2">
-                {p.active_limitations && p.active_limitations.length > 0 ? (
-                  p.active_limitations.map((limitation, idx) => (
-                    <div key={idx} className="flex items-center gap-2">
-                      <div className={`w-2 h-2 rounded-full ${
-                        limitation.severity >= 7 ? 'bg-red-500' :
-                        limitation.severity >= 4 ? 'bg-yellow-500' : 'bg-green-500'
-                      }`} />
-                      <span className="text-sm text-gray-900">{limitation.part}</span>
-                      <span className="text-xs text-gray-400">({limitation.severity}/10)</span>
-                      {limitation.expire_at && (
-                        <span className="text-xs text-gray-400 ml-auto">
-                          至 {formatDate(limitation.expire_at)}
-                        </span>
-                      )}
-                    </div>
-                  ))
-                ) : (
-                  <p className="text-sm text-gray-400 italic">无活跃限制</p>
-                )}
-              </div>
-            </DataCard>
-
-            <DataCard title="恢复状态">
-              <div className="space-y-2">
-                <DataRow label="总评分" value={p.recovery_state?.total_score ? `${p.recovery_state.total_score}/100` : '-'} />
-                <DataRow label="急性负荷" value={p.recovery_state?.acute_load?.toString() || '-'} />
-                <DataRow label="慢性负荷" value={p.recovery_state?.chronic_load?.toString() || '-'} />
-                <DataRow label="CNS疲劳" value={p.recovery_state?.cns_fusing ? '是' : '否'} />
-              </div>
-            </DataCard>
-          </div>
-
-          {/* ---- 历史摘要 ---- */}
-          <div className="space-y-4">
-            <div className="flex items-center gap-2 text-indigo-600">
-              <TrendingUp size={20} />
-              <h2 className="text-lg font-semibold text-gray-900">历史摘要</h2>
-              <span className="text-xs text-gray-400">每周计算</span>
-            </div>
-
-            <DataCard title="训练趋势">
-              <div className="space-y-3">
-                <DataRow label="RPE趋势" value={p.trends?.rpe_trend || '-'} />
-                <DataRow label="容量趋势" value={p.trends?.volume_trend || '-'} />
-                <DataRow label="平均RPE" value={p.trends?.recent_avg_rpe?.toString() || '-'} />
-                <DataRow label="疲劳等级" value={p.trends?.fatigue_level?.toString() || '-'} />
-              </div>
-            </DataCard>
-
-            <DataCard title="关键指标">
-              <div className="grid grid-cols-2 gap-3">
-                <MetricBox label="总训练次数" value={s?.session_count?.toString() || '0'} />
-                <MetricBox label="总容量 (kg)" value={`${((s?.total_volume || 0) / 1000).toFixed(1)}k`} />
-                <MetricBox label="个人纪录" value={p.key_metrics?.personal_records?.toString() || '0'} />
-                <MetricBox label="伤病次数" value={p.key_metrics?.injury_count?.toString() || '0'} />
-              </div>
-            </DataCard>
-
-            {p.red_flags && p.red_flags.length > 0 && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-4">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertCircle size={16} className="text-red-500" />
-                  <span className="font-medium text-red-700">红旗警告</span>
-                </div>
-                <div className="flex flex-wrap gap-2">
-                  {p.red_flags.map((flag, idx) => (
-                    <span key={idx} className="px-2 py-1 bg-red-100 text-red-700 rounded text-sm">
-                      {flag}
-                    </span>
-                  ))}
-                </div>
-              </div>
+        {/* ============ 基本参数行内编辑 ============ */}
+        <div className="rounded-xl border border-gray-200 px-4 py-3 shrink-0" data-testid="basic-params-row">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-medium text-gray-400">基本参数</span>
+            {!editingBasic && (
+              <button
+                className="text-[11px] text-gray-600 hover:text-gray-900 underline underline-offset-2 decoration-gray-300"
+                onClick={startEditBasic}
+              >
+                编辑
+              </button>
             )}
-
-            <DataCard title="训练策略" editable onEdit={() => startEdit('training_strategy')}>
-              <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-wrap">
-                {p.training_strategy || '暂无训练策略'}
-              </p>
-            </DataCard>
           </div>
-
+          {!editingBasic ? (
+            <div className="grid grid-cols-4 gap-2">
+              <MiniParam label="年龄" value={basic.age !== undefined && basic.age !== null ? `${basic.age} 岁` : '-'} />
+              <MiniParam label="身高" value={basic.height !== undefined && basic.height !== null ? `${basic.height}cm` : '-'} />
+              <MiniParam label="体重" value={basic.weight !== undefined && basic.weight !== null ? `${basic.weight}kg` : '-'} />
+              <MiniParam label="体脂" value={basic.body_fat !== undefined && basic.body_fat !== null ? `${basic.body_fat}%` : '-'} />
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <div className="grid grid-cols-4 gap-2">
+                <MiniInput label="年龄(岁)" value={basicDraft.age} onChange={(v) => setBasicDraft((d) => ({ ...d, age: v }))} />
+                <MiniInput label="身高(cm)" value={basicDraft.height} onChange={(v) => setBasicDraft((d) => ({ ...d, height: v }))} />
+                <MiniInput label="体重(kg)" value={basicDraft.weight} onChange={(v) => setBasicDraft((d) => ({ ...d, weight: v }))} />
+                <MiniInput label="体脂(%)" value={basicDraft.body_fat} onChange={(v) => setBasicDraft((d) => ({ ...d, body_fat: v }))} />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  className="px-3 py-1.5 rounded-lg text-xs text-gray-600 border border-gray-200 hover:bg-gray-50"
+                  onClick={() => setEditingBasic(false)}
+                >
+                  <X size={12} className="inline mr-1" />取消
+                </button>
+                <button
+                  className="px-3 py-1.5 rounded-lg text-xs text-white bg-gray-900 hover:bg-gray-700 disabled:opacity-50"
+                  disabled={savingBasic}
+                  onClick={saveBasic}
+                >
+                  <Check size={12} className="inline mr-1" />{savingBasic ? '保存中…' : '保存'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
+        {/* ============ 状态快照 ============ */}
+        <div className="grid grid-cols-4 gap-2 shrink-0">
+          <SnapshotCard label="训练次数" value={String(stats?.session_count ?? 0)} />
+          <SnapshotCard label="总容量" value={`${((stats?.total_volume ?? 0) / 1000).toFixed(1)}k`} />
+          <SnapshotCard
+            label="当前限制" value={String(limitationsCount)} alert={limitationsCount > 0}
+          />
+          <SnapshotCard label="恢复评分" value={String(p.recovery_state?.total_score ?? '-')} />
+        </div>
+
+        {/* ============ 查看完整画像入口 ============ */}
+        <button
+          className="shrink-0 w-full rounded-xl border border-gray-200 px-4 py-3.5 flex items-center justify-between hover:border-gray-400 transition-colors group text-left"
+          onClick={() => setSheetOpen(true)}
+          data-testid="open-profile-full-sheet"
+        >
+          <div>
+            <p className="text-sm font-medium text-gray-900">查看完整画像</p>
+            <p className="text-[11px] text-gray-400 mt-0.5">锚点 · 伤病 · 恢复 · 历史摘要 · 点击数据块可附加给 Agent</p>
+          </div>
+          <ChevronRight size={16} className="text-gray-300 group-hover:text-gray-600 transition-colors shrink-0" />
+        </button>
       </div>
 
-      {/* ============================================
-          EDIT MODALS
-          ============================================ */}
+      {/* 全页 sheet：完整画像 */}
+      <AnimatePresence>
+        {sheetOpen && (
+          <>
+            <motion.div
+              className="fixed inset-0 z-[140] bg-black/30"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+              onClick={() => setSheetOpen(false)}
+            />
+            <ProfileFullSheet
+              userId={userId}
+              displayName={displayName}
+              profile={p}
+              loading={false}
+              onClose={() => setSheetOpen(false)}
+              onAttached={(title) => showToast(`「${title}」已加入 Agent 上下文`)}
+            />
+          </>
+        )}
+      </AnimatePresence>
 
-      {/* Basic Info Modal */}
-      {editingSection === 'basic' && (
-        <EditModal title="编辑基础信息" onSave={saveEdit} onCancel={cancelEdit} saving={saving}>
-          <div className="space-y-4">
-            <Input label="年龄" type="number" value={editBasic.age ?? ''} onChange={v => setEditBasic({ ...editBasic, age: v ? Number(v) : undefined })} />
-            <Input label="体重 (kg)" type="number" value={editBasic.weight ?? ''} onChange={v => setEditBasic({ ...editBasic, weight: v ? Number(v) : undefined })} />
-            <Input label="身高 (cm)" type="number" value={editBasic.height ?? ''} onChange={v => setEditBasic({ ...editBasic, height: v ? Number(v) : undefined })} />
-            <Input label="体脂率 (%)" type="number" value={editBasic.body_fat ?? ''} onChange={v => setEditBasic({ ...editBasic, body_fat: v ? Number(v) : undefined })} />
-          </div>
-        </EditModal>
-      )}
-
-      {/* Preferences Modal */}
-      {editingSection === 'preferences' && (
-        <EditModal title="编辑训练偏好" onSave={saveEdit} onCancel={cancelEdit} saving={saving}>
-          <div className="space-y-4">
-            <Input label="训练方法 (逗号分隔)" value={editPreferences.method?.join(', ') ?? ''} onChange={v => setEditPreferences({ ...editPreferences, method: v.split(',').map(s => s.trim()).filter(Boolean) })} />
-            <Input label="时间限制 (分钟)" type="number" value={editPreferences.time_constraint ?? ''} onChange={v => setEditPreferences({ ...editPreferences, time_constraint: v ? Number(v) : undefined })} />
-            <Input label="避免动作 (逗号分隔)" value={editPreferences.avoided?.join(', ') ?? ''} onChange={v => setEditPreferences({ ...editPreferences, avoided: v.split(',').map(s => s.trim()).filter(Boolean) })} />
-          </div>
-        </EditModal>
-      )}
-
-      {/* Physiological Modal */}
-      {editingSection === 'physiological' && (
-        <EditModal title="编辑生理/心理特征" onSave={saveEdit} onCancel={cancelEdit} saving={saving}>
-          <div className="space-y-4">
-            <Input label="睡眠 (小时)" type="number" value={editPhysiological.sleep_hours ?? ''} onChange={v => setEditPhysiological({ ...editPhysiological, sleep_hours: v ? Number(v) : undefined })} />
-            <Select label="压力水平" value={editPhysiological.stress_level ?? ''} onChange={v => setEditPhysiological({ ...editPhysiological, stress_level: v as 'low' | 'medium' | 'high' | undefined })} options={[{ value: 'low', label: '低' }, { value: 'medium', label: '中' }, { value: 'high', label: '高' }]} />
-            <Select label="自律性" value={editPsychological.accountability ?? ''} onChange={v => setEditPsychological({ ...editPsychological, accountability: v as 'low' | 'medium' | 'high' | undefined })} options={[{ value: 'low', label: '低' }, { value: 'medium', label: '中' }, { value: 'high', label: '高' }]} />
-            <Select label="风险偏好" value={editPsychological.risk_preference ?? ''} onChange={v => setEditPsychological({ ...editPsychological, risk_preference: v as 'conservative' | 'moderate' | 'aggressive' | undefined })} options={[{ value: 'conservative', label: '保守' }, { value: 'moderate', label: '适度' }, { value: 'aggressive', label: '激进' }]} />
-          </div>
-        </EditModal>
-      )}
-
-      {/* Load Anchors Modal */}
-      {editingSection === 'anchors' && (
-        <EditModal title="编辑负荷锚点" onSave={saveEdit} onCancel={cancelEdit} saving={saving}>
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {Object.entries(editAnchors).map(([exercise, anchor]) => (
-              <div key={exercise} className="flex items-center gap-3 p-3 bg-gray-50 rounded-lg">
-                <span className="text-sm font-medium w-24 truncate">{exercise}</span>
-                <input type="number" value={anchor.best_weight ?? ''} onChange={e => updateAnchor(exercise, 'best_weight', e.target.value)} className="w-20 px-2 py-1 border border-gray-200 rounded text-sm" placeholder="重量" />
-                <span className="text-sm text-gray-400">kg ×</span>
-                <input type="number" value={anchor.best_reps ?? ''} onChange={e => updateAnchor(exercise, 'best_reps', e.target.value)} className="w-16 px-2 py-1 border border-gray-200 rounded text-sm" placeholder="次" />
-                <button onClick={() => removeAnchor(exercise)} className="ml-auto text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
-              </div>
-            ))}
-            <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
-              <input type="text" placeholder="新动作名称" value={newAnchorName} onChange={e => setNewAnchorName(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-              <button onClick={addAnchor} className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600"><Plus size={16} /></button>
-            </div>
-          </div>
-        </EditModal>
-      )}
-
-      {/* Limitations Modal */}
-      {editingSection === 'limitations' && (
-        <EditModal title="编辑伤病限制" onSave={saveEdit} onCancel={cancelEdit} saving={saving}>
-          <div className="space-y-4 max-h-96 overflow-y-auto">
-            {editLimitations.map((limitation, idx) => (
-              <div key={idx} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                <div className="flex items-center gap-3">
-                  <div className={`w-3 h-3 rounded-full ${limitation.severity >= 7 ? 'bg-red-500' : limitation.severity >= 4 ? 'bg-yellow-500' : 'bg-green-500'}`} />
-                  <span className="font-medium">{limitation.part}</span>
-                  <span className="text-sm text-gray-500">严重度: {limitation.severity}/10</span>
-                </div>
-                <button onClick={() => removeLimitation(limitation.part)} className="text-red-500 hover:text-red-700"><Trash2 size={16} /></button>
-              </div>
-            ))}
-            <div className="flex items-center gap-2 pt-2 border-t border-gray-200">
-              <input type="text" placeholder="部位名称" value={newLimitationPart} onChange={e => setNewLimitationPart(e.target.value)} className="flex-1 px-3 py-2 border border-gray-200 rounded-lg text-sm" />
-              <input type="number" min={1} max={10} value={newLimitationSeverity} onChange={e => setNewLimitationSeverity(Number(e.target.value))} className="w-20 px-2 py-2 border border-gray-200 rounded-lg text-sm" />
-              <button onClick={addLimitation} className="px-4 py-2 bg-blue-500 text-white rounded-lg text-sm hover:bg-blue-600"><Plus size={16} /></button>
-            </div>
-          </div>
-        </EditModal>
-      )}
-
-      {/* Training Strategy Modal */}
-      {editingSection === 'training_strategy' && (
-        <EditModal title="编辑训练策略" onSave={saveEdit} onCancel={cancelEdit} saving={saving}>
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm text-gray-500 mb-1">训练策略</label>
-              <textarea
-                value={editTrainingStrategy}
-                onChange={e => setEditTrainingStrategy(e.target.value)}
-                rows={10}
-                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none resize-none"
-                placeholder="输入训练策略..."
-              />
-            </div>
-          </div>
-        </EditModal>
-      )}
-
+      {/* 附加成功 toast（静默回传风格，只看结果） */}
+      <AnimatePresence>
+        {toast && (
+          <motion.div
+            className="fixed z-[160] left-1/2 -translate-x-1/2 top-6 bg-gray-900/90 text-white text-xs px-4 py-2 rounded-full shadow-lg"
+            initial={{ opacity: 0, y: -8 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -8 }}
+            transition={transitions.spring}
+          >
+            {toast}
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
 // ============================================================================
-// Sub Components
+// Sub-components
 // ============================================================================
 
-interface SnapshotCardProps {
-  icon: React.ReactNode;
-  label: string;
-  value: string;
-  alert?: boolean;
-}
-
-const SnapshotCard: React.FC<SnapshotCardProps> = ({ icon, label, value, alert }) => (
-  <div className={`p-4 rounded-xl border ${alert ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
-    <div className={`flex items-center gap-2 text-sm mb-1 ${alert ? 'text-red-600' : 'text-gray-500'}`}>
-      {icon}
-      <span>{label}</span>
-    </div>
-    <div className={`text-2xl font-bold ${alert ? 'text-red-700' : 'text-gray-900'}`}>
-      {value}
-    </div>
+const MiniParam: React.FC<{ label: string; value: string }> = ({ label, value }) => (
+  <div className="bg-gray-50 rounded-xl px-2.5 py-1.5 text-center">
+    <p className="text-[10px] text-gray-400">{label}</p>
+    <p className="text-sm font-semibold text-gray-800">{value}</p>
   </div>
 );
 
-interface DataCardProps {
-  title: string;
-  children: React.ReactNode;
-  editable?: boolean;
-  onEdit?: () => void;
-}
-
-const DataCard: React.FC<DataCardProps> = ({ title, children, editable, onEdit }) => (
-  <div className="bg-white rounded-xl p-4 border border-gray-100 shadow-sm">
-    <div className="flex items-center justify-between mb-4">
-      <h3 className="font-medium text-gray-900">{title}</h3>
-      {editable && (
-        <button onClick={onEdit} className="text-gray-400 hover:text-blue-500 transition-colors">
-          <Edit size={14} />
-        </button>
-      )}
-    </div>
-    {children}
-  </div>
-);
-
-interface DataRowProps {
-  label: string;
-  value: string;
-}
-
-const DataRow: React.FC<DataRowProps> = ({ label, value }) => (
-  <div className="flex items-center justify-between py-1">
-    <span className="text-sm text-gray-500">{label}</span>
-    <span className="text-sm font-medium text-gray-900">{value}</span>
-  </div>
-);
-
-interface MetricBoxProps {
-  label: string;
-  value: string;
-}
-
-const MetricBox: React.FC<MetricBoxProps> = ({ label, value }) => (
-  <div className="bg-gray-50 rounded-lg p-3 text-center">
-    <div className="text-lg font-bold text-gray-900">{value}</div>
-    <div className="text-xs text-gray-500">{label}</div>
-  </div>
-);
-
-interface InputProps {
-  label: string;
-  type?: string;
-  value: string | number;
-  onChange: (value: string) => void;
-}
-
-const Input: React.FC<InputProps> = ({ label, type = 'text', value, onChange }) => (
-  <div>
-    <label className="block text-sm text-gray-500 mb-1">{label}</label>
+const MiniInput: React.FC<{ label: string; value: string; onChange: (v: string) => void }> = ({ label, value, onChange }) => (
+  <div className="bg-gray-50 rounded-xl px-2 py-1.5 text-center border border-transparent focus-within:border-blue-300">
+    <p className="text-[10px] text-gray-400">{label}</p>
     <input
-      type={type}
       value={value}
-      onChange={e => onChange(e.target.value)}
-      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+      onChange={(e) => onChange(e.target.value)}
+      inputMode="decimal"
+      className="w-full bg-transparent text-center text-sm font-medium text-gray-800 outline-none"
     />
   </div>
 );
 
-interface SelectProps {
-  label: string;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-}
-
-const Select: React.FC<SelectProps> = ({ label, value, onChange, options }) => (
-  <div>
-    <label className="block text-sm text-gray-500 mb-1">{label}</label>
-    <select
-      value={value}
-      onChange={e => onChange(e.target.value)}
-      className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-    >
-      <option value="">-</option>
-      {options.map(opt => (
-        <option key={opt.value} value={opt.value}>{opt.label}</option>
-      ))}
-    </select>
+const SnapshotCard: React.FC<{ label: string; value: string; alert?: boolean }> = ({ label, value, alert }) => (
+  <div className={`rounded-xl border px-3 py-2.5 ${alert ? 'border-red-200 bg-red-50/50' : 'border-gray-200'}`}>
+    <p className="text-[10px] text-gray-400 truncate">{label}</p>
+    <p className={`text-base font-semibold ${alert ? 'text-red-600' : 'text-gray-900'}`}>{value}</p>
   </div>
 );
-
-interface EditModalProps {
-  title: string;
-  children: React.ReactNode;
-  onSave: () => void;
-  onCancel: () => void;
-  saving?: boolean;
-}
-
-const EditModal: React.FC<EditModalProps> = ({ title, children, onSave, onCancel, saving }) => (
-  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-    <div className="bg-white rounded-2xl p-6 w-full max-w-lg max-h-[80vh] overflow-hidden shadow-2xl">
-      <div className="flex items-center justify-between mb-6">
-        <h3 className="text-lg font-semibold text-gray-900">{title}</h3>
-        <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
-          <X size={20} />
-        </button>
-      </div>
-      <div className="overflow-y-auto max-h-[50vh]">
-        {children}
-      </div>
-      <div className="flex items-center justify-end gap-3 mt-6 pt-4 border-t border-gray-100">
-        <button
-          onClick={onCancel}
-          className="px-4 py-2 text-gray-600 hover:text-gray-800 transition-colors"
-        >
-          取消
-        </button>
-        <button
-          onClick={onSave}
-          disabled={saving}
-          className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50 flex items-center gap-2"
-        >
-          {saving ? <Clock size={16} className="animate-spin" /> : <Save size={16} />}
-          {saving ? '保存中...' : '保存'}
-        </button>
-      </div>
-    </div>
-  </div>
-);
-
-export default UserProfilePanelV2;

@@ -78,6 +78,7 @@ import {
   deleteLoadAnchor
 } from './controllers/userProfileController.js';
 import { generateTextUnified } from './services/llm.js';
+import { getPostgresClient } from './db/postgresql/client/postgres-client.js';
 import {
   uploadVideo,
   getVideoInfo,
@@ -129,6 +130,31 @@ server.addHook('onRequest', async (request) => {
   fs.appendFileSync(ACCESS_LOG, logMsg);
 });
 
+// ── Access token gate（2026-09-09，公网穿透场景）────────────────────────────
+// 设置了 STARFIT_ACCESS_TOKEN 后，所有请求必须带 X-Access-Token 头（或 ?token= 查询参数，
+// 供 WebSocket / EventSource 等无法自定义 header 的通道使用），否则 401。
+// 未设置 env = 鉴权关闭（局域网/本地开发不受影响）。
+// 放行：/health（LAN 扫描识别）、OPTIONS 预检、静态资源 /uploads/*（素材直链）。
+const ACCESS_TOKEN = process.env.STARFIT_ACCESS_TOKEN;
+if (ACCESS_TOKEN) {
+  server.addHook('onRequest', async (request, reply) => {
+    const url = request.url.split('?')[0];
+    if (
+      url === '/health' ||
+      request.method === 'OPTIONS' ||
+      url.startsWith('/uploads/')
+    ) {
+      return;
+    }
+    const provided =
+      (request.headers['x-access-token'] as string | undefined) ??
+      (request.query as Record<string, string> | undefined)?.token;
+    if (provided !== ACCESS_TOKEN) {
+      return reply.status(401).send({ error: 'invalid or missing access token' });
+    }
+  });
+}
+
 const start = async () => {
   try {
     // Init DB
@@ -141,7 +167,7 @@ const start = async () => {
         cb(null, true);
       },
       methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id', 'X-Access-Token'],
       credentials: true,
       preflight: true,
       strictPreflight: false
@@ -347,6 +373,45 @@ const start = async () => {
                   source: firstMarkdown ? "ai" : "internal",
                   isFinal: true,
                 };
+
+                // AI 生成成功后回写 exercises.tutorials（服务端持久化，换设备不丢）。
+                // 只回写 AI 真实生成的内容；fallback 文本不落库。失败仅记日志，不影响 WS 回包。
+                if (firstMarkdown && exerciseId) {
+                  try {
+                    const db = getPostgresClient();
+                    const cur = await db.queryOne<{ tutorials: any }>(
+                      'SELECT tutorials FROM exercises WHERE id = $id',
+                      { id: exerciseId }
+                    );
+                    if (cur) {
+                      const prev = typeof cur.tutorials === 'string'
+                        ? (JSON.parse(cur.tutorials || '{}') as Record<string, unknown>)
+                        : ((cur.tutorials as Record<string, unknown>) || {});
+                      await db.query(
+                        `UPDATE exercises
+                           SET tutorials = $tutorials::jsonb,
+                               modified_by = 'system',
+                               modified_at = $modifiedAt,
+                               updated_at = $modifiedAt
+                         WHERE id = $id`,
+                        {
+                          tutorials: JSON.stringify({
+                            ...prev,
+                            ai: { content_md: firstMarkdown, lang, generated_at: new Date().toISOString() }
+                          }),
+                          modifiedAt: new Date().toISOString(),
+                          id: exerciseId
+                        }
+                      );
+                      req.log.info({ exerciseId, lang }, "tutorial_ai_persisted");
+                    } else {
+                      req.log.info({ exerciseId }, "tutorial_ai_persist_skipped_no_row");
+                    }
+                  } catch (persistErr: any) {
+                    req.log.warn({ err: persistErr, exerciseId }, "tutorial_ai_persist_failed");
+                  }
+                }
+
                 try {
                   socket.send(JSON.stringify({ type: "tutor.tutorial_result", data: tutorialPayload, payload: tutorialPayload, ts: Date.now() }));
                 } catch {}

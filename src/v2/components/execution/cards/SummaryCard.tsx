@@ -243,7 +243,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
                   <span className="text-star-accent text-xl">总结报告</span>
                 </h3>
                 <p className="text-gray-500 text-[9px] font-mono mt-3 tracking-[0.3em] uppercase font-bold">
-                  PROJECT STARFIT • MAS 认证
+                  PROJECT STARFIT
                 </p>
               </div>
               <div className={`backdrop-blur-md border rounded-full px-2.5 py-0.5 shadow-[0_0_15px_rgba(188,254,47,0.15)] ${
@@ -365,7 +365,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
               <span className="text-[7px] font-black text-gray-400 uppercase tracking-[0.3em] block">REPORT DATA</span>
               <div className="flex items-center gap-1">
                 <div className="w-3 h-3 bg-star-dark rounded flex items-center justify-center text-white text-[7px] font-black italic">SF</div>
-                <span className="text-[9px] font-black italic tracking-tighter uppercase text-star-dark">Starfit MAS</span>
+                <span className="text-[9px] font-black italic tracking-tighter uppercase text-star-dark">Starfit</span>
               </div>
             </div>
             <div className="flex gap-0.5 h-4 items-end">

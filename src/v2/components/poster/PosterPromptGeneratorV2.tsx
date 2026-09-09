@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { motion } from 'framer-motion';
+import { motion, AnimatePresence } from 'framer-motion';
 import { WorkoutSession } from '../../types/protocol';
 import { extractWorkoutData } from './core/dataExtractorV2';
 import { generateShanShuiTemplate, generateBauhausTemplate, generateAcidTemplate, TemplateContext, VibeConfig } from '../../../../components/poster/core/templateEngine';
@@ -9,8 +9,11 @@ import { industrialConfig } from '../../../../components/poster/styles/industria
 import { liquidConfig } from '../../../../components/poster/styles/liquidConfig';
 import { cyberConfig } from '../../../../components/poster/styles/cyberConfig';
 import { punkConfig } from '../../../../components/poster/styles/punkConfig';
+import { API_BASE, getHeaders } from '../../../services/geminiService';
+import { setTabBarHidden } from '../../../lib/nativeTabBar';
 import { transitions } from '../../lib/animations';
 import { haptic } from '../../../lib/nativeHaptics';
+import { PosterResultViewer } from './PosterResultViewer';
 
 interface PosterPromptGeneratorV2Props {
   session: WorkoutSession;
@@ -41,6 +44,16 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
   const [finalPrompt, setFinalPrompt] = useState('');
   const [isGenerating, setIsGenerating] = useState(false);
   const [copied, setCopied] = useState(false);
+  // 生成状态机：idle → generating → hasResult（可查看结果/重新生成）| 失败回 idle + 页内错误提示
+  const [posterDataUrl, setPosterDataUrl] = useState<string | null>(null);
+  const [showResult, setShowResult] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+
+  // iOS sheet 规范：全屏 sheet 呈现时盖住原生 tab bar，关闭恢复（同 SettlementV2）
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
 
   const workoutData = extractWorkoutData(session);
 
@@ -107,16 +120,46 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
     });
   };
 
-  // 功能逻辑与原版一致：生成图片暂未实现，提示用户用提示词手动生成
-  const handleGenerateImage = async () => {
+  // 真实链路：POST {API_BASE}/agent/image → { dataUrl }（10-60s，不设短超时）
+  // 成功 → 主钮变「查看生成结果」；失败 → 恢复原文案 + 页内错误提示（勿 alert 阻塞）。
+  // 已有结果后改风格/氛围参数再次点击 → 重新 POST，成功覆盖刷新结果。
+  const requestPoster = useCallback(async () => {
     setIsGenerating(true);
+    setGenerateError(null);
     try {
-      alert('生成图片功能暂未实现，请稍后使用提示词手动生成图片。');
+      const isAcid = ACID_STYLE_IDS.includes(selectedStyle);
+      const res = await fetch(`${API_BASE}/agent/image`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          session,
+          templateKey: selectedStyle,
+          vibeOverride: isAcid ? vibeConfig : undefined,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof payload.error === 'string' ? payload.error : `生成失败（HTTP ${res.status}）`);
+      }
+      if (typeof payload.dataUrl !== 'string' || !payload.dataUrl.startsWith('data:image/')) {
+        throw new Error('生成结果格式异常');
+      }
+      setPosterDataUrl(payload.dataUrl);
+      haptic('success');
     } catch (error) {
       console.error('Generate image error:', error);
-      alert('生成图片失败，请重试');
+      setGenerateError(error instanceof Error ? error.message : '生成图片失败，请重试');
     } finally {
       setIsGenerating(false);
+    }
+  }, [session, selectedStyle, vibeConfig]);
+
+  const handlePrimaryAction = () => {
+    if (posterDataUrl && !isGenerating) {
+      haptic('light');
+      setShowResult(true);
+    } else {
+      requestPoster();
     }
   };
 
@@ -247,12 +290,20 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
         </button>
 
         <button
-          onClick={handleGenerateImage}
+          onClick={handlePrimaryAction}
           disabled={isGenerating}
           className="liquid-glass-dark flex-1 h-[50px] text-white font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform disabled:opacity-60"
         >
           {isGenerating ? (
             <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : posterDataUrl ? (
+            <>
+              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>查看生成结果</span>
+            </>
           ) : (
             <>
               <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -263,6 +314,36 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
           )}
         </button>
       </div>
+
+      {/* 页内错误提示（替代 alert 阻塞），悬浮于底部操作栏上方 */}
+      <AnimatePresence>
+        {generateError && !isGenerating && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={transitions.springGentle}
+            className="absolute left-0 right-0 flex justify-center px-6 pointer-events-none"
+            style={{ bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="bg-red-500/10 text-red-500 text-[12px] font-medium px-4 py-2 rounded-full max-w-full truncate">
+              {generateError}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 结果查看子页：同层级全屏 sheet，z-[130] 高于父层 z-[120] */}
+      <AnimatePresence>
+        {showResult && posterDataUrl && (
+          <PosterResultViewer
+            dataUrl={posterDataUrl}
+            isRegenerating={isGenerating}
+            onRegenerate={requestPoster}
+            onClose={() => setShowResult(false)}
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 };
