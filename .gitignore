@@ -51,6 +51,12 @@ backend/uploads/
 # Local secrets (never commit real keys)
 backend/.env
 
+# Machine-local compose with real credentials (task 1.2)
+docker-compose.local.yml
+
+# Env files with secrets (examples stay tracked)
+.env
+
 # Android machine-local / signing files
 android/local.properties
 android/keystore.properties
