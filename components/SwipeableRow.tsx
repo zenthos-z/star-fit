@@ -1,5 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { motion, useAnimation } from 'framer-motion';
+import { haptic } from '../src/lib/nativeHaptics';
 
 interface SwipeAction {
   label: string;
@@ -86,7 +87,7 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
     if (onLongPress) {
       longPressTimeoutRef.current = setTimeout(() => {
         if (!hasMoved.current) {
-          if (navigator.vibrate) navigator.vibrate(50);
+          haptic('medium'); // 长按触发：中等确认触感
           setIsLongPressTriggered(true);
           isLongPressTriggeredRef.current = true;
           onLongPress();
@@ -255,7 +256,7 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
       }}
       whileHover={{ scale: 1.025, boxShadow: "0 6px 16px -4px rgba(0, 0, 0, 0.1)" }}
       transition={{ duration: 0.15, ease: "easeOut" }}
-      className={`relative select-none rounded-2xl ${className}`}
+      className={`relative select-none rounded-[40px] ${className}`}
       style={{ contain: 'paint' }}
     >
        {/* Left Actions (Delete) */}

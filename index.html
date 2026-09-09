@@ -59,10 +59,10 @@
         scrollbar-width: none;
       }
 
-      html { background-color: #F3F3F3; }
+      html { background-color: #FAFAFA; }
       body {
-        /* 底色统一 #F3F3F3：底部安全区/tab bar 后区域与内容无色差分割线 */
-        background-color: #F3F3F3;
+        /* 底色统一 #FAFAFA：与内容底色一致，overscroll 露底不出现灰白差 */
+        background-color: #FAFAFA;
         color: #18181B;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         -webkit-font-smoothing: antialiased;
@@ -112,6 +112,59 @@
           0 12px 40px rgba(0,0,0,0.22),
           inset 0 1px 0.5px rgba(255,255,255,0.22),
           inset 0 -1px 0.5px rgba(255,255,255,0.06);
+      }
+
+      /* 磨砂透镜玻璃（计时胶囊专属）：Apple systemThinMaterial 配方——
+         低不透明度清玻璃体 + 20pt blur + 饱和度提升，让背后内容透色进来，
+         顶部 specular 内高光模拟透镜受光，整体比 liquid-glass 更透、更"镜" */
+      .frost-lens {
+        background: linear-gradient(135deg, rgba(255,255,255,0.38) 0%, rgba(255,255,255,0.22) 100%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
+        backdrop-filter: blur(20px) saturate(180%) brightness(1.06);
+        border: 0.5px solid rgba(255,255,255,0.45);
+        box-shadow:
+          0 8px 24px rgba(0,0,0,0.08),
+          0 1px 3px rgba(0,0,0,0.04),
+          inset 0 1px 0.5px rgba(255,255,255,0.85),
+          inset 0 -1px 1px rgba(255,255,255,0.25);
+      }
+
+      /* 磨砂透镜·深色变体：运行/暂停态用，黑玻璃透底色 */
+      .frost-lens-dark {
+        background: linear-gradient(135deg, rgba(20,20,24,0.52) 0%, rgba(14,14,18,0.38) 100%);
+        -webkit-backdrop-filter: blur(20px) saturate(180%);
+        backdrop-filter: blur(20px) saturate(180%);
+        border: 0.5px solid rgba(255,255,255,0.14);
+        box-shadow:
+          0 12px 40px rgba(0,0,0,0.18),
+          inset 0 1px 0.5px rgba(255,255,255,0.20),
+          inset 0 -1px 0.5px rgba(255,255,255,0.05);
+      }
+
+      /* Clear 玻璃：.glassEffect(.clear) 官方配方 —— 高透体，其下压黑 0.3 暗层保文字可读 */
+      .liquid-glass-clear {
+        background: rgba(0, 0, 0, 0.30);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        backdrop-filter: blur(20px) saturate(160%);
+        border: 0.5px solid rgba(255,255,255,0.35);
+        box-shadow:
+          0 8px 24px rgba(0,0,0,0.18),
+          inset 0 1px 0.5px rgba(255,255,255,0.55),
+          inset 0 -1px 1px rgba(255,255,255,0.12);
+      }
+
+      /* Clear + tint：颜色染在玻璃里（.clear.tint 同款），材质与暗层不变 */
+      .liquid-glass-clear-tinted {
+        background:
+          linear-gradient(165deg, rgba(79,132,240,0.45) 0%, rgba(37,99,235,0.50) 100%),
+          rgba(0, 0, 0, 0.30);
+        -webkit-backdrop-filter: blur(20px) saturate(160%);
+        backdrop-filter: blur(20px) saturate(160%);
+        border: 0.5px solid rgba(255,255,255,0.45);
+        box-shadow:
+          0 10px 26px rgba(37,99,235,0.30),
+          inset 0 1px 0.5px rgba(255,255,255,0.65),
+          inset 0 -1px 1px rgba(255,255,255,0.15);
       }
 
       /* 全屏沉浸层（对话窗口等）：整面磨砂，不再依赖局部白底 */

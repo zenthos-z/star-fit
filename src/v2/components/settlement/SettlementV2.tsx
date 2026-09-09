@@ -1,4 +1,4 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Session } from '../../../../types';
 import { WorkoutSession } from '../../types/protocol';
@@ -7,7 +7,8 @@ import { toPng } from 'html-to-image';
 import { PosterPromptGeneratorV2 } from '../poster/PosterPromptGeneratorV2';
 import { convertSessionToWorkoutSession } from '../../utils/typeBridge';
 import { calculateExerciseVolume } from '../../lib/settlementSummary';
-import { buttonPress, tapScale, staggerContainer, staggerItem } from '../../lib/animations';
+import { buttonPress, tapScale, staggerContainer, staggerItem, transitions } from '../../lib/animations';
+import { setTabBarHidden } from '../../../lib/nativeTabBar';
 
 interface SettlementV2Props {
   session: Session;
@@ -23,6 +24,12 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
   const [showPosterGenerator, setShowPosterGenerator] = useState(false);
 
   const workoutSession = convertSessionToWorkoutSession(session);
+
+  // iOS sheet 规范：训练战报是结算 sheet，呈现时盖住原生 tab bar，关闭恢复
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
   const endTime = session.endTime || Date.now();
   const durationMinutes = Math.floor((endTime - session.startTime - session.pausedDuration) / 1000 / 60);
 
@@ -80,40 +87,36 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
       initial={{ opacity: 0, scale: 0.95, y: 30 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 20 }}
-      transition={{
-        type: 'spring',
-        stiffness: 350,
-        damping: 28,
-        mass: 0.8
-      }}
+      transition={transitions.spring}
       className="fixed inset-0 bg-star-gray z-[100] overflow-y-auto overflow-x-hidden"
       style={{ WebkitOverflowScrolling: 'touch' }}
     >
       <motion.div
-        variants={staggerContainer.variants}
+        variants={staggerContainer}
         initial="initial"
         animate="animate"
-        className="min-h-full flex flex-col items-center px-4 py-8 pb-60"
+        className="min-h-full flex flex-col items-center px-4 pt-8 pb-60"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
+          paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(16px, env(safe-area-inset-right, 0px))'
+        }}
       >
 
-        {/* Header Navigation */}
-        <motion.div variants={staggerItem} className="w-full max-w-md flex justify-between items-center mb-8 px-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-white shadow-sm flex items-center justify-center text-star-dark border border-gray-100">
-              <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-            <div>
-              <h2 className="text-xl font-black text-star-dark italic uppercase tracking-tighter leading-none">训练战报</h2>
-              <p className="text-[10px] font-mono text-gray-400 mt-1 uppercase tracking-widest font-bold">Training Report • v2.1</p>
-            </div>
-          </div>
-          <button onClick={onClose} className="bg-white rounded-2xl p-3 shadow-sm text-gray-400 hover:text-black transition-all active:scale-95 border border-gray-100">
-            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+        {/* Header Navigation —— iOS 规范：返回/关闭按钮在左侧 */}
+        <motion.div variants={staggerItem} className="w-full max-w-md flex items-center gap-3 mb-8 px-2">
+          <button
+            onClick={onClose}
+            aria-label="返回"
+            className="flex-shrink-0 w-11 h-11 rounded-full bg-white shadow-sm text-star-dark flex items-center justify-center border border-gray-100 active:bg-gray-100 active:scale-95 transition-all"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
             </svg>
           </button>
+          <div>
+            <h1 className="text-lg font-black text-gray-900 tracking-tighter leading-none">训练战报</h1>
+          </div>
         </motion.div>
 
         {/* Main Summary Bubble (Card) */}
@@ -278,36 +281,33 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25, duration: 0.3 }}
-        className="fixed bottom-10 left-0 right-0 flex justify-center gap-4 z-[110] px-6"
+        className="fixed left-0 right-0 flex justify-center gap-4 z-[110] px-6"
+        style={{ bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
       >
         <motion.button
           {...buttonPress}
           onClick={handleAiGen}
-          className="flex-1 bg-white border border-gray-200 text-star-dark font-black px-6 py-4 rounded-[2rem] shadow-xl flex items-center justify-center gap-3 uppercase tracking-tighter italic text-sm"
+          className="liquid-glass-clear flex-1 h-[50px] text-white font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform"
         >
-          <div className="w-8 h-8 rounded-xl bg-purple-50 flex items-center justify-center text-purple-600">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-            </svg>
-          </div>
-          <span>AI 建议</span>
+          <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+          </svg>
+          <span>AI 海报</span>
         </motion.button>
 
         <motion.button
           {...tapScale}
           onClick={handleSaveCard}
           disabled={isSaving}
-          className="flex-1 bg-star-dark text-white font-black px-6 py-4 rounded-[2rem] shadow-2xl shadow-star-dark/30 flex items-center justify-center gap-3 uppercase tracking-tighter italic text-sm"
+          className="liquid-glass-clear-tinted flex-1 h-[50px] text-white font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform disabled:opacity-60"
         >
           {isSaving ? (
-            <div className="w-5 h-5 border-3 border-white/30 border-t-white rounded-full animate-spin"></div>
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
           ) : (
             <>
-              <div className="w-8 h-8 rounded-xl bg-white/10 flex items-center justify-center text-star-accent">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-                </svg>
-              </div>
+              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+              </svg>
               <span>保存海报</span>
             </>
           )}

@@ -16,6 +16,8 @@ import React from 'react';
 import ReactMarkdown from 'react-markdown';
 import rehypeRaw from 'rehype-raw';
 import remarkGfm from 'remark-gfm';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
 
 interface MarkdownRendererProps {
   content: string;
@@ -23,6 +25,14 @@ interface MarkdownRendererProps {
   isMobile?: boolean; // 是否为移动端预览（影响样式）
   onImageClick?: (url: string) => void;
 }
+
+/**
+ * 统一 Markdown 渲染管道：
+ * - remark-gfm    : 表格/任务列表/删除线等 GFM 扩展
+ * - remark-math   : $...$ / $$...$$ 数学公式解析
+ * - rehype-katex  : 公式渲染为 KaTeX（样式表已在 index.html 引入）
+ * - rehype-raw    : 支持内容中的内联 HTML（教学后台富文本）
+ */
 
 // 预处理：将 @[video](url) 转换为链接（禁止注入 <video>/<source>/<track>）
 const preprocessVideoSyntax = (markdown: string): string => {
@@ -52,8 +62,8 @@ export const MarkdownRenderer: React.FC<MarkdownRendererProps> = ({
   const rendered = (
     <ReactMarkdown
       className={className}
-      remarkPlugins={[remarkGfm]}
-      rehypePlugins={[rehypeRaw]}
+      remarkPlugins={[remarkGfm, remarkMath]}
+      rehypePlugins={[rehypeRaw, rehypeKatex]}
       components={{
         video: ({ node, ...props }) => null,
         source: ({ node, ...props }) => null,

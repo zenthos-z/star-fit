@@ -2,7 +2,19 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ExerciseAction, LoadAnchors, LoadAnchor } from '../../../types/protocol';
 import { deviationBuffer } from '../../../services/DeviationBuffer';
 import { DeviationWarningModal } from '../../DeviationWarningModal';
-import { getExerciseTypeLabel } from '../../../../utils/exerciseTypeLabels';
+import { CardHeader } from './CardHeader';
+import { haptic } from '../../../../lib/nativeHaptics';
+
+/**
+ * 数字字号按位数动态缩放（有下限）：
+ * ≤3位（如 27.5 / 100）→ text-2xl；4位（如 1025）→ text-xl；≥5位 → text-lg 封底。
+ */
+const numSizeClass = (v: unknown): string => {
+  const len = String(v ?? '').replace(/[-.]/g, '').length;
+  if (len <= 3) return 'text-2xl';
+  if (len === 4) return 'text-xl';
+  return 'text-lg';
+};
 
 interface ResistanceCardProps {
   exercise: ExerciseAction;
@@ -12,13 +24,6 @@ interface ResistanceCardProps {
   loadAnchors?: LoadAnchors;
   onUpdate?: (updates: Partial<ExerciseAction>) => void;
 }
-
-// 震动反馈辅助函数
-const triggerVibration = (pattern: number | number[] = 200) => {
-  if ('vibrate' in navigator) {
-    navigator.vibrate(pattern);
-  }
-};
 
 /**
  * ResistanceCard Plugin
@@ -67,7 +72,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
           const isInRestNow = set.restEndTime && set.restEndTime > Date.now();
           // 如果之前在休息，现在不在休息了，说明倒计时刚刚结束
           if (wasInRest && !isInRestNow) {
-            triggerVibration([100, 50, 100]); // 双击震动模式
+            haptic('warning'); // 休息倒计时结束：通知触感
           }
           // 更新当前状态
           previousRestStatesRef.current[set.index] = !!isInRestNow;
@@ -176,7 +181,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
     } else {
       // 未完成 -> 完成 (触发休息)
       updateSet(setIndex, { status: 'COMPLETED', restEndTime: Date.now() + 60000 });
-      triggerVibration(200);
+      haptic('success');
     }
   };
 
@@ -223,7 +228,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
     // 短按逻辑
     if (isInRest(setIndex)) {
       endRest(setIndex);
-      triggerVibration(150);
+      haptic('light');
       return;
     }
 
@@ -246,19 +251,9 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
   const totalCount = exercise.sets.length;
 
   return (
-    <div className="p-6 bg-white rounded-2xl shadow-sm border border-gray-50">
+    <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
       {/* Header */}
-      <div className="flex justify-between items-center mb-10">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-6 bg-blue-500 rounded-2xl shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
-          <h3 className="text-xl font-black text-gray-900 tracking-tight">{exerciseName}</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] bg-blue-50 text-blue-500 px-1.5 py-0.5 rounded-2xl font-bold uppercase tracking-widest border border-blue-100">
-            {getExerciseTypeLabel(exercise.type)}
-          </span>
-        </div>
-      </div>
+      <CardHeader name={exerciseName} type={exercise.type} />
 
       {/* Sets List */}
       <div className="space-y-10">
@@ -302,7 +297,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
                       setEditingValues(prev => { const next = { ...prev }; delete next[key]; return next; });
                     }}
                     disabled={isCompleted}
-                    className="w-full text-center font-black text-3xl bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none disabled:cursor-not-allowed transition-all tabular-nums text-gray-800"
+                    className={`w-full text-center font-black leading-tight py-1 bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none disabled:cursor-not-allowed transition-all tabular-nums text-gray-800 ${numSizeClass(editingValues[`weight-${set.index}`] ?? set.weight)}`}
                   />
                 </div>
                 <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">kg</span>
@@ -329,7 +324,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
                       setEditingValues(prev => { const next = { ...prev }; delete next[key]; return next; });
                     }}
                     disabled={isCompleted}
-                    className="w-full text-center font-black text-3xl bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none disabled:cursor-not-allowed transition-all tabular-nums text-gray-800"
+                    className={`w-full text-center font-black leading-tight py-1 bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none disabled:cursor-not-allowed transition-all tabular-nums text-gray-800 ${numSizeClass(editingValues[`reps-${set.index}`] ?? set.reps)}`}
                   />
                 </div>
                 <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">次数</span>
@@ -352,7 +347,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
                   }}
                   onTouchStart={(e) => e.stopPropagation()}
                   onMouseDown={(e) => e.stopPropagation()}
-                  className={`w-16 h-12 rounded-2xl border-2 flex items-center justify-center transition-all duration-300 active:scale-90 shadow-sm relative overflow-hidden ${
+                  className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all duration-300 active:scale-90 shadow-sm relative overflow-hidden ${
                     inRest
                       ? 'bg-orange-500 border-orange-400 shadow-lg shadow-orange-500/40'
                       : isCompleted

@@ -2,6 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ExerciseAction, LoadAnchors } from '../../../types/protocol';
 import { Play, Pause, RotateCcw, CheckCircle2, Heart, Timer, MapPin, Watch, Square } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { transitions } from '../../../lib/animations';
+import { CardHeader } from './CardHeader';
+import { haptic } from '../../../../lib/nativeHaptics';
 
 interface RunningCardProps {
   exercise: ExerciseAction;
@@ -127,6 +130,7 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
   const handleComplete = (finalElapsed?: number) => {
     setIsRunning(false);
     setIsCompleted(true);
+    haptic('success'); // 有氧完成：成功通知触感
     const actualElapsed = finalElapsed ?? elapsed;
     syncToParent(actualElapsed, true);
   };
@@ -146,7 +150,7 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
 
   const formatDistance = (meters: number) => (meters / 1000).toFixed(1);
 
-  const smoothSpring = { type: "spring", stiffness: 400, damping: 30, mass: 0.8 } as const;
+  const smoothSpring = transitions.springSmooth;
 
   const renderMetrics = () => {
     const isActive = isRunning || elapsed > 0 || isCompleted;
@@ -207,23 +211,12 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
   };
 
   return (
-    <div className="p-6 bg-white rounded-2xl shadow-sm border border-gray-50">
-      <div className="flex justify-between items-center mb-10">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-6 bg-blue-500 rounded-2xl shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
-          <h3 className="text-xl font-black text-gray-900 tracking-tight">{exerciseName}</h3>
-        </div>
-        <div className="flex items-center gap-2">
-           <span className="flex items-center gap-1 text-[10px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded-2xl font-bold uppercase tracking-widest border border-gray-100">
-               <config.icon className="w-3 h-3" />
-               {config.label}
-           </span>
-         </div>
-      </div>
+    <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
+      <CardHeader name={exerciseName} type={exercise.type} />
 
       {/* 已移除执行界面参考值展示 */}
 
-      <div className={`flex flex-col items-center justify-center py-8 mb-6 rounded-2xl border relative overflow-hidden transition-all duration-500 ${
+      <div className={`flex flex-col items-center justify-center py-8 mb-6 rounded-3xl border relative overflow-hidden transition-all duration-500 ${
           isCompleted ? 'bg-emerald-50 border-emerald-100' : 'bg-gray-50 border-gray-100'
       }`}>
           {/* 仅在倒计时模式显示进度条 */}
@@ -233,10 +226,8 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
           {renderMetrics()}
           {/* 心率行：目标 Zone + 实际平均心率录入 */}
           <div className="mt-4 w-full px-6 flex items-center justify-center gap-3">
-            <div className={`flex items-center gap-1.5 px-3 py-1 rounded-2xl border transition-all shrink-0 ${
-                isCompleted ? 'bg-emerald-100/50 text-emerald-600 border-emerald-200' : 'bg-rose-50 text-rose-600 border-rose-100'
-            }`}>
-              <Heart className={`w-3.5 h-3.5 ${isCompleted ? 'fill-emerald-600' : 'fill-rose-600'}`} />
+            <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border bg-white text-gray-400 border-gray-100 transition-all shrink-0">
+              <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100" />
               <span className="text-[10px] font-black uppercase tracking-widest">目标: Zone {targetHeartRateZone}</span>
             </div>
             <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1 flex-1 max-w-[10rem]">
@@ -246,7 +237,7 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
                 inputMode="numeric"
                 min={40}
                 max={220}
-                placeholder="实际心率"
+                placeholder="实时"
                 value={heartRateInput}
                 onChange={(e) => handleHeartRateChange(e.target.value)}
                 disabled={isCompleted}
@@ -262,12 +253,12 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
           {(isRunning || elapsed > 0 || isCompleted) && (
             <motion.div key="secondary" initial={{ opacity: 0, scale: 0.8, width: 0 }} animate={{ opacity: 1, scale: 1, width: 'auto' }} exit={{ opacity: 0, scale: 0.8, width: 0 }} transition={smoothSpring} className="flex-1 overflow-hidden">
               {isCompleted ? (
-                <button onClick={handleUndoComplete} className="w-full h-full rounded-2xl flex items-center justify-center gap-2 border-2 bg-white text-gray-400 border-gray-100 active:scale-95 transition-all">
+                <button onClick={handleUndoComplete} className="w-full h-full rounded-full flex items-center justify-center gap-2 border-2 bg-white text-gray-400 border-gray-100 active:scale-95 transition-all">
                   <RotateCcw className="w-4 h-4" />
                   <span className="text-sm font-bold uppercase tracking-widest">撤销</span>
                 </button>
               ) : (
-                <button onClick={() => handleComplete()} className={`w-full h-full rounded-2xl flex items-center justify-center gap-2 border-2 active:scale-95 transition-all ${isRunning ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'}`}>
+                <button onClick={() => handleComplete()} className={`w-full h-full rounded-full flex items-center justify-center gap-2 border-2 active:scale-95 transition-all ${isRunning ? 'bg-rose-50 text-rose-500 border-rose-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100'}`}>
                   {isRunning ? <Square className="w-4 h-4 fill-current" /> : <CheckCircle2 className="w-5 h-5" />}
                   <span className="text-sm font-bold uppercase tracking-widest">{isRunning ? '结束' : '完成'}</span>
                 </button>
@@ -278,12 +269,12 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
 
         <motion.div layout key="primary" transition={smoothSpring} style={{ originX: 1 }} className="flex-[2.5]">
           {isCompleted ? (
-            <div className="w-full h-full bg-emerald-500 rounded-2xl flex items-center justify-center gap-3 text-white border-2 border-emerald-500">
+            <div className="w-full h-full bg-emerald-500 rounded-full flex items-center justify-center gap-3 text-white border-2 border-emerald-500">
               <CheckCircle2 className="w-6 h-6" />
               <span className="text-lg font-bold uppercase tracking-widest">已完成</span>
             </div>
           ) : (
-            <button onClick={handleToggle} className={`w-full h-full rounded-2xl flex items-center justify-center gap-3 border-2 active:scale-95 transition-all ${isRunning ? 'bg-orange-50/50 text-orange-600 border-orange-200' : 'bg-white text-gray-800 border-gray-100'}`}>
+            <button onClick={handleToggle} className={`w-full h-full rounded-full flex items-center justify-center gap-3 border-2 active:scale-95 transition-all ${isRunning ? 'bg-orange-50/50 text-orange-600 border-orange-200' : 'bg-white text-gray-800 border-gray-100'}`}>
               {isRunning ? <Pause className="w-6 h-6 fill-current" /> : <Play className="w-6 h-6 fill-current text-blue-500" />}
               <span className="text-lg font-bold uppercase tracking-widest">{isRunning ? '暂停' : (elapsed > 0 ? '继续' : '开始')}</span>
             </button>

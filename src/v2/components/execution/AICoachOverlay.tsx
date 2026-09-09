@@ -252,6 +252,15 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
     }
   };
 
+  // 教学页「咨询教练」等入口挂入附件后，聚焦输入框引导用户直接提问（iMessage 行为）
+  useEffect(() => {
+    if (isOpen && attachedContext && textareaRef.current) {
+      // 等 sheet 滑入动画结束再聚焦，避免动画期间键盘弹起打断
+      const t = setTimeout(() => textareaRef.current?.focus(), 450);
+      return () => clearTimeout(t);
+    }
+  }, [isOpen, attachedContext, textareaRef]);
+
   // Helper function to handle survey upload directly
   const handleSurveyUpload = (payload: string) => {
     // Pass the payload directly to handleChatSubmit to avoid state timing issues
@@ -319,10 +328,13 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         opacity: isOpen ? 1 : 0,
         pointerEvents: isOpen ? 'auto' : 'none',
       }}
-      className={`fixed inset-0 z-50 flex flex-col h-full rounded-t-[40px] shadow-[0_-8px_40px_rgba(0,0,0,0.18)] overflow-hidden bg-[#F6F6F8]`}
+      className={`fixed inset-0 z-[110] rounded-t-[40px] shadow-[0_-8px_40px_rgba(0,0,0,0.18)] overflow-hidden bg-[#FAFAFA]`}
     >
-      {/* Header — iMessage 风格：左关闭 / 中标题 / 右历史 */}
-      <div className="flex-shrink-0 z-20 px-4 pt-2 pb-3 flex items-center justify-between" style={{ paddingTop: 'calc(var(--safe-top) + 8px)' }}>
+      {/* 顶部渐隐：对话内容上滑穿过导航栏，无硬切分割 */}
+      <div className="absolute top-0 inset-x-0 h-28 z-[15] pointer-events-none bg-gradient-to-b from-[#FAFAFA] via-[#FAFAFA]/85 to-transparent" />
+
+      {/* Header — iMessage 风格：左关闭 / 中标题 / 右历史（透明悬浮层） */}
+      <div className="absolute top-0 inset-x-0 z-20 px-4 pt-2 pb-3 flex items-center justify-between" style={{ paddingTop: 'calc(var(--safe-top) + 8px)' }}>
         <button
           onClick={onClose}
           className="h-11 px-4 rounded-full bg-white shadow-sm flex items-center gap-1.5 text-gray-800 active:scale-95 transition-all"
@@ -349,12 +361,12 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         </button>
       </div>
 
-      {/* Chat Body */}
-      <div className={`flex-1 overflow-y-auto px-6 relative z-10 custom-scrollbar transition-opacity duration-300 ${showContent ? 'opacity-100' : 'opacity-0'}`}>
+      {/* Chat Body — 全高滚动，内容从导航栏/输入栏后面穿过（玻璃悬浮层可折射内容） */}
+      <div className={`absolute inset-0 overflow-y-auto px-6 z-10 custom-scrollbar transition-opacity duration-300 ${showContent ? 'opacity-100' : 'opacity-0'}`}>
         {chatHistory.length === 0 ? (
           <WelcomeScreen />
         ) : (
-          <div className="space-y-2.5 pt-4 pb-6 px-1">
+          <div className="space-y-2.5 pt-[calc(var(--safe-top)+64px)] pb-[calc(var(--safe-bottom)+80px)] px-1">
             {chatHistoryWithProgress.map((msg, i) => (
               <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'} ${showContent ? 'animate-in fade-in slide-in-from-bottom-4 duration-500' : 'opacity-0'}`}>
 
@@ -379,10 +391,10 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 {/* Message Bubble（内容层用实色卡片：HIG 禁止 content 层玻璃化/glass-on-glass） */}
                 {(!msg.isThinking || msg.text) && (
                   <div className={`
-                    px-4 py-2.5 text-[16px] leading-[1.35] max-w-[78%] markdown-body
+                    px-4 py-2.5 text-[16px] leading-[1.35] markdown-body
                     ${msg.role === 'user'
-                      ? 'bg-[#0A84FF] text-white rounded-[20px] rounded-br-[6px]'
-                      : 'bg-[#E9E9EB] text-gray-900 rounded-[20px] rounded-bl-[6px]'
+                      ? 'max-w-[78%] bg-[#0A84FF] text-white rounded-[20px] rounded-br-[6px]'
+                      : 'w-full bg-[#E9E9EB] text-gray-900 rounded-[20px] rounded-bl-[6px]'
                     }
                   `}>
                     <ReactMarkdown
@@ -500,8 +512,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         )}
       </div>
 
-      {/* Input Bar — iMessage 风格：[+] [胶囊输入框] [🎤/↑] */}
-      <div className="relative flex-shrink-0 z-20 px-3 pt-2 pb-3" style={{ paddingTop: 8, paddingBottom: 'calc(var(--safe-bottom) + 8px)' }}>
+      {/* Input Bar — iMessage 风格：[+] [胶囊输入框] [🎤/↑]，玻璃悬浮层（透明底，内容从后穿过） */}
+      <div className="absolute bottom-0 inset-x-0 z-20 px-4 pt-2 pb-3" style={{ paddingTop: 8, paddingBottom: 'calc(var(--safe-bottom) + 8px)' }}>
         {/* iOS 26 Menu：参考信息 App——大型白色圆角浮层，大图标+大字，无分隔线 */}
         {showAttachPanel && (
           <motion.div
@@ -535,11 +547,11 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
           </motion.div>
         )}
 
-        <div className="relative flex items-end gap-2">
-          {/* + 附件按钮 */}
+        <div className="flex items-end gap-2">
+          {/* + 附件按钮：Liquid Glass（Apple glassEffect(.regular) 配方材质） */}
           <button
             onClick={() => setShowAttachPanel(!showAttachPanel)}
-            className={`w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center shrink-0 transition-all active:scale-90 text-gray-800 ${showAttachPanel ? 'rotate-45' : ''}`}
+            className={`glass-ring w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 text-gray-800 ${showAttachPanel ? 'rotate-45' : ''}`}
             aria-label="附件"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -547,8 +559,42 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
             </svg>
           </button>
 
-          {/* 胶囊输入框 */}
-          <form onSubmit={(e) => { e.preventDefault(); handleChatSubmit(); }} className="flex-1 flex items-end gap-1 bg-white rounded-[22px] pl-4 pr-1.5 py-1.5">
+          {/* 胶囊输入框列：附件 chip 贴在输入胶囊正上方、与胶囊同宽同缘（iMessage 官方布局） */}
+          <div className="relative flex-1">
+            {/* 附件 chip（iMessage 风格）：教学页「咨询教练」等入口挂入的上下文，可点 × 移除 */}
+            <AnimatePresence>
+              {attachedContext && (
+                <motion.div
+                  initial={{ opacity: 0, y: 6, scale: 0.97 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  exit={{ opacity: 0, y: 6, scale: 0.97 }}
+                  transition={{ duration: 0.2, ease: [0.32, 0.72, 0, 1] }}
+                  className="absolute bottom-full left-0 right-0 mb-2 flex items-center gap-2 bg-white rounded-[22px] shadow-sm border border-gray-100 pl-3 pr-2 py-2"
+                >
+                  <div className="w-6 h-6 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
+                    <svg className="w-3 h-3 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.182 15.182a4.5 4.5 0 01-6.364 0M21 12a9 9 0 11-18 0 9 9 0 0118 0zM9.75 9.75c0 .414-.168.75-.375.75S9 10.164 9 9.75 9.168 9 9.375 9s.375.336.375.75zm-.375 0h.375m4.875 0c0 .414-.168.75-.375.75s-.375-.336-.375-.75.168-.75.375-.75.375.336.375.75zm0 0h-.375" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[13px] font-medium text-gray-800 truncate leading-tight">
+                      {attachedContext.title || attachedContext.exerciseName || '上下文附件'}
+                    </div>
+                  </div>
+                  <button
+                    onClick={onRemoveAttachment}
+                    className="w-5 h-5 rounded-full bg-gray-200 flex items-center justify-center text-gray-500 active:bg-gray-300 active:scale-90 transition-all shrink-0"
+                    aria-label="移除附件"
+                  >
+                    <svg className="w-2.5 h-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            <form onSubmit={(e) => { e.preventDefault(); handleChatSubmit(); }} className="glass-ring flex items-end gap-1 rounded-[22px] pl-4 pr-1.5 py-1.5">
             <textarea
               ref={textareaRef}
               rows={1}
@@ -587,7 +633,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 </svg>
               )}
             </button>
-          </form>
+            </form>
+          </div>
         </div>
       </div>
 

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { v4 as uuidv4 } from 'uuid';
-import { motion, AnimatePresence, useMotionValue, useSpring, useTransform } from 'framer-motion';
+import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion';
 import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiScenario } from './types';
 import { navigationReducer, initialNavigation } from './src/v2/lib/navigation';
 import { computeSettlementSummary } from './src/v2/lib/settlementSummary';
@@ -11,6 +11,7 @@ import ReorderMode from './src/v2/components/execution/ReorderMode';
 import SettlementV2 from './src/v2/components/settlement/SettlementV2';
 import History from './components/History';
 import { haptic } from './src/lib/nativeHaptics';
+import { startLiveActivity, pauseLiveActivity, endLiveActivity } from './src/lib/liveActivity';
 import TimeEditor from './components/TimeEditor';
 import MainTabBar, { MainTab } from './components/MainTabBar';
 import ExerciseSettingsModal from './components/ExerciseSettingsModal';
@@ -287,6 +288,19 @@ const App: React.FC = () => {
     }
   }, [session.status, userId]);
 
+  // 灵动岛 Live Activity：训练计时同步到系统胶囊（退桌面/锁屏可见，系统跳秒）
+  // 全部静默降级：Web/Android/未授权 → no-op。等 hydrated 后再动作，避免冷启动恢复草稿期间误报。
+  useEffect(() => {
+    if (!hydrated) return;
+    if (session.status === 'active') {
+      startLiveActivity(session.id, session.startTime + session.pausedDuration);
+    } else if (session.status === 'paused') {
+      pauseLiveActivity(session.pauseStartTime ?? Date.now());
+    } else {
+      endLiveActivity();
+    }
+  }, [hydrated, session.status, session.id, session.startTime, session.pausedDuration, session.pauseStartTime]);
+
   const dateKey = new Date().toISOString().slice(0,10);
   const throttledSaveRef = useRef<any>(null);
   const sessionRef = useRef<Session>(session);
@@ -397,25 +411,46 @@ const App: React.FC = () => {
     console.log(`[TOAST]: ${msg}`);
   }, []);
 
-  // Overscroll Elasticity (Elastic Band Effect)
+  // Overscroll Elasticity (Apple-style rubber-band)
+  // 拖动时 1:1 橡筋阻尼跟随（越拉越紧、有上限，不露灰底）；松手后弹簧回弹。
   const overscrollY = useMotionValue(0);
-  const overscrollSpring = useSpring(overscrollY, { stiffness: 200, damping: 25 });
-  const scaleY = useTransform(overscrollSpring, [-200, 0, 200], [1.08, 1, 1.08]);
-  const translateY = useTransform(overscrollSpring, (v) => v * 0.2);
-  const overscrollOrigin = useTransform(overscrollSpring, (v) => v > 0 ? "top" : "bottom");
+  const RUBBER_BAND_MAX = 70; // 位移上限（px）
+  // 标准 iOS rubber-band 曲线：limit + (1 - 1/(x/limit + 1)) * limit，渐进逼近上限
+  const rubberBand = (x: number): number => {
+    const sign = Math.sign(x);
+    const v = Math.abs(x);
+    return sign * (RUBBER_BAND_MAX * (1 - 1 / (v / RUBBER_BAND_MAX + 1)));
+  };
 
   const startTouchY = useRef(0);
+  const lastTouchY = useRef(0);
+  const lastTouchTime = useRef(0);
   const isAtTop = useRef(false);
   const isAtBottom = useRef(false);
+  // 惯性滚动监控（scroll 事件）：手指抬起后页面靠惯性滚动，冲到边缘的瞬间
+  // 若速度够快则播一次 bounce（「到边了」的弹力提示），硬停变弹回。
+  const lastScrollPos = useRef(0);
+  const lastScrollTime = useRef(0);
+  const scrollVelocity = useRef(0); // px/s，正=向下
+  const bounceCooldownUntil = useRef(0); // 防重复触发
+  const inMomentumBounce = useRef(false); // 动量 bounce 进行中（抑制速度污染）
 
   const handleOverscrollTouchStart = (e: React.TouchEvent) => {
     if (currentRoute !== AppRoute.HOME || isAiOverlayOpen || showSettingsId || tutorialExerciseId || reorderMode) return;
+    // 新触摸：终止进行中的动量 bounce（把控制权还给手指）
+    if (inMomentumBounce.current) {
+      overscrollY.stop();
+      overscrollY.set(0);
+      inMomentumBounce.current = false;
+    }
     const scrollTop = window.scrollY;
     const scrollHeight = document.documentElement.scrollHeight;
     const clientHeight = window.innerHeight;
     isAtTop.current = scrollTop <= 2;
     isAtBottom.current = scrollTop + clientHeight >= scrollHeight - 10;
     startTouchY.current = e.touches[0].pageY;
+    lastTouchY.current = e.touches[0].pageY;
+    lastTouchTime.current = performance.now();
   };
 
   const handleOverscrollTouchMove = (e: React.TouchEvent) => {
@@ -423,14 +458,21 @@ const App: React.FC = () => {
     const currentY = e.touches[0].pageY;
     const deltaY = currentY - startTouchY.current;
     if ((isAtTop.current && deltaY > 0) || (isAtBottom.current && deltaY < 0)) {
-      overscrollY.set(deltaY);
+      overscrollY.set(rubberBand(deltaY));
     } else {
       overscrollY.set(0);
     }
   };
 
   const handleOverscrollTouchEnd = () => {
-    overscrollY.set(0);
+    if (overscrollY.get() !== 0) {
+      // 拖拽释放：Apple 标准 spring（响应快、微过冲一次）
+      animate(overscrollY, 0, { type: 'spring', stiffness: 400, damping: 34, mass: 0.9 });
+    }
+    // 手指抬起后进入惯性滚动阶段：armed，让 scroll 监听开始测速
+    lastScrollPos.current = window.scrollY;
+    lastScrollTime.current = performance.now();
+    scrollVelocity.current = 0;
   };
 
   const buildExercisesFromPlan = (planData: any[]): Exercise[] => {
@@ -555,13 +597,78 @@ const App: React.FC = () => {
       dispatchNav({ type: 'OPEN_HISTORY' });
       return;
     }
-}, [currentRoute, isAiOverlayOpen, viewHistorySession]);
+    if (tab === 2) {
+      // AI Agent 页签 → 打开 AI 浮层（浮层为 sheet：盖住 tab bar）
+      if (viewHistorySession) dispatchNav({ type: 'BACK' });
+      else if (currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS) dispatchNav({ type: 'HOME' });
+      setTransitionOrigin(null);
+      openAiCoach();
+      return;
+    }
+}, [currentRoute, isAiOverlayOpen, viewHistorySession, openAiCoach]);
+
+  // 挂全局 scroll 监听（惯性阶段 touch 事件已全部结束，只有 scroll 能观测到滚动）：
+  // 惯性滚动冲到边缘的瞬间若速度够快，播一次 bounce（「到边了」的弹力提示），硬停变弹回。
+  useEffect(() => {
+    const onScroll = () => {
+      if (currentRoute !== AppRoute.HOME || isAiOverlayOpen || showSettingsId || tutorialExerciseId || reorderMode) return;
+      if (overscrollY.get() !== 0 && !inMomentumBounce.current) return; // 拖拽 rubber-band 中，别捣乱
+      const now = performance.now();
+      const pos = window.scrollY;
+      const dt = now - lastScrollTime.current;
+      // 测速：只采纳朝当前滚动方向的位移样本。撞边后浏览器把 scrollY 钳在 0/最大值，
+      // 会补发 v≈0 的 scroll 事件——若采纳会把速度估计迅速稀释成 0（触发变弱/失效）。
+      if (dt > 0 && dt < 120) {
+        const raw = (pos - lastScrollPos.current) / dt * 1000;
+        const v = scrollVelocity.current;
+        if (raw === 0 || raw * v >= 0) { // 静止样本不稀释；反向样本（新的滚动）直接采纳
+          scrollVelocity.current = v * 0.6 + raw * 0.4;
+        } else if (Math.abs(raw) > 300) {
+          scrollVelocity.current = raw;
+        }
+      }
+      lastScrollPos.current = pos;
+      lastScrollTime.current = now;
+
+      const scrollHeight = document.documentElement.scrollHeight;
+      const clientHeight = window.innerHeight;
+      const v = scrollVelocity.current;
+      const cooled = now >= bounceCooldownUntil.current;
+      // 符号约定：scroll 速度 v 正 = scrollY 增大 = 页面向下滚（冲向底部）。
+      // 手指快速下拉 → scrollY 减小 → v 为负 → 惯性冲向顶部。
+      const hitTop = pos <= 0 && v < -400;
+      const hitBottom = pos + clientHeight >= scrollHeight - 1 && v > 400;
+      if (cooled && (hitTop || hitBottom)) {
+        bounceCooldownUntil.current = now + 900;
+        const impact = Math.abs(v);
+        const dir = hitTop ? 1 : -1; // 顶部内容往下弹，底部内容往上弹
+        scrollVelocity.current = 0;
+        inMomentumBounce.current = true;
+        // 动量连续的 bounce：把撞边瞬间的滚动速度作为初速度注入阻尼弹簧，
+        // 内容带着惯性自然冲出→减速→弹回，全程速度连续，无「硬停再起步」断崖。
+        // 物理：x'' = (-k·x - c·x')/m，x(0)=0，x'(0)=撞边速度（换算到像素幅度）。
+        const v0 = dir * Math.min(impact * 0.4, 1400); // 初速度 px/s（与冲量成正比，封顶防爆）
+        animate(overscrollY, 0, {
+          type: 'spring',
+          stiffness: 170,   // k：偏软，冲得出去
+          damping: 18,      // c：欠阻尼 ζ≈0.69，冲出后自然回弹一次半
+          mass: 1,
+          velocity: v0,     // ← 关键：初速度 = 撞边动能，动画从运动中接棒而非从静止起步
+        }).then(() => {
+          inMomentumBounce.current = false;
+        });
+      }
+    };
+    window.addEventListener('scroll', onScroll, { passive: true });
+    return () => window.removeEventListener('scroll', onScroll);
+  }, [currentRoute, isAiOverlayOpen, showSettingsId, tutorialExerciseId, reorderMode]);
 
   // 路由侧变化反向同步 tab 高亮（结算完成回主页等场景）
   useEffect(() => {
     if (currentRoute === AppRoute.SETTLEMENT) return;
     if (currentRoute === AppRoute.HISTORY || viewHistorySession) { if (mainTabRef.current !== 0) setMainTab(0); return; }
-    // AI 对话现在是独立按钮（非 tab），打开时保持当前 tab 高亮不动
+    // AI 浮层打开 = AI 页签高亮；关闭回运动页
+    if (isAiOverlayOpen) { if (mainTabRef.current !== 2) setMainTab(2); return; }
     if (mainTabRef.current !== 1) setMainTab(1);
   }, [currentRoute, viewHistorySession, isAiOverlayOpen]);
 
@@ -657,7 +764,7 @@ const App: React.FC = () => {
         status: 'active',
         exercises: prev.exercises
       }));
-      if (navigator.vibrate) navigator.vibrate(50);
+      haptic('medium'); // 开始训练：主操作触感
     }
   };
 
@@ -665,7 +772,7 @@ const App: React.FC = () => {
     if (session.status === 'active') {
         const now = Date.now();
         setSession(prev => ({ ...prev, status: 'paused', pauseStartTime: now }));
-        if (navigator.vibrate) navigator.vibrate(20);
+        haptic('light'); // 暂停：轻触感
     }
   };
 
@@ -1040,13 +1147,12 @@ const App: React.FC = () => {
   };
 
   const handleAskAiFromTutorial = (attachment: any) => {
-      setTutorialExerciseId(null); 
-      if (attachment?.content) {
-          openAiCoach({ question: attachment.content });
-      }
+      setTutorialExerciseId(null);
       if (attachment) {
+          // 以附件形式挂入 AI 教练输入区（不自动发送），用户直接输入/补充问题
           setAttachedContext(attachment);
       }
+      openAiCoach();
   };
 
   // --- Renderers ---
@@ -1090,9 +1196,7 @@ const App: React.FC = () => {
           scale: (isAiOverlayOpen || currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession || reorderMode) ? 0.95 : 1,
         }}
         style={{
-          y: translateY,
-          scaleY,
-          transformOrigin: overscrollOrigin
+          y: overscrollY
         }}
         transition={{
           type: 'spring',
@@ -1148,14 +1252,14 @@ const App: React.FC = () => {
 
           {session.exercises.length > 0 && (
             <div className="mt-8 flex justify-center pb-8">
-               <button 
-                 onClick={handleAddSingleExercise} 
-                 className="flex items-center gap-2 px-6 py-3.5 rounded-2xl bg-white border border-dashed border-gray-300 text-gray-400 hover:text-star-accent hover:border-star-accent active:scale-95 transition-all group"
+               <button
+                 onClick={handleAddSingleExercise}
+                 aria-label="添加动作"
+                 className="flex items-center justify-center w-11 h-11 rounded-full bg-gray-200 text-blue-500 active:bg-gray-300 active:scale-95 transition-all group"
                >
                   <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4 group-hover:scale-110 transition-transform">
                      <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                   </svg>
-                  <span className="text-sm font-black uppercase tracking-wider">添加动作</span>
                </button>
             </div>
           )}
@@ -1242,7 +1346,6 @@ const App: React.FC = () => {
           <MainTabBar
               tab={mainTab}
               onSelect={handleTabSelect}
-              onAiTap={() => openAiCoach()}
               hidden={(currentRoute as AppRoute) === AppRoute.SETTLEMENT || isAiOverlayOpen}
           />
         </div>

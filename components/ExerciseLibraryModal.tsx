@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { API_BASE } from '../services/geminiService';
-import { Zap, Wifi, WifiOff, RefreshCw } from 'lucide-react';
+import { Zap, WifiOff, RefreshCw, Search } from 'lucide-react';
 import { guessExerciseType } from '@/utils/exerciseLogic';
 import { ExerciseLibraryService } from '../services/exerciseLibraryService';
+import { haptic } from '../src/lib/nativeHaptics';
 
 interface ExerciseLibraryModalProps {
   onSelect: (id: string, name: string, defaultType?: string, bodyCategory?: string, muscles?: string[], equipment?: string) => void;
@@ -56,14 +56,34 @@ const MUSCLE_TO_CATEGORY: Record<string, string> = {
   '下臀部': '腿部',
 };
 
+/** 同步状态文案：与真实 sync 结果严格对应（失败不伪装成刚刚同步） */
+function formatLastSyncTime(timestamp: number | null): string {
+  if (!timestamp) return '未同步';
+  const diff = Date.now() - timestamp;
+  const minutes = Math.floor(diff / (60 * 1000));
+  const hours = Math.floor(diff / (60 * 60 * 1000));
+  const days = Math.floor(diff / (24 * 60 * 60 * 1000));
+
+  if (days > 0) return `${days} 天前更新`;
+  if (hours > 0) return `${hours} 小时前更新`;
+  if (minutes > 0) return `${minutes} 分钟前更新`;
+  return '刚刚更新';
+}
+
 const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, onClose, isCreatingMode = false, onCancelCreate }) => {
   const [searchTerm, setSearchTerm] = useState("");
   const [exercises, setExercises] = useState<Exercise[]>([]);
   const [loading, setLoading] = useState(true);
   const [isClassifying, setIsClassifying] = useState(false);
   const [isOnline, setIsOnline] = useState(navigator.onLine);
-  const [cacheStatus, setCacheStatus] = useState<{ lastSyncTime: number | null; isExpired: boolean } | null>(null);
+  const [cacheStatus, setCacheStatus] = useState<{
+    lastSyncTime: number | null;
+    isExpired: boolean;
+    isSyncing: boolean;
+    lastError?: string;
+  } | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isScrolled, setIsScrolled] = useState(false);
 
   useEffect(() => {
     const handleOnline = () => setIsOnline(true);
@@ -94,7 +114,9 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
       const status = await ExerciseLibraryService.getCacheStatus();
       setCacheStatus({
         lastSyncTime: status.lastSyncTime,
-        isExpired: status.isExpired
+        isExpired: status.isExpired,
+        isSyncing: status.isSyncing,
+        ...(status.lastError ? { lastError: status.lastError } : {})
       });
     };
 
@@ -109,18 +131,32 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
       const status = await ExerciseLibraryService.getCacheStatus();
       setCacheStatus({
         lastSyncTime: status.lastSyncTime,
-        isExpired: status.isExpired
+        isExpired: status.isExpired,
+        isSyncing: status.isSyncing,
+        ...(status.lastError ? { lastError: status.lastError } : {})
       });
     });
 
     return unsubscribe;
   }, []);
 
+  const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
+    setIsScrolled(e.currentTarget.scrollTop > 8);
+  }, []);
+
+  /**
+   * 更新动作库：真实同步——结果只有三种，全部如实反映
+   * ① 成功 → 状态更新为「刚刚更新」
+   * ② 失败但旧缓存仍在 → 状态回到旧缓存时间 + 「上次同步失败」琥珀色提示
+   * ③ 失败且无缓存 → 「未同步」
+   * 绝不在失败时把时间刷成「刚刚」。
+   */
   const handleRefresh = async () => {
-    if (!isOnline) {
+    if (!isOnline || isRefreshing) {
       return;
     }
 
+    haptic('light');
     setIsRefreshing(true);
     try {
       const data = await ExerciseLibraryService.forceRefresh();
@@ -128,27 +164,15 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
       const status = await ExerciseLibraryService.getCacheStatus();
       setCacheStatus({
         lastSyncTime: status.lastSyncTime,
-        isExpired: status.isExpired
+        isExpired: status.isExpired,
+        isSyncing: status.isSyncing,
+        ...(status.lastError ? { lastError: status.lastError } : {})
       });
     } catch (error) {
       console.error('[ExerciseLibraryModal] Failed to refresh exercises:', error);
     } finally {
       setIsRefreshing(false);
     }
-  };
-
-  const formatLastSyncTime = (timestamp: number | null) => {
-    if (!timestamp) return '未同步';
-    const now = Date.now();
-    const diff = now - timestamp;
-    const minutes = Math.floor(diff / (60 * 1000));
-    const hours = Math.floor(diff / (60 * 60 * 1000));
-    const days = Math.floor(diff / (24 * 60 * 60 * 1000));
-
-    if (days > 0) return `${days}天前同步`;
-    if (hours > 0) return `${hours}小时前同步`;
-    if (minutes > 0) return `${minutes}分钟前同步`;
-    return '刚刚同步';
   };
 
   const guessType = (name: string, cat: string) => {
@@ -223,6 +247,7 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
 
   const handleSmartCreate = async () => {
       if (!searchTerm) return;
+      haptic('medium');
       setIsClassifying(true);
       try {
           const response = await fetch('/api/agent/classify', {
@@ -253,7 +278,21 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
       }
   };
 
+  const handleBack = () => {
+    haptic('light');
+    if (isCreatingMode && onCancelCreate) {
+      onCancelCreate();
+    } else {
+      onClose();
+    }
+  };
+
   const displayLibrary = getFilteredLibrary();
+  const isEmptyLibrary = Object.keys(displayLibrary).length === 0;
+  /** 同步失败过（本次会话内）且当前不在线上刷新成功 → 琥珀提示 */
+  const showSyncError = !!cacheStatus?.lastError && isOnline;
+  /** 离线但已有缓存 */
+  const showOfflineCache = !isOnline && !!cacheStatus?.lastSyncTime;
 
   return (
     <motion.div
@@ -265,155 +304,190 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
         duration: 0.25,
         ease: 'easeOut'
       }}
-      className="fixed inset-0 z-[70] bg-white flex flex-col animate-in fade-in slide-in-from-bottom-10"
+      className="fixed inset-0 z-[70] bg-star-gray flex flex-col overflow-hidden"
     >
-       {/* Header */}
-       <div className="px-6 pt-12 pb-4 border-b border-gray-100 flex items-center gap-4 bg-white/80 backdrop-blur-md sticky top-0 z-20">
-           <button onClick={() => {
-             if (isCreatingMode && onCancelCreate) {
-               onCancelCreate();
-             } else {
-               onClose();
-             }
-           }} className="p-3 -ml-3 text-gray-400 hover:text-black active:scale-90 transition-transform">
-             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-8 h-8">
-               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-             </svg>
-           </button>
-           <div className="flex-1 flex items-center gap-2">
-             <h2 className="text-2xl font-black tracking-tight">动作库</h2>
-             {cacheStatus && (
-               <div className="flex items-center gap-2">
-                 {isOnline ? (
-                   <Wifi size={16} className="text-green-500" />
-                 ) : (
-                   <WifiOff size={16} className="text-red-500" />
-                 )}
-                 <span className="text-xs text-gray-400">
-                   {formatLastSyncTime(cacheStatus.lastSyncTime)}
-                   {cacheStatus.isExpired && isOnline && (
-                     <span className="text-orange-500 ml-1">(需更新)</span>
-                   )}
-                 </span>
+      {/* iOS Large Title 导航栏 — 与 History 页同规格：滚动折叠居中小标题 */}
+      <div
+        className="sticky top-0 z-20 bg-star-gray/85 backdrop-blur-md"
+        style={{ paddingTop: 'calc(var(--safe-top, 0px) + 4px)' }}
+      >
+        <div className="relative flex items-center h-11 px-4">
+            {/* HIG：返回钮左上角，44pt 命中区 */}
+            <button
+              onClick={handleBack}
+              aria-label="返回"
+              className="flex items-center -ml-2 pr-3 text-star-accent active:opacity-50 transition-opacity"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-7 h-7">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+            </button>
+            {/* 折叠居中小标题（滚动后淡入） */}
+            <span
+              className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-star-dark transition-opacity duration-200 pointer-events-none"
+              style={{ opacity: isScrolled ? 1 : 0 }}
+              aria-hidden={!isScrolled}
+            >
+              动作库
+            </span>
+
+            {/* HIG：动作与状态贴近——「最近更新 + 更新钮」一体放在导航栏右侧 */}
+            <div className="ml-auto flex items-center gap-2">
+                <span
+                  className={`text-xs whitespace-nowrap ${
+                    showSyncError
+                      ? 'text-amber-500'
+                      : showOfflineCache
+                        ? 'text-gray-400'
+                        : cacheStatus?.isExpired && isOnline
+                          ? 'text-amber-500'
+                          : 'text-gray-400'
+                  }`}
+                >
+                  {formatLastSyncTime(cacheStatus?.lastSyncTime ?? null)}
+                </span>
+                {isOnline && (
+                  <button
+                    onClick={handleRefresh}
+                    disabled={isRefreshing}
+                    aria-label="更新动作库"
+                    className="w-9 h-9 rounded-full bg-white shadow-sm text-gray-500 flex items-center justify-center active:scale-90 transition-transform disabled:opacity-50"
+                  >
+                    <RefreshCw size={17} className={isRefreshing ? 'animate-spin' : ''} />
+                  </button>
+                )}
+            </div>
+        </div>
+
+        {/* Large Title — 滚动时折叠（History 页同规格） */}
+        <h2
+          className="px-4 text-[34px] leading-[41px] font-black text-star-dark tracking-tight transition-all duration-200 overflow-hidden"
+          style={{ opacity: isScrolled ? 0 : 1, maxHeight: isScrolled ? 0 : 60, marginBottom: isScrolled ? 0 : 8 }}
+        >
+          动作库
+        </h2>
+      </div>
+
+      {/* Search — iOS 风格圆角灰底搜索框 */}
+      <div className="px-4 pt-1 pb-3">
+          <div className="bg-black/[0.06] rounded-xl px-3.5 py-2.5 flex items-center gap-2.5">
+              <Search size={18} className="text-gray-400 shrink-0" />
+              <input
+                type="text"
+                placeholder="搜索动作..."
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="bg-transparent outline-none w-full text-[17px] font-medium placeholder-gray-400"
+              />
+              {searchTerm && (
+                  <button onClick={() => setSearchTerm("")} aria-label="清除搜索" className="text-gray-400 p-1">
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+                  </button>
+              )}
+          </div>
+      </div>
+
+      {/* 同步失败提示条 — 真实反馈，只在失败时出现 */}
+      <AnimatePresence>
+        {showSyncError && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            className="px-4 overflow-hidden"
+          >
+            <div className="bg-amber-50 text-amber-600 text-xs font-medium rounded-xl px-3.5 py-2.5 mb-1">
+              上次更新失败，当前显示的是缓存数据
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Grouped List */}
+      <div
+        className="flex-1 overflow-y-auto px-4 pb-20 custom-scrollbar"
+        onScroll={handleScroll}
+      >
+          {loading ? (
+               <div className="flex items-center justify-center h-full">
+                   <div className="text-center">
+                       <div className="inline-block w-8 h-8 border-4 border-gray-200 border-t-star-dark rounded-full animate-spin mb-4"></div>
+                       <p className="text-gray-400">加载动作库中...</p>
+                   </div>
                </div>
-             )}
-           </div>
-           {isOnline && (
-             <button
-               onClick={handleRefresh}
-               disabled={isRefreshing}
-               className="p-3 -mr-3 text-gray-400 hover:text-black active:scale-90 transition-transform disabled:opacity-50"
-             >
-               <RefreshCw size={20} className={isRefreshing ? 'animate-spin' : ''} />
-             </button>
-           )}
-       </div>
+          ) : isEmptyLibrary ? (
+               <div className="text-center py-20 px-6">
+                   {!isOnline && cacheStatus && cacheStatus.lastSyncTime === null ? (
+                       <>
+                           <WifiOff size={48} className="mx-auto text-gray-400 mb-4" />
+                           <p className="text-gray-400 text-lg mb-6">网络离线，暂无动作库缓存</p>
+                           <p className="text-sm text-gray-400 mb-6">连接网络后将自动同步动作库数据</p>
+                       </>
+                   ) : searchTerm ? (
+                       <>
+                           <p className="text-gray-400 text-lg mb-6">未找到 "{searchTerm}"</p>
 
-       {/* Search - Big Input */}
-       <div className="px-6 py-4">
-           <div className="bg-gray-100 rounded-2xl px-5 py-4 flex items-center gap-3 shadow-inner">
-               <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-               <input
-                 type="text"
-                 placeholder="搜索动作..."
-                 value={searchTerm}
-                 onChange={e => setSearchTerm(e.target.value)}
-                 className="bg-transparent outline-none w-full text-xl font-medium placeholder-gray-400"
-               />
-               {searchTerm && (
-                   <button onClick={() => setSearchTerm("")} className="text-gray-400 p-1">
-                       <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path d="M6.28 5.22a.75.75 0 00-1.06 1.06L8.94 10l-3.72 3.72a.75.75 0 101.06 1.06L10 11.06l3.72 3.72a.75.75 0 101.06-1.06L11.06 10l3.72-3.72a.75.75 0 00-1.06-1.06L10 8.94 6.28 5.22z"/></svg>
+                   {/* Primary Action: AI Smart Create */}
+                   <button
+                       onClick={handleSmartCreate}
+                       disabled={isClassifying || !isOnline}
+                       className="w-full max-w-sm mx-auto bg-star-dark text-white rounded-2xl shadow-lg active:scale-95 transition-all flex items-center justify-between px-5 py-4 disabled:opacity-50"
+                   >
+                       <div className="flex flex-col items-start">
+                           <span className="text-sm text-gray-400 font-medium mb-0.5">创建新动作</span>
+                           <span className="text-lg font-bold text-white flex items-center gap-2">
+                               {searchTerm}
+                               <span className="bg-star-accent/15 text-star-accent text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider border border-star-accent/30">AI</span>
+                           </span>
+                       </div>
+
+                       <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center">
+                           {isClassifying ? (
+                               <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                           ) : (
+                               <Zap className="w-5 h-5 text-star-accent fill-star-accent/20" />
+                           )}
+                       </div>
                    </button>
-               )}
-           </div>
-       </div>
 
-       {/* Grouped List */}
-       <div className="flex-1 overflow-y-auto px-6 pb-20 custom-scrollbar">
-           {loading ? (
-                <div className="flex items-center justify-center h-full">
-                    <div className="text-center">
-                        <div className="inline-block w-8 h-8 border-4 border-gray-200 border-t-star-dark rounded-full animate-spin mb-4"></div>
-                        <p className="text-gray-400">加载动作库中...</p>
-                    </div>
-                </div>
-           ) : Object.keys(displayLibrary).length === 0 ? (
-                <div className="text-center py-20 px-6">
-                    {!isOnline && cacheStatus && cacheStatus.lastSyncTime === null ? (
-                        <>
-                            <WifiOff size={48} className="mx-auto text-gray-400 mb-4" />
-                            <p className="text-gray-400 text-lg mb-6">网络离线，暂无动作库缓存</p>
-                            <p className="text-sm text-gray-400 mb-6">连接网络后将自动同步动作库数据</p>
-                        </>
-                    ) : searchTerm ? (
-                        <>
-                            <p className="text-gray-400 text-lg mb-6">未找到 "{searchTerm}"</p>
+                   <p className="text-xs text-gray-400 mt-4 max-w-xs mx-auto leading-relaxed">
+                       系统将使用 AI 自动分析动作类型、目标肌群和器械需求，并为您预设合适的训练参数。
+                   </p>
 
-                    {/* Primary Action: AI Smart Create */}
-                    <button
-                        onClick={handleSmartCreate}
-                        disabled={isClassifying || !isOnline}
-                        className="w-full max-w-sm mx-auto bg-star-dark text-white p-1 rounded-2xl shadow-lg active:scale-95 transition-all group overflow-hidden relative"
-                    >
-                        <div className="absolute inset-0 bg-gradient-to-r from-violet-600 via-purple-600 to-blue-600 opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-
-                        <div className="relative bg-gray-900 rounded-xl px-6 py-4 flex items-center justify-between group-hover:bg-opacity-90 transition-all">
-                            <div className="flex flex-col items-start">
-                                <span className="text-sm text-gray-400 font-medium mb-0.5">创建新动作</span>
-                                <span className="text-lg font-bold text-white flex items-center gap-2">
-                                    {searchTerm}
-                                    <span className="bg-violet-500/20 text-violet-300 text-[10px] px-1.5 py-0.5 rounded uppercase tracking-wider border border-violet-500/30">AI</span>
-                                </span>
-                            </div>
-
-                            <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center group-hover:bg-white/20 transition-colors">
-                                {isClassifying ? (
-                                    <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                ) : (
-                                    <Zap className="w-5 h-5 text-yellow-400 fill-yellow-400" />
-                                )}
-                            </div>
-                        </div>
-                    </button>
-
-                    <p className="text-xs text-gray-400 mt-4 max-w-xs mx-auto leading-relaxed">
-                        系统将使用 AI 自动分析动作类型、目标肌群和器械需求，并为您预设合适的训练参数。
-                    </p>
-
-                    {/* Secondary Action: Quick Create (Legacy) */}
-                    <button
-                        onClick={() => onSelect('', searchTerm, guessType(searchTerm, ''))}
-                        className="mt-6 text-sm font-bold text-gray-400 hover:text-gray-600 transition-colors"
-                    >
-                        跳过 AI 分析，直接创建 &rarr;
-                    </button>
-                        </>
-                    ) : null}
-                </div>
-           ) : (
+                   {/* Secondary Action: Quick Create (Legacy) */}
+                   <button
+                       onClick={() => onSelect('', searchTerm, guessType(searchTerm, ''))}
+                       className="mt-6 text-sm font-bold text-star-accent active:opacity-50 transition-opacity"
+                   >
+                       跳过 AI 分析，直接创建 &rarr;
+                   </button>
+                       </>
+                   ) : null}
+               </div>
+          ) : (
                Object.entries(displayLibrary).map(([category, items]) => (
                    <div key={category} className="mb-8">
-                       <div className="sticky top-0 bg-white/95 backdrop-blur py-3 z-10 border-b border-gray-100">
-                           <h3 className="text-sm font-black text-gray-400 uppercase tracking-widest">{category}</h3>
+                       <div className="sticky top-0 bg-star-gray/95 backdrop-blur py-3 z-10">
+                           <h3 className="px-1 text-[13px] font-semibold text-gray-400 uppercase tracking-widest">{category}</h3>
                        </div>
-                       <div className="space-y-3 pt-3">
-                           {items.map((item) => (
+                       <div className="bg-white rounded-[20px] overflow-hidden shadow-sm">
+                           {items.map((item, idx) => (
                                <button
                                  key={(item as any).id || item.name}
-                                 onClick={() => onSelect((item as any).id || item.name, item.name, item.type, item.bodyCategory, item.muscles, item.equipment)}
-                                 className="w-full text-left p-5 rounded-2xl bg-gray-50 border border-gray-100 active:bg-star-dark active:text-white transition-all flex justify-between items-center group shadow-sm"
+                                 onClick={() => { haptic('light'); onSelect((item as any).id || item.name, item.name, item.type, item.bodyCategory, item.muscles, item.equipment); }}
+                                 className={`w-full text-left px-5 py-3.5 active:bg-gray-100 transition-colors flex justify-between items-center group ${
+                                   idx > 0 ? 'border-t border-gray-100' : ''
+                                 }`}
                                >
-                                   <span className="text-lg font-bold group-active:text-white text-gray-800">{item.name}</span>
-                                   <div className="w-8 h-8 rounded-full bg-white flex items-center justify-center opacity-0 group-hover:opacity-100 group-active:opacity-100 transition-opacity">
-                                       <svg className="w-4 h-4 text-star-dark" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
-                                   </div>
+                                   <span className="text-[17px] font-medium text-star-dark">{item.name}</span>
+                                   <svg className="w-4 h-4 text-star-accent opacity-0 group-active:opacity-100 transition-opacity shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
                                </button>
                            ))}
                        </div>
                    </div>
                ))
-           )}
-       </div>
+          )}
+      </div>
     </motion.div>
   );
 };

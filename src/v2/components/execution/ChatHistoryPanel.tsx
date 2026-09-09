@@ -1,6 +1,7 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ChatThread } from '@/storage';
+import { transitions } from '../../lib/animations';
 
 interface ChatHistoryPanelProps {
   isOpen: boolean;
@@ -48,7 +49,7 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
           initial={{ x: '100%' }}
           animate={{ x: 0 }}
           exit={{ x: '100%' }}
-          transition={{ type: 'tween', duration: 0.25, ease: [0.25, 0.1, 0.25, 1] }}
+          transition={transitions.springGentle} // push 级：右滑入弹簧（动效规范）
           className="fixed inset-0 z-[70] bg-white flex flex-col"
         >
           {/* Header with Safe Area support for Notch/Dynamic Island */}

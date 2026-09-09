@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { ExerciseAction, LoadAnchors } from '../../../types/protocol';
 import { Attachment } from '../FloatingAttachment';
 import { db } from '../../../storage/db';
-import { getExerciseTypeLabel } from '../../../../utils/exerciseTypeLabels';
+import { CardHeader } from './CardHeader';
 
 interface CardioCardProps {
   exercise: ExerciseAction;
@@ -183,24 +183,20 @@ export const CardioCard: React.FC<CardioCardProps> = ({
   const totalSets = exercise.sets.length;
 
   return (
-    <div className="p-6 bg-white rounded-[2.5rem] shadow-sm border border-gray-50">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-4">
-          <div className="w-2.5 h-8 bg-blue-500 rounded-full shadow-[0_0_10px_rgba(59,130,246,0.3)]"></div>
-          <h3 className="text-2xl font-black text-gray-900 tracking-tight">{exercise.metadata?.name || '有氧运动'}</h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] bg-blue-50 text-blue-500 px-2 py-0.5 rounded-2xl font-bold uppercase tracking-widest border border-blue-100">
-            {getExerciseTypeLabel(exercise.type)}
-          </span>
+    <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
+      <CardHeader
+        name={exercise.metadata?.name || '有氧运动'}
+        type={exercise.type}
+        className="mb-6"
+        rightExtra={
           <span className="flex items-center gap-2 text-[11px] bg-blue-50 text-blue-500 px-4 py-2.5 rounded-full font-bold uppercase tracking-widest border border-blue-100">
               <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
                 <path d="M12 2L4.5 20.29l.71.71L12 18l6.79 3 .71-.71L12 2z" />
               </svg>
               GPS ACTIVE
           </span>
-        </div>
-      </div>
+        }
+      />
 
       <div className="space-y-6">
         {exercise.sets.map((set, idx) => {
@@ -215,11 +211,11 @@ export const CardioCard: React.FC<CardioCardProps> = ({
               {/* 已移除执行界面参考值展示 */}
 
               {/* Metrics Section */}
-              <div className={`relative flex flex-col items-center justify-center pt-12 pb-14 rounded-[2.5rem] border transition-all duration-500 ${
+              <div className={`relative flex flex-col items-center justify-center pt-12 pb-14 rounded-3xl border transition-all duration-500 ${
                   isCompleted ? 'bg-[#f0fdf4] border-[#dcfce7]' : 'bg-[#f8fafc] border-[#f1f5f9]'
               }`}>
                 <div className="flex flex-col items-center">
-                  <div className="text-6xl font-bold tracking-tighter tabular-nums text-[#0f172a] leading-none">
+                  <div style={{ fontWeight: 500 }} className="text-6xl font-medium tracking-tighter tabular-nums text-[#0f172a] leading-none">
                     {formatTime(timerState.elapsed)}
                   </div>
                   <div className="text-[12px] font-bold text-[#94a3b8] mt-3 uppercase tracking-widest">

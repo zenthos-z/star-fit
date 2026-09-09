@@ -9,8 +9,9 @@ import json
 p = 'ios/App/App/capacitor.config.json'
 d = json.load(open(p))
 lst = d.get('packageClassList', [])
-if 'LiquidGlassPlugin' not in lst:
-    lst.append('LiquidGlassPlugin')
+for name in ('LiquidGlassPlugin', 'LiveActivityPlugin'):
+    if name not in lst:
+        lst.append(name)
 d['packageClassList'] = lst
 json.dump(d, open(p, 'w'), indent='\t', ensure_ascii=False)
 print('packageClassList:', d['packageClassList'])

@@ -99,7 +99,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
       >
         {/* 阴影载体：不能放进 mask 容器，否则阴影被裁掉（上一轮的教训） */}
         <motion.div
-          className={status === 'idle' ? 'liquid-glass absolute inset-0' : 'liquid-glass-dark absolute inset-0'}
+          className={status === 'idle' ? 'frost-lens absolute inset-0' : 'frost-lens-dark absolute inset-0'}
           style={{ borderRadius: '32px' }}
           animate={{
             width: status === 'idle' ? 208 : (isPaused ? 320 : 180),
@@ -197,9 +197,9 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                       </span>
                     )}
                     <span 
-                      style={{ fontFeatureSettings: "'tnum'" }}
+                      style={{ fontFeatureSettings: "'tnum'", fontWeight: 600 }}
                       className={`
-                        font-mono font-black text-4xl tracking-tight
+                        font-mono font-semibold text-4xl tracking-tight
                         ${isPaused ? 'text-white/40' : 'text-white'}
                         transition-colors duration-300
                       `}

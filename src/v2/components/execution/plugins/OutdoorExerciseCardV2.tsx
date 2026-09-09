@@ -7,7 +7,9 @@ import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useGeolocation, LocationStatus } from '../../../hooks/useGeolocation';
 import { MapErrorBoundary } from './MapErrorBoundary';
-import { getExerciseTypeLabel } from '../../../../utils/exerciseTypeLabels';
+import { CardHeader } from './CardHeader';
+import { transitions } from '../../../lib/animations';
+import { haptic } from '../../../../lib/nativeHaptics';
 
 const fixLeafletIcon = () => {
   if (typeof window !== 'undefined' && L.Icon.Default) {
@@ -63,12 +65,7 @@ interface OutdoorExerciseCardV2Props {
   onUpdate?: (updates: Partial<ExerciseAction>) => void;
 }
 
-const smoothSpring = {
-  type: "spring",
-  stiffness: 400,
-  damping: 30,
-  mass: 0.8
-} as const;
+const smoothSpring = transitions.springSmooth;
 
 const MapController = ({ positions, isInteractive }: { positions: [number, number][], isInteractive: boolean }) => {
   const map = useMap();
@@ -314,6 +311,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   const handleComplete = (finalElapsed?: number, finalDistance?: number) => {
     setIsRunning(false);
     setIsCompleted(true);
+    haptic('success'); // 户外完成：成功通知触感
     syncToParent(finalElapsed, finalDistance, 'COMPLETED');
   };
 
@@ -515,8 +513,8 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   /** 心率录入行（地图上方统计区之下） */
   const renderHeartRateInput = () => (
     <div className="w-full px-6 pb-3 pt-1 flex items-center justify-center gap-3">
-      <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border shrink-0 bg-rose-50 text-rose-600 border-rose-100">
-        <Heart className="w-3.5 h-3.5 fill-rose-600" />
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border shrink-0 bg-white text-gray-400 border-gray-100">
+        <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100" />
         <span className="text-[10px] font-black uppercase tracking-widest">目标: Zone {targetHeartRateZone}</span>
       </div>
       <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1 flex-1 max-w-[10rem]">
@@ -526,7 +524,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
           inputMode="numeric"
           min={40}
           max={220}
-          placeholder="实际心率"
+          placeholder="实时"
           value={heartRateInput}
           onChange={(e) => handleHeartRateChange(e.target.value)}
           disabled={isCompleted}
@@ -540,7 +538,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   const renderMapContent = () => {
     if (!isRunning && !isWaitingForGPS && elapsed === 0 && !isCompleted) {
       return (
-        <div className="absolute inset-0 flex items-center justify-center bg-gradient-to-br from-blue-50 to-emerald-50">
+        <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
           <div className="flex flex-col items-center gap-3">
             <MapIcon className="w-12 h-12 text-gray-300" />
             <div className="text-sm font-medium text-gray-400">点击开始后显示地图</div>
@@ -701,21 +699,10 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
 
   return (
     <>
-    <div className="p-6 bg-white rounded-2xl shadow-sm border border-gray-50 relative overflow-hidden">
-      <div className="flex justify-between items-center mb-6">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-6 bg-blue-500 rounded-2xl shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
-          <h3 className="text-xl font-black text-gray-900 tracking-tight">{exerciseName}</h3>
-        </div>
-        <div className="flex items-center gap-2">
-           <span className="flex items-center gap-1 text-[10px] bg-gray-50 text-gray-500 px-1.5 py-0.5 rounded-2xl font-bold uppercase tracking-widest border border-gray-100">
-               <Navigation className="w-3 h-3" />
-               {getExerciseTypeLabel(exercise.type)}
-           </span>
-         </div>
-      </div>
+    <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50 relative overflow-hidden">
+      <CardHeader name={exerciseName} type={exercise.type} className="mb-6" />
 
-        <div className="flex flex-col rounded-2xl border border-gray-100 overflow-hidden mb-6 bg-gray-50/30">
+        <div className="flex flex-col rounded-3xl border border-gray-100 overflow-hidden mb-6 bg-gray-50/30">
         <div className={`relative flex flex-col items-center justify-center py-6 border-b border-gray-100 transition-all duration-500 ${
             isCompleted ? 'bg-[#f0fdf4]/50' : 'bg-transparent'
         }`}>
@@ -745,12 +732,12 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
           {(isRunning || elapsed > 0 || isCompleted) && (
             <motion.div key="secondary" initial={{ opacity: 0, scale: 0.8, width: 0 }} animate={{ opacity: 1, scale: 1, width: 'auto' }} exit={{ opacity: 0, scale: 0.8, width: 0 }} transition={smoothSpring} className="flex-1 overflow-hidden">
               {isCompleted ? (
-                <button onClick={handleUndoComplete} className="w-full h-full rounded-2xl flex items-center justify-center gap-2 border-2 bg-white text-gray-400 border-gray-100 active:scale-90 transition-all shadow-sm active:bg-gray-50">
+                <button onClick={handleUndoComplete} className="w-full h-full rounded-full flex items-center justify-center gap-2 border-2 bg-white text-gray-400 border-gray-100 active:scale-90 transition-all shadow-sm active:bg-gray-50">
                   <RotateCcw className="w-4 h-4" />
                   <span className="text-sm font-bold uppercase tracking-widest">撤销</span>
                 </button>
               ) : (
-                <button onClick={() => handleComplete()} className={`w-full h-full rounded-2xl flex items-center justify-center gap-2 border-2 active:scale-90 transition-all shadow-sm ${isRunning ? 'bg-rose-50 text-rose-500 border-rose-100 active:bg-rose-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100 active:bg-emerald-100'}`}>
+                <button onClick={() => handleComplete()} className={`w-full h-full rounded-full flex items-center justify-center gap-2 border-2 active:scale-90 transition-all shadow-sm ${isRunning ? 'bg-rose-50 text-rose-500 border-rose-100 active:bg-rose-100' : 'bg-emerald-50 text-emerald-500 border-emerald-100 active:bg-emerald-100'}`}>
                   {isRunning ? <Square className="w-4 h-4 fill-current" /> : <CheckCircle2 className="w-5 h-5" />}
                   <span className="text-sm font-bold uppercase tracking-widest">{isRunning ? '结束' : '完成'}</span>
                 </button>
@@ -763,13 +750,13 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
               <div className="w-full h-full flex gap-2">
                 <button
                   onClick={handleCancelStart}
-                  className="flex-1 h-full rounded-2xl flex items-center justify-center gap-2 border-2 border-gray-200 text-gray-600 active:scale-90 transition-all shadow-sm hover:bg-gray-50"
+                  className="flex-1 h-full rounded-full flex items-center justify-center gap-2 border-2 border-gray-200 text-gray-600 active:scale-90 transition-all shadow-sm hover:bg-gray-50"
                 >
                   <span className="text-sm font-bold uppercase tracking-widest">取消</span>
                 </button>
                 <button
                   onClick={handleForceStart}
-                  className="flex-1 h-full rounded-2xl flex items-center justify-center gap-2 border-2 bg-blue-500 text-white active:scale-90 transition-all shadow-lg shadow-blue-500/30 hover:bg-blue-600"
+                  className="flex-1 h-full rounded-full flex items-center justify-center gap-2 border-2 bg-blue-500 text-white active:scale-90 transition-all shadow-lg shadow-blue-500/30 hover:bg-blue-600"
                 >
                   <AlertCircle className="w-4 h-4" />
                   <span className="text-sm font-bold uppercase tracking-widest">强行开始</span>
@@ -778,7 +765,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
             ) : (
               <button
                 onClick={handleToggle}
-                className={`w-full h-full rounded-2xl flex items-center justify-center gap-3 border-2 active:scale-90 transition-all shadow-sm relative overflow-hidden ${
+                className={`w-full h-full rounded-full flex items-center justify-center gap-3 border-2 active:scale-90 transition-all shadow-sm relative overflow-hidden ${
                   isRunning 
                     ? 'bg-orange-50 text-orange-600 border-orange-200 active:bg-orange-100' 
                     : 'bg-white text-gray-800 border-gray-100 active:bg-gray-50'

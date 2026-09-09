@@ -32,6 +32,8 @@ export const transitions = {
   springGentle: { type: 'spring' as const, stiffness: 200, damping: 20 },
   springBouncy: { type: 'spring' as const, stiffness: 400, damping: 15 },
   springStiff: { type: 'spring' as const, stiffness: 400, damping: 38, mass: 1 },
+  /** 布局切换弹簧（卡片形态切换/拖拽跟手）：欠阻尼 ζ≈0.65，Apple 手感基准 */
+  springSmooth: { type: 'spring' as const, stiffness: 400, damping: 30, mass: 0.8 },
 } as const;
 
 // ============================================

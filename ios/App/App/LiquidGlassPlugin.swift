@@ -42,14 +42,7 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
         selectionObservation = ctrl.observe(\.selectedIndex, options: [.new]) { [weak self] ctrl, change in
             guard let self = self, !self.searchKVOSuppressed else { return }
             guard let nv = change.newValue else { return }
-            if #available(iOS 18.0, *), ctrl.tabs.count > 2, nv == 2 {
-                self.searchKVOSuppressed = true
-                self.notifyListeners("aiTap", data: [:])
-                ctrl.selectedIndex = 1
-                self.searchKVOSuppressed = false
-            } else {
-                self.notifyListeners("tabSelect", data: ["tab": nv])
-            }
+            self.notifyListeners("tabSelect", data: ["tab": nv])
         }
     }
 
@@ -89,8 +82,8 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
             let barH: CGFloat = 76 + safeBottom
             let hInset: CGFloat = 44
             let rect = CGRect(x: hInset, y: windowH - barH, width: host.bounds.width - hInset * 2, height: barH)
-            // 底部露出区域与 web 内容底色一致（#F3F3F3），消除 bar 后色差分割线
-            let pageBg = UIColor(red: 243/255.0, green: 243/255.0, blue: 243/255.0, alpha: 1)
+            // 底部露出区域与 web 内容底色一致（#FAFAFA），消除 bar 后色差分割线
+            let pageBg = UIColor(red: 250/255.0, green: 250/255.0, blue: 250/255.0, alpha: 1)
             webView.backgroundColor = pageBg
             webView.scrollView.backgroundColor = pageBg
             if #available(iOS 15.0, *) { webView.underPageBackgroundColor = pageBg }
@@ -116,32 +109,15 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
                 tabCtrl.delegate = self
                 if #available(iOS 18.0, *) {
-                    // 官方姿势：iOS18+ 只用 tabs API。UISearchTab = 系统渲染的独立圆钮
-                    // （自动与玻璃胶囊横向对齐，BookPlayer 的 search tab 同款）。勿与 viewControllers 混用。
+                    // 官方姿势：iOS18+ 只用 tabs API。勿与 viewControllers 混用。
+                    // 3 个常规页签（历史/开始运动/AI Agent）——不再用 UISearchTab 圆钮
                     let tabs: [UITab] = items.map { item in
                         let vc = UIViewController()
                         vc.view.backgroundColor = .clear
                         let title = item.title ?? ""
                         return UITab(title: title, image: item.image, identifier: title) { _ in vc }
                     }
-                    let searchTab = UISearchTab { _ in
-                        let vc = SearchSignalVC()
-                        vc.view.backgroundColor = .clear
-                        return vc
-                    }
-                    tabCtrl.tabs = tabs + [searchTab]
-                    // 搜索位 VC 出现 = 用户点了圆钮（系统保证 viewWillAppear 回调）
-                    NotificationCenter.default.addObserver(forName: Notification.Name("AISearchSelected"), object: nil, queue: .main) { [weak self] _ in
-                        NSLog("[AIButton] SearchSignalVC appeared -> aiTap")
-                        self?.notifyListeners("aiTap", data: [:])
-                        self?.searchKVOSuppressed = true
-                        self?.tabControllerRef?.selectedIndex = 1
-                        self?.searchKVOSuppressed = false
-                    }
-
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                        NSLog("[AIButton] tabBar frame=\(tabCtrl.tabBar.frame) hidden=\(tabCtrl.tabBar.isHidden)")
-                    }
+                    tabCtrl.tabs = tabs
                 } else {
                     tabCtrl.viewControllers = vcs
                 }
@@ -166,7 +142,11 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
                 host.addSubview(tabCtrl.view)
                 self.tabControllerRef = tabCtrl
             }
-            tabCtrl.selectedIndex = min(selection, (tabCtrl.viewControllers?.count ?? 1) - 1)
+            if #available(iOS 18.0, *) {
+                tabCtrl.selectedIndex = min(selection, max(tabCtrl.tabs.count - 1, 0))
+            } else {
+                tabCtrl.selectedIndex = min(selection, max((tabCtrl.viewControllers?.count ?? 1) - 1, 0))
+            }
 
             // WebView 保持全屏：内容延伸到 bar 后面（系统玻璃透出内容=官方 Liquid Glass 层次），
             // Web 侧用 env(safe-area-inset-bottom) 留出滚动余量，滚动到底不被遮
@@ -188,7 +168,7 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func setCurrentTab(_ call: CAPPluginCall) {
         queue.async { [weak self] in
             guard let self = self else { return }
-            let sel = min(call.getInt("selection") ?? 1, 1) // 普通页签只有 0/1
+            let sel = min(max(call.getInt("selection") ?? 1, 0), 2) // 常规页签 0/1/2
             if let ctrl = self.tabControllerRef {
                 self.searchKVOSuppressed = true
                 ctrl.selectedIndex = sel
@@ -204,12 +184,6 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
             guard let self = self else { return }
             let dimmed = call.getBool("dimmed") ?? false
             self.tabControllerRef?.view.isHidden = dimmed
-            if dimmed {
-                // 搜索位被选中后需复位，否则关闭 sheet 后再次点击圆钮会被系统视为"已选中"而忽略
-                self.searchKVOSuppressed = true
-                self.tabControllerRef?.selectedIndex = 1
-                self.searchKVOSuppressed = false
-            }
             call.resolve()
         }
     }
@@ -277,14 +251,6 @@ extension LiquidGlassPlugin: UITabBarControllerDelegate {
         let idx = tabBarController.viewControllers?.firstIndex(of: viewController) ?? 0
         notifyListeners("tabSelect", data: ["tab": idx])
         return true
-    }
-}
-
-/// 搜索位信号 VC：viewWillAppear 即广播（系统保证生命周期回调，比 delegate/KVO 可靠）
-final class SearchSignalVC: UIViewController {
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        NotificationCenter.default.post(name: Notification.Name("AISearchSelected"), object: nil)
     }
 }
 

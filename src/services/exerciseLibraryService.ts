@@ -8,6 +8,7 @@ const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
 const CACHE_VERSION = 3; // Incremented to invalidate old cache (NanoID migration)
 
 let isSyncing = false;
+let syncError: string | undefined;
 const listeners: Set<() => void> = new Set();
 
 function computeHash(exercises: Exercise[]): string {
@@ -69,19 +70,18 @@ export const ExerciseLibraryService = {
   },
 
   async fetchFromServer(): Promise<Exercise[]> {
-    try {
-      const res = await fetch(`${API_BASE}/exercises`, {
-        headers: getHeaders()
-      });
+    const res = await fetch(`${API_BASE}/exercises`, {
+      headers: getHeaders()
+    });
 
-      if (!res.ok) {
-        throw new Error(`HTTP error! status: ${res.status}`);
-      }
+    if (!res.ok) {
+      throw new Error(`HTTP error! status: ${res.status}`);
+    }
 
-      const data = await res.json();
-      const exercises = Array.isArray(data) ? data : [];
+    const data = await res.json();
+    const exercises = Array.isArray(data) ? data : [];
 
-      const parsed = exercises.map((ex: any) => {
+    const parsed = exercises.map((ex: any) => {
         let targets = ex.targets;
         let equipmentRequired = ex.equipment_required;
 
@@ -118,11 +118,7 @@ export const ExerciseLibraryService = {
         };
       });
 
-      return parsed;
-    } catch (e) {
-      console.error('[ExerciseLibraryService] Failed to fetch from server:', e);
-      return [];
-    }
+    return parsed;
   },
 
   async getExercises(): Promise<Exercise[]> {
@@ -148,11 +144,21 @@ export const ExerciseLibraryService = {
     
     try {
       const exercises = await this.fetchFromServer();
+      // 真实同步：只有服务器真正返回成功才写缓存/刷新 lastSyncTime。
+      // （此前 fetchFromServer 失败静默返回 []，setCache 会把「同步失败」
+      //  伪装成「刚刚同步」并清空缓存——即 UI 上的虚假同步效果）
+      if (exercises.length === 0) {
+        console.warn('[ExerciseLibraryService] Server returned empty list, keeping previous cache');
+        const cached = await this.getCache();
+        return cached?.exercises || [];
+      }
       await this.setCache(exercises);
+      syncError = undefined;
       this.notifyListeners();
       return exercises;
     } catch (e) {
       console.error('[ExerciseLibraryService] Sync failed:', e);
+      syncError = e instanceof Error ? e.message : String(e);
       
       const cached = await this.getCache();
       if (cached) {
@@ -197,6 +203,8 @@ export const ExerciseLibraryService = {
     hasCache: boolean;
     isExpired: boolean;
     lastSyncTime: number | null;
+    isSyncing: boolean;
+    lastError?: string;
   }> {
     const meta = await storageGet(EXERCISE_LIBRARY_META_KEY);
     const now = Date.now();
@@ -204,7 +212,9 @@ export const ExerciseLibraryService = {
     return {
       hasCache: !!meta,
       isExpired: !meta || (now - meta.lastSyncTime > SYNC_INTERVAL_MS),
-      lastSyncTime: meta?.lastSyncTime || null
+      lastSyncTime: meta?.lastSyncTime || null,
+      isSyncing,
+      ...(syncError ? { lastError: syncError } : {})
     };
   },
 

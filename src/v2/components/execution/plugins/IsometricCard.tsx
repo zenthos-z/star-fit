@@ -1,7 +1,18 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ExerciseAction, LoadAnchors } from '../../../types/protocol';
 import { Attachment } from '../FloatingAttachment';
-import { getExerciseTypeLabel } from '../../../../utils/exerciseTypeLabels';
+import { CardHeader } from './CardHeader';
+
+/**
+ * 数字字号按位数动态缩放（有下限）：
+ * ≤3位 → text-2xl；4位 → text-xl；≥5位 → text-lg 封底。
+ */
+const numSizeClass = (v: unknown): string => {
+  const len = String(v ?? '').replace(/[-.]/g, '').length;
+  if (len <= 3) return 'text-2xl';
+  if (len === 4) return 'text-xl';
+  return 'text-lg';
+};
 
 interface IsometricCardProps {
   exercise: ExerciseAction;
@@ -134,21 +145,9 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
   const totalSets = exercise.sets.length;
 
   return (
-    <div className="p-6 bg-white rounded-2xl shadow-sm border border-gray-50">
+    <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
       {/* Header - Standard Structure */}
-      <div className="flex justify-between items-center mb-8">
-        <div className="flex items-center gap-3">
-          <div className="w-1.5 h-6 bg-blue-500 rounded-2xl shadow-[0_0_8px_rgba(59,130,246,0.5)]"></div>
-          <h3 className="text-xl font-black text-gray-900 tracking-tight">
-            {exercise.metadata?.name || '静力动作'}
-          </h3>
-        </div>
-        <div className="flex items-center gap-2">
-          <span className="text-[10px] bg-blue-50 text-blue-500 px-2 py-0.5 rounded-2xl font-black uppercase tracking-widest border border-blue-100">
-            {getExerciseTypeLabel(exercise.type)}
-          </span>
-        </div>
-      </div>
+      <CardHeader name={exercise.metadata?.name || '静力动作'} type={exercise.type} className="mb-8" />
 
       <div className="space-y-10">
         {exercise.sets.map((set, idx) => {
@@ -163,7 +162,7 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
             <div 
               key={set.index} 
               className={`grid grid-cols-[48px_1fr_1fr_80px] items-center gap-x-4 transition-all duration-300 ${
-                isActive ? 'scale-[1.02] bg-orange-50/30 rounded-2xl -mx-2 px-2 py-4' : ''
+                isActive ? 'scale-[1.02] bg-orange-50/30 rounded-3xl -mx-2 px-2 py-4' : ''
               } ${
                 shouldGrayOut ? 'opacity-30' : 'opacity-100'
               }`}
@@ -195,7 +194,7 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
               {/* 3. Weight */}
               <div className="flex flex-col items-center justify-center">
                 <div className="flex items-baseline gap-1">
-                  <span className={`text-3xl font-black tabular-nums leading-none ${isCompleted ? 'text-gray-400' : 'text-gray-800'}`}>
+                  <span className={`${numSizeClass(set.weight)} font-black tabular-nums leading-none ${isCompleted ? 'text-gray-400' : 'text-gray-800'}`}>
                     {set.weight || 0}
                   </span>
                 </div>
@@ -206,7 +205,7 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
               <div className="flex justify-center">
                 <button
                   onClick={() => toggleStatus(set.index)}
-                  className={`w-16 h-10 rounded-2xl border-2 flex items-center justify-center transition-all duration-300 active:scale-95 shadow-sm ${
+                  className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all duration-300 active:scale-95 shadow-sm ${
                     isActive 
                       ? 'bg-amber-500 border-amber-500 text-white shadow-lg shadow-amber-500/20' 
                       : isCompleted
@@ -219,11 +218,11 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
                       <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7"/>
                     </svg>
                   ) : isActive ? (
-                    <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M6 6h12v12H6z"/>
                     </svg>
                   ) : (
-                    <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
+                    <svg className="w-6 h-6 fill-current" viewBox="0 0 24 24">
                       <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.348a1.125 1.125 0 010 1.971l-11.54 6.347c-.75.412-1.667-.13-1.667-.986V5.653z" />
                     </svg>
                   )}

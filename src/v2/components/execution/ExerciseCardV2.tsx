@@ -113,7 +113,7 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
 
   return (
     <SwipeableRow
-        className="mb-4 rounded-2xl shadow-sm border border-gray-100 bg-white"
+        className="mb-4 rounded-[40px] shadow-sm border border-gray-100 bg-white"
         actionWidth={80}
         onLongPress={() => onLongPress?.(exercise.id)}
         onDragStatusChange={onDragStatusChange}

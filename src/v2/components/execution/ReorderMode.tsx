@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence, useSpring } from 'framer-motion';
+import { haptic } from '../../../lib/nativeHaptics';
 
 interface ReorderModeProps {
   exerciseName: string;
@@ -63,7 +64,7 @@ const ReorderMode: React.FC<ReorderModeProps> = ({
       
       if (newIndex !== targetIndex) {
         setTargetIndex(newIndex);
-        if (navigator.vibrate) navigator.vibrate(10);
+        haptic('heavy'); // 拖拽跨过落位槽位
       }
     };
 

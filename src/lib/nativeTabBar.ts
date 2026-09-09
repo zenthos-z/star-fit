@@ -18,6 +18,7 @@ export interface TabItem {
 export const TABS: TabItem[] = [
   { title: '历史', sfSymbol: 'clock.arrow.circlepath' },
   { title: '开始运动', sfSymbol: 'figure.run' },
+  { title: 'AI Agent', sfSymbol: 'sparkles' },
 ];
 
 const platform = Capacitor.getPlatform();
@@ -76,20 +77,6 @@ export function onTabSelect(handler: (index: number) => void): void {
     plugin?.addListener?.('tabSelect', (d: { tab: number }) => {
       console.log('[nativeTabBar] tabSelect received:', d.tab);
       tabSelectHandler?.(d.tab);
-    });
-  } catch { /* ignore */ }
-}
-
-/** 独立 AI 圆钮点击（不参与 tab 切换） */
-let aiTapHandler: (() => void) | null = null;
-export function onAiTap(handler: () => void): void {
-  if (!isNativeTabBar) return;
-  aiTapHandler = handler;
-  try {
-    const plugin = bridge.registerPlugin?.('LiquidGlassPlugin');
-    plugin?.addListener?.('aiTap', () => {
-      console.log('[nativeTabBar] aiTap received');
-      aiTapHandler?.();
     });
   } catch { /* ignore */ }
 }

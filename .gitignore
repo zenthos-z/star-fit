@@ -61,3 +61,6 @@ build/
 DerivedData/
 ios/**/*.xcuserdata/
 *.xcuserstate
+
+# Hermes agent local scratch
+.hermes/

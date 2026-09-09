@@ -615,10 +615,10 @@ ${JSON.stringify(uploadData, null, 2)}`
         const persistingMessage = `## 训练完成！正在保存数据...
 
 **本次训练概览**
-- 🏋️ 完成 ${attachment.data?.exercises?.length || 0} 个动作
-- ⏱️ 用时 ${attachment.data?.stats?.durationMinutes || 0} 分钟
-- 📊 总容量 ${attachment.data?.stats?.totalVolume || 0} kg
-- ✅ 完成 ${attachment.data?.stats?.setsCount || 0} 组`;
+- 完成 ${attachment.data?.exercises?.length || 0} 个动作
+- 用时 ${attachment.data?.stats?.durationMinutes || 0} 分钟
+- 总容量 ${attachment.data?.stats?.totalVolume || 0} kg
+- 完成 ${attachment.data?.stats?.setsCount || 0} 组`;
 
         // Set overlay open first, then update chat history
         setIsAiOverlayOpen(true);
