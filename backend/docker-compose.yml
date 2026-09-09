@@ -28,8 +28,8 @@ services:
       - PORT=43111
       - HOST=0.0.0.0
       - DATABASE_URL=postgres://${POSTGRES_USER:-starfit}:${POSTGRES_PASSWORD:-starfit}@postgres:5432/${POSTGRES_DB:-starfit}
-      - GOOGLE_API_KEY=${GOOGLE_API_KEY}
-      - APP_ORIGIN=${APP_ORIGIN}
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
+      - APP_ORIGIN=${APP_ORIGIN:-}
     ports:
       - "43111:43111"
     volumes:
