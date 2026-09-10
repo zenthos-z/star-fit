@@ -23,6 +23,9 @@ ON CONFLICT (version) DO NOTHING;
 -- ============================================================================
 -- CREATE VIEW: user_insights compatibility view
 -- ============================================================================
+-- DROP-then-CREATE（与 004/006 同款模式）：CREATE OR REPLACE VIEW 不能减列，
+-- 重复执行或视图已处于后续版本列集时会报 "cannot drop columns from view"。
+DROP VIEW IF EXISTS user_insights;
 
 CREATE OR REPLACE VIEW user_insights AS
 SELECT

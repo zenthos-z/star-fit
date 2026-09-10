@@ -13,10 +13,10 @@
  * @created 2026-02-09
  */
 
-import fs from 'fs';
-import path from 'path';
-import { fileURLToPath } from 'url';
-import { getPostgresClient, type PostgresClient } from '../../index.js';
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
+import { getPostgresClient, type PostgresClient } from "../../index.js";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -71,7 +71,9 @@ export class MigrationRunner {
    */
   async getAppliedMigrations(): Promise<Set<string>> {
     await this.ensureMetadataTable();
-    const result = await this.client.query('SELECT version FROM migration_metadata ORDER BY version');
+    const result = await this.client.query(
+      "SELECT version FROM migration_metadata ORDER BY version",
+    );
     return new Set(result.rows.map((r: any) => r.version));
   }
 
@@ -83,11 +85,12 @@ export class MigrationRunner {
       throw new Error(`Migrations directory not found: ${this.migrationsDir}`);
     }
 
-    const files = fs.readdirSync(this.migrationsDir)
-      .filter(f => f.endsWith('.sql') && f.match(/^\d+_/))
+    const files = fs
+      .readdirSync(this.migrationsDir)
+      .filter((f) => f.endsWith(".sql") && f.match(/^\d+_/))
       .sort();
 
-    return files.map(filename => {
+    return files.map((filename) => {
       const match = filename.match(/^(\d+)_(.+)\.sql$/);
       if (!match) {
         throw new Error(`Invalid migration filename: ${filename}`);
@@ -97,7 +100,7 @@ export class MigrationRunner {
         version,
         name,
         filename,
-        filepath: path.join(this.migrationsDir, filename)
+        filepath: path.join(this.migrationsDir, filename),
       };
     });
   }
@@ -107,7 +110,7 @@ export class MigrationRunner {
    */
   async executeMigration(migration: MigrationFile): Promise<MigrationResult> {
     const startTime = Date.now();
-    const sql = fs.readFileSync(migration.filepath, 'utf-8');
+    const sql = fs.readFileSync(migration.filepath, "utf-8");
 
     try {
       await this.client.transaction(async (tx) => {
@@ -116,26 +119,32 @@ export class MigrationRunner {
       });
 
       const duration = Date.now() - startTime;
-      console.log(`[Migration] Completed: ${migration.version}_${migration.name} (${duration}ms)`);
+      console.log(
+        `[Migration] Completed: ${migration.version}_${migration.name} (${duration}ms)`,
+      );
 
       return {
         version: migration.version,
         name: migration.name,
         success: true,
-        duration
+        duration,
       };
     } catch (error: any) {
       const duration = Date.now() - startTime;
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
-      console.error(`[Migration] Failed: ${migration.version}_${migration.name}`, error);
+      console.error(
+        `[Migration] Failed: ${migration.version}_${migration.name}`,
+        error,
+      );
 
       return {
         version: migration.version,
         name: migration.name,
         success: false,
         error: errorMessage,
-        duration
+        duration,
       };
     }
   }
@@ -151,7 +160,9 @@ export class MigrationRunner {
 
     for (const migration of migrations) {
       if (applied.has(migration.version)) {
-        console.log(`[Migration] Skipping: ${migration.filename} (already applied)`);
+        console.log(
+          `[Migration] Skipping: ${migration.filename} (already applied)`,
+        );
         continue;
       }
 
@@ -161,7 +172,7 @@ export class MigrationRunner {
           version: migration.version,
           name: migration.name,
           success: true,
-          duration: 0
+          duration: 0,
         });
         continue;
       }
@@ -170,7 +181,9 @@ export class MigrationRunner {
       results.push(result);
 
       if (!result.success) {
-        console.error(`[Migration] Stopping due to error in ${migration.filename}`);
+        console.error(
+          `[Migration] Stopping due to error in ${migration.filename}`,
+        );
         break;
       }
     }
@@ -186,32 +199,36 @@ export class MigrationRunner {
     const applied = await this.getAppliedMigrations();
     const migrations = this.listMigrations();
 
-    console.log('\n=== Migration Status ===\n');
+    console.log("\n=== Migration Status ===\n");
 
     for (const migration of migrations) {
-      const status = applied.has(migration.version) ? '✓ Applied' : '⊘ Pending';
+      const status = applied.has(migration.version) ? "✓ Applied" : "⊘ Pending";
       console.log(`  ${status}: ${migration.filename}`);
     }
 
-    const appliedCount = migrations.filter(m => applied.has(m.version)).length;
+    const appliedCount = migrations.filter((m) =>
+      applied.has(m.version),
+    ).length;
     const pendingCount = migrations.length - appliedCount;
 
-    console.log(`\nTotal: ${migrations.length} migrations (${appliedCount} applied, ${pendingCount} pending)\n`);
+    console.log(
+      `\nTotal: ${migrations.length} migrations (${appliedCount} applied, ${pendingCount} pending)\n`,
+    );
   }
 
   /**
    * Print migration summary
    */
   private printSummary(results: MigrationResult[]): void {
-    const success = results.filter(r => r.success).length;
-    const failed = results.filter(r => !r.success).length;
+    const success = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
     const totalDuration = results.reduce((sum, r) => sum + r.duration, 0);
 
-    console.log('\n=== Migration Summary ===');
+    console.log("\n=== Migration Summary ===");
     console.log(`  Applied: ${success}`);
     console.log(`  Failed: ${failed}`);
     console.log(`  Duration: ${totalDuration}ms`);
-    console.log('========================\n');
+    console.log("========================\n");
   }
 }
 
@@ -222,8 +239,12 @@ export class MigrationRunner {
 /**
  * Run all pending migrations
  */
-export async function runMigrations(options?: { dryRun?: boolean }): Promise<MigrationResult[]> {
-  const migrationsDir = path.join(process.cwd(), 'backend/src/db/postgresql/migrations');
+export async function runMigrations(options?: {
+  dryRun?: boolean;
+}): Promise<MigrationResult[]> {
+  // 以本文件位置定位迁移目录（与构造器默认值一致），不依赖 process.cwd()——
+  // 旧实现假设 cwd=仓库根，在 backend/ 目录下直接跑 npm run db:migrate 会双重拼接失败。
+  const migrationsDir = path.join(__dirname);
   const runner = new MigrationRunner(migrationsDir);
   return runner.migrate(options);
 }
@@ -232,7 +253,7 @@ export async function runMigrations(options?: { dryRun?: boolean }): Promise<Mig
  * Show migration status
  */
 export async function showMigrationStatus(): Promise<void> {
-  const migrationsDir = path.join(process.cwd(), 'backend/src/db/postgresql/migrations');
+  const migrationsDir = path.join(__dirname);
   const runner = new MigrationRunner(migrationsDir);
   await runner.status();
 }

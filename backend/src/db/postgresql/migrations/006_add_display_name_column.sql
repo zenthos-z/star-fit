@@ -61,3 +61,8 @@ FROM users u;
 
 -- Add comment
 COMMENT ON COLUMN users.display_name IS 'User-friendly display name that can be set by admin (1-50 characters)';
+
+-- Record migration
+INSERT INTO migration_metadata (version, name, applied_at)
+VALUES ('006', 'add_display_name_column', NOW())
+ON CONFLICT (version) DO NOTHING;

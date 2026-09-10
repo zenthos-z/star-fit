@@ -76,7 +76,7 @@ backend 健康检查通过可能需要 30-60 秒（start_period 15s + 依赖 pos
 
 ```bash
 docker compose -f deploy/docker-compose.prod.yml --profile tools run --rm migrate
-# 预期：输出建表/迁移日志（001..009），进程退出码 0
+# 预期：输出建表/迁移日志（000..009），进程退出码 0
 ```
 
 ## 第 5 步：健康验证

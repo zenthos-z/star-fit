@@ -4,3 +4,8 @@
 -- Idempotent. Table was empty at drop time — no data loss.
 DROP INDEX IF EXISTS idx_exercises_embedding_hnsw;
 ALTER TABLE exercises DROP COLUMN IF EXISTS embedding;
+
+-- Record migration
+INSERT INTO migration_metadata (version, name, applied_at)
+VALUES ('008', 'drop_exercises_embedding', NOW())
+ON CONFLICT (version) DO NOTHING;

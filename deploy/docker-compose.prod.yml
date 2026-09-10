@@ -16,8 +16,6 @@ services:
       - ./.env
     volumes:
       - pgdata:/var/lib/postgresql/data
-      # 迁移脚本（002/003）依赖 uuid-ossp 扩展，首次建库时自动安装
-      - ./postgres-init.sql:/docker-entrypoint-initdb.d/10-uuid-ossp.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER:-starfit} -d $${POSTGRES_DB:-starfit}"]
       interval: 5s
@@ -55,7 +53,7 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # 一次性数据库迁移：建表 + 增量迁移（001..009），跑完即退出。
+  # 一次性数据库迁移：建表 + 增量迁移（000..009），跑完即退出。
   # 首次部署或 schema 变更后手动执行：
   #   docker compose -f deploy/docker-compose.prod.yml --profile tools run --rm migrate
   migrate:
@@ -71,24 +69,12 @@ services:
       - ./.env
     working_dir: /app
     # MigrationRunner 以「仓库根 + backend/src/...」定位迁移目录，故工作目录必须是 /app。
-    # 两段式：①postgres-init 幂等建基线 schema（users/exercises 等 14 表，已初始化则跳过）
-    # ②run.ts 跑增量迁移（001..009）。基线表不在 SQL 迁移里，漏掉①会导致 002 因
-    # 「relation users does not exist」失败。
+    # 000_baseline.sql 幂等建全量基线 schema（14 表 + 枚举/索引/触发器/物化视图，
+    # 含 fitness_level / pgb_json_merge 等迁移 003 的历史断裂依赖），001..009 为增量迁移。
     command:
       - sh
       - -c
-      - |
-        printf '%s\n' \
-          "import pg from '/app/node_modules/pg/lib/index.js';" \
-          "const { initializeDatabase } = await import('/app/backend/src/db/postgresql/client/postgres-init.ts');" \
-          "await initializeDatabase();" \
-          "const client = new pg.Client({ connectionString: process.env.DATABASE_URL });" \
-          "await client.connect();" \
-          "await client.query('DROP VIEW IF EXISTS user_insights');" \
-          "await client.end();" \
-          > /tmp/init.mjs \
-          && cd /app/backend/src/db/postgresql/client && npx tsx /tmp/init.mjs \
-          && cd /app && npx tsx --eval "import('/app/backend/src/db/postgresql/migrations/run.ts').then(() => process.exit(0)).catch(() => process.exit(1))"
+      - npx tsx backend/src/db/postgresql/migrations/run.ts migrate
     restart: "no"
 
   # 可选反向代理网关（默认不启动）。需要时：

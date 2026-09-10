@@ -24,3 +24,8 @@ CREATE INDEX IF NOT EXISTS idx_user_media_hash ON user_media(hash);
 COMMENT ON TABLE user_media IS 'User uploaded media files. Both id and hash contain the same business identifier (timestamp_random format).';
 COMMENT ON COLUMN user_media.id IS 'Primary key: Business identifier (timestamp_random format) used as file identifier';
 COMMENT ON COLUMN user_media.hash IS 'Hash: Same value as id, kept for flexibility and query compatibility';
+
+-- Record migration
+INSERT INTO migration_metadata (version, name, applied_at)
+VALUES ('005', 'add_user_media_hash_unique', NOW())
+ON CONFLICT (version) DO NOTHING;
