@@ -63,7 +63,7 @@ description: "在修改数据相关内容前检查是否符合 MAS 数据契约�
 ```
 docs-site/database/postgresql-schema.md
 docs-site/database/repository-layer.md
-docs-site/architecture/mas-data-contract.md
+docs-site/architecture/data-flow.md
 ```
 
 ### 步骤 2: 判断修改类型
@@ -187,6 +187,6 @@ profile_dynamic JSONB NOT NULL DEFAULT '{}'  // ✅ PostgreSQL JSONB
 **参考文档**:
 - `docs-site/database/postgresql-schema.md`
 - `docs-site/database/repository-layer.md`
-- `docs-site/architecture/mas-data-contract.md`
+- `docs-site/architecture/data-flow.md`
 
 **版本**: v2.1.0 (PostgreSQL + Repository Layer)

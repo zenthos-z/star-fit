@@ -191,8 +191,8 @@ Flex 层：JSONB 容器
 
 | 域 | 文档路径 |
 |---|---------|
-| 数据契约 | `architecture/mas-data-contract.md` |
-| 架构红线 | `architecture/mas-red-lines.md` |
+| 数据契约 | `architecture/data-flow.md` |
+| 架构红线 | `architecture/three-state-data-flow.md` |
 | 颜色系统 | `ui-guides/color-system.md` |
 | 动画规范 | `ui-guides/motion-design-system.md` |
 | 设计令牌 | `src/v2/lib/design-tokens.ts` |

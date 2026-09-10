@@ -230,6 +230,6 @@ const workout = await workoutRepo.getById(workoutId);
 **完整规范**:
 - `docs-site\database\postgresql-schema.md`
 - `docs-site\database\repository-layer.md`
-- `docs-site\architecture\mas-data-contract.md`
+- `docs-site\architecture\data-flow.md`
 
 **版本**: v2.1.0 (PostgreSQL + Repository Layer)
