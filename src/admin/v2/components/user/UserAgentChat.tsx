@@ -256,8 +256,8 @@ export const UserAgentChat: React.FC<UserAgentChatProps> = ({ targetUserId, targ
                   <div
                     className={
                       m.role === 'user'
-                        ? 'max-w-[85%] bg-gray-900 text-white text-sm rounded-2xl rounded-br-md px-3.5 py-2 whitespace-pre-wrap'
-                        : 'max-w-full text-sm text-gray-800 leading-relaxed'
+                        ? 'max-w-[85%] bg-gray-900 text-white text-sm rounded-2xl rounded-br-md px-3.5 py-2 whitespace-pre-wrap break-words [overflow-wrap:anywhere]'
+                        : 'max-w-full text-sm text-gray-800 leading-relaxed break-words [overflow-wrap:anywhere]'
                     }
                   >
                     {m.role === 'ai' ? (
@@ -279,7 +279,7 @@ export const UserAgentChat: React.FC<UserAgentChatProps> = ({ targetUserId, targ
                   {m.role === 'ai' && m.thinkingText && (
                     <details className="mt-1">
                       <summary className="text-[10px] text-gray-400 cursor-pointer select-none">Agent 自审过程</summary>
-                      <p className="text-[10px] text-gray-400 whitespace-pre-wrap mt-1">{m.thinkingText}</p>
+                      <p className="text-[10px] text-gray-400 whitespace-pre-wrap break-words [overflow-wrap:anywhere] mt-1">{m.thinkingText}</p>
                     </details>
                   )}
                 </div>
