@@ -55,6 +55,14 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
   const previousRestStatesRef = useRef<Record<number, boolean>>({});
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
 
+  // assisted 动作：weight 为负值辅助重量（-20 = 机器辅助 20kg，实际负荷 = 体重−20）。
+  // 展示层取绝对值 + 「辅助」标签；存储仍为负值（统计/锚点全链路负值契约，不动）。
+  const isAssisted = (exercise as unknown as { metadata?: { libraryType?: string } }).metadata?.libraryType === 'assisted';
+  const displayWeight = (w: number | undefined): string => {
+    if (w === undefined || w === null) return '';
+    return isAssisted ? String(Math.abs(w)) : String(w);
+  };
+
   // 倒计时更新 - 每秒刷新以更新所有组的倒计时显示
   useEffect(() => {
     const nowRef = (isPaused && pauseStartTime) ? pauseStartTime : Date.now();
@@ -281,17 +289,22 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
                 <div className="flex items-baseline">
                   <input
                     type="number"
-                    value={editingValues[`weight-${set.index}`] ?? String(set.weight ?? '')}
+                    value={editingValues[`weight-${set.index}`] ?? displayWeight(set.weight)}
                     onChange={(e) => setEditingValues(prev => ({ ...prev, [`weight-${set.index}`]: e.target.value }))}
                     onBlur={() => {
                       const key = `weight-${set.index}`;
                       const rawValue = editingValues[key];
                       if (rawValue === undefined) return;
                       const trimmed = String(rawValue).trim();
-                      const finalValue = trimmed === '' ? 0 : Number(trimmed);
+                      let finalValue = trimmed === '' ? 0 : Number(trimmed);
                       if (!Number.isFinite(finalValue)) {
                         setEditingValues(prev => { const next = { ...prev }; delete next[key]; return next; });
                         return;
+                      }
+                      // assisted：用户输入的是「辅助量」（正数语义），存储为负值。
+                      // 用户显式输入负数（带 - 号）尊重原值，不二次取负。
+                      if (isAssisted && finalValue > 0) {
+                        finalValue = -finalValue;
                       }
                       updateSet(set.index, { weight: finalValue });
                       setEditingValues(prev => { const next = { ...prev }; delete next[key]; return next; });
@@ -300,7 +313,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
                     className={`w-full text-center font-black leading-tight py-1 bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none disabled:cursor-not-allowed transition-all tabular-nums text-gray-800 ${numSizeClass(editingValues[`weight-${set.index}`] ?? set.weight)}`}
                   />
                 </div>
-                <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">kg</span>
+                <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">{isAssisted ? '辅助 kg' : 'kg'}</span>
               </div>
 
               {/* Reps */}
