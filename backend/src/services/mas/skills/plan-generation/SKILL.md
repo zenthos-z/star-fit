@@ -2,58 +2,61 @@
 name: "plan-generation"
 description: "计划生成能力包 - 训练容量计算、历史数据加载、计划格式验证"
 category: "planning"
-version: "3.0.0"
+version: "3.1.0"
 ---
 
 # 计划生成能力包 (Plan Generation Skill)
 
 ## 概述
 
-本技能包提供智能训练计划生成所需的基础能力，专注于计划参数计算和验证。动作查询功能已移至 `strategy_coach` 技能。
+本技能包提供智能训练计划生成所需的基础能力，专注于计划参数计算和验证。
 
 ## 能力说明
 
 ### 核心能力
 
-1. **训练容量科学计算** - 基于 MEV/MRV 的容量分配
+1. **训练容量科学计算** - 基于 MEV/MRV 的容量分配（知识见 strength-training-designer 技能）
 2. **历史数据加载** - 负荷锚点和健身等级
-3. **格式验证与修正** - 自动重试机制
+3. **格式验证与修正** - 计划卡格式自检（uiHint 校验回路打回时修订重试）
 
 ## 工具列表
 
-| 工具 | 说明 | 参数 | 类别 |
-|------|------|------|------|
-| load_history | 加载用户历史数据和负荷锚点 | `id` (系统自动注入) | 数据 |
-| submit_plan | 验证并提交计划（终止器） | `exercise_list`, `explanation` | 验证 |
+| 工具           | 说明                                                    | 参数                | 类别 |
+| -------------- | ------------------------------------------------------- | ------------------- | ---- |
+| load_history   | 加载用户历史数据和负荷锚点                              | `id` (系统自动注入) | 数据 |
+| list_exercises | 加载完整动作库 [{id, name, exercise_type, description}] | 无                  | 数据 |
 
-**注意**: `calculate_capacity` 已移至 `strength_training_designer` skill。
-如需三大项容量计算，请先激活 strength-training-designer 技能（按其 SKILL.md 指引读取知识文件）。
+**注意**: 本技能没有提交/计算工具——不存在 `submit_plan` 和 `calculate_capacity`。
+计划完成后直接在回复正文中输出 plan 卡（```json 围栏包裹的 uiHint JSON，
+见 knowledge.md 第九节）；三大项容量按 `strength-training-designer` 技能的
+知识在上下文中推演。
 
-### submit_plan 参数说明
+### plan 卡数据格式
 
-- **exercise_list**: 动作数组（必须是数组，不是 JSON 字符串）
-  - 每个动作包含: `id`, `name`, `exercise_type`, `sets`, `reps`, `weight`
-- **explanation**: 训练计划说明文字
+计划以 ```json 围栏包裹的 plan 卡直出（type: "plan"），data 为动作数组：
+
+- 每个动作包含: `exerciseId`, `name`, `exercise_type`, `sets`, `reps`, `weight`
+- `exerciseId` 必须来自 `list_exercises` 返回的真实条目（禁止编造）
+- `weight` 允许为 0：无 load_anchor 的动作留 0 并在正文说明
+  「首次尝试请自选重量」——首训重量由用户自选，该次实际重量即成为下次
+  计划的锚点（load_history 会随训练落库更新）
 
 ```typescript
-// ✅ 正确调用方式
-submit_plan({
-  exercise_list: [
-    { id: "V1StGXR8_Z5jdHi6", name: "杠铃深蹲", exercise_type: "resistance", sets: 4, reps: 12, weight: 60 }
-  ],
-  explanation: "训练计划说明"
-})
+// ✅ 正确：data 数组中的动作对象
+{ exerciseId: "V1StGXR8_Z5jdHi6", name: "杠铃深蹲", exercise_type: "resistance", sets: 4, reps: 12, weight: 60 }
 
-// ❌ 错误：参数名使用 plan
-submit_plan({ plan: [...] })
+// ❌ 错误：data 写成 JSON 字符串
+"{...}"
 
-// ❌ 错误：exercise_list 写成 JSON 字符串
-submit_plan({ exercise_list: "[...]" })
+// ❌ 错误：调用不存在的 submit_plan / create_exercise / calculate_capacity
+submit_plan({ exercise_list: [...] })
 ```
 
 ## 使用方式
 
-Agent 通过调用这些工具来完成计划生成，最后必须调用 `submit_plan` 验证格式。
+Agent 通过 `load_history` 取画像与锚点、`list_exercises` 取动作库，在上下文中
+完成容量与动作选择，最后直接输出 plan 卡。格式错误会被 uiHint 校验回路
+打回重试（被拒轮次以 thinking 事件呈现，按错误信息修正后重新输出整张卡片）。
 
 ### 典型流程
 
@@ -62,35 +65,31 @@ Agent 通过调用这些工具来完成计划生成，最后必须调用 `submit
   ↓
 load_history (获取历史负荷锚点)
   ↓
-strength-training-designer 技能 (如涉及三大项)
+list_exercises (获取动作库，按器械/伤病过滤)
   ↓
-calculate_capacity (计算三大项容量)
+strength-training-designer 技能 (如涉及三大项容量推演)
   ↓
-submit_plan (验证并提交)
+直接输出 plan 卡 (json 围栏, type: "plan")
 ```
 
 ## 知识文档
 
 ### 主知识文档
+
 详见 `knowledge.md`，包含：
+
 - 动作选择原则
 - 容量分配规则
 - 重量推算逻辑
-
-### 工具专属知识
-按工具拆分的知识文档（更详细）：
-- `tools/submit_plan/knowledge.md` - 格式验证规则、NanoID 来源
-- `tools/load_history/knowledge.md` - 重量推算逻辑、用户画像适配
-
-**注意**: `calculate_capacity` 相关知识已移至 `strength_training_designer` skill。
+- plan 卡输出格式
 
 ## 依赖服务
 
 - `IProfileService` - 用户画像服务
-- `strength_calculator` - 三大项科学计算
 
 ## 版本历史
 
+- **3.1.0** (2026-09-11) - 移除幻影工具文档（submit_plan/calculate_capacity 已不在工具表），改为 plan 卡直出链路；weight 允许留 0（首训自选、次训锚定）
 - **3.0.0** (2026-03-10) - 精简版：移除 query_exercises（迁移至 strategy_coach）
 - **2.1.0** (2026-03-04) - 添加工具参数说明，明确 submit_plan 使用 exercise_list
 - **2.0.0** (2026-02-19) - 重构为 Agent 模式，基础能力打包

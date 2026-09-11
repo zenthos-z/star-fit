@@ -85,10 +85,20 @@ export const PlanCard: React.FC<PlanCardProps> = ({ uiHint, onConfirm }) => {
                   <span className="text-gray-400 text-[11px]">次</span>
                   <span className="text-gray-900 font-semibold">{item?.reps || 0}</span>
                 </span>
-                {item?.weight && (
+                {item?.weight != null && item.weight !== 0 && (
                   <span className="flex items-center gap-1">
-                    <span className="text-gray-400 text-[11px]">kg</span>
-                    <span className="text-gray-900 font-semibold">{item.weight}</span>
+                    {item.exercise_type === 'assisted' ? (
+                      // assisted 负值辅助重量：展示「辅助 20kg」，不露负号
+                      <>
+                        <span className="text-gray-400 text-[11px]">辅助</span>
+                        <span className="text-gray-900 font-semibold">{Math.abs(item.weight)}kg</span>
+                      </>
+                    ) : (
+                      <>
+                        <span className="text-gray-400 text-[11px]">kg</span>
+                        <span className="text-gray-900 font-semibold">{item.weight}</span>
+                      </>
+                    )}
                   </span>
                 )}
               </div>

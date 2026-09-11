@@ -10,7 +10,7 @@
  * transitioning to the new NanoID-based exercise system.
  */
 
-import { getPostgresClient } from '../db/postgresql/index.js';
+import { getPostgresClient } from "../db/postgresql/index.js";
 
 interface CleanupResult {
   success: boolean;
@@ -30,13 +30,13 @@ export async function cleanExerciseData(): Promise<CleanupResult> {
     // Use transaction for atomic operations
     const result = await postgresClient.transaction(async (client) => {
       // Step 1: Delete all exercises
-      console.log('Step 1: Clearing exercises table...');
-      const exerciseResult = await client.query('DELETE FROM exercises');
+      console.log("Step 1: Clearing exercises table...");
+      const exerciseResult = await client.query("DELETE FROM exercises");
       const exercisesDeleted = exerciseResult.rowCount || 0;
       console.log(`✓ Deleted ${exercisesDeleted} exercises`);
 
       // Step 2: Clear load_anchors from all users
-      console.log('Step 2: Clearing load_anchors from user profiles...');
+      console.log("Step 2: Clearing load_anchors from user profiles...");
       const userResult = await client.query(`
         UPDATE users
         SET profile_dynamic = jsonb_set(
@@ -55,10 +55,10 @@ export async function cleanExerciseData(): Promise<CleanupResult> {
       console.log(`✓ Cleared load_anchors for ${usersCleared} users`);
 
       // Step 3: Refresh materialized views
-      console.log('Step 3: Refreshing materialized views...');
-      await client.query('REFRESH MATERIALIZED VIEW CONCURRENTLY user_current_state');
-      await client.query('REFRESH MATERIALIZED VIEW CONCURRENTLY exercise_summary');
-      console.log('✓ Refreshed materialized views');
+      console.log("Step 3: Refreshing materialized views...");
+      // materialized views (user_current_state/exercise_summary) retired in
+      // migration 010 — nothing to refresh here.
+      console.log("✓ Refreshed materialized views");
 
       return {
         exercisesDeleted,
@@ -72,7 +72,7 @@ export async function cleanExerciseData(): Promise<CleanupResult> {
       viewsRefreshed: true,
     };
   } catch (error) {
-    console.error('Error cleaning exercise data:', error);
+    console.error("Error cleaning exercise data:", error);
     return {
       success: false,
       exercisesDeleted: 0,
@@ -87,11 +87,11 @@ export async function cleanExerciseData(): Promise<CleanupResult> {
  * Main execution function for CLI usage
  */
 export async function main(): Promise<void> {
-  console.log('=== Exercise Data Cleanup for NanoID Migration ===\n');
+  console.log("=== Exercise Data Cleanup for NanoID Migration ===\n");
 
   const result = await cleanExerciseData();
 
-  console.log('\n=== Cleanup Summary ===');
+  console.log("\n=== Cleanup Summary ===");
   console.log(`Success: ${result.success}`);
   console.log(`Exercises deleted: ${result.exercisesDeleted}`);
   console.log(`Users cleared: ${result.usersCleared}`);
@@ -102,7 +102,7 @@ export async function main(): Promise<void> {
     process.exit(1);
   }
 
-  console.log('\n✓ Cleanup completed successfully');
+  console.log("\n✓ Cleanup completed successfully");
   process.exit(0);
 }
 

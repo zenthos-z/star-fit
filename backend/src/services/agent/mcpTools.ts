@@ -9,7 +9,7 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (6)
+ * ## Tool set (7)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, description}].
  *                                 The library is small enough to fit in context, so the agent
@@ -21,6 +21,13 @@
  * - `write_memory`        (write) keyed free-text memory note under profile_dynamic.memories
  * - `update_profile`      (write) structured update of profile_dynamic
  *                                 (load_anchors / active_limitations / recovery_state)
+ * - `create_exercise`     (write) insert a USER-BOUND custom exercise into the
+ *                                 library. User-binding rides in
+ *                                 `attributes.owner_user_id` (HC-2: no schema
+ *                                 change) — the row stays invisible to other
+ *                                 users' queries and the admin console filters
+ *                                 can adopt it later. A NanoID is generated
+ *                                 server-side (never LLM-supplied).
  *
  * ## Red lines honoured
  * - **Repository boundary (B1)**: tools reach data ONLY through the Repository
@@ -58,9 +65,9 @@
  * explicit fallback for the real-PG test suite (which runs outside LangGraph).
  */
 
-import { DynamicStructuredTool } from '@langchain/core/tools';
-import { getConfig } from '@langchain/langgraph';
-import { z } from 'zod';
+import { DynamicStructuredTool } from "@langchain/core/tools";
+import { getConfig } from "@langchain/langgraph";
+import { z } from "zod";
 
 // B1: data access is via the Repository layer only. These imports reach the
 // `pg` driver indirectly through PostgresClient inside BaseRepository; the tool
@@ -68,9 +75,10 @@ import { z } from 'zod';
 import {
   BaseRepository,
   createUserRepository,
-} from '../../db/postgresql/repository/index.js';
-import { getPostgresClient } from '../../db/postgresql/index.js';
-import { mergeHistorySources } from './historyMerger.js';
+} from "../../db/postgresql/repository/index.js";
+import { getPostgresClient } from "../../db/postgresql/index.js";
+import { mergeHistorySources } from "./historyMerger.js";
+import { generateExerciseNanoId } from "../../utils/nanoid.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -116,7 +124,7 @@ export class McpScopeError extends Error {
     super(
       `mcpTools scope violation: write targeted userId=${targetUserId} but the tool is scoped to userId=${injectedUserId}`,
     );
-    this.name = 'McpScopeError';
+    this.name = "McpScopeError";
   }
 }
 
@@ -127,7 +135,10 @@ export class McpScopeError extends Error {
  * the LLM); the exported scoped-write helpers let tests drive mismatched inputs
  * to prove the guard is not a perpetually-green no-op.
  */
-export function assertUserScope(injectedUserId: string, targetUserId: string): void {
+export function assertUserScope(
+  injectedUserId: string,
+  targetUserId: string,
+): void {
   if (injectedUserId !== targetUserId) {
     throw new McpScopeError(injectedUserId, targetUserId);
   }
@@ -150,14 +161,17 @@ export function assertUserScope(injectedUserId: string, targetUserId: string): v
  *
  * Throws if no userId can be resolved — tools must NEVER guess or default.
  */
-export function getUserIdFromContext(opts: {
-  explicitConfig?: unknown;
-  injectedUserId?: string;
-} = {}): string {
+export function getUserIdFromContext(
+  opts: {
+    explicitConfig?: unknown;
+    injectedUserId?: string;
+  } = {},
+): string {
   // 1. LangGraph ALS context (production primary).
   let alsUserId: string | undefined;
   try {
-    const cfg = getConfig() as { configurable?: { userId?: string } } | undefined;
+    const cfg = getConfig() as
+      { configurable?: { userId?: string } } | undefined;
     alsUserId = cfg?.configurable?.userId;
   } catch {
     // getConfig() can throw when invoked outside a LangGraph run; that's fine,
@@ -179,15 +193,16 @@ export function getUserIdFromContext(opts: {
     | { config?: { configurable?: { userId?: string } } }
     | undefined;
   const fromExplicit =
-    (cfg as { configurable?: { userId?: string } } | undefined)?.configurable?.userId ??
-    (cfg as { config?: { configurable?: { userId?: string } } } | undefined)?.config?.configurable
-      ?.userId;
+    (cfg as { configurable?: { userId?: string } } | undefined)?.configurable
+      ?.userId ??
+    (cfg as { config?: { configurable?: { userId?: string } } } | undefined)
+      ?.config?.configurable?.userId;
   if (fromExplicit) {
     return fromExplicit;
   }
 
   throw new Error(
-    'mcpTools: userId not found — expected LangGraph configurable.userId (set by DeepAgentService.chat) or an injected test principal',
+    "mcpTools: userId not found — expected LangGraph configurable.userId (set by DeepAgentService.chat) or an injected test principal",
   );
 }
 
@@ -230,23 +245,31 @@ export class UserScopedWriteRepository extends BaseRepository {
   }
 
   /** Raw `history_summary` for the append-read in `write_session`. */
-  async readHistorySummary(userId: string): Promise<Record<string, unknown> | null> {
+  async readHistorySummary(
+    userId: string,
+  ): Promise<Record<string, unknown> | null> {
     const row = await this.queryOne<{ history_summary: unknown }>(
       `SELECT history_summary FROM users WHERE id = $userId`,
       { userId },
     );
     const hs = row?.history_summary;
-    return hs && typeof hs === 'object' ? (hs as Record<string, unknown>) : null;
+    return hs && typeof hs === "object"
+      ? (hs as Record<string, unknown>)
+      : null;
   }
 
   /** Raw `profile_dynamic` for the read-modify-write in `write_memory`. */
-  async readProfileDynamic(userId: string): Promise<Record<string, unknown> | null> {
+  async readProfileDynamic(
+    userId: string,
+  ): Promise<Record<string, unknown> | null> {
     const row = await this.queryOne<{ profile_dynamic: unknown }>(
       `SELECT profile_dynamic FROM users WHERE id = $userId`,
       { userId },
     );
     const pd = row?.profile_dynamic;
-    return pd && typeof pd === 'object' ? (pd as Record<string, unknown>) : null;
+    return pd && typeof pd === "object"
+      ? (pd as Record<string, unknown>)
+      : null;
   }
 }
 
@@ -277,6 +300,46 @@ export class ExerciseQuery extends BaseRepository {
       { id },
     );
   }
+
+  /**
+   * True when a (case-insensitive) exercise name already exists. Used by
+   * create_exercise to fail loudly instead of hitting the UNIQUE(name)
+   * constraint with a raw driver error.
+   */
+  async nameExists(name: string): Promise<boolean> {
+    const row = await this.queryOne<{ id: string }>(
+      `SELECT id FROM exercises WHERE lower(name) = lower($name) LIMIT 1`,
+      { name },
+    );
+    return row != null;
+  }
+
+  /**
+   * Insert a user-bound custom exercise. Ownership rides inside the
+   * attributes JSONB (`owner_user_id`) — HC-2: no schema change, the existing
+   * table serves per-user customs with zero migration.
+   */
+  async insertUserExercise(row: {
+    id: string;
+    name: string;
+    exercise_type: string;
+    attributes: Record<string, unknown>;
+    content_html: string | null;
+    modified_by: string;
+  }): Promise<void> {
+    await this.execute(
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, content_html, modified_by, updated_at)
+       VALUES ($id, $name, $exerciseType, 'beginner', $attributes, $contentHtml, $modifiedBy, NOW())`,
+      {
+        id: row.id,
+        name: row.name,
+        exerciseType: row.exercise_type,
+        attributes: JSON.stringify(row.attributes),
+        contentHtml: row.content_html,
+        modifiedBy: row.modified_by,
+      },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -288,13 +351,13 @@ const loadHistorySchema = z
     include_profile: z
       .boolean()
       .optional()
-      .describe('Also return the static profile. Defaults to true.'),
+      .describe("Also return the static profile. Defaults to true."),
     include_dynamic: z
       .boolean()
       .optional()
       .describe(
-        'Also return profile_dynamic (load_anchors, active_limitations, recovery_state). Defaults to true. ' +
-          'These are hard constraints for plan generation — load them.',
+        "Also return profile_dynamic (load_anchors, active_limitations, recovery_state). Defaults to true. " +
+          "These are hard constraints for plan generation — load them.",
       ),
     limit: z
       .number()
@@ -302,34 +365,39 @@ const loadHistorySchema = z
       .positive()
       .max(50)
       .optional()
-      .describe('Max recent sessions to return from history_summary.sessions.'),
+      .describe("Max recent sessions to return from history_summary.sessions."),
   })
   .describe(
-    'Read the current user training history + static + dynamic profile. Read-only. Scoped to the calling user.',
+    "Read the current user training history + static + dynamic profile. Read-only. Scoped to the calling user.",
   );
 
 const listExercisesSchema = z
   .object({})
   .describe(
-    'List the ENTIRE exercise library as [{id, name, description}]. No filters, no arguments — ' +
-      'the library is small enough to fit in context. Read it ONCE, then pick actions in-context ' +
-      'respecting the user equipment and any active injuries (from load_history). `description` ' +
-      'carries pattern / targets / equipment / joint-impact so you can choose safe actions directly. ' +
-      'Never invent an exercise that is not in the returned list.',
+    "List the ENTIRE exercise library as [{id, name, description}]. No filters, no arguments — " +
+      "the library is small enough to fit in context. Read it ONCE, then pick actions in-context " +
+      "respecting the user equipment and any active injuries (from load_history). `description` " +
+      "carries pattern / targets / equipment / joint-impact so you can choose safe actions directly. " +
+      "Never invent an exercise that is not in the returned list.",
   );
 
 const getExerciseDetailSchema = z
   .object({
-    id: z.string().min(1).max(24).describe('Exact exercise id.'),
+    id: z.string().min(1).max(24).describe("Exact exercise id."),
   })
-  .describe('Fetch the full record of one exercise (attributes, tutorials, content_html). Read-only.');
+  .describe(
+    "Fetch the full record of one exercise (attributes, tutorials, content_html). Read-only.",
+  );
 
 const exerciseEntrySchema = z
   .object({
     name: z.string().max(120).describe('Exercise name, e.g. "Back Squat".'),
     sets: z.number().int().positive().optional(),
     reps: z.number().int().positive().optional(),
-    weight: z.number().optional().describe('Weight used (kg or lb, as configured).'),
+    weight: z
+      .number()
+      .optional()
+      .describe("Weight used (kg or lb, as configured)."),
     rpe: z.number().min(0).max(10).optional(),
   })
   .passthrough();
@@ -340,7 +408,7 @@ const writeSessionSchema = z
       .string()
       .min(1)
       .max(500)
-      .describe('One-line summary of the completed session.'),
+      .describe("One-line summary of the completed session."),
     date: z
       .string()
       .max(20)
@@ -350,11 +418,11 @@ const writeSessionSchema = z
       .array(exerciseEntrySchema)
       .max(50)
       .optional()
-      .describe('Exercises performed in this session.'),
+      .describe("Exercises performed in this session."),
     notes: z.string().max(1000).optional(),
   })
   .passthrough()
-  .describe('Append a completed training session to the current user history.');
+  .describe("Append a completed training session to the current user history.");
 
 const writeMemorySchema = z
   .object({
@@ -367,10 +435,59 @@ const writeMemorySchema = z
       .string()
       .min(1)
       .max(2000)
-      .describe('Free-text memory content to remember about the user.'),
+      .describe("Free-text memory content to remember about the user."),
   })
   .passthrough()
-  .describe('Write/overwrite a memory note keyed under the current user profile.');
+  .describe(
+    "Write/overwrite a memory note keyed under the current user profile.",
+  );
+
+const createExerciseSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(120)
+      .describe(
+        'Exercise name in the user\'s language, e.g. "单臂哑铃划船（左）". Must not duplicate an existing library name.',
+      ),
+    exercise_type: z
+      .string()
+      .max(24)
+      .describe(
+        "One of: resistance | unilateral | bodyweight | assisted | isometric | cardio | flexibility | heavy_weight | rep_training | outdoor. Pick by how the movement is measured (assisted uses NEGATIVE assistance weight).",
+      ),
+    targets_primary: z
+      .array(z.string().max(40))
+      .max(6)
+      .optional()
+      .describe('Primary muscle groups, e.g. ["背阔肌", "斜方肌"].'),
+    equipment_required: z
+      .array(z.string().max(40))
+      .max(8)
+      .optional()
+      .describe(
+        'Equipment needed, e.g. ["哑铃", "平凳"]. Empty for bodyweight.',
+      ),
+    description: z
+      .string()
+      .max(300)
+      .optional()
+      .describe(
+        "One-line description: movement pattern + target muscles + equipment, same style as list_exercises descriptions.",
+      ),
+    tutorial_md: z
+      .string()
+      .max(8000)
+      .optional()
+      .describe(
+        "Optional Markdown tutorial in the SAME 4-section format the frontend coach generates (### 动作作用 / ### 发力心法 / ### 注意事项 / ### 容易做错的地方). Generate it for custom moves the library does not cover.",
+      ),
+  })
+  .passthrough()
+  .describe(
+    "Create a NEW user-bound exercise when the library has no suitable match. The exercise is visible ONLY to the calling user (bound via attributes.owner_user_id server-side). The id is generated server-side and returned — use it in plan cards. Check list_exercises FIRST; do not create a near-duplicate of an existing exercise.",
+  );
 
 const updateProfileSchema = z
   .object({
@@ -378,39 +495,43 @@ const updateProfileSchema = z
       .record(z.string(), z.any())
       .optional()
       .describe(
-        'Replacement load_anchors map (exercise name -> anchor object, e.g. {type,best_weight,best_reps}). REPLACES the whole map — to update one anchor, load_history first, merge, then pass the full map.',
+        "Replacement load_anchors map (exercise name -> anchor object, e.g. {type,best_weight,best_reps}). REPLACES the whole map — to update one anchor, load_history first, merge, then pass the full map.",
       ),
     active_limitations: z
       .array(
         z
           .object({
             part: z.string().describe('Body part, e.g. "left_knee".'),
-            severity: z.number().min(1).max(10).describe('1-10 severity.'),
-            expire_at: z.string().describe('ISO 8601 UTC auto-heal timestamp.'),
-            logged_at: z.string().describe('ISO 8601 UTC when logged.'),
+            severity: z.number().min(1).max(10).describe("1-10 severity."),
+            expire_at: z.string().describe("ISO 8601 UTC auto-heal timestamp."),
+            logged_at: z.string().describe("ISO 8601 UTC when logged."),
             auto_heal: z.boolean().optional(),
           })
           .passthrough(),
       )
       .optional()
       .describe(
-        'Replacement active_limitations array. To ADD a limitation, load_history first, append it, then pass the full array here.',
+        "Replacement active_limitations array. To ADD a limitation, load_history first, append it, then pass the full array here.",
       ),
     recovery_state: z
       .object({
-        total_score: z.number().min(0).max(100).describe('0-100 recovery score.'),
-        last_assessed: z.string().describe('ISO 8601 UTC.'),
+        total_score: z
+          .number()
+          .min(0)
+          .max(100)
+          .describe("0-100 recovery score."),
+        last_assessed: z.string().describe("ISO 8601 UTC."),
         cns_fusing: z.boolean().optional(),
         acute_load: z.number().optional(),
         chronic_load: z.number().optional(),
       })
       .passthrough()
       .optional()
-      .describe('Replacement recovery_state.'),
+      .describe("Replacement recovery_state."),
   })
   .passthrough()
   .describe(
-    'Structured update to the current user profile_dynamic (load_anchors / active_limitations / recovery_state). Shallow-merges into profile_dynamic; always targets the calling user. Use after a workout to record new anchors, limitations, or recovery.',
+    "Structured update to the current user profile_dynamic (load_anchors / active_limitations / recovery_state). Shallow-merges into profile_dynamic; always targets the calling user. Use after a workout to record new anchors, limitations, or recovery.",
   );
 
 export type SessionInput = z.infer<typeof writeSessionSchema>;
@@ -474,7 +595,11 @@ export async function updateProfileForUser(
     Object.entries(update).filter(([, v]) => v !== undefined),
   );
   await writeRepo.mergeProfileDynamic(targetUserId, filtered);
-  return { ok: true, userId: targetUserId, updated_fields: Object.keys(filtered) };
+  return {
+    ok: true,
+    userId: targetUserId,
+    updated_fields: Object.keys(filtered),
+  };
 }
 
 /** Read just the `memories` map from `profile_dynamic` (used for read-modify-write). */
@@ -484,7 +609,7 @@ async function readProfileDynamicMemories(
 ): Promise<Record<string, string>> {
   const pd = await repo.readProfileDynamic(userId);
   const memories = pd?.memories;
-  return memories && typeof memories === 'object'
+  return memories && typeof memories === "object"
     ? (memories as Record<string, string>)
     : {};
 }
@@ -503,22 +628,28 @@ export function buildMcpToolsWith(
   injectedUserId?: string,
 ): DynamicStructuredTool[] {
   const loadHistory = new DynamicStructuredTool({
-    name: 'load_history',
+    name: "load_history",
     description:
-      'Load the current user training history (history_summary, recent sessions), static profile, ' +
-      'AND dynamic profile (load_anchors, active_limitations, recovery_state). Read-only. Scoped to the calling user. ' +
-      'ALWAYS call this before generating a plan — the dynamic profile holds the hard constraints (equipment the user owns, active injuries, recovery).',
+      "Load the current user training history (history_summary, recent sessions), static profile, " +
+      "AND dynamic profile (load_anchors, active_limitations, recovery_state). Read-only. Scoped to the calling user. " +
+      "ALWAYS call this before generating a plan — the dynamic profile holds the hard constraints (equipment the user owns, active injuries, recovery).",
     schema: loadHistorySchema,
     func: async (input, _runManager, config) => {
-      const userId = getUserIdFromContext({ explicitConfig: config, injectedUserId });
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
       const userRepo = createUserRepository(client);
-      const history = await userRepo.getHistorySummary(userId);
       const limit = input.limit ?? 10;
 
-      // History reads no longer rely solely on users.history_summary — the
-      // sync/push write path upserts the `sessions` table but never maintains
-      // the summary JSONB, so a summary-only read can return empty history
-      // right after a workout. Merge both sources (live rows win the dedupe).
+      // Training history comes from the `sessions` table directly (source of
+      // truth written by every sync/push) — no reliance on the auto-compressed
+      // users.history_summary, which drops detail the model needs and is never
+      // maintained on this write path. history_summary.sessions still joins the
+      // merge as the carrier of write_session Agent-recorded memory entries.
+      const history = await userRepo
+        .getHistorySummary(userId)
+        .catch(() => null);
       let liveRows: Array<{ raw_json: unknown }> = [];
       try {
         liveRows = await client.queryMany(
@@ -532,7 +663,13 @@ export function buildMcpToolsWith(
         liveRows = [];
       }
       const trimmed = trimSessions(
-        { ...(history ?? {}), sessions: mergeHistorySources((history as Record<string, unknown> | null)?.sessions, liveRows, limit) },
+        {
+          sessions: mergeHistorySources(
+            (history as Record<string, unknown> | null)?.sessions,
+            liveRows,
+            limit,
+          ),
+        },
         limit,
       );
       let profileStatic: unknown = null;
@@ -561,13 +698,13 @@ export function buildMcpToolsWith(
   });
 
   const listExercises = new DynamicStructuredTool({
-    name: 'list_exercises',
+    name: "list_exercises",
     description:
-      'List the ENTIRE exercise library (read-only) as [{id, name, exercise_type, description}]. No arguments. ' +
-      'The library is small enough to fit in context — call this ONCE, then pick actions in-context ' +
-      'respecting the user equipment and any active injuries. `exercise_type` tells you which fields are required ' +
-      '(isometric needs duration, outdoor needs distance, resistance needs weight). ' +
-      '`description` carries pattern/targets/equipment/joint-impact. Never invent an exercise that is not in the returned list.',
+      "List the ENTIRE exercise library (read-only) as [{id, name, exercise_type, description}]. No arguments. " +
+      "The library is small enough to fit in context — call this ONCE, then pick actions in-context " +
+      "respecting the user equipment and any active injuries. `exercise_type` tells you which fields are required " +
+      "(isometric needs duration, outdoor needs distance, resistance needs weight). " +
+      "`description` carries pattern/targets/equipment/joint-impact. Never invent an exercise that is not in the returned list.",
     schema: listExercisesSchema,
     func: async () => {
       const exerciseQuery = new ExerciseQuery(client);
@@ -583,11 +720,11 @@ export function buildMcpToolsWith(
   });
 
   const getExerciseDetail = new DynamicStructuredTool({
-    name: 'get_exercise_detail',
+    name: "get_exercise_detail",
     description:
-      'Fetch the full record of one exercise by id (attributes incl. equipment/targets/impact, tutorials, content_html). ' +
-      'Read-only. Optional drill-down after list_exercises when you need a candidate tutorials/content_html ' +
-      'or to confirm impact_level on an injured joint.',
+      "Fetch the full record of one exercise by id (attributes incl. equipment/targets/impact, tutorials, content_html). " +
+      "Read-only. Optional drill-down after list_exercises when you need a candidate tutorials/content_html " +
+      "or to confirm impact_level on an injured joint.",
     schema: getExerciseDetailSchema,
     func: async (input) => {
       const exerciseQuery = new ExerciseQuery(client);
@@ -599,13 +736,76 @@ export function buildMcpToolsWith(
     },
   });
 
-  const writeSession = new DynamicStructuredTool({
-    name: 'write_session',
+  const createExercise = new DynamicStructuredTool({
+    name: "create_exercise",
     description:
-      'Append a completed training session to the current user history. Always writes to the calling user; the agent cannot target another user.',
+      "Create a NEW user-bound exercise (visible ONLY to the calling user) when the library lacks a suitable movement. " +
+      "Check list_exercises FIRST and never create a near-duplicate. The NanoID id is generated SERVER-SIDE and returned — " +
+      "use the returned id in plan cards. Optionally attach a Markdown tutorial in the same 4-section format the " +
+      "frontend coach tutorial uses (### 动作作用 / ### 发力心法 / ### 注意事项 / ### 容易做错的地方).",
+    schema: createExerciseSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const exerciseQuery = new ExerciseQuery(client);
+
+      // Duplicate-name guard: fail loudly with an actionable message instead
+      // of a raw UNIQUE violation from the driver.
+      if (await exerciseQuery.nameExists(input.name)) {
+        return JSON.stringify({
+          created: false,
+          reason: "name_exists",
+          message:
+            "An exercise with this name already exists in the library. Call list_exercises and use the existing id instead of creating a duplicate.",
+        });
+      }
+
+      // Server-side NanoID (never LLM-supplied) + user binding in attributes.
+      const id = generateExerciseNanoId();
+      const attributes: Record<string, unknown> = {
+        owner_user_id: userId,
+        custom: true,
+        created_via: "agent",
+        targets: { primary: input.targets_primary ?? [] },
+        equipment_required: input.equipment_required ?? [],
+      };
+
+      await exerciseQuery.insertUserExercise({
+        id,
+        name: input.name,
+        exercise_type: input.exercise_type,
+        attributes,
+        // Tutorial persisted into content_html so ExerciseTutorialModal renders
+        // it with the same priority as coach/admin-generated tutorials
+        // (content_html is the top slot in the modal's source priority).
+        content_html: input.tutorial_md ?? null,
+        modified_by: "system",
+      });
+
+      return JSON.stringify({
+        created: true,
+        id,
+        name: input.name,
+        exercise_type: input.exercise_type,
+        visibility: "user_only",
+        message:
+          "Exercise created and bound to the current user. Use this id in plan cards.",
+      });
+    },
+  });
+
+  const writeSession = new DynamicStructuredTool({
+    name: "write_session",
+    description:
+      "Append a completed training session to the current user history. Always writes to the calling user; the agent cannot target another user.",
     schema: writeSessionSchema,
     func: async (input, _runManager, config) => {
-      const userId = getUserIdFromContext({ explicitConfig: config, injectedUserId });
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
       const writeRepo = new UserScopedWriteRepository(client);
       const res = await writeSessionForUser(writeRepo, userId, userId, input);
       return JSON.stringify(res);
@@ -613,12 +813,15 @@ export function buildMcpToolsWith(
   });
 
   const writeMemory = new DynamicStructuredTool({
-    name: 'write_memory',
+    name: "write_memory",
     description:
-      'Write or overwrite a free-text memory note about the current user (keyed). Always writes to the calling user; the agent cannot target another user.',
+      "Write or overwrite a free-text memory note about the current user (keyed). Always writes to the calling user; the agent cannot target another user.",
     schema: writeMemorySchema,
     func: async (input, _runManager, config) => {
-      const userId = getUserIdFromContext({ explicitConfig: config, injectedUserId });
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
       const writeRepo = new UserScopedWriteRepository(client);
       const res = await writeMemoryForUser(writeRepo, userId, userId, input);
       return JSON.stringify(res);
@@ -626,25 +829,36 @@ export function buildMcpToolsWith(
   });
 
   const updateProfile = new DynamicStructuredTool({
-    name: 'update_profile',
+    name: "update_profile",
     description:
-      'Structured update of the current user dynamic profile (load_anchors / active_limitations / recovery_state). ' +
-      'Use AFTER a workout to record new performance anchors, fresh limitations, or recovery state. Always writes to the calling user.',
+      "Structured update of the current user dynamic profile (load_anchors / active_limitations / recovery_state). " +
+      "Use AFTER a workout to record new performance anchors, fresh limitations, or recovery state. Always writes to the calling user.",
     schema: updateProfileSchema,
     func: async (input, _runManager, config) => {
-      const userId = getUserIdFromContext({ explicitConfig: config, injectedUserId });
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
       const writeRepo = new UserScopedWriteRepository(client);
       const res = await updateProfileForUser(writeRepo, userId, userId, input);
       return JSON.stringify(res);
     },
   });
 
-  return [loadHistory, listExercises, getExerciseDetail, writeSession, writeMemory, updateProfile];
+  return [
+    loadHistory,
+    listExercises,
+    getExerciseDetail,
+    createExercise,
+    writeSession,
+    writeMemory,
+    updateProfile,
+  ];
 }
 
 /**
  * Production entry point (P006: userId resolved per-request via LangGraph ALS;
- * client = singleton). Returns the six domain tools.
+ * client = singleton). Returns the seven domain tools.
  */
 export function buildMcpTools(): DynamicStructuredTool[] {
   return buildMcpToolsWith(getPostgresClient(), undefined);
@@ -683,24 +897,28 @@ function describeExercise(row: ExerciseListRow): string {
   if (row.exercise_type) parts.push(String(row.exercise_type));
   if (row.difficulty) parts.push(String(row.difficulty));
   const pattern = attr.pattern;
-  if (typeof pattern === 'string' && pattern) parts.push(`pattern:${pattern}`);
+  if (typeof pattern === "string" && pattern) parts.push(`pattern:${pattern}`);
   const targets = (attr.targets as { primary?: unknown } | undefined)?.primary;
   if (Array.isArray(targets) && targets.length > 0) {
-    parts.push(`targets:${targets.filter((t) => typeof t === 'string').join('+')}`);
+    parts.push(
+      `targets:${targets.filter((t) => typeof t === "string").join("+")}`,
+    );
   }
   const equip = attr.equipment_required;
   if (Array.isArray(equip) && equip.length > 0) {
-    parts.push(`equipment:${equip.filter((e) => typeof e === 'string').join('+')}`);
+    parts.push(
+      `equipment:${equip.filter((e) => typeof e === "string").join("+")}`,
+    );
   } else {
-    parts.push('equipment:bodyweight');
+    parts.push("equipment:bodyweight");
   }
   const impact = attr.impact_level;
-  if (impact && typeof impact === 'object') {
+  if (impact && typeof impact === "object") {
     const notable = Object.entries(impact as Record<string, unknown>)
-      .filter(([, v]) => typeof v === 'number' && v >= 5)
+      .filter(([, v]) => typeof v === "number" && v >= 5)
       .map(([k, v]) => `${k}:${v}`)
-      .join(',');
+      .join(",");
     if (notable) parts.push(`impact:${notable}`);
   }
-  return parts.join(' | ');
+  return parts.join(" | ");
 }

@@ -1,10 +1,13 @@
-import { z } from 'zod';
+import { z } from "zod";
 
 /**
- * load_history 读取修复：历史训练不再只依赖 users.history_summary（该字段
- * 在 sync/push 写入路径上无人维护，长期为空）。改为「summary + sessions 表
- * 实时查询」双源合并：sessions 表是每次 sync/push 都会写的权威数据，
- * summary 里已有的条目按 session_id 去重后并在一起，按开始时间倒序取 limit 条。
+ * load_history 读取实现（2026-09-11 调整）：
+ *
+ * 训练历史以 sessions 表原始数据为准（每次 sync/push 都写的权威数据源），
+ * 不再依赖 users.history_summary 的自动压缩摘要——压缩必然丢信息。
+ * history_summary.sessions 仅作为补充源参与合并：它承载 Agent 通过
+ * write_session 工具显式记录的记忆条目（与前端训练数据是两条独立写入流），
+ * 这类记录不可丢弃。live 行（sessions 表）在去重中始终优先。
  */
 
 /** sessions 表 raw_json 行的最小形状（宽松解析，容错字段缺失）。 */
@@ -25,7 +28,8 @@ export type RawSessionRow = z.infer<typeof RawSessionRowSchema>;
 
 function toIso(value: string | number | undefined): string | undefined {
   if (value === undefined) return undefined;
-  const date = typeof value === 'number' ? new Date(value) : new Date(String(value));
+  const date =
+    typeof value === "number" ? new Date(value) : new Date(String(value));
   if (Number.isNaN(date.getTime())) return undefined;
   return date.toISOString();
 }
@@ -51,14 +55,16 @@ export function normalizeSessionRow(raw: unknown): RawSessionRow | null {
 /** Key used to dedupe summary entries against live-session rows. */
 function dedupeKey(entry: Record<string, unknown>): string {
   const id = entry.session_id ?? entry.id;
-  return typeof id === 'string' && id.length > 0 ? id : JSON.stringify(entry).slice(0, 120);
+  return typeof id === "string" && id.length > 0
+    ? id
+    : JSON.stringify(entry).slice(0, 120);
 }
 
 /**
- * Merge `history_summary.sessions` (may be stale/empty) with real-time rows
- * queried from the `sessions` table. Live rows win the dedupe (they are the
- * source of truth written by every sync/push). Result: newest-first, capped
- * at `limit`.
+ * Merge Agent-recorded `history_summary.sessions` (write_session memory) with
+ * real-time rows queried from the `sessions` table. Live rows win the dedupe
+ * (sessions table is the authoritative training-data source). Result:
+ * newest-first, capped at `limit`.
  */
 export function mergeHistorySources(
   summarySessions: unknown,
@@ -85,10 +91,10 @@ export function mergeHistorySources(
     merged.push(rec);
   }
 
-  // Then summary entries not already covered by a live row.
+  // Then summary entries (Agent-recorded memory) not already covered by a live row.
   if (Array.isArray(summarySessions)) {
     for (const entry of summarySessions) {
-      if (!entry || typeof entry !== 'object') continue;
+      if (!entry || typeof entry !== "object") continue;
       const rec = entry as Record<string, unknown>;
       if (seen.has(dedupeKey(rec))) continue;
       merged.push(rec);

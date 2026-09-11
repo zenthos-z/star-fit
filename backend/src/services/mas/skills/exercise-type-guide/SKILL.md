@@ -21,6 +21,7 @@ version: "1.1.0"
 ## 解决方案
 
 本技能包提供：
+
 1. **知识库文档**：详细的动作类型规范（参数要求、示例、最佳实践）
 2. **查询工具**：`get_exercise_type_knowledge` - 供 AI 主动查询特定类型的规范
 3. **按需加载架构**：只在需要时加载详细知识，避免 token 浪费
@@ -29,23 +30,23 @@ version: "1.1.0"
 
 ### 10 种动作类型及其参数要求
 
-| 类型 | 名称 | 必需字段 | 可选字段 | 典型示例 |
-|------|------|----------|----------|----------|
-| `resistance` | 抗阻力训练 | weight > 0 | - | 深蹲: weight=60 |
-| `unilateral` | 单侧训练 | weight >= 0 | - | 箭步蹲: weight=20 |
-| `bodyweight` | 自重训练 | - | weight=0 | 俯卧撑: weight=0 |
-| `assisted` | 辅助训练 | weight > 0 | - | 助力引体: weight=-10 |
-| `isometric` | 等长收缩 | duration > 0 | weight | 平板支撑: duration=30 |
-| `cardio` | 有氧训练 | duration > 0 | distance | 跑步: duration=600 |
-| `flexibility` | 柔韧性训练 | - | duration | 拉伸: duration=30 |
-| `heavy_weight` | 大重量训练 | weight > 0 | - | 硬拉: weight=100 |
-| `rep_training` | 次数训练 | weight >= 0 | - | 次数训练: weight=0 |
-| `outdoor` | 户外运动 | distance > 0 | duration | 户外跑: distance=3000 |
+| 类型           | 名称       | 必需字段     | 可选字段 | 典型示例              |
+| -------------- | ---------- | ------------ | -------- | --------------------- |
+| `resistance`   | 抗阻力训练 | weight > 0   | -        | 深蹲: weight=60       |
+| `unilateral`   | 单侧训练   | weight >= 0  | -        | 箭步蹲: weight=20     |
+| `bodyweight`   | 自重训练   | -            | weight=0 | 俯卧撑: weight=0      |
+| `assisted`     | 辅助训练   | weight > 0   | -        | 助力引体: weight=-10  |
+| `isometric`    | 等长收缩   | duration > 0 | weight   | 平板支撑: duration=30 |
+| `cardio`       | 有氧训练   | duration > 0 | distance | 跑步: duration=600    |
+| `flexibility`  | 柔韧性训练 | -            | duration | 拉伸: duration=30     |
+| `heavy_weight` | 大重量训练 | weight > 0   | -        | 硬拉: weight=100      |
+| `rep_training` | 次数训练   | weight >= 0  | -        | 次数训练: weight=0    |
+| `outdoor`      | 户外运动   | distance > 0 | duration | 户外跑: distance=3000 |
 
 ## 工具列表
 
-| 工具 | 说明 | 类别 |
-|------|------|------|
+| 工具      | 说明                                       | 类别 |
+| --------- | ------------------------------------------ | ---- |
 | read_file | 按需读取本技能知识文档（原生文件系统工具） | 查询 |
 
 ## 按需读取 (Progressive Loading)
@@ -53,11 +54,13 @@ version: "1.1.0"
 本技能的详细知识通过原生文件系统工具 `read_file` 按需读取（R5 起 `load_skill` 已移除）：
 
 ### 读取知识索引（轻量级）
+
 ```
 read_file("/exercise-type-guide/knowledge-index.md")
 ```
 
 ### 读取特定动作类型的详细知识
+
 ```
 read_file("/exercise-type-guide/knowledge/resistance.md")   // 抗阻力训练
 read_file("/exercise-type-guide/knowledge/bodyweight.md")   // 自重训练
@@ -72,11 +75,12 @@ read_file("/exercise-type-guide/knowledge/rep_training.md") // 次数训练
 ```
 
 ### Token 使用估算
-| 操作 | Token 消耗 |
-|------|------------|
-| 加载知识索引 | ~500 tokens |
+
+| 操作                 | Token 消耗        |
+| -------------------- | ----------------- |
+| 加载知识索引         | ~500 tokens       |
 | 加载单个类型详细知识 | ~1000-2000 tokens |
-| 加载完整 SKILL.md | ~2000 tokens |
+| 加载完整 SKILL.md    | ~2000 tokens      |
 
 ## 使用方式
 
@@ -88,20 +92,20 @@ read_file("/exercise-type-guide/knowledge/rep_training.md") // 次数训练
 3. get_exercise_type_knowledge({type: "resistance"}) → 了解 resistance 类型需要 weight 字段
 4. load_history (获取历史负荷锚点)
 5. 生成包含 weight 字段的动作计划
-6. submit_plan (验证并提交)
+6. 输出 plan 卡（json 围栏, type: "plan"）
 ```
 
 ### 工具使用示例
 
 ```javascript
 // 查询单个类型 - 返回该类型的详细知识（~1000-2000 tokens）
-get_exercise_type_knowledge({ type: "cardio", includeExamples: true })
+get_exercise_type_knowledge({ type: "cardio", includeExamples: true });
 
 // 查询多个类型 - 返回多个类型的概要（~300 tokens/类型）
-get_exercise_type_knowledge({ types: ["resistance", "bodyweight"] })
+get_exercise_type_knowledge({ types: ["resistance", "bodyweight"] });
 
 // 不传参数 - 返回轻量级索引（所有类型概要，~500 tokens）
-get_exercise_type_knowledge()
+get_exercise_type_knowledge();
 ```
 
 ## 知识文档结构

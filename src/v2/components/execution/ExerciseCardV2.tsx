@@ -69,6 +69,9 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
       },
       metadata: {
         name: exercise.name,
+        // 原始动作类型透传（assisted 等）——ExerciseAction.type 是弱 enum 丢掉了
+        // assisted 细分，插件卡（ResistanceCard）靠它判断负值辅助重量的展示语义。
+        libraryType: exercise.type,
         targetRpe: exercise.targetRpe,
         cardioMode: exercise.metadata?.cardioMode,
         cardioSubtype: exercise.metadata?.cardioSubtype,
