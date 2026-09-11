@@ -1,4 +1,6 @@
 import React, { useState, useRef } from 'react';
+import { ChatCardHeader } from './ChatCardHeader';
+import { ChatCardShell, ChatPrimaryButton } from './ChatCardShell';
 
 interface QuestionOption {
   label: string;
@@ -151,16 +153,11 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
     const options = data.options || [];
 
     return (
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-        <div className="bg-gray-50/50 px-4 py-3 border-b border-gray-100 flex items-center gap-2">
-          <svg className="w-4 h-4 text-star-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-          </svg>
-          <span className="text-xs font-bold text-star-accent uppercase tracking-widest">练后调研</span>
-        </div>
+      <ChatCardShell>
+<ChatCardHeader title="练后调研" />
 
         <div className="p-5">
-          <h4 className="text-sm font-bold text-gray-800 leading-relaxed mb-6">
+          <h4 className="text-[15px] font-medium text-gray-900 leading-relaxed mb-6">
             {question}
           </h4>
 
@@ -169,7 +166,7 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
               <button
                 key={opt?.value || idx}
                 onClick={() => onConfirm?.(opt?.value)}
-                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-left text-sm font-bold text-gray-700 hover:border-star-accent hover:bg-star-accent/5 hover:text-star-accent transition-all active:scale-95 flex justify-between items-center group shadow-sm"
+                className="w-full p-4 bg-gray-50 border border-gray-100 rounded-2xl text-left text-[15px] font-medium text-gray-800 hover:border-blue-200 hover:bg-blue-50/50 transition-all active:scale-95 flex justify-between items-center"
               >
                 {opt?.label || '未知选项'}
                 <svg className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -179,21 +176,17 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
             ))}
           </div>
         </div>
-      </div>
+      </ChatCardShell>
     );
   }
 
   // New multi-question mode with upload button
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-floating" data-testid="survey-card">
-      <div className="bg-star-dark px-4 py-3 flex justify-between items-center" data-testid="survey-header">
-        <div>
-          <h3 className="text-white text-lg font-black italic uppercase tracking-widest" data-testid="survey-title">{title}</h3>
-          {subtitle && (
-            <p className="text-star-accent text-[10px] mt-1 uppercase tracking-widest" data-testid="survey-subtitle">{subtitle}</p>
-          )}
-        </div>
-      </div>
+    <ChatCardShell testId="survey-card">
+      <ChatCardHeader
+        title={title}
+        subtitle={subtitle}
+      />
 
       <div className="p-5 space-y-4" data-testid="survey-questions">
         {displayQuestions.map((q: Question, idx: number) => {
@@ -204,8 +197,8 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
           return (
             <div key={q?.id || idx} className="space-y-3" data-testid={`survey-question-${q?.id}`}>
               <div className="flex items-start gap-2">
-                <span className="text-star-accent font-bold">{idx + 1}.</span>
-                <p className="font-bold text-gray-800 flex-1">{q?.question || '未知问题'}</p>
+                <span className="text-blue-500 font-semibold">{idx + 1}.</span>
+                <p className="font-medium text-gray-900 flex-1">{q?.question || '未知问题'}</p>
                 {q?.required && <span className="text-red-500 text-xs">*</span>}
               </div>
 
@@ -228,10 +221,10 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
                         data-testid={`survey-option-${q?.id}-${opt.value}`}
                         onClick={() => handleOptionClick(q.id, opt.value, isMultiSelect)}
                         className={`
-                          px-4 py-3 rounded-2xl text-sm font-bold transition-all active:scale-95 shadow-sm
+                          px-4 py-3 rounded-full text-[15px] font-medium transition-all active:scale-95
                           ${isSelected
-                            ? 'bg-star-accent text-white shadow-lg shadow-blue-500/20'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}
+                            ? 'bg-star-accent text-white'
+                            : 'bg-gray-100 text-gray-700 hover:bg-gray-200'}
                         `}
                       >
                         <span className="flex items-center gap-2">
@@ -261,7 +254,7 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
                       w-full px-4 py-3 rounded-2xl border-2 text-sm font-medium
                       transition-all outline-none shadow-sm
                       ${textInputs[q.id] || selectedOptions[q.id]
-                        ? 'border-star-accent bg-star-accent/5'
+                        ? 'border-star-accent bg-blue-50/40'
                         : 'border-gray-200 bg-gray-50 focus:border-star-accent focus:bg-white'}
                     `}
                   />
@@ -273,24 +266,17 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
       </div>
 
       <div className="p-5 pt-0">
-        <button
+        <ChatPrimaryButton
+          className="w-full"
           onClick={handleUpload}
           disabled={!allRequiredAnswered || isUploading}
-          data-testid="survey-submit-button"
-          className={`
-            w-full py-4 rounded-2xl font-black italic uppercase tracking-widest
-            transition-all active:scale-95
-            ${!allRequiredAnswered || isUploading
-              ? 'bg-gray-200 text-gray-400 cursor-not-allowed shadow-none'
-              : 'bg-star-accent text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20'}
-          `}
         >
           {isUploading ? '上传中...' : '上传补充信息'}
-        </button>
+        </ChatPrimaryButton>
         {!allRequiredAnswered && (
           <p className="text-xs text-gray-400 text-center mt-2">请完成所有必填问题</p>
         )}
       </div>
-    </div>
+    </ChatCardShell>
   );
 };

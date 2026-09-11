@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { ChatCardHeader } from './ChatCardHeader';
+import { ChatCardShell, ChatPrimaryButton, ChatSecondaryButton } from './ChatCardShell';
 
 interface HitlConfirmCardProps {
   uiHint: {
@@ -8,6 +10,12 @@ interface HitlConfirmCardProps {
   onConfirm?: (payload: any) => void;
 }
 
+/**
+ * HitlConfirmCard (hitl_confirm) - Human-in-the-loop 确认卡
+ *
+ * 2026-09-11 聊天卡片视觉统一：琥珀色头部 → 统一深色头 + 空心小蓝圈
+ * （警示语义改由内容区琥珀徽标表达），按钮斜体大写 → 胶囊 semibold。
+ */
 export const HitlConfirmCard: React.FC<HitlConfirmCardProps> = ({ uiHint, onConfirm }) => {
   const [isModifying, setIsModifying] = useState(false);
   const [draft, setDraft] = useState('');
@@ -48,57 +56,50 @@ export const HitlConfirmCard: React.FC<HitlConfirmCardProps> = ({ uiHint, onConf
   };
 
   return (
-    <div className="bg-white border border-amber-100 rounded-2xl overflow-hidden shadow-sm">
-      <div className="bg-amber-50 px-4 py-3 border-b border-amber-100 flex items-center gap-2">
-        <div className="w-2 h-2 rounded-full bg-amber-500" />
-        <span className="text-xs font-bold text-amber-700 uppercase">{title}</span>
-      </div>
+    <ChatCardShell>
+      <ChatCardHeader
+        title={title}
+        right={
+          <span className="ml-1 text-[10px] px-2 py-0.5 rounded-full font-semibold bg-amber-50 text-amber-600 shrink-0">
+            待确认
+          </span>
+        }
+      />
 
-      <div className="p-4 space-y-3">
-        <div className="text-sm text-gray-700 leading-relaxed">{message}</div>
+      <div className="p-5 space-y-3">
+        <div className="text-[15px] text-gray-800 leading-relaxed">{message}</div>
 
         {isModifying && (
           <textarea
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
-            className="w-full min-h-[120px] font-mono text-xs p-3 rounded-2xl border border-gray-200 bg-gray-50 outline-none focus:ring-2 focus:ring-amber-200"
+            className="w-full min-h-[120px] font-mono text-xs p-3 rounded-2xl border border-gray-200 bg-gray-50 outline-none focus:border-star-accent"
             placeholder='{"value": 105}'
           />
         )}
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleAccept}
-            className="flex-1 py-3 rounded-2xl bg-emerald-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 active:scale-95 transition-all shadow-lg shadow-emerald-500/10"
-          >
+        <div className="flex items-center gap-2.5">
+          <ChatPrimaryButton className="flex-1" onClick={handleAccept}>
             接受
-          </button>
-          <button
-            onClick={handleReject}
-            className="flex-1 py-3 rounded-2xl bg-rose-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-rose-700 active:scale-95 transition-all shadow-lg shadow-rose-500/10"
-          >
-            拒绝
-          </button>
+          </ChatPrimaryButton>
           {!isModifying ? (
-            <button
-              onClick={handleOpenModify}
-              className="px-6 py-3 rounded-2xl bg-gray-100 text-gray-700 text-[10px] font-black uppercase tracking-widest hover:bg-gray-200 active:scale-95 transition-all"
-            >
-              修改
-            </button>
+            <>
+              <ChatSecondaryButton className="flex-1" onClick={handleOpenModify}>
+                修改
+              </ChatSecondaryButton>
+              <ChatSecondaryButton className="flex-1" onClick={handleReject}>
+                拒绝
+              </ChatSecondaryButton>
+            </>
           ) : (
-            <button
-              onClick={handleModify}
-              className="px-6 py-3 rounded-2xl bg-amber-600 text-white text-[10px] font-black uppercase tracking-widest hover:bg-amber-700 active:scale-95 transition-all shadow-lg shadow-amber-500/10"
-            >
-              提交
-            </button>
+            <ChatSecondaryButton className="flex-1" onClick={handleModify}>
+              提交修改
+            </ChatSecondaryButton>
           )}
         </div>
       </div>
-    </div>
+    </ChatCardShell>
   );
 };
 
 export default HitlConfirmCard;
-

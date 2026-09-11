@@ -11,6 +11,7 @@ import { ChatMessage, ProgressItem } from '../../hooks/useAICoach';
 import type { ChatThread } from '@/storage';
 import { API_BASE, getHeaders } from '../../../services/geminiService';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
+import { BubbleGallery, GALLERY_MESSAGES } from './BubbleGallery';
 
 interface MessageProgressIndicatorProps {
   items: ProgressItem[];
@@ -60,6 +61,40 @@ async function pickPhoto(setCtx: (c: any) => void) {
     console.error('[AICoachOverlay] pickPhoto failed:', err);
     alert(`无法获取照片：${err?.message || err || '未知错误'}`);
   }
+}
+
+/**
+ * 文件选取：WebView 原生 <input type="file"> —— Capacitor Android 走系统
+ * Storage Access Framework、iOS 走 Files/照片选择器，真实访问手机中的文件。
+ * 文本类文件读为 UTF-8 文本挂入附件（随 intent_context 直达 Agent）；
+ * 二进制 / 超大文件如实提示，不挂假附件。
+ */
+async function pickFile(setCtx: (c: any) => void) {
+  const input = document.createElement('input');
+  input.type = 'file';
+  // 不设 accept：允许从系统文件 App 选任意文件，由前端判断可读性
+  input.onchange = () => {
+    const f = input.files?.[0];
+    if (!f) return;
+    if (f.size > 200 * 1024) {
+      alert('文件过大（超过 200KB），请先精简后再附加。');
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const text = String(reader.result ?? '');
+      // 二进制特征：大量 U+FFFD 替换符（UTF-8 解码失败）
+      const bad = (text.match(/\uFFFD/g) || []).length;
+      if (text.length > 0 && bad > text.length * 0.02) {
+        alert('该文件是二进制格式，暂只支持文本类文件（txt / md / json / csv 等）。');
+        return;
+      }
+      setCtx({ type: 'file', title: f.name, mime: f.type || 'text/plain', textContent: text });
+    };
+    reader.onerror = () => alert('文件读取失败，请重试。');
+    reader.readAsText(f);
+  };
+  input.click();
 }
 
 const MessageProgressIndicator: React.FC<MessageProgressIndicatorProps> = ({ items, isGenerating }) => {
@@ -217,9 +252,25 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   onCreateNewThread = () => {},
   formatRelativeTime = (t: number) => new Date(t).toLocaleDateString()
 }) => {
+  // 调试模式：URL 带 ?bubbleGallery 时用气泡画廊替代空状态 Welcome 屏，
+  // 一屏看全所有气泡/卡片样式（不影响正常聊天链路）
+  const isGalleryMode = typeof window !== 'undefined' &&
+    /([?&#])bubbleGallery/.test(window.location.search + window.location.hash);
   const [showContent, setShowContent] = useState(true);
+  // 模拟器入口：Welcome 屏 STARFIT 标志长按 1 秒切换气泡画廊（URL ?bubbleGallery 之外的等效通道）
+  // 长按而非连点：WKWebView 触摸层连点易与系统手势/双击缩放冲突，长按更可靠
+  const [galleryToggled, setGalleryToggled] = useState(false);
+  const logoPressTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const handleLogoPressStart = () => {
+    logoPressTimerRef.current = setTimeout(() => setGalleryToggled(v => !v), 1000);
+  };
+  const handleLogoPressEnd = () => {
+    if (logoPressTimerRef.current) {
+      clearTimeout(logoPressTimerRef.current);
+      logoPressTimerRef.current = null;
+    }
+  };
   const [showAttachPanel, setShowAttachPanel] = useState(false);
-  const [isFetchingStats, setIsFetchingStats] = useState(false);
   const [isStrategyActive, setIsStrategyActive] = useState(false);
   const [chatHistoryWithProgress, setChatHistoryWithProgress] = useState<ChatMessage[]>(chatHistory);
 
@@ -299,6 +350,16 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
       setIsStrategyActive(false);
     }
   }, [isLoading, isStrategyActive]);
+
+  // 键盘感知布局规则②补全：视口收缩/还原后把滚动重新锚定到最新消息，
+  // 避免键盘盖住最后一轮对话（focus 行为遵循 iMessage：聚焦即看到末尾）
+  useEffect(() => {
+    if (!isOpen || kbHeight <= 0) return;
+    const el = chatEndRef.current;
+    if (!el) return;
+    const container = (el.closest('[data-chat-scroll-container]') as HTMLElement | null) ?? el.parentElement;
+    if (container) container.scrollTop = container.scrollHeight; // 同步直赋，必达
+  }, [isOpen, kbHeight, chatEndRef]);
 
   // 同步 chatHistory 到 chatHistoryWithProgress，保留已有的 progressItems
   useEffect(() => {
@@ -449,7 +510,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
       <div className="absolute top-0 inset-x-0 z-20 px-4 pt-2 pb-3 flex items-center justify-between" style={{ paddingTop: 'calc(var(--safe-top) + 8px)' }}>
         <button
           onClick={onClose}
-          className="h-11 px-4 rounded-full bg-white shadow-sm flex items-center gap-1.5 text-gray-800 active:scale-95 transition-all"
+          className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 active:scale-95 transition-all"
           aria-label="关闭"
         >
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
@@ -462,21 +523,47 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
             {isBusy ? '正在输入…' : 'Agent 系统已就绪'}
           </div>
         </div>
-        <button
-          onClick={() => setShowHistoryPanel(true)}
-          className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 active:scale-95 transition-all"
-          aria-label="历史对话"
-        >
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-        </button>
+        {/* 右上角按钮组："+"新建（白色胶囊，放历史按钮左边） + 历史对话 */}
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setShowHistoryPanel(false);
+              onCreateNewThread();
+            }}
+            className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 active:scale-95 transition-all"
+            aria-label="新建对话"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
+            </svg>
+          </button>
+          <button
+            onClick={() => setShowHistoryPanel(true)}
+            className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 active:scale-95 transition-all"
+            aria-label="历史对话"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+        </div>
       </div>
 
-      {/* Chat Body — 全高滚动，内容从导航栏/输入栏后面穿过（玻璃悬浮层可折射内容） */}
-      <div className={`absolute inset-0 overflow-y-auto px-6 z-10 custom-scrollbar transition-opacity duration-300 ${showContent ? 'opacity-100' : 'opacity-0'}`}>
-        {chatHistory.length === 0 ? (
-          <WelcomeScreen />
+      {/* Chat Body — 全高滚动，内容从导航栏/输入栏后面穿过（玻璃悬浮层可折射内容）
+          键盘感知布局规则②：可视对话区域随键盘同步收缩——容器底边上移 kbHeight，
+          与输入栏（规则①）同时长同曲线，保证最新消息始终贴在输入栏上方可见 */}
+      <div
+        data-chat-scroll-container
+        style={{
+          transition: 'transform 250ms ease-out',
+          transform: kbHeight > 0 ? `translateY(-${kbHeight}px)` : 'translateY(0)'
+        }}
+        className={`absolute inset-0 overflow-y-auto px-6 z-10 custom-scrollbar transition-opacity duration-300 ${showContent ? 'opacity-100' : 'opacity-0'}`}
+      >
+        {chatHistory.length === 0 && (isGalleryMode || galleryToggled) ? (
+          <GalleryDebug />
+        ) : chatHistory.length === 0 ? (
+          <WelcomeScreen onLogoTap={handleLogoPressStart} onLogoTapEnd={handleLogoPressEnd} />
         ) : (
           <div className="space-y-2.5 pt-[calc(var(--safe-top)+64px)] pb-[calc(var(--safe-bottom)+80px)] px-1">
             {chatHistoryWithProgress.map((msg, i) => (
@@ -503,10 +590,10 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 {/* Message Bubble（内容层用实色卡片：HIG 禁止 content 层玻璃化/glass-on-glass） */}
                 {(!msg.isThinking || msg.text) && (
                   <div className={`
-                    px-4 py-2.5 text-[16px] leading-[1.35] markdown-body break-words [overflow-wrap:anywhere] min-w-0
+                    px-5 py-3.5 text-[16px] leading-[1.45] markdown-body break-words [overflow-wrap:anywhere] min-w-0
                     ${msg.role === 'user'
-                      ? 'max-w-[78%] bg-[#0A84FF] text-white rounded-[20px] rounded-br-[6px]'
-                      : 'w-full bg-[#E9E9EB] text-gray-900 rounded-[20px] rounded-bl-[6px]'
+                      ? 'max-w-[78%] bg-[#0A84FF] text-white rounded-[24px] rounded-br-[8px]'
+                      : 'w-full bg-[#E9E9EB] text-gray-900 rounded-[24px] rounded-bl-[8px]'
                     }
                   `}>
                     <ReactMarkdown
@@ -644,51 +731,22 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
             className="fixed inset-x-4 bottom-[120px] top-auto z-40 rounded-[40px] bg-white/80 backdrop-blur-2xl shadow-[0_12px_48px_rgba(0,0,0,0.16)] overflow-hidden px-4 py-3"
           >
             {[
-              { key: 'plan', label: '生成训练计划', bg: 'linear-gradient(135deg,#34C759,#30B350)', icon: 'M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4' },
-              { key: 'stats', label: '附上训练数据', bg: 'linear-gradient(135deg,#FF9F0A,#FF7A00)', icon: 'M13 7h3l2 4m0 0l-2-4-2 4m2 0v9m-9-9h3l2 4m0 0l-2-4-2 4m2 0V4m-6 5h18' },
               { key: 'photo', label: '照片', bg: 'linear-gradient(135deg,#0A84FF,#0066CC)', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
+              { key: 'file', label: '文件', bg: 'linear-gradient(135deg,#8E8E93,#636366)', icon: 'M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7zm0 0v7h7M9 13h6m-6 4h6' },
             ].map((a) => (
               <button
                 key={a.key}
                 type="button"
-                disabled={a.key === 'stats' && isFetchingStats}
                 onClick={async () => {
                   setShowAttachPanel(false);
-                  if (a.key === 'plan') {
-                    setIsPlanMode(true);
-                  } else if (a.key === 'stats') {
-                    // 拉最近一次训练 session 挂为附件，Agent 经 intent_context 读取
-                    try {
-                      setIsFetchingStats(true);
-                      // API_BASE 本身以 /api 结尾（geminiService），故只需拼 /sessions/recent
-                      const res = await fetch(`${API_BASE}/sessions/recent?limit=1`, { headers: getHeaders() });
-                      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                      const data = await res.json();
-                      const s = data?.sessions?.[0];
-                      if (s) {
-                        setAttachedContext({
-                          type: 'workout_data',
-                          title: '最近训练数据',
-                          data: s,
-                        });
-                      } else {
-                        // 无已持久化 session：仍挂附件，指示 Agent 用 load_history 自查 DB
-                        setAttachedContext({
-                          type: 'workout_data',
-                          title: '最近训练数据',
-                          data: null,
-                          hint: '前端无已持久化的 session，请调用 load_history 读取我最近的训练记录后再回答',
-                        });
-                      }
-                    } catch (err) {
-                      console.error('[AICoachOverlay] Fetch recent session failed:', err);
-                    } finally {
-                      setIsFetchingStats(false);
-                    }
-                  } else if (a.key === 'photo') {
+                  if (a.key === 'photo') {
                     // 拍照/相册：原生走 @capacitor/camera（iOS 弹系统 action sheet：
                     // 拍照 / 照片图库）；Web 降级为系统文件选择（同样支持拍照/相册）。
                     await pickPhoto(setAttachedContext);
+                  } else if (a.key === 'file') {
+                    // 文件：WebView 原生文件选择器（Android SAF / iOS Files），
+                    // 真实访问手机中的文件，读为文本挂入附件。
+                    await pickFile(setAttachedContext);
                   }
                 }}
                 className="w-full flex items-center gap-5 px-2 py-3.5 text-left active:bg-black/5 rounded-2xl transition-colors"
@@ -738,6 +796,12 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                         alt="附件照片"
                         className="w-8 h-8 rounded-md object-cover shrink-0 border border-black/5"
                       />
+                    ) : attachedContext?.type === 'file' ? (
+                    <div className="w-7 h-7 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                      <svg className="w-3.5 h-3.5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7zm0 0v7h7M9 13h6m-6 4h6" />
+                      </svg>
+                    </div>
                     ) : (
                     <div className="w-7 h-7 rounded-full bg-blue-50 flex items-center justify-center shrink-0">
                       <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -820,7 +884,6 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         threads={threads}
         currentThreadId={currentThreadId}
         onSelectThread={onSwitchThread}
-        onCreateNewThread={onCreateNewThread}
         formatRelativeTime={formatRelativeTime}
       />
     </div>
@@ -894,12 +957,19 @@ const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text,
   );
 };
 
-const WelcomeScreen: React.FC = () => (
+const WelcomeScreen: React.FC<{ onLogoTap?: () => void; onLogoTapEnd?: () => void }> = ({ onLogoTap, onLogoTapEnd }) => (
   // min-h-full 而非 flex-1：父容器是 absolute inset-0 的滚动容器，
   // flex-1 会被内容高度塌缩（欢迎语贴在导航栏下），min-h-full 才能真正垂直居中
   <div className="min-h-full flex flex-col items-center justify-center p-8 pt-[calc(var(--safe-top)+64px)] pb-[calc(var(--safe-bottom)+120px)] text-center">
     <div className="text-center space-y-3">
-      <h3 className="text-4xl font-black text-gray-900 tracking-tighter">
+      <h3
+        onPointerDown={onLogoTap}
+        onPointerUp={onLogoTapEnd}
+        onPointerLeave={onLogoTapEnd}
+        onPointerCancel={onLogoTapEnd}
+        className="text-4xl font-black text-gray-900 tracking-tighter select-none active:opacity-60 transition-opacity"
+        style={{ touchAction: 'manipulation' }}
+      >
         STAR<span className="text-blue-600">FIT</span>
       </h3>
       <p className="text-gray-400 text-sm font-medium leading-relaxed max-w-[260px] mx-auto">
@@ -908,6 +978,39 @@ const WelcomeScreen: React.FC = () => (
     </div>
   </div>
 );
+
+/**
+ * GalleryDebug — 气泡画廊（?bubbleGallery 调试模式）。
+ * 复用聊天流的气泡/卡片渲染 JSX（与 chatHistory 分支同一套 className），
+ * 数据源为 GALLERY_MESSAGES 全量 mock，onConfirm 全部静默。
+ */
+const GalleryDebug: React.FC = () => {
+  const renderMsg = (msg: any, i: number) => (
+    <div key={i} className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}>
+      {(!msg.isThinking || msg.text) && (
+        <div className={`
+          px-5 py-3.5 text-[16px] leading-[1.45] markdown-body break-words [overflow-wrap:anywhere] min-w-0
+          ${msg.role === 'user'
+            ? 'max-w-[78%] bg-[#0A84FF] text-white rounded-[24px] rounded-br-[8px]'
+            : 'w-full bg-[#E9E9EB] text-gray-900 rounded-[24px] rounded-bl-[8px]'}
+        `}>
+          <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+            {String(msg.text || (msg.uiHint ? '教练为您生成了以下交互卡片：' : ''))}
+          </ReactMarkdown>
+        </div>
+      )}
+      {msg.uiHint && (
+        <div className="w-full mt-3">
+          <ExerciseRenderer
+            uiHint={msg.uiHint}
+            onConfirm={() => { /* 画廊模式：静默，不触发真实链路 */ }}
+          />
+        </div>
+      )}
+    </div>
+  );
+  return <div>{GALLERY_MESSAGES.map(renderMsg)}</div>;
+};
 
 const WelcomeChip: React.FC<{ label: string; icon: string }> = ({ label, icon }) => (
   <div className="flex items-center gap-2 px-4 py-3 bg-white border border-gray-100 rounded-2xl shadow-sm hover:border-blue-100 transition-colors">

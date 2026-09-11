@@ -1,4 +1,6 @@
 import React, { useMemo, useState } from 'react';
+import { ChatCardHeader } from './ChatCardHeader';
+import { ChatCardShell, ChatPrimaryButton, ChatSecondaryButton } from './ChatCardShell';
 
 /**
  * ProfileUpdateConfirmCard (profile_update_confirm) - 用户画像更新确认气泡
@@ -93,36 +95,29 @@ export const ProfileUpdateConfirmCard: React.FC<ProfileUpdateConfirmCardProps> =
   };
 
   return (
-    <div
-      className={`bg-white border rounded-2xl overflow-hidden shadow-floating transition-colors ${
-        frozen ? 'border-gray-100 opacity-90' : 'border-gray-100'
-      }`}
-      role="group"
-      aria-label={title}
+    <ChatCardShell
+      className={frozen ? 'opacity-90' : ''}
     >
-      {/* Header - dark theme, matching AuditCompleteCard */}
-      <div className="bg-star-dark px-4 py-3 flex items-center gap-2">
-        <svg className="w-5 h-5 text-star-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 3v18m-7-9.5a14.5 14.5 0 007 3.5m0-11a14.5 14.5 0 00-7 3.5m14 4a14.5 14.5 0 00-7-3.5m0 11a14.5 14.5 0 007-3.5" />
-        </svg>
-        <h3 className="text-white text-lg font-black uppercase tracking-widest">{title}</h3>
-        {triggerBadge && (
-          <span className={`ml-auto text-[10px] px-2 py-0.5 rounded-full font-bold ${triggerBadge.className}`}>
+      {/* Header - 统一深色头 + 空心小蓝圈 */}
+      <ChatCardHeader
+        title={title}
+        right={triggerBadge && (
+          <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold ${triggerBadge.className} shrink-0`}>
             {triggerBadge.label}
           </span>
         )}
-      </div>
+      />
 
       {/* Content */}
       <div className="p-6">
         <div className="flex items-start gap-4 mb-4">
-          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-star-accent/10 flex items-center justify-center">
-            <svg className="w-6 h-6 text-star-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+            <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M12 3v18m-7-9.5a14.5 14.5 0 007 3.5m0-11a14.5 14.5 0 00-7 3.5m14 4a14.5 14.5 0 00-7-3.5m0 11a14.5 14.5 0 007-3.5" />
             </svg>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-bold text-gray-700 leading-relaxed">
+            <p className="text-[15px] text-gray-800 leading-relaxed">
               {message || '教练希望更新你的训练画像，请确认以下改动。'}
             </p>
           </div>
@@ -131,7 +126,7 @@ export const ProfileUpdateConfirmCard: React.FC<ProfileUpdateConfirmCardProps> =
         {/* Proposals list */}
         {proposals.length > 0 && (
           <div className="space-y-2 mt-4 pt-4 border-t border-gray-100">
-            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">更新提案</p>
+            <p className="text-xs font-medium text-gray-400 mb-2">更新提案</p>
             {proposals.map((p, idx) => {
               const expanded = expandedIdx === idx;
               const hasValue = p.value !== undefined && p.value !== null;
@@ -174,36 +169,22 @@ export const ProfileUpdateConfirmCard: React.FC<ProfileUpdateConfirmCardProps> =
 
       {/* Action buttons - 冻结态：选中高亮、另一按钮禁用 */}
       <div className="p-5 pt-0 flex items-center gap-3">
-        <button
+        <ChatSecondaryButton
+          className="flex-1"
           onClick={handleCancel}
           disabled={frozen}
-          aria-pressed={decision === 'cancelled'}
-          className={`flex-1 py-4 rounded-2xl font-black italic uppercase tracking-widest transition-all active:scale-95 disabled:cursor-not-allowed ${
-            decision === 'cancelled'
-              ? 'bg-gray-800 text-white shadow-lg'
-              : frozen
-              ? 'bg-gray-100 text-gray-300'
-              : 'bg-gray-200 text-gray-600 hover:bg-gray-300'
-          }`}
         >
           {decision === 'cancelled' ? '已保留原状' : cancelLabel}
-        </button>
-        <button
+        </ChatSecondaryButton>
+        <ChatPrimaryButton
+          className={`flex-1 ${decision === 'confirmed' ? '!bg-emerald-600' : frozen ? 'opacity-50' : ''}`}
           onClick={handleConfirm}
           disabled={frozen}
-          aria-pressed={decision === 'confirmed'}
-          className={`flex-1 py-4 rounded-2xl font-black italic uppercase tracking-widest transition-all active:scale-95 disabled:cursor-not-allowed ${
-            decision === 'confirmed'
-              ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-500/20'
-              : frozen
-              ? 'bg-gray-100 text-gray-300'
-              : 'bg-star-accent text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20'
-          }`}
         >
           {decision === 'confirmed' ? '✓ 已更新' : confirmLabel}
-        </button>
+        </ChatPrimaryButton>
       </div>
-    </div>
+    </ChatCardShell>
   );
 };
 

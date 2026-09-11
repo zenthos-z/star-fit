@@ -222,10 +222,10 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
       {/* 1. Exportable Content Area */}
       <div 
         ref={exportRef}
-        className="bg-white border border-gray-100 rounded-[2.5rem] overflow-hidden shadow-xl animate-in zoom-in-95 duration-300"
+        className="bg-white border border-gray-100 rounded-[24px] overflow-hidden shadow-sm animate-in zoom-in-95 duration-300"
       >
         {/* 1.1 Sporty Header */}
-        <div className="bg-star-dark p-6 pb-8 relative overflow-hidden rounded-t-[40px]">
+        <div className="bg-star-dark p-6 pb-8 relative overflow-hidden rounded-t-[24px]">
           {/* Decorative Background Pattern */}
           <div className="absolute top-0 right-0 opacity-10 pointer-events-none transform translate-x-1/4 -translate-y-1/4">
             <svg width="200" height="200" viewBox="0 0 100 100">
@@ -238,11 +238,11 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
           <div className="relative z-10">
             <div className="flex justify-between items-start mb-4">
               <div>
-                <h3 className="text-white text-3xl font-black italic tracking-tighter uppercase leading-[0.85]">
+                <h3 className="text-white text-3xl font-black tracking-tighter leading-[0.85]">
                   训练<br />
                   <span className="text-star-accent text-xl">总结报告</span>
                 </h3>
-                <p className="text-gray-500 text-[9px] font-mono mt-3 tracking-[0.3em] uppercase font-bold">
+                <p className="text-gray-500 text-[9px] font-mono mt-3 tracking-[0.3em] font-bold">
                   PROJECT STARFIT
                 </p>
               </div>
@@ -253,7 +253,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
                   ? 'bg-orange-400/10 border-orange-400/20'
                   : 'bg-gray-400/10 border-gray-400/20'
               }`}>
-                <span className={`${overallStatus.colorClass} text-[9px] font-black italic uppercase tracking-widest`}>
+                <span className={`${overallStatus.colorClass} text-[9px] font-bold`}>
                   {overallStatus.label}
                 </span>
               </div>
@@ -266,7 +266,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
                   <div className="w-0.5 h-2 bg-star-accent rounded-full"></div>
                   <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">总时长</span>
                 </div>
-                <div className="text-xl font-mono font-black text-white italic">
+                <div className="text-xl font-mono font-black text-white">
                   {stats.durationMinutes}<span className="text-[10px] text-gray-500 ml-0.5 not-italic font-bold">分</span>
                 </div>
               </div>
@@ -276,7 +276,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
                   <div className="w-0.5 h-2 bg-blue-500 rounded-full"></div>
                   <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">总容量</span>
                 </div>
-                <div className="text-xl font-mono font-black text-white italic">
+                <div className="text-xl font-mono font-black text-white">
                   {stats.totalVolume}<span className="text-[10px] text-gray-500 ml-0.5 not-italic font-bold">kg</span>
                 </div>
               </div>
@@ -286,7 +286,7 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
                   <div className="w-0.5 h-2 bg-purple-500 rounded-full"></div>
                   <span className="text-[9px] font-bold text-gray-500 uppercase tracking-widest">总组数</span>
                 </div>
-                <div className="text-xl font-mono font-black text-white italic">
+                <div className="text-xl font-mono font-black text-white">
                   {stats.setsCount}
                 </div>
               </div>
@@ -316,15 +316,15 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
                 </div>
 
                 <div className="flex justify-between items-baseline mb-3 gap-4">
-                  <h4 className="text-base font-black text-star-dark italic uppercase tracking-tighter leading-tight group-hover:text-black transition-colors">
+                  <h4 className="text-base font-bold text-gray-900 tracking-tight leading-snug group-hover:text-black transition-colors">
                     {ex?.name || '未知动作'}
                   </h4>
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <span className="text-[9px] font-mono text-gray-400 font-bold uppercase tracking-widest">
+                    <span className="text-[9px] font-mono text-gray-400 font-medium">
                       {displayInfo.typeLabel}
                     </span>
                     <span className="w-0.5 h-0.5 rounded-full bg-gray-200"></span>
-                    <span className={`text-[9px] font-mono font-bold uppercase tracking-widest ${exStatus.colorClass}`}>
+                    <span className={`text-[9px] font-mono font-medium ${exStatus.colorClass}`}>
                       {exStatus.label}
                     </span>
                   </div>
@@ -359,13 +359,13 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
         </div>
 
         {/* 1.3 Footer Branding (Only visible in export or bottom of card) */}
-        <div className="p-6 pt-0 bg-white rounded-b-[2.5rem]">
+        <div className="p-6 pt-0 bg-white rounded-b-[24px]">
           <div className="border-t border-gray-100 pt-4 flex justify-between items-end opacity-40">
             <div className="space-y-1">
-              <span className="text-[7px] font-black text-gray-400 uppercase tracking-[0.3em] block">REPORT DATA</span>
+              <span className="text-[7px] font-bold text-gray-400 tracking-[0.3em] block">REPORT DATA</span>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 bg-star-dark rounded flex items-center justify-center text-white text-[7px] font-black italic">SF</div>
-                <span className="text-[9px] font-black italic tracking-tighter uppercase text-star-dark">Starfit</span>
+                <div className="w-3 h-3 bg-star-dark rounded flex items-center justify-center text-white text-[7px] font-bold">SF</div>
+                <span className="text-[9px] font-bold tracking-tight text-star-dark">Starfit</span>
               </div>
             </div>
             <div className="flex gap-0.5 h-4 items-end">
@@ -377,42 +377,33 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({ uiHint, onConfirm }) =
         </div>
       </div>
 
-      {/* 2. Non-exportable Action Area */}
+      {/*Non-exportable Action Area（统一胶囊按钮，2026-09-11） */}
       <div className="flex gap-3 px-1">
-        <button 
+        <button
+          type="button"
           onClick={handleViewDetails}
-          className="flex-1 group relative flex items-center justify-center gap-2 px-4 py-3.5 bg-white border border-gray-200 rounded-[1.5rem] shadow-sm hover:border-star-dark transition-all duration-300 active:scale-95"
+          className="flex-1 h-12 rounded-full bg-white border border-gray-200 text-gray-800 text-[15px] font-semibold transition-all active:scale-95 flex items-center justify-center gap-2"
         >
-          <div className="w-7 h-7 rounded-xl bg-gray-50 flex items-center justify-center text-star-dark group-hover:bg-star-dark group-hover:text-white transition-colors">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
-            </svg>
-          </div>
-          <span className="text-xs font-black text-star-dark italic uppercase tracking-widest">
-            查看详情
-          </span>
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" />
+          </svg>
+          查看详情
         </button>
 
-        <button 
-          onClick={handleSaveImage} 
+        <button
+          type="button"
+          onClick={handleSaveImage}
           disabled={isSaving}
-          className="flex-1 group relative flex items-center justify-center gap-2 px-4 py-3.5 bg-star-dark rounded-[1.5rem] shadow-lg shadow-gray-200 hover:scale-[1.02] transition-all duration-300 active:scale-95 disabled:opacity-70 disabled:scale-100 overflow-hidden"
+          className="flex-1 h-12 rounded-full bg-star-accent text-white text-[15px] font-semibold transition-all active:scale-95 disabled:opacity-70 flex items-center justify-center gap-2"
         >
-          {/* Shine effect */}
-          <div className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/10 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-1000"></div>
-
           {isSaving ? (
             <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
           ) : (
-            <div className="w-7 h-7 rounded-xl bg-white/10 flex items-center justify-center text-star-accent">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
-              </svg>
-            </div>
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+            </svg>
           )}
-          <span className="text-xs font-black text-white italic uppercase tracking-widest">
-            {isSaving ? '生成中...' : '保存海报'}
-          </span>
+          {isSaving ? '生成中...' : '保存海报'}
         </button>
       </div>
     </div>

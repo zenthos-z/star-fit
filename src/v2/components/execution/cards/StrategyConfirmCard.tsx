@@ -3,6 +3,8 @@ import { createPortal } from 'react-dom';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Loader, CheckCircle } from 'lucide-react';
+import { ChatCardHeader } from './ChatCardHeader';
+import { ChatCardShell, ChatPrimaryButton } from './ChatCardShell';
 
 interface StrategyConfirmCardProps {
   uiHint: {
@@ -81,7 +83,7 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
       {/* Header - Fixed at top */}
       <div className="flex-shrink-0 bg-star-dark px-4 py-4 rounded-t-[40px] flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h3 className="text-white text-lg font-black uppercase tracking-widest">编辑训练策略</h3>
+          <h3 className="text-white text-[17px] font-semibold">编辑训练策略</h3>
         </div>
         <button
           onClick={handleCloseFullscreen}
@@ -97,7 +99,7 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
       <div className="flex-shrink-0 flex bg-white border-b border-gray-100">
         <button
           onClick={() => setActiveTab('edit')}
-          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${
             activeTab === 'edit'
               ? 'text-star-accent border-b-2 border-star-accent'
               : 'text-gray-400 hover:text-gray-600'
@@ -107,7 +109,7 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
         </button>
         <button
           onClick={() => setActiveTab('preview')}
-          className={`flex-1 py-3 text-xs font-black uppercase tracking-widest transition-colors ${
+          className={`flex-1 py-3 text-sm font-medium transition-colors ${
             activeTab === 'preview'
               ? 'text-star-accent border-b-2 border-star-accent'
               : 'text-gray-400 hover:text-gray-600'
@@ -143,7 +145,7 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
         <button
           onClick={handleCloseFullscreen}
           disabled={saveStatus === 'saving' || saveStatus === 'success'}
-          className="flex-1 py-4 rounded-2xl font-black italic uppercase tracking-widest bg-gray-200 text-gray-600 hover:bg-gray-300 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="flex-1 h-12 rounded-full font-semibold text-[15px] bg-gray-100 text-gray-700 transition-all active:scale-95 disabled:opacity-50"
         >
           取消
         </button>
@@ -154,19 +156,19 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
               {saveStatus === 'saving' && (
                 <>
                   <Loader className="w-4 h-4 text-yellow-600 animate-spin" />
-                  <span className="text-xs text-yellow-600 font-bold uppercase">保存中...</span>
+                  <span className="text-xs text-yellow-600 font-medium">保存中...</span>
                 </>
               )}
               {saveStatus === 'success' && (
                 <>
                   <CheckCircle className="w-4 h-4 text-green-600" />
-                  <span className="text-xs text-green-600 font-bold uppercase">保存成功</span>
+                  <span className="text-xs text-green-600 font-medium">保存成功</span>
                 </>
               )}
               {saveStatus === 'error' && (
                 <>
                   <div className="w-2 h-2 rounded-full bg-red-500" />
-                  <span className="text-xs text-red-600 font-bold uppercase">保存失败</span>
+                  <span className="text-xs text-red-600 font-medium">保存失败</span>
                 </>
               )}
             </div>
@@ -174,7 +176,7 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
           <button
             onClick={handleSave}
             disabled={saveStatus === 'saving' || saveStatus === 'success'}
-            className="w-full py-4 rounded-2xl font-black italic uppercase tracking-widest bg-star-accent text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+            className="w-full h-12 rounded-full font-semibold text-[15px] bg-star-accent text-white transition-all active:scale-95 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             {saveStatus === 'saving' && <Loader className="w-5 h-5 animate-spin" />}
             {saveStatus === 'success' ? '已保存' : '保存策略'}
@@ -187,25 +189,20 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
   return (
     <>
       {/* Main Card - No preview, just info and action button */}
-      <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-floating">
+      <ChatCardShell>
         {/* Header - dark theme, matching AuditCompleteCard */}
-        <div className="bg-star-dark px-4 py-3 flex items-center gap-2">
-          <svg className="w-5 h-5 text-star-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-          </svg>
-          <h3 className="text-white text-lg font-black uppercase tracking-widest">{title}</h3>
-        </div>
+        <ChatCardHeader title={title} />
 
         {/* Content - Simple info display */}
         <div className="p-6">
           <div className="flex items-start gap-4">
-            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-star-accent/10 flex items-center justify-center">
-              <svg className="w-6 h-6 text-star-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+              <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold text-gray-700 leading-relaxed">
+              <p className="text-[15px] text-gray-800 leading-relaxed">
                 {message}
               </p>
               {updatedAt && (
@@ -219,14 +216,11 @@ export const StrategyConfirmCard: React.FC<StrategyConfirmCardProps> = ({ uiHint
 
         {/* Action button */}
         <div className="p-5 pt-0">
-          <button
-            onClick={handleOpenFullscreen}
-            className="w-full py-4 rounded-2xl font-black italic uppercase tracking-widest bg-blue-50 text-star-accent hover:bg-blue-100 transition-all active:scale-95"
-          >
+          <ChatPrimaryButton className="w-full" onClick={handleOpenFullscreen}>
             {actionLabel}
-          </button>
+          </ChatPrimaryButton>
         </div>
-      </div>
+      </ChatCardShell>
 
       {/* Fullscreen Editor - Rendered via Portal to document.body */}
       {isFullscreenOpen && createPortal(FullscreenEditor, document.body)}

@@ -1,4 +1,6 @@
 import React from 'react';
+import { ChatCardHeader } from './ChatCardHeader';
+import { ChatCardShell, ChatPrimaryButton } from './ChatCardShell';
 
 interface SurveySuccessCardProps {
   uiHint: {
@@ -19,6 +21,9 @@ interface SurveySuccessCardProps {
  * [方案 B] Shown when user profile is successfully saved from survey.
  * Displays a success message with a confirmation button to continue.
  * When confirmed, triggers a second request to generate the training plan.
+ *
+ * 2026-09-11 聊天卡片视觉统一：绿色头部 → 统一深色头 + 空心小蓝圈
+ * （成功语义改由内容区 ✓ 图标表达），按钮斜体大写 → 胶囊 semibold。
  */
 export const SurveySuccessCard: React.FC<SurveySuccessCardProps> = ({ uiHint, onConfirm }) => {
   const data = uiHint?.data || {} as SurveySuccessCardProps['uiHint']['data'];
@@ -32,23 +37,18 @@ export const SurveySuccessCard: React.FC<SurveySuccessCardProps> = ({ uiHint, on
   };
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-floating" data-testid="survey-success">
-      <div className="bg-green-500 px-4 py-3 flex items-center gap-2">
-        <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
-        </svg>
-        <h3 className="text-white text-lg font-black uppercase tracking-widest">{title}</h3>
-      </div>
+    <ChatCardShell testId="survey-success">
+      <ChatCardHeader title={title} />
 
-      <div className="p-6">
+      <div className="p-5">
         <div className="flex items-start gap-4">
-          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-green-100 flex items-center justify-center">
-            <svg className="w-6 h-6 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <div className="flex-shrink-0 w-10 h-10 rounded-full bg-green-50 flex items-center justify-center">
+            <svg className="w-5 h-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M5 13l4 4L19 7" />
             </svg>
           </div>
           <div className="flex-1">
-            <p className="text-sm font-bold text-gray-700 leading-relaxed" data-testid="survey-success-message">
+            <p className="text-[15px] text-gray-800 leading-relaxed" data-testid="survey-success-message">
               {message}
             </p>
           </div>
@@ -56,13 +56,10 @@ export const SurveySuccessCard: React.FC<SurveySuccessCardProps> = ({ uiHint, on
       </div>
 
       <div className="p-5 pt-0">
-        <button
-          onClick={handleClick}
-          className="w-full py-4 rounded-2xl font-black italic uppercase tracking-widest bg-star-accent text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20 transition-all active:scale-95"
-        >
+        <ChatPrimaryButton className="w-full" onClick={handleClick}>
           {actionLabel}
-        </button>
+        </ChatPrimaryButton>
       </div>
-    </div>
+    </ChatCardShell>
   );
 };

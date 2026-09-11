@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
+import { ChatCardHeader } from './ChatCardHeader';
+import { ChatCardShell, ChatPrimaryButton } from './ChatCardShell';
 
 interface AuditCompleteCardProps {
   uiHint: {
@@ -112,36 +114,36 @@ export const AuditCompleteCard: React.FC<AuditCompleteCardProps> = ({ uiHint, on
   };
 
   return (
-    <div className="bg-white border border-gray-100 rounded-2xl overflow-hidden shadow-floating">
+    <ChatCardShell>
       {/* Header - dark theme */}
-      <div className="bg-star-dark px-4 py-3 flex items-center gap-2">
-        <svg className="w-5 h-5 text-star-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-        <h3 className="text-white text-lg font-black uppercase tracking-widest">{title}</h3>
-        {showAuditContent && (
+      <ChatCardHeader
+        title={title}
+        right={
+          !showAuditContent ? undefined : (
           <button
             onClick={() => setShowAuditContent(false)}
-            className="ml-auto text-white/70 hover:text-white transition-colors"
+            className="text-white/70 hover:text-white transition-colors"
+            aria-label="收起详情"
           >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M6 18L18 6M6 6l12 12" />
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
             </svg>
           </button>
-        )}
-      </div>
+          )
+        }
+      />
 
       {/* Content */}
       {!showAuditContent ? (
         <div className="p-6">
           <div className="flex items-start gap-4 mb-4">
-            <div className="flex-shrink-0 w-12 h-12 rounded-full bg-star-accent/10 flex items-center justify-center">
-              <svg className="w-6 h-6 text-star-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-blue-50 flex items-center justify-center">
+              <svg className="w-5 h-5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             </div>
             <div className="flex-1">
-              <p className="text-sm font-bold text-gray-700 leading-relaxed">
+              <p className="text-[15px] text-gray-800 leading-relaxed">
                 {message}
               </p>
             </div>
@@ -150,7 +152,7 @@ export const AuditCompleteCard: React.FC<AuditCompleteCardProps> = ({ uiHint, on
           {/* Updates list */}
           {updates.length > 0 && (
             <div className="space-y-2 mt-4 pt-4 border-t border-gray-100">
-              <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-2">已更新内容</p>
+              <p className="text-xs font-medium text-gray-400 mb-2">已更新内容</p>
               {updates.map((update, idx) => (
                 <div key={idx}>
                   <div className={`flex items-center gap-3 px-3 py-2 rounded-xl ${getFieldColor(update.field)}`}>
@@ -200,16 +202,16 @@ export const AuditCompleteCard: React.FC<AuditCompleteCardProps> = ({ uiHint, on
       {/* Action button */}
       {!showAuditContent && (
         <div className="p-5 pt-0">
-          <button
+          <ChatPrimaryButton
+            className="w-full"
             onClick={handleClick}
-            className="w-full py-4 rounded-2xl font-black italic uppercase tracking-widest bg-star-accent text-white hover:bg-blue-600 shadow-lg shadow-blue-500/20 transition-all active:scale-95"
           >
             {auditContent ? (showAuditContent ? '收起详情' : actionLabel)
               : updates.some(u => u.details && u.details.length > 0) ? (showAllDetails ? '收起详情' : actionLabel)
               : actionLabel}
-          </button>
+          </ChatPrimaryButton>
         </div>
       )}
-    </div>
+    </ChatCardShell>
   );
 };
