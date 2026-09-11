@@ -37,17 +37,17 @@ const provider: CacheProvider = new MemoryCacheProvider();
 
 export const CacheService = {
   get: <T>(key: string) => provider.get<T>(key),
-  set: <T>(key: string, value: T, ttlSeconds?: number) => provider.set(key, value, ttlSeconds),
+  set: <T>(key: string, value: T, ttlSeconds?: number) =>
+    provider.set(key, value, ttlSeconds),
   del: (key: string) => provider.del(key),
-  
+
   // Key generators
   keys: {
-    historySummary: (userId: string, lastSessionId: string) => `history_summary:${userId}:${lastSessionId}`,
-    rpeStats: (userId: string, exerciseName: string) => `rpe_stats:${userId}:${exerciseName}`,
     exerciseList: () => `exercise_list`,
     guidance: (userId: string) => `guidance:${userId}`,
     configs: (userId: string) => `configs:${userId}`,
-    styleParams: (userId: string, styleKey: string) => `style_params:${userId}:${styleKey}`,
+    styleParams: (userId: string, styleKey: string) =>
+      `style_params:${userId}:${styleKey}`,
     userList: () => `user_list`,
-  }
+  },
 };

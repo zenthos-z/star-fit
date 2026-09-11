@@ -3,10 +3,10 @@
  *
  * Migrated from SQLite (getDb()) to PostgreSQL client
  *
- * Contains three repositories:
+ * Contains two repositories:
  * - KnowledgeRepo: Exercise library and guidance documents
  * - ConfigRepo: User configurations and style parameters
- * - CacheRepo: History summaries and RPE stats cache
+ * (CacheRepo retired in migration 010 — cache tables dropped.)
  *
  * Changes:
  * - Replaced getDb() with getPostgresClient()
@@ -352,145 +352,5 @@ export const ConfigRepo = {
     );
 
     return { app, styles };
-  },
-};
-
-// ============================================
-// CacheRepo - PostgreSQL Implementation
-// ============================================
-
-export const CacheRepo = {
-  /**
-   * Get PostgreSQL client instance
-   */
-  getClient(): PostgresClient {
-    return getPostgresClient();
-  },
-
-  getHistorySummary: async (
-    deviceId: string,
-    lastSessionId: string,
-  ): Promise<string | null> => {
-    const client = CacheRepo.getClient();
-
-    const user = await client.queryOne<{ id: string }>(
-      "SELECT id FROM users WHERE device_id = $deviceId",
-      { deviceId },
-    );
-
-    if (!user) return null;
-
-    const cacheKey = CacheService.keys.historySummary(user.id, lastSessionId);
-    const cached = await CacheService.get(cacheKey);
-    if (cached) return cached as string;
-
-    const row = await client.queryOne<{ summary_text: string }>(
-      "SELECT summary_text FROM cache_history_summaries WHERE user_id = $userId AND last_session_id = $lastSessionId",
-      { userId: user.id, lastSessionId },
-    );
-
-    if (row) {
-      await CacheService.set(cacheKey, row.summary_text, 86400); // 24h
-      return row.summary_text;
-    }
-    return null;
-  },
-
-  setHistorySummary: async (
-    deviceId: string,
-    lastSessionId: string,
-    summary: string,
-  ): Promise<void> => {
-    const client = CacheRepo.getClient();
-
-    const user = await client.queryOne<{ id: string }>(
-      "SELECT id FROM users WHERE device_id = $deviceId",
-      { deviceId },
-    );
-
-    if (!user) return;
-
-    await client.query(
-      `INSERT INTO cache_history_summaries (user_id, last_session_id, summary_text, updated_at)
-       VALUES ($userId, $lastSessionId, $summary, $updatedAt)
-       ON CONFLICT (user_id) DO UPDATE SET
-         last_session_id = EXCLUDED.last_session_id,
-         summary_text = EXCLUDED.summary_text,
-         updated_at = EXCLUDED.updated_at`,
-      {
-        userId: user.id,
-        lastSessionId,
-        summary,
-        updatedAt: getNowISO(),
-      },
-    );
-
-    await CacheService.set(
-      CacheService.keys.historySummary(user.id, lastSessionId),
-      summary,
-      86400,
-    );
-  },
-
-  getRpeStats: async (deviceId: string, exerciseName: string): Promise<any> => {
-    const client = CacheRepo.getClient();
-
-    const user = await client.queryOne<{ id: string }>(
-      "SELECT id FROM users WHERE device_id = $deviceId",
-      { deviceId },
-    );
-
-    if (!user) return null;
-
-    const cacheKey = CacheService.keys.rpeStats(user.id, exerciseName);
-    const cached = await CacheService.get(cacheKey);
-    if (cached) return cached;
-
-    const row = await client.queryOne<{ stats_json: any }>(
-      "SELECT stats_json FROM cache_rpe_stats WHERE user_id = $userId AND exercise_name = $exerciseName",
-      { userId: user.id, exerciseName },
-    );
-
-    if (row) {
-      // pg library already parses JSONB values
-      await CacheService.set(cacheKey, row.stats_json, 3600);
-      return row.stats_json;
-    }
-    return null;
-  },
-
-  setRpeStats: async (
-    deviceId: string,
-    exerciseName: string,
-    stats: any,
-  ): Promise<void> => {
-    const client = CacheRepo.getClient();
-
-    const user = await client.queryOne<{ id: string }>(
-      "SELECT id FROM users WHERE device_id = $deviceId",
-      { deviceId },
-    );
-
-    if (!user) return;
-
-    await client.query(
-      `INSERT INTO cache_rpe_stats (user_id, exercise_name, stats_json, updated_at)
-       VALUES ($userId, $exerciseName, $statsJson, $updatedAt)
-       ON CONFLICT (user_id, exercise_name) DO UPDATE SET
-         stats_json = EXCLUDED.stats_json,
-         updated_at = EXCLUDED.updated_at`,
-      {
-        userId: user.id,
-        exerciseName,
-        statsJson: JSON.stringify(stats),
-        updatedAt: getNowISO(),
-      },
-    );
-
-    await CacheService.set(
-      CacheService.keys.rpeStats(user.id, exerciseName),
-      stats,
-      3600,
-    );
   },
 };
