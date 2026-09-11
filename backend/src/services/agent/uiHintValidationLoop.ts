@@ -24,19 +24,19 @@
  * silent skip).
  */
 
-import type { AgentEvent, ChatRequest } from 'shared/contracts';
-import type { AgentService } from './AgentService.js';
+import type { AgentEvent, ChatRequest } from "shared/contracts";
+import type { AgentService } from "./AgentService.js";
+import { validateUiHint, type StructuredError } from "./uiHintValidator.js";
 import {
-  validateUiHint,
-  type StructuredError,
-} from './uiHintValidator.js';
-import { ALLOWED_UIHINT_TYPES, BLACKLISTED_UIHINT_TYPES } from './uiHintFormat.js';
+  ALLOWED_UIHINT_TYPES,
+  BLACKLISTED_UIHINT_TYPES,
+} from "./uiHintFormat.js";
 import {
   checkWorkoutCardQuality,
   cardToCheckableText,
   extractSessionFacts,
-} from './workoutQualityGate.js';
-import type { WorkoutSessionFacts } from './workoutQualityGate.js';
+} from "./workoutQualityGate.js";
+import type { WorkoutSessionFacts } from "./workoutQualityGate.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -80,9 +80,10 @@ export async function* chatWithValidationLoop(
   // Q1: workout_complete 场景加载数据一致性检测所需的最新 session 真值。
   // 读取失败不阻断主流程（质量检测降级为跳过，而不是把整个聊天打断）。
   let sessionFacts: WorkoutSessionFacts | null = null;
-  if (req.scenario === 'workout_complete') {
+  if (req.scenario === "workout_complete") {
     try {
-      const { getLatestSessionFacts } = await import('./qualityFactsResolver.js');
+      const { getLatestSessionFacts } =
+        await import("./qualityFactsResolver.js");
       sessionFacts = await getLatestSessionFacts(req.userId);
     } catch {
       sessionFacts = null;
@@ -97,17 +98,21 @@ export async function* chatWithValidationLoop(
   // Loop until a stream completes cleanly (done/error already forwarded) or
   // the retry budget is exhausted.
   for (;;) {
-    const invalid = consumeStreamLookingForInvalidCard(deepAgent, currentReq, sessionFacts);
+    const invalid = consumeStreamLookingForInvalidCard(
+      deepAgent,
+      currentReq,
+      sessionFacts,
+    );
 
     let firstInvalid: { errors: StructuredError[] } | null = null;
     for await (const item of invalid) {
-      if (item.kind === 'event') {
+      if (item.kind === "event") {
         // Forward token / done / error / valid-uiHint / cardless-uiHint.
         yield item.event;
-      } else if (item.kind === 'rejected_thinking') {
+      } else if (item.kind === "rejected_thinking") {
         // Prose written around a rejected card — surface as collapsible
         // thinking context, never as answer text.
-        yield { type: 'thinking', text: item.text };
+        yield { type: "thinking", text: item.text };
       } else {
         // kind === 'invalid' — first invalid card in this stream.
         firstInvalid = { errors: item.errors };
@@ -125,9 +130,9 @@ export async function* chatWithValidationLoop(
     if (attempt >= maxRetries) {
       // L005: predicate matched real shape — surface the structured errors.
       yield {
-        type: 'error',
+        type: "error",
         error: {
-          code: 'VALIDATION_ERROR',
+          code: "VALIDATION_ERROR",
           message:
             `uiHint card failed validation after ${attempt + 1} attempt(s): ` +
             formatErrors(firstInvalid.errors),
@@ -146,9 +151,9 @@ export async function* chatWithValidationLoop(
 // ---------------------------------------------------------------------------
 
 type StreamItem =
-  | { kind: 'event'; event: AgentEvent }
-  | { kind: 'invalid'; errors: StructuredError[]; rejectedText: string }
-  | { kind: 'rejected_thinking'; text: string };
+  | { kind: "event"; event: AgentEvent }
+  | { kind: "invalid"; errors: StructuredError[]; rejectedText: string }
+  | { kind: "rejected_thinking"; text: string };
 
 /**
  * Wrap `deepAgent.chat(req)` as an async iterable of {@link StreamItem}.
@@ -171,15 +176,19 @@ async function* consumeStreamLookingForInvalidCard(
   sessionFacts: WorkoutSessionFacts | null,
 ): AsyncIterable<StreamItem> {
   const stream = deepAgent.chat(req);
-  let bufferedText = ''; // this attempt's prose, held until the card verdict
+  let bufferedText = ""; // this attempt's prose, held until the card verdict
   for await (const event of stream) {
-    if (event.type === 'uiHint' && event.card !== undefined) {
+    if (event.type === "uiHint" && event.card !== undefined) {
       const result = validateUiHint(event.card);
       if (!result.ok) {
         if (bufferedText) {
-          yield { kind: 'rejected_thinking', text: bufferedText };
+          yield { kind: "rejected_thinking", text: bufferedText };
         }
-        yield { kind: 'invalid', errors: result.errors, rejectedText: bufferedText };
+        yield {
+          kind: "invalid",
+          errors: result.errors,
+          rejectedText: bufferedText,
+        };
         return; // stop this stream; caller decides retry
       }
       // Q1 (workout_complete): schema 合法之后追加数据一致性检测。
@@ -191,34 +200,38 @@ async function* consumeStreamLookingForInvalidCard(
         );
         if (!quality.ok) {
           if (bufferedText) {
-            yield { kind: 'rejected_thinking', text: bufferedText };
+            yield { kind: "rejected_thinking", text: bufferedText };
           }
-          yield { kind: 'invalid', errors: quality.issues, rejectedText: bufferedText };
+          yield {
+            kind: "invalid",
+            errors: quality.issues,
+            rejectedText: bufferedText,
+          };
           return;
         }
       }
       // Valid card — flush the buffered prose first, then forward the card.
       if (bufferedText) {
-        yield { kind: 'event', event: { type: 'token', text: bufferedText } };
-        bufferedText = '';
+        yield { kind: "event", event: { type: "token", text: bufferedText } };
+        bufferedText = "";
       }
-      yield { kind: 'event', event };
+      yield { kind: "event", event };
       continue;
     }
-    if (event.type === 'token') {
-      bufferedText += event.text ?? '';
+    if (event.type === "token") {
+      bufferedText += event.text ?? "";
       continue;
     }
     // done / error / cardless uiHint — flush any pending prose, pass through.
     if (bufferedText) {
-      yield { kind: 'event', event: { type: 'token', text: bufferedText } };
-      bufferedText = '';
+      yield { kind: "event", event: { type: "token", text: bufferedText } };
+      bufferedText = "";
     }
-    yield { kind: 'event', event };
+    yield { kind: "event", event };
   }
   // Stream drained with no card (cardless chat turn) — flush remaining prose.
   if (bufferedText) {
-    yield { kind: 'event', event: { type: 'token', text: bufferedText } };
+    yield { kind: "event", event: { type: "token", text: bufferedText } };
   }
 }
 
@@ -240,38 +253,46 @@ function buildFeedbackRequest(
   attempt: number,
 ): ChatRequest {
   // Detect type-related errors for enhanced guidance
-  const typeErrors = errors.filter(e =>
-    e.path.some(p => p === 'exercise_type' || p === 'duration' || p === 'weight' || p === 'distance')
+  const typeErrors = errors.filter((e) =>
+    e.path.some(
+      (p) =>
+        p === "exercise_type" ||
+        p === "duration" ||
+        p === "weight" ||
+        p === "distance",
+    ),
   );
 
-  const typeGuidance = typeErrors.length > 0
-    ? [
-        '',
-        '### Exercise Type Field Requirements Quick Reference:',
-        '- isometric: duration > 0 (required), reps=1',
-        '- cardio: duration > 0 (required)',
-        '- outdoor: distance > 0 (required)',
-        '- resistance/unilateral/heavy_weight/assisted: weight > 0 (required)',
-        '- bodyweight/rep_training: no required fields (weight defaults to 0)',
-        '- flexibility: no required fields',
-        '',
-        'Read exercise-type-guide/knowledge-index.md for full details.',
-      ].join('\n')
-    : '';
+  const typeGuidance =
+    typeErrors.length > 0
+      ? [
+          "",
+          "### Exercise Type Field Requirements Quick Reference:",
+          "- isometric: duration > 0 (required), reps=1",
+          "- cardio: duration > 0 (required)",
+          "- outdoor: distance > 0 (required)",
+          "- resistance/unilateral/heavy_weight: weight optional (0 = user self-selects on first attempt)",
+          "- assisted: weight MUST be <= 0 (negative = assistance kg, e.g. -20 = 20kg assist)",
+          "- bodyweight/rep_training: no required fields (weight defaults to 0)",
+          "- flexibility: no required fields",
+          "",
+          "Read exercise-type-guide/knowledge-index.md for full details.",
+        ].join("\n")
+      : "";
 
   const correction = [
-    '',
+    "",
     `--- uiHint validation feedback (attempt ${attempt} was rejected) ---`,
-    'The uiHint card you emitted was invalid. Fix every error below and',
-    're-emit a single corrected uiHint card.',
-    'Errors:',
+    "The uiHint card you emitted was invalid. Fix every error below and",
+    "re-emit a single corrected uiHint card.",
+    "Errors:",
     errors
       .map((e) => `- [${e.code}] at ${pathToString(e.path)}: ${e.message}`)
-      .join('\n'),
+      .join("\n"),
     typeGuidance,
-    `Allowed types: ${ALLOWED_UIHINT_TYPES.join(', ')}.`,
-    `Blacklisted HITL types (never emit): ${BLACKLISTED_UIHINT_TYPES.join(', ')}.`,
-  ].join('\n');
+    `Allowed types: ${ALLOWED_UIHINT_TYPES.join(", ")}.`,
+    `Blacklisted HITL types (never emit): ${BLACKLISTED_UIHINT_TYPES.join(", ")}.`,
+  ].join("\n");
 
   return {
     ...original,
@@ -290,9 +311,9 @@ function buildFeedbackRequest(
 function formatErrors(errors: StructuredError[]): string {
   return errors
     .map((e) => `[${e.code}] at ${pathToString(e.path)}: ${e.message}`)
-    .join('; ');
+    .join("; ");
 }
 
 function pathToString(path: (string | number)[]): string {
-  return path.length === 0 ? '<root>' : path.join('.');
+  return path.length === 0 ? "<root>" : path.join(".");
 }

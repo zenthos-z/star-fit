@@ -9,7 +9,7 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (6)
+ * ## Tool set (7)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, description}].
  *                                 The library is small enough to fit in context, so the agent
@@ -21,6 +21,13 @@
  * - `write_memory`        (write) keyed free-text memory note under profile_dynamic.memories
  * - `update_profile`      (write) structured update of profile_dynamic
  *                                 (load_anchors / active_limitations / recovery_state)
+ * - `create_exercise`     (write) insert a USER-BOUND custom exercise into the
+ *                                 library. User-binding rides in
+ *                                 `attributes.owner_user_id` (HC-2: no schema
+ *                                 change) — the row stays invisible to other
+ *                                 users' queries and the admin console filters
+ *                                 can adopt it later. A NanoID is generated
+ *                                 server-side (never LLM-supplied).
  *
  * ## Red lines honoured
  * - **Repository boundary (B1)**: tools reach data ONLY through the Repository
@@ -71,6 +78,7 @@ import {
 } from "../../db/postgresql/repository/index.js";
 import { getPostgresClient } from "../../db/postgresql/index.js";
 import { mergeHistorySources } from "./historyMerger.js";
+import { generateExerciseNanoId } from "../../utils/nanoid.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -292,6 +300,46 @@ export class ExerciseQuery extends BaseRepository {
       { id },
     );
   }
+
+  /**
+   * True when a (case-insensitive) exercise name already exists. Used by
+   * create_exercise to fail loudly instead of hitting the UNIQUE(name)
+   * constraint with a raw driver error.
+   */
+  async nameExists(name: string): Promise<boolean> {
+    const row = await this.queryOne<{ id: string }>(
+      `SELECT id FROM exercises WHERE lower(name) = lower($name) LIMIT 1`,
+      { name },
+    );
+    return row != null;
+  }
+
+  /**
+   * Insert a user-bound custom exercise. Ownership rides inside the
+   * attributes JSONB (`owner_user_id`) — HC-2: no schema change, the existing
+   * table serves per-user customs with zero migration.
+   */
+  async insertUserExercise(row: {
+    id: string;
+    name: string;
+    exercise_type: string;
+    attributes: Record<string, unknown>;
+    content_html: string | null;
+    modified_by: string;
+  }): Promise<void> {
+    await this.execute(
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, content_html, modified_by, updated_at)
+       VALUES ($id, $name, $exerciseType, 'beginner', $attributes, $contentHtml, $modifiedBy, NOW())`,
+      {
+        id: row.id,
+        name: row.name,
+        exerciseType: row.exercise_type,
+        attributes: JSON.stringify(row.attributes),
+        contentHtml: row.content_html,
+        modifiedBy: row.modified_by,
+      },
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -392,6 +440,53 @@ const writeMemorySchema = z
   .passthrough()
   .describe(
     "Write/overwrite a memory note keyed under the current user profile.",
+  );
+
+const createExerciseSchema = z
+  .object({
+    name: z
+      .string()
+      .min(1)
+      .max(120)
+      .describe(
+        'Exercise name in the user\'s language, e.g. "单臂哑铃划船（左）". Must not duplicate an existing library name.',
+      ),
+    exercise_type: z
+      .string()
+      .max(24)
+      .describe(
+        "One of: resistance | unilateral | bodyweight | assisted | isometric | cardio | flexibility | heavy_weight | rep_training | outdoor. Pick by how the movement is measured (assisted uses NEGATIVE assistance weight).",
+      ),
+    targets_primary: z
+      .array(z.string().max(40))
+      .max(6)
+      .optional()
+      .describe('Primary muscle groups, e.g. ["背阔肌", "斜方肌"].'),
+    equipment_required: z
+      .array(z.string().max(40))
+      .max(8)
+      .optional()
+      .describe(
+        'Equipment needed, e.g. ["哑铃", "平凳"]. Empty for bodyweight.',
+      ),
+    description: z
+      .string()
+      .max(300)
+      .optional()
+      .describe(
+        "One-line description: movement pattern + target muscles + equipment, same style as list_exercises descriptions.",
+      ),
+    tutorial_md: z
+      .string()
+      .max(8000)
+      .optional()
+      .describe(
+        "Optional Markdown tutorial in the SAME 4-section format the frontend coach generates (### 动作作用 / ### 发力心法 / ### 注意事项 / ### 容易做错的地方). Generate it for custom moves the library does not cover.",
+      ),
+  })
+  .passthrough()
+  .describe(
+    "Create a NEW user-bound exercise when the library has no suitable match. The exercise is visible ONLY to the calling user (bound via attributes.owner_user_id server-side). The id is generated server-side and returned — use it in plan cards. Check list_exercises FIRST; do not create a near-duplicate of an existing exercise.",
   );
 
 const updateProfileSchema = z
@@ -641,6 +736,66 @@ export function buildMcpToolsWith(
     },
   });
 
+  const createExercise = new DynamicStructuredTool({
+    name: "create_exercise",
+    description:
+      "Create a NEW user-bound exercise (visible ONLY to the calling user) when the library lacks a suitable movement. " +
+      "Check list_exercises FIRST and never create a near-duplicate. The NanoID id is generated SERVER-SIDE and returned — " +
+      "use the returned id in plan cards. Optionally attach a Markdown tutorial in the same 4-section format the " +
+      "frontend coach tutorial uses (### 动作作用 / ### 发力心法 / ### 注意事项 / ### 容易做错的地方).",
+    schema: createExerciseSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const exerciseQuery = new ExerciseQuery(client);
+
+      // Duplicate-name guard: fail loudly with an actionable message instead
+      // of a raw UNIQUE violation from the driver.
+      if (await exerciseQuery.nameExists(input.name)) {
+        return JSON.stringify({
+          created: false,
+          reason: "name_exists",
+          message:
+            "An exercise with this name already exists in the library. Call list_exercises and use the existing id instead of creating a duplicate.",
+        });
+      }
+
+      // Server-side NanoID (never LLM-supplied) + user binding in attributes.
+      const id = generateExerciseNanoId();
+      const attributes: Record<string, unknown> = {
+        owner_user_id: userId,
+        custom: true,
+        created_via: "agent",
+        targets: { primary: input.targets_primary ?? [] },
+        equipment_required: input.equipment_required ?? [],
+      };
+
+      await exerciseQuery.insertUserExercise({
+        id,
+        name: input.name,
+        exercise_type: input.exercise_type,
+        attributes,
+        // Tutorial persisted into content_html so ExerciseTutorialModal renders
+        // it with the same priority as coach/admin-generated tutorials
+        // (content_html is the top slot in the modal's source priority).
+        content_html: input.tutorial_md ?? null,
+        modified_by: "system",
+      });
+
+      return JSON.stringify({
+        created: true,
+        id,
+        name: input.name,
+        exercise_type: input.exercise_type,
+        visibility: "user_only",
+        message:
+          "Exercise created and bound to the current user. Use this id in plan cards.",
+      });
+    },
+  });
+
   const writeSession = new DynamicStructuredTool({
     name: "write_session",
     description:
@@ -694,6 +849,7 @@ export function buildMcpToolsWith(
     loadHistory,
     listExercises,
     getExerciseDetail,
+    createExercise,
     writeSession,
     writeMemory,
     updateProfile,
@@ -702,7 +858,7 @@ export function buildMcpToolsWith(
 
 /**
  * Production entry point (P006: userId resolved per-request via LangGraph ALS;
- * client = singleton). Returns the six domain tools.
+ * client = singleton). Returns the seven domain tools.
  */
 export function buildMcpTools(): DynamicStructuredTool[] {
   return buildMcpToolsWith(getPostgresClient(), undefined);
