@@ -23,7 +23,7 @@ const config: CapacitorConfig = {
     ...(process.env.CAP_DEV_URL ? { url: process.env.CAP_DEV_URL } : {})
   },
   // 手写原生插件（iOS: LiquidGlassPlugin.swift）注册进桥
-  includePlugins: ['AppPlugin', 'LiquidGlassPlugin', '@capacitor/keyboard', '@capacitor/camera'],
+  includePlugins: ['AppPlugin', 'LiquidGlassPlugin', '@capacitor/keyboard', '@capacitor/camera', '@capawesome/capacitor-file-picker'],
   plugins: {
     // 键盘不推挤/不缩放 webview 视口：聚焦输入框时整个页面被顶上灵动岛的根因修复。
     // webview 尺寸保持不变，输入框可见性由页面自身布局（底部输入栏 + safe-bottom 冻结）负责。

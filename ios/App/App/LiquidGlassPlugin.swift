@@ -28,6 +28,8 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "hideMenu", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "setMenuItems", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "clearMenuItems", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "showGlassPanel", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "hideGlassPanel", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "setLens", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "setLabel", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "hideLens", returnType: CAPPluginReturnNone)

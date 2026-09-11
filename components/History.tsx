@@ -27,6 +27,7 @@ import {
   onGlassMenuSelect,
   GlassMenuItem,
 } from '../src/lib/nativeGlassMenu';
+import { isNativeTabBar, setTabBarHidden } from '../src/lib/nativeTabBar';
 import { List } from 'react-window';
 
 const calculateVolume = (ex: Exercise) => {
@@ -259,6 +260,12 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Sync Debug State
   const [showDebug, setShowDebug] = useState(false);
+  // iOS sheet 规范：诊断 sheet 呈现时盖住原生 tab bar，关闭恢复（引用计数，与全项目 sheet 一致）
+  React.useEffect(() => {
+    if (!showDebug) return;
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, [showDebug]);
   const [syncStatus, setSyncStatus] = useState('');
   const [pingResult, setPingResult] = useState<any>(null);
   const [netLogs, setNetLogs] = useState<string[]>([]);
@@ -587,9 +594,22 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
           )}
         </AnimatePresence>
 
-        {/* Sync Debug Panel — 底部 sheet（rounded-t-[40px] 全局统一）*/}
+        {/* Sync Debug Panel — iOS sheet 形态：全屏遮罩 + 底部滑入（rounded-t-[40px] 全局统一）；
+            呈现时原生 tab bar 隐藏（见上方 useEffect），点遮罩关闭 */}
         {showDebug && (
-            <div className="fixed inset-x-0 bottom-0 z-50 bg-gray-900 text-gray-200 p-4 rounded-t-[40px] shadow-2xl animate-in slide-in-from-bottom-6 max-w-md mx-auto" style={{ paddingBottom: 'calc(16px + var(--safe-bottom, 0px))' }}>
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm"
+              onClick={() => setShowDebug(false)}
+            >
+            <div
+                className="fixed inset-x-0 bottom-0 z-[90] bg-gray-900 text-gray-200 p-4 rounded-t-[40px] shadow-2xl max-w-md mx-auto"
+                style={{ paddingBottom: 'calc(16px + var(--safe-bottom, 0px))', maxHeight: '85vh', overflowY: 'auto' }}
+                onClick={(e) => e.stopPropagation()}
+            >
                 <div className="flex justify-between items-center mb-3">
                     <h3 className="font-mono text-sm font-bold text-star-primary">DIAGNOSTICS</h3>
                     <button onClick={() => setShowDebug(false)} aria-label="关闭诊断" className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 active:scale-90">
@@ -711,6 +731,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
                     </div>
                 </div>
             </div>
+            </motion.div>
         )}
 
         {/* List */}

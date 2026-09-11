@@ -11,6 +11,7 @@ import { ChatMessage, ProgressItem } from '../../hooks/useAICoach';
 import type { ChatThread } from '@/storage';
 import { API_BASE, getHeaders } from '../../../services/geminiService';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
+import { showGlassPanel, hideGlassPanel, onGlassPanelSelect, onGlassPanelDismiss } from '../../../lib/nativeGlassPanel';
 import { BubbleGallery, GALLERY_MESSAGES } from './BubbleGallery';
 
 interface MessageProgressIndicatorProps {
@@ -20,17 +21,22 @@ interface MessageProgressIndicatorProps {
 
 /**
  * 拍照 / 相册取图 → 压缩 dataUrl 附件。
- * 原生：@capacitor/camera（source: Prompt 系统 action sheet：拍照 / 照片图库）。
+ * 原生：@capacitor/camera。source 缺省 Prompt（系统 action sheet）；
+ * 'camera' / 'photos' 走显式来源（原生菜单选「拍照」/「照片图库」后不再二次弹单）。
  * Web：文件选择器降级（accept="image/*" 同样支持移动端拍照/相册）。
  * 用户取消 → 静默；其他错误 → alert 提示（不挂假附件）。
  */
-async function pickPhoto(setCtx: (c: any) => void) {
+async function pickPhoto(setCtx: (c: any) => void, source?: 'camera' | 'photos') {
   try {
     const { Capacitor } = await import('@capacitor/core');
     if (Capacitor.isNativePlatform()) {
       const { Camera, CameraResultType, CameraSource } = await import('@capacitor/camera');
+      const cameraSource =
+        source === 'camera' ? CameraSource.Camera :
+        source === 'photos' ? CameraSource.Photos :
+        CameraSource.Prompt;
       const photo = await Camera.getPhoto({
-        source: CameraSource.Prompt,
+        source: cameraSource,
         resultType: CameraResultType.DataUrl,
         quality: 80,
         width: 1600,
@@ -64,12 +70,49 @@ async function pickPhoto(setCtx: (c: any) => void) {
 }
 
 /**
- * 文件选取：WebView 原生 <input type="file"> —— Capacitor Android 走系统
- * Storage Access Framework、iOS 走 Files/照片选择器，真实访问手机中的文件。
+ * 文件选取：原生（iOS/Android）走 @capawesome/capacitor-file-picker ——
+ * iOS 直接呈现系统的 UIDocumentPicker（Files App），无 <input type="file">
+ * 的「Photo Library / Take Photo / Choose File」三选中间弹单。
+ * Web 降级为 <input type="file">。
  * 文本类文件读为 UTF-8 文本挂入附件（随 intent_context 直达 Agent）；
  * 二进制 / 超大文件如实提示，不挂假附件。
  */
 async function pickFile(setCtx: (c: any) => void) {
+  const { Capacitor } = await import('@capacitor/core');
+  if (Capacitor.isNativePlatform()) {
+    try {
+      const { FilePicker } = await import('@capawesome/capacitor-file-picker');
+      const result = await FilePicker.pickFiles({ readData: true });
+      const f = result.files?.[0];
+      if (!f) return; // 用户取消
+      if ((f.size ?? 0) > 200 * 1024) {
+        alert('文件过大（超过 200KB），请先精简后再附加。');
+        return;
+      }
+      const text = f.data ? atob(f.data) : '';
+      if (!text) {
+        alert('文件内容为空或无法读取。');
+        return;
+      }
+      // base64 → UTF-8（atob 出的是 latin1 串，需经 Uint8Array 解码）
+      const bytes = Uint8Array.from(text, (ch) => ch.charCodeAt(0));
+      const decoded = new TextDecoder('utf-8', { fatal: false }).decode(bytes);
+      // 二进制特征：大量 U+FFFD 替换符（UTF-8 解码失败）
+      const bad = (decoded.match(/\uFFFD/g) || []).length;
+      if (decoded.length > 0 && bad > decoded.length * 0.02) {
+        alert('该文件是二进制格式，暂只支持文本类文件（txt / md / json / csv 等）。');
+        return;
+      }
+      setCtx({ type: 'file', title: f.name || '文件', mime: f.mimeType || 'text/plain', textContent: decoded });
+    } catch (err: any) {
+      const msg = err?.message || '';
+      if (/cancel/i.test(msg)) return; // 用户取消静默
+      console.error('[AICoachOverlay] pickFile failed:', err);
+      alert(`无法读取文件：${msg || '未知错误'}`);
+    }
+    return;
+  }
+  // Web 兜底：<input type="file">
   const input = document.createElement('input');
   input.type = 'file';
   // 不设 accept：允许从系统文件 App 选任意文件，由前端判断可读性
@@ -270,9 +313,80 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
       logoPressTimerRef.current = null;
     }
   };
-  const [showAttachPanel, setShowAttachPanel] = useState(false);
+  // true = Web 自绘面板在显示（原生面板成功时不渲染 Web 壳，避免双重）
+  const [showWebAttachPanel, setShowWebAttachPanel] = useState(false);
+  // 原生玻璃面板展开态：驱动「+」旋转动画（原生面板的出现/收起不走 React state，
+  // 靠这个镜像同步 UI）；点外部收起时由 onGlassPanelDismiss 复位
+  const [glassPanelOpen, setGlassPanelOpen] = useState(false);
+  const attachBarRef = useRef<HTMLDivElement | null>(null);
+  const setAttachedCtxRef = useRef(setAttachedContext);
+  setAttachedCtxRef.current = setAttachedContext;
+  const [kbHeight, setKbHeight] = useState(0);
   const [isStrategyActive, setIsStrategyActive] = useState(false);
   const [chatHistoryWithProgress, setChatHistoryWithProgress] = useState<ChatMessage[]>(chatHistory);
+
+  // ── 附件面板（材质升级：iOS 26 走原生 SwiftUI .glassEffect 面板）──
+  // 「+」点按 → 上报输入栏 rect 试原生面板；原生拒绝（旧系统/无桥）时回落
+  // Web 自绘面板。三项选择统一经 onGlassPanelSelect 分发。
+  useEffect(() => {
+    onGlassPanelDismiss(() => setGlassPanelOpen(false));
+    onGlassPanelSelect((index) => {
+      const setCtx = setAttachedCtxRef.current;
+      setGlassPanelOpen(false);
+      if (!setCtx) return;
+      // index：0=相机，1=照片（图库），2=文件
+      if (index === 0) pickPhoto(setCtx, 'camera');
+      else if (index === 1) pickPhoto(setCtx, 'photos');
+      else if (index === 2) pickFile(setCtx);
+    });
+  }, []);
+
+  const openAttachPanel = async () => {
+    const bar = attachBarRef.current;
+    if (bar) {
+      // 等输入栏 rect 稳定（sheet 滑入动画期 rect 是动画起点值，历史坑）
+      let prev = bar.getBoundingClientRect();
+      let rounds = 0;
+      while (rounds < 20) {
+        await new Promise((r) => setTimeout(r, 80));
+        const cur = bar.getBoundingClientRect();
+        if (
+          Math.abs(cur.left - prev.left) < 0.5 &&
+          Math.abs(cur.bottom - prev.bottom) < 0.5 &&
+          Math.abs(cur.width - prev.width) < 0.5 &&
+          rounds >= 2
+        ) {
+          break;
+        }
+        prev = cur;
+        rounds++;
+      }
+      // 面板宽度 = 屏宽 - 左右留白（左 16 + 右 56，与 Web 面板一致）
+      const r = prev;
+      const ok = await showGlassPanel({ x: 16, width: r.width - 72, bottomY: r.top - 12 });
+      if (ok) {
+        setGlassPanelOpen(true); // 原生玻璃面板已呈现，「+」转入展开态
+        return;
+      }
+    }
+    setShowWebAttachPanel(true);
+  };
+
+  const handleAttachButton = () => {
+    // 「+」点按在原生面板开着时被 backdrop 截住（点「+」= 点外部 = 收起，
+    // 原生侧会回调 onGlassPanelDismiss 复位 glassPanelOpen），这里只处理
+    // Web 面板的开关；glassPanelOpen 仅为旋转动画镜像。
+    if (showWebAttachPanel) {
+      setShowWebAttachPanel(false);
+      return;
+    }
+    void openAttachPanel();
+  };
+
+  // sheet 关闭 / 键盘起伏时拆原生面板（键盘会移动输入栏，面板位置随之失效）
+  useEffect(() => {
+    if (!isOpen || kbHeight > 0) hideGlassPanel();
+  }, [isOpen, kbHeight]);
 
   // Reset strategy active state when message is sent (isLoading becomes true)
   // iOS sheet 规范：sheet 呈现时盖住原生 tab bar，关闭恢复
@@ -308,7 +422,6 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   // WKWebView 聚焦输入框时内部 scrollView 仍会自动滚动以"露出"输入框，
   // 把 fixed inset-0 的整个 sheet（含导航栏）顶出安全区、推进灵动岛。
   // 监听原生键盘事件，在滚动发生前后把 window/document 的滚动位置强制归零。
-  const [kbHeight, setKbHeight] = useState(0);
   useEffect(() => {
     if (!isOpen) return;
     const pin = () => {
@@ -523,20 +636,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
             {isBusy ? '正在输入…' : 'Agent 系统已就绪'}
           </div>
         </div>
-        {/* 右上角按钮组："+"新建（白色胶囊，放历史按钮左边） + 历史对话 */}
+        {/* 右上角：历史对话（"新建对话"已移入历史对话面板右上角） */}
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => {
-              setShowHistoryPanel(false);
-              onCreateNewThread();
-            }}
-            className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 active:scale-95 transition-all"
-            aria-label="新建对话"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4v16m8-8H4" />
-            </svg>
-          </button>
           <button
             onClick={() => setShowHistoryPanel(true)}
             className="w-11 h-11 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-700 active:scale-95 transition-all"
@@ -721,53 +822,100 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
           transform: kbHeight > 0 ? `translateY(-${kbHeight}px)` : 'translateY(0)'
         }}
       >
-        {/* iOS 26 Menu：参考信息 App——大型白色圆角浮层，大图标+大字，无分隔线 */}
-        {showAttachPanel && (
-          <motion.div
-            initial={{ opacity: 0, y: 24, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 16, scale: 0.97 }}
-            transition={{ duration: 0.22, ease: [0.32, 0.72, 0, 1] }}
-            className="fixed inset-x-4 bottom-[120px] top-auto z-40 rounded-[40px] bg-white/80 backdrop-blur-2xl shadow-[0_12px_48px_rgba(0,0,0,0.16)] overflow-hidden px-4 py-3"
-          >
-            {[
-              { key: 'photo', label: '照片', bg: 'linear-gradient(135deg,#0A84FF,#0066CC)', icon: 'M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z' },
-              { key: 'file', label: '文件', bg: 'linear-gradient(135deg,#8E8E93,#636366)', icon: 'M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7zm0 0v7h7M9 13h6m-6 4h6' },
-            ].map((a) => (
-              <button
-                key={a.key}
-                type="button"
-                onClick={async () => {
-                  setShowAttachPanel(false);
-                  if (a.key === 'photo') {
-                    // 拍照/相册：原生走 @capacitor/camera（iOS 弹系统 action sheet：
-                    // 拍照 / 照片图库）；Web 降级为系统文件选择（同样支持拍照/相册）。
-                    await pickPhoto(setAttachedContext);
-                  } else if (a.key === 'file') {
-                    // 文件：WebView 原生文件选择器（Android SAF / iOS Files），
-                    // 真实访问手机中的文件，读为文本挂入附件。
-                    await pickFile(setAttachedContext);
-                  }
-                }}
-                className="w-full flex items-center gap-5 px-2 py-3.5 text-left active:bg-black/5 rounded-2xl transition-colors"
-              >
-                <div className="w-12 h-12 rounded-full flex items-center justify-center shrink-0 text-white shadow-sm" style={{ background: a.bg }}>
-                  <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d={a.icon} />
-                  </svg>
-                </div>
-                <span className="text-[19px] text-gray-900">{a.label}</span>
-              </button>
-            ))}
-          </motion.div>
-        )}
+        {/* Web 自绘附件面板（兜底）：iOS 26+ 走原生玻璃面板不渲染此壳 */}
+        <AnimatePresence>
+          {showWebAttachPanel && (
+            <motion.div
+              initial={{ opacity: 0, y: 24, scale: 0.95 }}
+              animate={{ opacity: 1, y: 0, scale: 1 }}
+              exit={{ opacity: 0, y: 16, scale: 0.96 }}
+              transition={{ type: 'spring', stiffness: 480, damping: 38 }}
+              style={{ transformOrigin: 'left bottom' }}
+              className="absolute left-4 right-14 bottom-full mb-3 z-30 rounded-[40px] bg-white/90 backdrop-blur-2xl shadow-[0_16px_56px_rgba(0,0,0,0.18)] px-5 py-5"
+            >
+              <div className="flex flex-col gap-1">
+                {[
+                  {
+                    key: 'camera',
+                    label: '相机',
+                    iconBg: 'linear-gradient(145deg,#3A3A3C,#1C1C1E)',
+                  },
+                  {
+                    key: 'photo',
+                    label: '照片',
+                    iconBg: '#FFFFFF',
+                  },
+                  {
+                    key: 'file',
+                    label: '文件',
+                    iconBg: 'linear-gradient(145deg,#3B9BFF,#0A6BFF)',
+                  },
+                ].map((a) => (
+                  <button
+                    key={a.key}
+                    type="button"
+                    onClick={async () => {
+                      setShowWebAttachPanel(false);
+                      if (a.key === 'camera') {
+                        await pickPhoto(setAttachedContext, 'camera');
+                      } else if (a.key === 'photo') {
+                        await pickPhoto(setAttachedContext, 'photos');
+                      } else if (a.key === 'file') {
+                        // 文件：WebView 原生文件选择器（Android SAF / iOS Files），
+                        // 真实访问手机中的文件，读为文本挂入附件。
+                        await pickFile(setAttachedContext);
+                      }
+                    }}
+                    className="w-full flex items-center gap-6 px-2 py-3 text-left rounded-[28px] active:bg-black/5 transition-colors"
+                  >
+                    <div
+                      className="w-14 h-14 rounded-full flex items-center justify-center shrink-0 shadow-[0_2px_8px_rgba(0,0,0,0.12)]"
+                      style={{ background: a.iconBg }}
+                    >
+                      {a.key === 'camera' && (
+                        <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h1.2l1.05-1.5a1.5 1.5 0 011.24-.65h2.02c.49 0 .95.24 1.24.65l1.05 1.5h1.2A2.25 2.25 0 0118.75 10.5v6a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-6a2.25 2.25 0 012.25-2.25z" />
+                          <circle cx="12" cy="13.5" r="3.25" />
+                        </svg>
+                      )}
+                      {a.key === 'photo' && (
+                        <svg className="w-8 h-8" viewBox="0 0 24 24" fill="none">
+                          {/* Photos 多彩花瓣（8 瓣） */}
+                          {[
+                            { c: '#FF9500', r: 0 }, { c: '#FFCC00', r: 45 },
+                            { c: '#34C759', r: 90 }, { c: '#00C7BE', r: 135 },
+                            { c: '#0A84FF', r: 180 }, { c: '#5E5CE6', r: 225 },
+                            { c: '#FF2D55', r: 270 }, { c: '#FF375F', r: 315 },
+                          ].map((p, i) => (
+                            <ellipse
+                              key={i}
+                              cx="12" cy="7.2" rx="2.1" ry="4.2"
+                              fill={p.c} opacity="0.88"
+                              transform={`rotate(${p.r} 12 12)`}
+                            />
+                          ))}
+                        </svg>
+                      )}
+                      {a.key === 'file' && (
+                        <svg className="w-7 h-7 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9l-7-7zm0 0v7h7" />
+                        </svg>
+                      )}
+                    </div>
+                    <span className="text-[22px] text-gray-900 leading-none">{a.label}</span>
+                  </button>
+                ))}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
-        <div className="flex items-end gap-2">
-          {/* + 附件按钮：Liquid Glass（Apple glassEffect(.regular) 配方材质） */}
+        <div ref={attachBarRef} className="flex items-end gap-2">
+          {/* + 附件按钮：iOS 26 弹原生玻璃面板，其余回落本浮层 */}
           <button
             type="button"
-            onClick={() => setShowAttachPanel(!showAttachPanel)}
-            className={`glass-ring w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all active:scale-90 text-gray-800 ${showAttachPanel ? 'rotate-45' : ''}`}
+            onClick={handleAttachButton}
+            className={`glass-ring w-11 h-11 rounded-full flex items-center justify-center shrink-0 transition-all duration-200 active:scale-90 text-gray-800 ${glassPanelOpen || showWebAttachPanel ? 'rotate-45' : ''}`}
             aria-label="附件"
           >
             <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -884,6 +1032,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         threads={threads}
         currentThreadId={currentThreadId}
         onSelectThread={onSwitchThread}
+        onCreateNewThread={onCreateNewThread}
         formatRelativeTime={formatRelativeTime}
       />
     </div>
