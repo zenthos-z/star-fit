@@ -37,9 +37,14 @@ export const useLoginStatus = (): LoginStatusReturn => {
     (async () => {
       try {
         const creds = await loadLoginCredentials();
-        if (creds.userId) {
+        // Logout tombstone: if present, IDB creds are stale (IDB delete can
+        // hang in WKWebView) — ignore them and stay on the login page.
+        const loggedOut = localStorage.getItem('starfit_logged_out') === '1';
+        if (creds.userId && !loggedOut) {
           setUserId(creds.userId);
           setIsLoggedIn(true);
+        } else if (creds.userId && loggedOut) {
+          clearStorageLoginCredentials().catch(() => {});
         }
         if (creds.serverUrl) {
           setServerUrl(creds.serverUrl);
@@ -98,22 +103,36 @@ export const useLoginStatus = (): LoginStatusReturn => {
     localStorage.setItem('starfit_user_id', newUserId);
     localStorage.setItem('starfit_server_url', newServerUrl);
     localStorage.setItem('starfit_server_ip', newServerIp);
+    localStorage.removeItem('starfit_logged_out');
   };
 
   const logout = async () => {
-    // Clear from IDB (must complete before reload)
-    await clearStorageLoginCredentials();
-
     // Clear state
     setUserId(null);
     setServerUrl(null);
     setServerIp(null);
     setIsLoggedIn(false);
 
-    // Also clear localStorage for compatibility
+    // Clear localStorage FIRST (synchronous, cannot fail) so a reload
+    // right after this call always lands on the login page.
     localStorage.removeItem('starfit_user_id');
     localStorage.removeItem('starfit_server_url');
     localStorage.removeItem('starfit_server_ip');
+    // Tombstone: survives even if the IDB delete below hangs, so the app
+    // boots logged-out and lazily purges the stale IDB creds on next launch.
+    localStorage.setItem('starfit_logged_out', '1');
+
+    // Clear IDB best-effort: WKWebView IndexedDB can hang or reject
+    // transiently (observed on iOS sim 2026-09-10: logout never reloaded
+    // because await hung here). Never let it block the reload.
+    try {
+      await Promise.race([
+        clearStorageLoginCredentials(),
+        new Promise<void>((r) => setTimeout(r, 2000)),
+      ]);
+    } catch (e) {
+      console.warn('[useLoginStatus] IDB credential clear failed (non-fatal):', e);
+    }
   };
 
   return {

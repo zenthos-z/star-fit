@@ -239,7 +239,12 @@ export const useAICoach = (
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   // [SCROLL_FIX] Smart scroll function with animation synchronization
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'smooth', force = false) => {
+  // 根因修复：旧实现用 chatEndRef.parentElement 判断"内容是否已渲染"，
+  // 但那是内容包裹层（高度自适应、永不溢出），scrollHeight<=clientHeight 恒真，
+  // 导致无限重试、scrollIntoView 从未执行——初始锚定完全失效。
+  // 现改为：data-chat-scroll-container 精确定位滚动容器 + scrollTop 同步直赋
+  // （绕开 WKWebView 对 scrollIntoView 与入场 transform 动画冲突的各类怪癖）。
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = 'auto', force = false, depth = 0) => {
     if (!force && isUserScrollingRef.current) return;
 
     const attemptId = ++scrollAttemptRef.current;
@@ -247,16 +252,22 @@ export const useAICoach = (
     requestAnimationFrame(() => {
       if (attemptId !== scrollAttemptRef.current) return;
 
-      const container = chatEndRef.current?.parentElement;
+      const el = chatEndRef.current;
+      if (!el) return;
+      const container = (el.closest('[data-chat-scroll-container]') as HTMLElement | null) ?? el.parentElement;
       if (!container) return;
 
-      // Wait for content to render
+      // 内容可能仍在异步渲染（Markdown/KaTeX/卡片），尚未可滚动时短暂重试（封顶防死循环）
       if (container.scrollHeight <= container.clientHeight) {
-        setTimeout(() => scrollToBottom(behavior, force), 50);
+        if (depth < 10) setTimeout(() => scrollToBottom(behavior, force, depth + 1), 60);
         return;
       }
 
-      chatEndRef.current?.scrollIntoView({ behavior, block: 'end' });
+      if (behavior === 'smooth') {
+        container.scrollTo({ top: container.scrollHeight, behavior: 'smooth' });
+      } else {
+        container.scrollTop = container.scrollHeight; // 同步直设，无动画、必达
+      }
     });
   }, []);
 
@@ -278,18 +289,38 @@ export const useAICoach = (
   }, [chatHistory, currentThreadId]);
 
   // [SCROLL_FIX] Scroll when overlay opens (wait for animation to complete)
+  // 初始锚定必须用 instant 而非 smooth：sheet 入场（420ms transform 过渡）期间，
+  // iOS WKWebView 对正在 transform 的容器执行平滑 scrollIntoView 会被中断，
+  // 结果停在顶部（最旧消息）。呈现态应直接落在底部锚点（iMessage 行为）；
+  // 延迟二次锚定兜底 Markdown/KaTeX 等重内容异步撑高。
   useEffect(() => {
     if (isAiOverlayOpen && chatHistory.length > 0) {
       const timer = setTimeout(() => {
         isScrollReadyRef.current = true;
-        scrollToBottomRef.current('smooth', true);
+        scrollToBottomRef.current('auto', true);
       }, 350); // 300ms transition + 50ms buffer
+      const lateTimer = setTimeout(() => {
+        scrollToBottomRef.current('auto', true);
+      }, 800); // 兜底：异步渲染内容二次撑高后再锚一次
 
-      return () => clearTimeout(timer);
+      return () => {
+        clearTimeout(timer);
+        clearTimeout(lateTimer);
+      };
     } else if (!isAiOverlayOpen) {
       isScrollReadyRef.current = false;
     }
   }, [isAiOverlayOpen, chatHistory.length]);
+
+  // [SCROLL_FIX] 切换会话后直接锚定到底部：新载入的对话视口停在顶部（scrollTop=0），
+  // 此时 isNearBottom 判定不成立，上面的「新消息跟随滚动」兜底不会触发
+  useEffect(() => {
+    if (isAiOverlayOpen && currentThreadId && chatHistory.length > 0) {
+      const t1 = setTimeout(() => scrollToBottomRef.current?.('auto', true), 100);
+      const t2 = setTimeout(() => scrollToBottomRef.current?.('auto', true), 600);
+      return () => { clearTimeout(t1); clearTimeout(t2); };
+    }
+  }, [isAiOverlayOpen, currentThreadId, chatHistory.length]);
 
   // [SCROLL_FIX] Scroll on new message (only if already at bottom)
   useEffect(() => {
@@ -536,6 +567,15 @@ ${JSON.stringify(uploadData, null, 2)}`
         alert('图片上传失败，请重试。');
         return;
       }
+    }
+
+    // 文件附件：文本已在选取时读入（textContent），直接随 intent_context 透传，
+    // 无需上传图床。后端会把文件内容注入模型上下文。
+    if (currentAttachment?.type === 'file' && !currentAttachment.textContent) {
+      setIsLoading(false);
+      setChatHistory(prev => prev.filter(m => !m.isThinking));
+      alert('文件内容为空，请重新选择文件。');
+      return;
     }
 
     setChatMessage("");

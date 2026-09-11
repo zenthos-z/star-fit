@@ -19,6 +19,14 @@ import { API_BASE, setApiBase, getHeaders } from '../services/geminiService';
 import { useLoginStatus } from '../src/hooks/useLoginStatus';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '../src/lib/nativeHaptics';
+import { transitions } from '../src/v2/lib/animations';
+import {
+  isNativeGlassMenu,
+  showGlassMenu,
+  hideGlassMenu,
+  onGlassMenuSelect,
+  GlassMenuItem,
+} from '../src/lib/nativeGlassMenu';
 import { List } from 'react-window';
 
 const calculateVolume = (ex: Exercise) => {
@@ -140,7 +148,7 @@ function MenuItem({ icon, label, onClick, danger = false }: { icon: string; labe
     <button
       onClick={onClick}
       role="menuitem"
-      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left active:bg-gray-100 ${danger ? 'text-red-600' : 'text-gray-800'}`}
+      className={`flex items-center gap-3 px-3 py-2.5 rounded-xl transition-colors text-left active:bg-black/5 ${danger ? 'text-red-600' : 'text-gray-800'}`}
     >
       <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5 opacity-70" aria-hidden="true">
         {MENU_ICONS[icon]}
@@ -150,13 +158,103 @@ function MenuItem({ icon, label, onClick, danger = false }: { icon: string; labe
   );
 }
 
+// 原生 Liquid Glass 菜单项（iOS：SF Symbol 图标原生渲染；separator 原生分组线）。
+// index 与下方 runGlassMenuAction 的分支一一对应
+const GLASS_MENU_ITEMS: GlassMenuItem[] = [
+  { title: '导出 Markdown 战报', sfSymbol: 'square.and.arrow.up' },
+  { title: '导出 JSON 备份', sfSymbol: 'curlybraces.square' },
+  { title: '导入备份', sfSymbol: 'square.and.arrow.down' },
+  { separator: true },
+  { title: '设置', sfSymbol: 'gearshape' },
+  { title: '诊断', sfSymbol: 'stethoscope' },
+  { separator: true },
+  { title: '注销登录', sfSymbol: 'rectangle.portrait.and.arrow.right', danger: true },
+];
+
 const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelete, onOpenSettings }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
+  const menuButtonRef = useRef<HTMLButtonElement>(null);
+
+  // 原生 Liquid Glass 菜单（点按触发，官方组件 UIButton.showsMenuAsPrimaryAction）：
+  // 挂载时按「···」按钮当前位置叠原生透明锚点按钮（原生用 convert(_:from:) 换算坐标），
+  // 点按弹系统菜单；选项经 evaluateJavaScript 直调回传分发。
+  // 注意：History 页容器有 scale 0.9→1 入场动画（App.tsx），必须等 transform
+  // 归位后再读 rect，否则锚点坐标抓在动画中途（会偏 ~16pt/+80pt）。
+  // Web/Android 回落自绘菜单（menuOpen）
+  useEffect(() => {
+    if (!isNativeGlassMenu) return;
+    onGlassMenuSelect((index) => runActionRef.current(index));
+    let cancelled = false;
+    let pollTimer: ReturnType<typeof setTimeout> | null = null;
+    let mounted = false;
+    const mountAnchor = () => {
+      if (cancelled || mounted) return;
+      mounted = true;
+      const rect = menuButtonRef.current?.getBoundingClientRect();
+      if (rect) {
+        void showGlassMenu(GLASS_MENU_ITEMS, { x: rect.left, y: rect.top, size: rect.width });
+      }
+    };
+    // 轮询等 rect 稳定：History 页容器有 scale 0.9→1 入场动画（App.tsx），
+    // 挂载瞬间的 rect 是动画起点值。每 80ms 读一次 rect，与上次读数一致
+    // （<0.5px）且已过首帧（至少轮过一轮动画）才挂锚点；1.5s 硬兜底。
+    const waitStable = () => {
+      if (cancelled || mounted) return;
+      const read = () => {
+        const r = menuButtonRef.current?.getBoundingClientRect();
+        return r ? [r.left, r.top, r.width] : null;
+      };
+      let prev: number[] | null = null;
+      let rounds = 0;
+      const tick = () => {
+        if (cancelled || mounted) return;
+        const cur = read();
+        const stable = prev && cur
+          && Math.abs(cur[0] - prev[0]) < 0.5
+          && Math.abs(cur[1] - prev[1]) < 0.5
+          && Math.abs(cur[2] - prev[2]) < 0.5;
+        // 首轮 prev 为 null 必不稳；动画 0.3s ≈ 4 轮，rounds>=2 排除挂载瞬间的假静止
+        if (cur && stable && rounds >= 2) {
+          mountAnchor();
+        } else {
+          prev = cur;
+          rounds += 1;
+          pollTimer = setTimeout(tick, 80);
+        }
+      };
+      tick();
+    };
+    waitStable();
+    // 兜底：rect 迟迟不稳（异常路径）也必须挂上锚点
+    const hardTimeout = setTimeout(mountAnchor, 1500);
+    return () => {
+      cancelled = true;
+      if (pollTimer) clearTimeout(pollTimer);
+      clearTimeout(hardTimeout);
+      hideGlassMenu();
+    };
+  }, []);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
     setIsScrolled(e.currentTarget.scrollTop > 30);
   }, []);
+
+  // 原生菜单选项分发（index 对应 GLASS_MENU_ITEMS；separator 槽位不会回传）
+  const runGlassMenuAction = (index: number) => {
+    haptic('light');
+    switch (index) {
+      case 0: handleExportMarkdown(); break;
+      case 1: handleExportJSON(); break;
+      case 2: handleImportClick(); break;
+      case 4: onOpenSettings?.(); break;
+      case 5: setShowDebug(true); break;
+      case 7: handleLogout(); break;
+    }
+  };
+  // 镜像最新分发器给原生菜单监听（空依赖 effect 持有首帧闭包，直接引用会读到过期 sessions）
+  const runActionRef = useRef<(index: number) => void>(() => {});
+  runActionRef.current = runGlassMenuAction;
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   // Sync Debug State
@@ -421,39 +519,39 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
 
       <div className="h-full flex flex-col px-4 pb-20 max-w-md mx-auto">
 
-        {/* Navbar — iOS Large Title：滚动后居中小标题淡入；右上角单「···」菜单 */}
+        {/* Navbar — iOS Large Title：未滚动时大标题与右侧「···」同行垂直居中（原生规范）；滚动后大标题收起、居中小标题淡入 */}
         <div
-          className="sticky top-0 z-20 -mx-4 px-4 bg-star-gray/85 backdrop-blur-md"
-          style={{ paddingTop: 'calc(var(--safe-top, 0px) + 4px)', paddingBottom: '10px' }}
+          className="sticky top-0 z-20 -mx-4 px-4 bg-star-gray/85 backdrop-blur-md transition-all duration-200 flex items-center justify-between"
+          style={{ paddingTop: 'calc(var(--safe-top, 0px) + 4px)', paddingBottom: '10px', marginBottom: isScrolled ? 0 : 16 }}
         >
-          <div className="relative flex justify-end items-center h-11">
-            <span
-              className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-star-dark transition-opacity duration-200 pointer-events-none"
-              style={{ opacity: isScrolled ? 1 : 0 }}
-              aria-hidden={!isScrolled}
-            >
-              运动记录
-            </span>
-            <button
-                onClick={() => { haptic('light'); setMenuOpen(!menuOpen); }}
-                aria-label="更多操作"
-                aria-expanded={menuOpen}
-                className={`w-11 h-11 rounded-full shadow-sm transition-all active:scale-90 flex items-center justify-center ${menuOpen ? 'bg-star-primary text-white' : 'bg-white text-gray-600'}`}
-            >
-                <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-5 h-5" aria-hidden="true">
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
-                </svg>
-            </button>
-          </div>
+          <h2
+            className="text-[34px] leading-[41px] font-bold text-star-dark tracking-tight transition-all duration-200 overflow-hidden"
+            style={{ opacity: isScrolled ? 0 : 1, maxHeight: isScrolled ? 0 : 41 }}
+            aria-hidden={isScrolled}
+          >
+            运动记录
+          </h2>
+          <span
+            className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-star-dark transition-opacity duration-200 pointer-events-none"
+            style={{ opacity: isScrolled ? 1 : 0 }}
+            aria-hidden={!isScrolled}
+          >
+            运动记录
+          </span>
+          {/* iOS：原生透明锚点按钮叠在此按钮正上方（点按弹系统菜单），本按钮仅视觉占位；
+              Web/Android：本按钮点按展开自绘菜单 */}
+          <button
+              ref={menuButtonRef}
+              onClick={(e) => { if (!isNativeGlassMenu) { haptic('light'); setMenuOpen(!menuOpen); } }}
+              aria-label="更多操作"
+              aria-expanded={menuOpen}
+              className={`w-11 h-11 shrink-0 rounded-full shadow-sm transition-all active:scale-90 flex items-center justify-center ${menuOpen ? 'bg-star-primary text-white' : 'bg-white text-gray-600'}`}
+          >
+              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.2} stroke="currentColor" className="w-5 h-5" aria-hidden="true">
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM12.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0zM18.75 12a.75.75 0 11-1.5 0 .75.75 0 011.5 0z" />
+              </svg>
+          </button>
         </div>
-
-        {/* Large Title — 滚动时折叠 */}
-        <h2
-          className="text-[34px] leading-[41px] font-black text-star-dark tracking-tight transition-all duration-200 overflow-hidden"
-          style={{ opacity: isScrolled ? 0 : 1, maxHeight: isScrolled ? 0 : 60, marginBottom: isScrolled ? 0 : 16 }}
-        >
-          运动记录
-        </h2>
 
         {/* ··· 菜单：导出/导入/设置/诊断/注销 */}
         <AnimatePresence>
@@ -467,23 +565,23 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
                 className="fixed inset-0 z-30"
               />
               <motion.div
-                initial={{ opacity: 0, y: -8, scale: 0.96 }}
+                initial={{ opacity: 0, y: -8, scale: 0.92 }}
                 animate={{ opacity: 1, y: 0, scale: 1 }}
-                exit={{ opacity: 0, y: -8, scale: 0.96 }}
-                transition={{ duration: 0.18, ease: 'easeOut' }}
+                exit={{ opacity: 0, y: -8, scale: 0.92 }}
+                transition={transitions.springGentle}
                 role="menu"
-                className="absolute right-4 z-40 w-60 bg-white/95 backdrop-blur-xl rounded-2xl shadow-2xl border border-gray-100 p-1.5 flex flex-col gap-0.5"
-                style={{ top: 'calc(var(--safe-top, 0px) + 60px)' }}
+                className="liquid-glass absolute right-4 z-40 w-60 rounded-2xl p-1.5 flex flex-col gap-0.5"
+                style={{ top: 'calc(var(--safe-top, 0px) + 60px)', transformOrigin: 'top right' }}
               >
                 <MenuItem icon="export" label="导出 Markdown 战报" onClick={() => { setMenuOpen(false); handleExportMarkdown(); haptic('light'); }} />
                 <MenuItem icon="json" label="导出 JSON 备份" onClick={() => { setMenuOpen(false); handleExportJSON(); haptic('light'); }} />
                 <MenuItem icon="import" label="导入备份" onClick={() => { setMenuOpen(false); handleImportClick(); haptic('medium'); }} />
-                <div className="my-1 h-px bg-gray-100 mx-2" />
+                <div className="my-1 h-px bg-gray-100/60 mx-2" />
                 {onOpenSettings && <MenuItem icon="settings" label="设置" onClick={() => { setMenuOpen(false); onOpenSettings(); haptic('light'); }} />}
                 <MenuItem icon="debug" label="诊断" onClick={() => { setMenuOpen(false); setShowDebug(true); haptic('light'); }} />
-                <div className="my-1 h-px bg-gray-100 mx-2" />
+                <div className="my-1 h-px bg-gray-100/60 mx-2" />
                 <MenuItem icon="logout" label="注销登录" danger onClick={() => { setMenuOpen(false); handleLogout(); }} />
-                <div className="text-[9px] text-gray-300 text-center pt-1.5 pb-0.5 italic">数据加密存储于本地 · 建议定期备份</div>
+                <div className="text-[9px] text-gray-500 text-center pt-1.5 pb-0.5">数据加密存储于本地 · 建议定期备份</div>
               </motion.div>
             </>
           )}

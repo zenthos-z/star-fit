@@ -37,27 +37,27 @@
  * here — M5 wraps it, INT AC4 verifies it.
  */
 
-import { createDeepAgent, type DeepAgent } from 'deepagents';
-import type { AIMessageChunk } from '@langchain/core/messages';
-import { HumanMessage } from '@langchain/core/messages';
-import { createMiddleware } from 'langchain';
+import { createDeepAgent, type DeepAgent } from "deepagents";
+import type { AIMessageChunk } from "@langchain/core/messages";
+import { HumanMessage } from "@langchain/core/messages";
+import { createMiddleware } from "langchain";
 
-import type { AgentEvent, ChatRequest } from 'shared/contracts';
-import type { AgentService } from './AgentService.js';
-import { loadModel, loadVisionModel } from '../llm.js';
+import type { AgentEvent, ChatRequest } from "shared/contracts";
+import type { AgentService } from "./AgentService.js";
+import { loadModel, loadVisionModel } from "../llm.js";
 // P006: inject the checkpointer; no business pool handle crosses this import.
 import {
   ensureAgentRuntimeSchema,
   getAgentRuntimeCheckpointer,
-} from './agentRuntime.js';
+} from "./agentRuntime.js";
 // INT: inject the M5a uiHint card-format skill so the agent emits cards in the
 // exact shape the M5 validator (and the INT extraction layer) expect.
-import { loadUiHintFormatSkill } from './uiHintFormat.js';
+import { loadUiHintFormatSkill } from "./uiHintFormat.js";
 // MCP domain tools (R3): the Agent-only data adapter over the Repository layer.
-import { buildMcpTools } from './mcpTools.js';
+import { buildMcpTools } from "./mcpTools.js";
 // R5: mount every GOLD knowledge skill + operational skill via native
 // deepagents Skills + Filesystem (read on demand).
-import { mountAllSkills } from './skillLoader.js';
+import { mountAllSkills } from "./skillLoader.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -83,45 +83,48 @@ export type CompiledStatefulAgent = DeepAgent;
  * picks its own skill and uses its data tools.
  */
 const BASE_SYSTEM_PROMPT = [
-  'You are the Starfit training agent, a single autonomous agent loop.',
-  'Multiple skills are available to you simultaneously; choose which to apply',
-  'based on the user intent — do NOT ask which skill to use.',
-  '',
-  '## Profile auto-update trigger (ANY scenario, incl. plain chat)',
-  'Whenever the user\'s message SEMANTICALLY signals a state change — injury or',
+  "You are the Starfit training agent, a single autonomous agent loop.",
+  "Multiple skills are available to you simultaneously; choose which to apply",
+  "based on the user intent — do NOT ask which skill to use.",
+  "",
+  "## Profile auto-update trigger (ANY scenario, incl. plain chat)",
+  "Whenever the user's message SEMANTICALLY signals a state change — injury or",
   'discomfort ("肩膀僵", "右边使不上劲"), unusual fatigue, sleep disruption,',
-  'continuous training days, or a training-day wrap-up — you MUST, in that same',
-  'turn (after load_history), also propose a profile update by emitting a',
-  '`profile_update_confirm` card (see the profile-update-reviewer skill).',
-  'You may give training advice in the same reply, but the confirm card is NOT',
+  "continuous training days, or a training-day wrap-up — you MUST, in that same",
+  "turn (after load_history), also propose a profile update by emitting a",
+  "`profile_update_confirm` card (see the profile-update-reviewer skill).",
+  "You may give training advice in the same reply, but the confirm card is NOT",
   'optional and is NOT skipped in favor of "wait for more info": ask targeted',
-  'follow-up questions inside the card\'s message if needed. NEVER call',
-  '`update_profile` in that turn — only after the user confirms.',
-  '',
-  '## Output length (soft guidance)',
-  'As a general guideline, aim to keep prose replies under about 1000 Chinese',
-  'characters (~600 English words). Prioritize what matters: if trimming would',
-  'cut important safety or health information, keep it — completeness wins',
-  'over brevity. Lead with the conclusion, drop filler and repetition.',
-  'Structured cards do not count toward the limit, but keep their prose',
-  'wrapper to a sentence or two.',
-  '',
-  'You also have domain data tools (load_history, list_exercises,',
-  'get_exercise_detail, write_session, update_profile, write_memory). Use them',
-  'to ground answers in THIS user real data and the real exercise library — see',
-  'the fitness-data-tools skill for when/how. list_exercises returns the WHOLE',
-  'library (small enough to fit in context) as [{id, name, description}] — call',
-  'it once, then pick safe actions in-context. Never invent exercises that are',
-  'not in the library; always respect the user equipment + active limitations.',
-  '',
-  '## uiHint output format (HC-1)',
-  'When a structured card is the right response, emit it as a JSON object with',
-  'one of these `type` values: plan | summary | survey | instruction | deviation | unknown.',
-  'Include `title` (string), `data` (object), `priority` (number, default 0), and',
-  'optional `actionUri` (string). Keep prose tokens flowing before/after the card',
-  'so the UI can stream naturally. (Programmatic validation of this card is',
-  'applied upstream, not in this loop.)',
-].join('\n');
+  "follow-up questions inside the card's message if needed. NEVER call",
+  "`update_profile` in that turn — only after the user confirms.",
+  "",
+  "## Output length & formatting",
+  "NON-CARD PROSE LIMIT: plain explanations and chat replies that contain no",
+  "structured card MUST stay under 200 Chinese characters per reply. This is a",
+  "soft guideline you enforce by self-discipline — never pad, never ramble.",
+  "Structured cards do not count toward the limit, but keep their prose",
+  "wrapper to one sentence. If more detail is genuinely needed, move it into",
+  "a card rather than growing the prose.",
+  "FORMATTING: structure every non-card reply for scanability — lead with the",
+  'conclusion in one line, then at most 2-3 short points (use "-" bullets or',
+  "line breaks, never a wall of text). Drop filler, greetings and repetition.",
+  "",
+  "You also have domain data tools (load_history, list_exercises,",
+  "get_exercise_detail, write_session, update_profile, write_memory). Use them",
+  "to ground answers in THIS user real data and the real exercise library — see",
+  "the fitness-data-tools skill for when/how. list_exercises returns the WHOLE",
+  "library (small enough to fit in context) as [{id, name, description}] — call",
+  "it once, then pick safe actions in-context. Never invent exercises that are",
+  "not in the library; always respect the user equipment + active limitations.",
+  "",
+  "## uiHint output format (HC-1)",
+  "When a structured card is the right response, emit it as a JSON object with",
+  "one of these `type` values: plan | summary | survey | instruction | deviation | unknown.",
+  "Include `title` (string), `data` (object), `priority` (number, default 0), and",
+  "optional `actionUri` (string). Keep prose tokens flowing before/after the card",
+  "so the UI can stream naturally. (Programmatic validation of this card is",
+  "applied upstream, not in this loop.)",
+].join("\n");
 
 /**
  * Per-scenario data interpretation addendum for the systemPrompt. The agent
@@ -131,52 +134,52 @@ const BASE_SYSTEM_PROMPT = [
  */
 const SCENARIO_DATA_GUIDES: Record<string, string> = {
   workout_complete: [
-    '## Reading pre-formatted workout records (workout_complete)',
-    'Each persisted session row under history_summary.sessions contains:',
-    '- start_time / end_time (ISO) — actual workout window.',
-    '- exercises[]: ONE AGGREGATE ROW PER EXERCISE (not raw sets). Fields are',
+    "## Reading pre-formatted workout records (workout_complete)",
+    "Each persisted session row under history_summary.sessions contains:",
+    "- start_time / end_time (ISO) — actual workout window.",
+    "- exercises[]: ONE AGGREGATE ROW PER EXERCISE (not raw sets). Fields are",
     "  type-dependent — always read them by the row's `type`:",
-    '  * resistance/unilateral/assisted/bodyweight → weight (avg kg), reps',
-    '    (avg per set), sets (planned), completed_sets (done). The session',
-    '    total is already in stats.totalVolume — do NOT recompute from',
-    '    incomplete data.',
-    '  * cardio/outdoor → duration (total seconds), distance (total meters),',
-    '    avg_hr (bpm). Session-level cardio stats: stats.totalCardioDurationSec,',
-    '    stats.totalDistanceM, stats.avgHr.',
-    '  * isometric → duration (total seconds), optional weight.',
-    '- stats: { totalVolume (kg), setsCount, totalCardioDurationSec (s),',
-    '  totalDistanceM (m), durationMinutes?, avgHr? }.',
-    'A missing field means the type does not record it (e.g. no distance for',
-    'general cardio) or no HR device was connected — treat it as absent data,',
-    'never as zero performance, and never invent numbers.',
-    '',
-    'When analyzing the latest session (last element of sessions[]): compare',
-    'completed_sets vs sets for incomplete work, weight vs profile_dynamic',
-    'load_anchors for PRs/down-regulation, and report cardio minutes /',
-    'distance / avg HR when present. Then follow the workout-complete-handler',
-    'skill for survey questions and profile updates.',
-  ].join('\n'),
+    "  * resistance/unilateral/assisted/bodyweight → weight (avg kg), reps",
+    "    (avg per set), sets (planned), completed_sets (done). The session",
+    "    total is already in stats.totalVolume — do NOT recompute from",
+    "    incomplete data.",
+    "  * cardio/outdoor → duration (total seconds), distance (total meters),",
+    "    avg_hr (bpm). Session-level cardio stats: stats.totalCardioDurationSec,",
+    "    stats.totalDistanceM, stats.avgHr.",
+    "  * isometric → duration (total seconds), optional weight.",
+    "- stats: { totalVolume (kg), setsCount, totalCardioDurationSec (s),",
+    "  totalDistanceM (m), durationMinutes?, avgHr? }.",
+    "A missing field means the type does not record it (e.g. no distance for",
+    "general cardio) or no HR device was connected — treat it as absent data,",
+    "never as zero performance, and never invent numbers.",
+    "",
+    "When analyzing the latest session (last element of sessions[]): compare",
+    "completed_sets vs sets for incomplete work, weight vs profile_dynamic",
+    "load_anchors for PRs/down-regulation, and report cardio minutes /",
+    "distance / avg HR when present. Then follow the workout-complete-handler",
+    "skill for survey questions and profile updates.",
+  ].join("\n"),
 
   update_profile: [
-    '## User-profile update confirmation flow (update_profile)',
-    'The user-profile auto-update feature is gated by explicit user consent.',
-    'Follow the profile-update-reviewer skill exactly:',
-    '',
-    '1. TRIGGER detected (day training wrap-up, injury report, or a change to',
-    '   a key profile parameter) -> call `load_history` to read the CURRENT',
-    '   profile_dynamic and the relevant sessions FIRST.',
-    '2. PROPOSE, never write: emit a `profile_update_confirm` card listing',
-    '   each intended change (field / label / change description / value',
-    '   preview). Do NOT call `update_profile` in this turn.',
-    '3. On the NEXT user turn, if the user confirmed (explicitly or via the',
-    '   confirm bubble action), re-check `load_history` for the current values,',
-    '   merge the confirmed changes, then call `update_profile` and reply with',
-    '   an `audit_complete` card summarizing what was written (updates[] with',
-    '   field/label/count). If the user declined, acknowledge briefly and',
-    '   change nothing.',
-    '4. Only propose changes grounded in real tool data — never invent',
-    '   anchors, limitations, or recovery values.',
-  ].join('\n'),
+    "## User-profile update confirmation flow (update_profile)",
+    "The user-profile auto-update feature is gated by explicit user consent.",
+    "Follow the profile-update-reviewer skill exactly:",
+    "",
+    "1. TRIGGER detected (day training wrap-up, injury report, or a change to",
+    "   a key profile parameter) -> call `load_history` to read the CURRENT",
+    "   profile_dynamic and the relevant sessions FIRST.",
+    "2. PROPOSE, never write: emit a `profile_update_confirm` card listing",
+    "   each intended change (field / label / change description / value",
+    "   preview). Do NOT call `update_profile` in this turn.",
+    "3. On the NEXT user turn, if the user confirmed (explicitly or via the",
+    "   confirm bubble action), re-check `load_history` for the current values,",
+    "   merge the confirmed changes, then call `update_profile` and reply with",
+    "   an `audit_complete` card summarizing what was written (updates[] with",
+    "   field/label/count). If the user declined, acknowledge briefly and",
+    "   change nothing.",
+    "4. Only propose changes grounded in real tool data — never invent",
+    "   anchors, limitations, or recovery values.",
+  ].join("\n"),
 };
 
 /**
@@ -192,7 +195,7 @@ function buildSystemPrompt(scenario?: string): string {
     parts.push(guide);
   }
   parts.push(loadUiHintFormatSkill());
-  return parts.join('\n\n');
+  return parts.join("\n\n");
 }
 
 // ---------------------------------------------------------------------------
@@ -244,8 +247,11 @@ export class DeepAgentService implements AgentService {
    * `hasImage`：带图轮次用多模态视觉模型（doubao-seed-2.1-turbo）构建 agent，
    * 与无图（deepseek 文本）实例分开缓存，互不污染。
    */
-  async buildAgent(scenario?: string, hasImage = false): Promise<CompiledStatefulAgent> {
-    const key = `${scenario ?? 'default'}::${hasImage ? 'img' : 'txt'}`;
+  async buildAgent(
+    scenario?: string,
+    hasImage = false,
+  ): Promise<CompiledStatefulAgent> {
+    const key = `${scenario ?? "default"}::${hasImage ? "img" : "txt"}`;
     const existing = this.cached.get(key);
     if (existing) {
       return existing;
@@ -268,7 +274,10 @@ export class DeepAgentService implements AgentService {
    * SkillsMiddleware) are orthogonal and coexist in one `createDeepAgent` call.
    * Tool names do not collide with the built-in filesystem tools.
    */
-  private async assembleAgent(scenario?: string, hasImage = false): Promise<CompiledStatefulAgent> {
+  private async assembleAgent(
+    scenario?: string,
+    hasImage = false,
+  ): Promise<CompiledStatefulAgent> {
     // P006: model loaded via loadModel (no provider hardcoded). 'default' is
     // equivalent to chat/plan/tutorial in current config (same provider+model).
     // hasImage → 多模态视觉模型（doubao-seed-2.1-turbo @ ark），图片直接进模型。
@@ -276,7 +285,9 @@ export class DeepAgentService implements AgentService {
     // image_url 块，若不清洗，带图轮之后的下一个纯文本轮会 400
     // "Model do not support image input"。stripImageMiddleware 在每次模型调用前
     // 把历史消息里的 image 块替换为文字占位（checkpoint 保留原图不丢上下文）。
-    const model = hasImage ? await loadVisionModel() : await loadModel('default');
+    const model = hasImage
+      ? await loadVisionModel()
+      : await loadModel("default");
     const middleware = hasImage ? undefined : [stripImageMiddleware];
 
     // P006: checkpointer injected from M-RT (agent_runtime schema). Ensure the
@@ -304,7 +315,7 @@ export class DeepAgentService implements AgentService {
       // systemPrompt and peeled out by uiHintExtractor instead.
       responseFormat: undefined,
       checkpointer,
-      name: 'starfit-agent',
+      name: "starfit-agent",
       backend: skillMount.backend,
       skills: skillMount.skills,
       permissions: skillMount.permissions,
@@ -363,15 +374,19 @@ export class DeepAgentService implements AgentService {
       const now = new Date();
       const timeContext =
         `[System context] Current time: ${now.toISOString()} ` +
-        `(user local date: ${now.toLocaleDateString('zh-CN', { timeZone: 'Asia/Shanghai' })}, ` +
-        `${now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Shanghai' })}). ` +
+        `(user local date: ${now.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" })}, ` +
+        `${now.toLocaleDateString("en-US", { weekday: "long", timeZone: "Asia/Shanghai" })}). ` +
         'All "today / tomorrow / this week" references and any auto-heal / expiry ' +
-        'dates must be computed from this timestamp.\n\n';
+        "dates must be computed from this timestamp.\n\n";
 
-      const userContent = await buildUserContent(req, timeContext, imageAttachments);
+      const userContent = await buildUserContent(
+        req,
+        timeContext,
+        imageAttachments,
+      );
 
       const result = (await agent.invoke(
-        { messages: [{ role: 'user', content: userContent }] },
+        { messages: [{ role: "user", content: userContent }] },
         {
           configurable: {
             thread_id: threadId,
@@ -383,9 +398,9 @@ export class DeepAgentService implements AgentService {
 
       const finalText = finalAnswerText(result?.messages ?? []);
       if (finalText) {
-        yield { type: 'token', text: finalText };
+        yield { type: "token", text: finalText };
       }
-      yield { type: 'done' };
+      yield { type: "done" };
     } catch (err) {
       yield toErrorEvent(err);
     }
@@ -417,14 +432,19 @@ function extractText(chunk: unknown): string | undefined {
   }
   const message = chunk[0] as AIMessageChunk | undefined;
   const content = message?.content;
-  if (typeof content === 'string') {
+  if (typeof content === "string") {
     return content.length > 0 ? content : undefined;
   }
   // Multimodal content blocks: concatenate any text blocks.
   if (Array.isArray(content)) {
-    let text = '';
+    let text = "";
     for (const block of content) {
-      if (block && typeof block === 'object' && block.type === 'text' && typeof block.text === 'string') {
+      if (
+        block &&
+        typeof block === "object" &&
+        block.type === "text" &&
+        typeof block.text === "string"
+      ) {
         text += block.text;
       }
     }
@@ -457,16 +477,18 @@ function finalAnswerText(messages: unknown[]): string {
     } | null;
     if (!m) continue;
     const isAi =
-      typeof m._getType === 'function' ? m._getType() === 'ai' : m.role === 'assistant';
+      typeof m._getType === "function"
+        ? m._getType() === "ai"
+        : m.role === "assistant";
     if (!isAi) continue;
     const hasTools =
       (Array.isArray(m.tool_calls) && m.tool_calls.length > 0) ||
       (Array.isArray(m.additional_kwargs?.tool_calls) &&
         m.additional_kwargs!.tool_calls!.length > 0);
     if (hasTools) continue;
-    return extractText([m, {}]) ?? '';
+    return extractText([m, {}]) ?? "";
   }
-  return '';
+  return "";
 }
 
 /**
@@ -474,13 +496,37 @@ function finalAnswerText(messages: unknown[]): string {
  * 兼容单对象与数组两种形态。
  */
 function extractImageAttachments(
-  req: ChatRequest
+  req: ChatRequest,
 ): Array<{ mediaId: string; mime?: string }> {
-  const ic = (req.metadata ?? {})['intent_context'] as unknown;
+  const ic = (req.metadata ?? {})["intent_context"] as unknown;
   const items = Array.isArray(ic) ? ic : ic ? [ic] : [];
   return items.filter(
-    (x: any) => x && typeof x === 'object' && x.type === 'image' && x.mediaId
+    (x: any) => x && typeof x === "object" && x.type === "image" && x.mediaId,
   ) as Array<{ mediaId: string; mime?: string }>;
+}
+
+/**
+ * 从请求 metadata.intent_context 提取文件附件（type='file' 且带 textContent 文本）。
+ * 兼容单对象与数组两种形态。
+ */
+function extractFileAttachments(
+  req: ChatRequest,
+): Array<{ title: string; mime?: string; textContent: string }> {
+  const ic = (req.metadata ?? {})["intent_context"] as unknown;
+  const items = Array.isArray(ic) ? ic : ic ? [ic] : [];
+  return items
+    .filter(
+      (x: any) =>
+        x &&
+        typeof x === "object" &&
+        x.type === "file" &&
+        typeof x.textContent === "string",
+    )
+    .map((x: any) => ({
+      title: String(x.title || "附件文件"),
+      mime: typeof x.mime === "string" ? x.mime : undefined,
+      textContent: x.textContent,
+    }));
 }
 
 /**
@@ -491,14 +537,25 @@ function extractImageAttachments(
 async function buildUserContent(
   req: ChatRequest,
   timeContext: string,
-  images: Array<{ mediaId: string; mime?: string }>
+  images: Array<{ mediaId: string; mime?: string }>,
 ): Promise<string | Array<Record<string, unknown>>> {
+  // 文件附件：文本全文注入 user 消息（带文件名），模型可直接读取。
+  const files = extractFileAttachments(req);
+  const fileContext = files
+    .map(
+      (f) =>
+        `\n\n[用户附件文件：${f.title}${f.mime ? ` (${f.mime})` : ""}]\n` +
+        "--- 文件内容开始 ---\n" +
+        f.textContent +
+        "\n--- 文件内容结束 ---\n",
+    )
+    .join("");
   if (images.length === 0) {
-    return `${timeContext}${req.message}`;
+    return `${timeContext}${req.message}${fileContext}`;
   }
-  const { getObject } = await import('../mediaStorage.js');
+  const { getObject } = await import("../mediaStorage.js");
   const blocks: Array<Record<string, unknown>> = [
-    { type: 'text', text: `${timeContext}${req.message}` },
+    { type: "text", text: `${timeContext}${req.message}${fileContext}` },
   ];
   let failed = 0;
   for (const img of images) {
@@ -508,10 +565,10 @@ async function buildUserContent(
         failed++;
         continue;
       }
-      const b64 = Buffer.from(found.content).toString('base64');
-      const mime = img.mime || found.mime || 'image/jpeg';
+      const b64 = Buffer.from(found.content).toString("base64");
+      const mime = img.mime || found.mime || "image/jpeg";
       blocks.push({
-        type: 'image_url',
+        type: "image_url",
         image_url: { url: `data:${mime};base64,${b64}` },
       });
     } catch {
@@ -520,7 +577,7 @@ async function buildUserContent(
   }
   if (failed > 0) {
     blocks.push({
-      type: 'text',
+      type: "text",
       text: `（注意：有 ${failed} 张图片读取失败，无法展示，请如实告知用户。）`,
     });
   }
@@ -532,12 +589,12 @@ function toErrorEvent(err: unknown): AgentEvent {
   const message =
     err instanceof Error
       ? err.message
-      : typeof err === 'string'
+      : typeof err === "string"
         ? err
-        : 'DeepAgentService chat failed';
+        : "DeepAgentService chat failed";
   return {
-    type: 'error',
-    error: { code: 'INTERNAL', message },
+    type: "error",
+    error: { code: "INTERNAL", message },
   };
 }
 
@@ -550,7 +607,7 @@ function toErrorEvent(err: unknown): AgentEvent {
  * 混合 thread 场景）。
  */
 const stripImageMiddleware = createMiddleware({
-  name: 'stripImageForTextModel',
+  name: "stripImageForTextModel",
   wrapModelCall: async (request, handler) => {
     const { messages } = request;
     let touched = false;
@@ -558,22 +615,25 @@ const stripImageMiddleware = createMiddleware({
       const content = (msg as { content?: unknown }).content;
       if (!Array.isArray(content)) return msg;
       const hasImage = content.some(
-        (part) => (part as { type?: string })?.type === 'image_url',
+        (part) => (part as { type?: string })?.type === "image_url",
       );
       if (!hasImage) return msg;
       touched = true;
       const textParts = content
-        .filter((part) => (part as { type?: string })?.type === 'text')
-        .map((part) => (part as { text?: string }).text ?? '');
+        .filter((part) => (part as { type?: string })?.type === "text")
+        .map((part) => (part as { text?: string }).text ?? "");
       return new HumanMessage({
         content:
-          textParts.join('\n') +
-          '\n（此前的图片附件内容已在当时由视觉模型读取并分析，图片本身不再附带。）',
-        additional_kwargs: (msg as { additional_kwargs?: Record<string, unknown> })
-          .additional_kwargs,
+          textParts.join("\n") +
+          "\n（此前的图片附件内容已在当时由视觉模型读取并分析，图片本身不再附带。）",
+        additional_kwargs: (
+          msg as { additional_kwargs?: Record<string, unknown> }
+        ).additional_kwargs,
       });
     });
-    return touched ? handler({ ...request, messages: cleaned }) : handler(request);
+    return touched
+      ? handler({ ...request, messages: cleaned })
+      : handler(request);
   },
 });
 

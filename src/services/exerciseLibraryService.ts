@@ -5,7 +5,7 @@ import { Keys, ExerciseLibraryCache, Exercise } from '@/storage/schemas';
 const EXERCISE_LIBRARY_KEY = Keys.exerciseLibrary;
 const EXERCISE_LIBRARY_META_KEY = Keys.exerciseLibraryMeta;
 const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000;
-const CACHE_VERSION = 3; // Incremented to invalidate old cache (NanoID migration)
+const CACHE_VERSION = 4; // Incremented to invalidate old cache (NanoID migration; v4: sync/pull 通道补齐 targets，作废缺 targets 的旧缓存)
 
 let isSyncing = false;
 let syncError: string | undefined;

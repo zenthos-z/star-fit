@@ -749,11 +749,7 @@ const App: React.FC = () => {
 
   const handleStartSession = () => {
     haptic('medium'); // 主操作：开始训练
-    // If no exercises, clicking START should trigger adding an exercise instead of starting the timer
-    if (session.exercises.length === 0) {
-      handleAddSingleExercise();
-      return;
-    }
+    // 空状态点击「开始」不再直接开动作库：TimerCapsule 会弹分裂菜单（挑选动作/AI 教练/今日计划）
 
     if (session.status === 'idle' || session.status === 'finished') {
       setSession(prev => ({
@@ -1293,55 +1289,45 @@ const App: React.FC = () => {
             onResume={handleResumeSession}
             onOpenManual={() => setShowTimeEditor(true)}
             onEnd={() => handleEndSession()}
+            startOptions={[
+              {
+                key: 'library',
+                label: '挑选动作',
+                icon: (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
+                    <path d="M4 6h16M4 12h16M4 18h10" />
+                  </svg>
+                ),
+                onSelect: handleAddSingleExercise
+              },
+              {
+                key: 'ai-coach',
+                label: 'AI 教练',
+                icon: (
+                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor">
+                    <path d="M12 2L14.85 9.15L22 12L14.85 14.85L12 22L9.15 14.85L2 12L9.15 9.15L12 2Z" />
+                  </svg>
+                ),
+                onSelect: () => {
+                  // 菜单关闭动画先走，再开 AI 浮层（与返回键时序一致的错峰）
+                  setTimeout(() => openAiCoach(), 150);
+                }
+              },
+              ...(nextPlan && Array.isArray(nextPlan) && nextPlan.length > 0 ? [{
+                key: 'next-plan',
+                label: '今日计划',
+                icon: (
+                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
+                    <rect x="3" y="4" width="18" height="18" rx="2" />
+                    <path d="M16 2v4M8 2v4M3 10h18" />
+                  </svg>
+                ),
+                onSelect: handleImportNextPlan
+              }] : [])
+            ]}
           />
 
-          {session.exercises.length === 0 && (
-            <div className="fixed top-1/2 left-1/2 transform -translate-x-1/2 mt-24 flex flex-col gap-4 items-center">
-              {nextPlan && Array.isArray(nextPlan) && nextPlan.length > 0 && (
-                <motion.button
-                  onClick={handleImportNextPlan}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  whileTap={{ scale: 0.95 }}
-                  className="relative group px-8 py-3 rounded-2xl bg-gray-50 hover:bg-gray-100 text-gray-400 hover:text-gray-600 border border-gray-100 overflow-hidden flex items-center gap-3 transition-all duration-300"
-                 >
-                   {/* Subtle AI Shimmer Effect */}
-                   <motion.div
-                     animate={{
-                       left: ['-100%', '200%'],
-                     }}
-                     transition={{
-                       duration: 4,
-                       repeat: Infinity,
-                       ease: "linear",
-                       repeatDelay: 4
-                     }}
-                     className="absolute top-0 w-1/2 h-full bg-gradient-to-r from-transparent via-white/40 to-transparent skew-x-[-25deg] pointer-events-none"
-                   />
-                   
-                   {/* AI Sparkle Icon */}
-                   <svg className="w-3.5 h-3.5 text-star-accent/60 group-hover:text-star-accent group-hover:rotate-12 transition-all" viewBox="0 0 24 24" fill="currentColor">
-                     <path d="M12 2L14.85 9.15L22 12L14.85 14.85L12 22L9.15 14.85L2 12L9.15 9.15L12 2Z" />
-                   </svg>
-                   
-                   <span className="text-[10px] font-black uppercase tracking-[0.2em]">导入计划</span>
-                   
-                   {/* Arrow */}
-                   <motion.svg 
-                     xmlns="http://www.w3.org/2000/svg" 
-                     fill="none" 
-                     viewBox="0 0 24 24" 
-                     strokeWidth={3} 
-                     stroke="currentColor" 
-                     className="w-3.5 h-3.5 opacity-40 group-hover:opacity-60 group-hover:translate-x-0.5 transition-all"
-                   >
-                     <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-                   </motion.svg>
-                 </motion.button>
-               )}
-
-            </div>
-          )}
+          {/* 空状态「导入计划」旧悬浮钮已删：功能吸收进 TimerCapsule 分裂菜单「今日计划」 */}
 
           <MainTabBar
               tab={mainTab}

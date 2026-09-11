@@ -1,5 +1,13 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { haptic } from '../src/lib/nativeHaptics';
+
+export interface StartMenuOption {
+  key: string;
+  label: string;
+  icon: React.ReactNode;
+  onSelect: () => void;
+}
 
 interface TimerCapsuleProps {
   status: 'idle' | 'active' | 'paused' | 'finished';
@@ -11,24 +19,29 @@ interface TimerCapsuleProps {
   onResume: () => void;
   onOpenManual: () => void;
   onEnd: () => void;
+  // 空状态点击「开始运动」时弹出的分裂菜单选项；不传则保持旧行为（直接 onStart）
+  startOptions?: StartMenuOption[];
 }
 
-const TimerCapsule: React.FC<TimerCapsuleProps> = ({ 
-  status, 
-  startTime, 
-  pausedDuration, 
-  hasExercises, 
+const TimerCapsule: React.FC<TimerCapsuleProps> = ({
+  status,
+  startTime,
+  pausedDuration,
+  hasExercises,
   onStart,
   onPause,
   onResume,
   onOpenManual,
-  onEnd
+  onEnd,
+  startOptions
 }) => {
   const [displayTime, setDisplayTime] = useState("00:00");
   const [textIndex, setTextIndex] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
   const requestRef = useRef<number | null>(null);
 
   const isCentered = status === 'idle' && !hasExercises;
+  const hasMenu = !!startOptions && startOptions.length > 0;
 
   // Text rotation for idle state without exercises
   useEffect(() => {
@@ -41,6 +54,22 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
       setTextIndex(0);
     }
   }, [isCentered]);
+
+  // 离开空状态时自动收起菜单（如选项动作添加了卡片）
+  useEffect(() => {
+    if (!isCentered && menuOpen) setMenuOpen(false);
+  }, [isCentered, menuOpen]);
+
+  // 硬件返回键：菜单打开时拦截一层，只关菜单
+  useEffect(() => {
+    if (!menuOpen) return;
+    const onBack = (e: Event) => {
+      e.preventDefault();
+      setMenuOpen(false);
+    };
+    window.addEventListener('starfit-back-button', onBack);
+    return () => window.removeEventListener('starfit-back-button', onBack);
+  }, [menuOpen]);
 
   useEffect(() => {
     if (status !== 'active') {
@@ -85,6 +114,15 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
 
   const idleLabels = ["开始运动", "添加动作"];
 
+  const handleCapsuleTap = () => {
+    if (isCentered && hasMenu) {
+      haptic('medium'); // 主操作：唤出开始菜单
+      setMenuOpen(true);
+      return;
+    }
+    onStart();
+  };
+
   return (
     <div className="fixed inset-0 z-50 pointer-events-none flex items-start justify-center">
       <motion.div
@@ -92,7 +130,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
         animate={{
           y: isCentered ? '50vh' : 'calc(var(--safe-top) + 12px)',
           translateY: isCentered ? '-50%' : '0%',
-          scale: isCentered ? 1.05 : 1,
+          scale: isCentered ? (menuOpen ? 0.96 : 1.05) : 1,
         }}
         transition={springConfig}
         className="pointer-events-auto origin-center"
@@ -116,7 +154,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
             WebkitMaskImage: '-webkit-radial-gradient(white, black)',
             maskImage: 'radial-gradient(white, black)',
           }}
-          onClick={status === 'idle' ? onStart : undefined}
+          onClick={status === 'idle' ? handleCapsuleTap : undefined}
           animate={{
             width: status === 'idle' ? 208 : (isPaused ? 320 : 180),
             height: 64,
@@ -196,7 +234,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                         <span className="relative inline-flex w-2 h-2 rounded-full bg-green-400" />
                       </span>
                     )}
-                    <span 
+                    <span
                       style={{ fontFeatureSettings: "'tnum'", fontWeight: 600 }}
                       className={`
                         font-mono font-semibold text-4xl tracking-tight
@@ -219,7 +257,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                       exit={{ opacity: 0, x: 20 }}
                       className="absolute right-3"
                     >
-                      <button 
+                      <button
                         onClick={onResume}
                         className="w-12 h-12 rounded-full flex items-center justify-center text-blue-400 hover:bg-blue-400/10 active:scale-90 transition-all"
                       >
@@ -235,6 +273,51 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
           </AnimatePresence>
         </motion.div>
       </motion.div>
+
+      {/* 空状态分裂菜单：从胶囊下方错峰弹出，同 frost-lens 玻璃药丸 */}
+      <AnimatePresence>
+        {menuOpen && isCentered && hasMenu && (
+          <>
+            <motion.div
+              key="start-menu-backdrop"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="absolute inset-0 bg-black/20 pointer-events-auto"
+              onClick={() => setMenuOpen(false)}
+            />
+            {/* 菜单顶边 = 胶囊底边（50vh + 32px）+ 12px 间距 */}
+            <div
+              key="start-menu"
+              className="absolute left-1/2 pointer-events-auto flex flex-col gap-2.5"
+              style={{ top: 'calc(50vh + 44px)', transform: 'translateX(-50%)' }}
+            >
+              {startOptions!.map((opt, i) => (
+                <motion.button
+                  key={opt.key}
+                  initial={{ opacity: 0, scale: 0.6, y: -28 }}
+                  animate={{ opacity: 1, scale: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.6, y: -28, transition: { duration: 0.12 } }}
+                  transition={{ type: 'spring', stiffness: 420, damping: 26, mass: 0.9, delay: i * 0.05 }}
+                  whileTap={{ scale: 0.95 }}
+                  onClick={() => {
+                    haptic('light');
+                    setMenuOpen(false);
+                    opt.onSelect();
+                  }}
+                  className="frost-lens relative w-[208px] h-[56px] rounded-full flex items-center gap-3 px-4"
+                >
+                  <span className="w-8 h-8 rounded-full bg-black/[0.05] flex items-center justify-center text-gray-700 shrink-0">
+                    {opt.icon}
+                  </span>
+                  <span className="text-[15px] font-semibold text-gray-900">{opt.label}</span>
+                </motion.button>
+              ))}
+            </div>
+          </>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

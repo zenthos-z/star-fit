@@ -18,9 +18,17 @@
  * @version 3.0.0 - PostgreSQL Migration
  */
 
-import { getPostgresClient, type PostgresClient } from '../db/postgresql/client/postgres-client.js';
-import { CacheService } from './cacheService.js';
-import { getNowISO } from '../utils/timestamp.js';
+import {
+  getPostgresClient,
+  type PostgresClient,
+} from "../db/postgresql/client/postgres-client.js";
+import { CacheService } from "./cacheService.js";
+import { getNowISO } from "../utils/timestamp.js";
+import { parseJSONSafe } from "../types/validation.js";
+import {
+  parseTargets,
+  parseEquipmentRequired,
+} from "./exerciseLibraryService.js";
 
 // ============================================
 // Types
@@ -101,14 +109,16 @@ export const KnowledgeRepo = {
         name: ex.name,
         exerciseType: ex.exercise_type,
         // Map targets string to attributes JSONB structure
-        attributes: JSON.stringify({ targets: ex.targets ? JSON.parse(ex.targets) : {} }),
+        attributes: JSON.stringify({
+          targets: ex.targets ? JSON.parse(ex.targets) : {},
+        }),
         contentHtml: ex.content_html || null,
         // Map assets_json string to tutorials JSONB structure
-        tutorials: ex.assets_json || '{}',
+        tutorials: ex.assets_json || "{}",
         tagsJson: ex.tags_json || null,
         assetsJson: ex.assets_json || null,
-        updatedAt: getNowISO()
-      }
+        updatedAt: getNowISO(),
+      },
     );
 
     // Invalidate exercise list cache
@@ -117,7 +127,7 @@ export const KnowledgeRepo = {
 
   deleteExercise: async (id: string): Promise<void> => {
     const client = KnowledgeRepo.getClient();
-    await client.query('DELETE FROM exercises WHERE id = $id', { id });
+    await client.query("DELETE FROM exercises WHERE id = $id", { id });
     await CacheService.del(CacheService.keys.exerciseList());
   },
 
@@ -125,10 +135,26 @@ export const KnowledgeRepo = {
     const client = KnowledgeRepo.getClient();
     const sinceDate = new Date(since);
     const rows = await client.queryMany(
-      'SELECT * FROM exercises WHERE updated_at > $since ORDER BY updated_at DESC',
-      { since: sinceDate }
+      "SELECT * FROM exercises WHERE updated_at > $since ORDER BY updated_at DESC",
+      { since: sinceDate },
     );
-    return rows;
+    // 与 exerciseController.getAllExercises 同款：从 attributes JSONB 提取
+    // targets/equipment_required 平铺到顶层。sync/pull 通道若不提取，
+    // 前端动作库缓存会缺分组依据（targets），导致打开动作库全部落入「其他」分组。
+    return rows.map((ex) => {
+      const attributes =
+        parseJSONSafe<Record<string, any>>(
+          ex.attributes,
+          "exercise attributes",
+        ) || {};
+      return {
+        ...ex,
+        targets: parseTargets(attributes.targets),
+        equipment_required: parseEquipmentRequired(
+          attributes.equipment_required,
+        ),
+      };
+    });
   },
 
   getAllExercises: async (): Promise<any[]> => {
@@ -137,18 +163,23 @@ export const KnowledgeRepo = {
     if (cached) return cached as any[];
 
     const client = KnowledgeRepo.getClient();
-    const rows = await client.queryMany('SELECT * FROM exercises ORDER BY name');
+    const rows = await client.queryMany(
+      "SELECT * FROM exercises ORDER BY name",
+    );
     await CacheService.set(cacheKey, rows, 3600); // Cache for 1 hour
     return rows;
   },
 
   // Guidance
-  upsertGuidance: async (userId: string, doc: {
-    key: string;
-    version: number;
-    content_md: string;
-    meta_json: string;
-  }): Promise<void> => {
+  upsertGuidance: async (
+    userId: string,
+    doc: {
+      key: string;
+      version: number;
+      content_md: string;
+      meta_json: string;
+    },
+  ): Promise<void> => {
     const client = KnowledgeRepo.getClient();
     await client.query(
       `INSERT INTO guidance (user_id, key, version, content_md, meta_json, updated_at)
@@ -164,8 +195,8 @@ export const KnowledgeRepo = {
         version: doc.version,
         contentMd: doc.content_md || null,
         metaJson: doc.meta_json || null,
-        updatedAt: getNowISO()
-      }
+        updatedAt: getNowISO(),
+      },
     );
 
     await CacheService.del(CacheService.keys.guidance(userId));
@@ -175,8 +206,8 @@ export const KnowledgeRepo = {
     const client = KnowledgeRepo.getClient();
     const sinceDate = new Date(since);
     const rows = await client.queryMany(
-      'SELECT * FROM guidance WHERE user_id = $userId AND updated_at > $since ORDER BY updated_at DESC',
-      { userId, since: sinceDate }
+      "SELECT * FROM guidance WHERE user_id = $userId AND updated_at > $since ORDER BY updated_at DESC",
+      { userId, since: sinceDate },
     );
     return rows;
   },
@@ -188,12 +219,12 @@ export const KnowledgeRepo = {
 
     const client = KnowledgeRepo.getClient();
     const rows = await client.queryMany(
-      'SELECT * FROM guidance WHERE user_id = $userId ORDER BY key',
-      { userId }
+      "SELECT * FROM guidance WHERE user_id = $userId ORDER BY key",
+      { userId },
     );
     await CacheService.set(cacheKey, rows, 1800); // 30 mins
     return rows;
-  }
+  },
 };
 
 // ============================================
@@ -220,15 +251,18 @@ export const ConfigRepo = {
         userId,
         key,
         valueJson: JSON.stringify(value),
-        updatedAt: getNowISO()
-      }
+        updatedAt: getNowISO(),
+      },
     );
 
     await CacheService.del(CacheService.keys.configs(userId));
   },
 
   getConfig: async (userId: string, key: string): Promise<any> => {
-    const configs = await ConfigRepo.getAllConfigs(userId) as Record<string, any>;
+    const configs = (await ConfigRepo.getAllConfigs(userId)) as Record<
+      string,
+      any
+    >;
     return configs[key] || null;
   },
 
@@ -239,12 +273,12 @@ export const ConfigRepo = {
 
     const client = ConfigRepo.getClient();
     const rows = await client.queryMany<{ key: string; value_json: any }>(
-      'SELECT key, value_json FROM app_configs WHERE user_id = $userId',
-      { userId }
+      "SELECT key, value_json FROM app_configs WHERE user_id = $userId",
+      { userId },
     );
 
     const out: Record<string, any> = {};
-    rows.forEach(r => {
+    rows.forEach((r) => {
       // pg library automatically parses JSONB values:
       // - JSON objects → JS objects
       // - JSON strings → JS strings (already unquoted)
@@ -257,7 +291,11 @@ export const ConfigRepo = {
     return out;
   },
 
-  setStyleParam: async (userId: string, styleKey: string, params: any): Promise<void> => {
+  setStyleParam: async (
+    userId: string,
+    styleKey: string,
+    params: any,
+  ): Promise<void> => {
     const client = ConfigRepo.getClient();
     await client.query(
       `INSERT INTO prompt_style_configs (user_id, style_key, parameters_json, updated_at)
@@ -269,8 +307,8 @@ export const ConfigRepo = {
         userId,
         styleKey,
         parametersJson: JSON.stringify(params),
-        updatedAt: getNowISO()
-      }
+        updatedAt: getNowISO(),
+      },
     );
 
     await CacheService.del(CacheService.keys.styleParams(userId, styleKey));
@@ -283,8 +321,8 @@ export const ConfigRepo = {
 
     const client = ConfigRepo.getClient();
     const row = await client.queryOne<{ parameters_json: any }>(
-      'SELECT parameters_json FROM prompt_style_configs WHERE user_id = $userId AND style_key = $styleKey',
-      { userId, styleKey }
+      "SELECT parameters_json FROM prompt_style_configs WHERE user_id = $userId AND style_key = $styleKey",
+      { userId, styleKey },
     );
 
     const out = row ? row.parameters_json : {};
@@ -293,22 +331,28 @@ export const ConfigRepo = {
     return out;
   },
 
-  getConfigsAfter: async (userId: string, since: number): Promise<{ app: any[]; styles: any[] }> => {
+  getConfigsAfter: async (
+    userId: string,
+    since: number,
+  ): Promise<{ app: any[]; styles: any[] }> => {
     const client = ConfigRepo.getClient();
     const sinceDate = new Date(since);
 
     const app = await client.queryMany<{ key: string; value_json: any }>(
-      'SELECT key, value_json FROM app_configs WHERE user_id = $userId AND updated_at > $since',
-      { userId, since: sinceDate }
+      "SELECT key, value_json FROM app_configs WHERE user_id = $userId AND updated_at > $since",
+      { userId, since: sinceDate },
     );
 
-    const styles = await client.queryMany<{ style_key: string; parameters_json: any }>(
-      'SELECT style_key, parameters_json FROM prompt_style_configs WHERE user_id = $userId AND updated_at > $since',
-      { userId, since: sinceDate }
+    const styles = await client.queryMany<{
+      style_key: string;
+      parameters_json: any;
+    }>(
+      "SELECT style_key, parameters_json FROM prompt_style_configs WHERE user_id = $userId AND updated_at > $since",
+      { userId, since: sinceDate },
     );
 
     return { app, styles };
-  }
+  },
 };
 
 // ============================================
@@ -323,12 +367,15 @@ export const CacheRepo = {
     return getPostgresClient();
   },
 
-  getHistorySummary: async (deviceId: string, lastSessionId: string): Promise<string | null> => {
+  getHistorySummary: async (
+    deviceId: string,
+    lastSessionId: string,
+  ): Promise<string | null> => {
     const client = CacheRepo.getClient();
 
     const user = await client.queryOne<{ id: string }>(
-      'SELECT id FROM users WHERE device_id = $deviceId',
-      { deviceId }
+      "SELECT id FROM users WHERE device_id = $deviceId",
+      { deviceId },
     );
 
     if (!user) return null;
@@ -338,8 +385,8 @@ export const CacheRepo = {
     if (cached) return cached as string;
 
     const row = await client.queryOne<{ summary_text: string }>(
-      'SELECT summary_text FROM cache_history_summaries WHERE user_id = $userId AND last_session_id = $lastSessionId',
-      { userId: user.id, lastSessionId }
+      "SELECT summary_text FROM cache_history_summaries WHERE user_id = $userId AND last_session_id = $lastSessionId",
+      { userId: user.id, lastSessionId },
     );
 
     if (row) {
@@ -349,12 +396,16 @@ export const CacheRepo = {
     return null;
   },
 
-  setHistorySummary: async (deviceId: string, lastSessionId: string, summary: string): Promise<void> => {
+  setHistorySummary: async (
+    deviceId: string,
+    lastSessionId: string,
+    summary: string,
+  ): Promise<void> => {
     const client = CacheRepo.getClient();
 
     const user = await client.queryOne<{ id: string }>(
-      'SELECT id FROM users WHERE device_id = $deviceId',
-      { deviceId }
+      "SELECT id FROM users WHERE device_id = $deviceId",
+      { deviceId },
     );
 
     if (!user) return;
@@ -370,19 +421,23 @@ export const CacheRepo = {
         userId: user.id,
         lastSessionId,
         summary,
-        updatedAt: getNowISO()
-      }
+        updatedAt: getNowISO(),
+      },
     );
 
-    await CacheService.set(CacheService.keys.historySummary(user.id, lastSessionId), summary, 86400);
+    await CacheService.set(
+      CacheService.keys.historySummary(user.id, lastSessionId),
+      summary,
+      86400,
+    );
   },
 
   getRpeStats: async (deviceId: string, exerciseName: string): Promise<any> => {
     const client = CacheRepo.getClient();
 
     const user = await client.queryOne<{ id: string }>(
-      'SELECT id FROM users WHERE device_id = $deviceId',
-      { deviceId }
+      "SELECT id FROM users WHERE device_id = $deviceId",
+      { deviceId },
     );
 
     if (!user) return null;
@@ -392,8 +447,8 @@ export const CacheRepo = {
     if (cached) return cached;
 
     const row = await client.queryOne<{ stats_json: any }>(
-      'SELECT stats_json FROM cache_rpe_stats WHERE user_id = $userId AND exercise_name = $exerciseName',
-      { userId: user.id, exerciseName }
+      "SELECT stats_json FROM cache_rpe_stats WHERE user_id = $userId AND exercise_name = $exerciseName",
+      { userId: user.id, exerciseName },
     );
 
     if (row) {
@@ -404,12 +459,16 @@ export const CacheRepo = {
     return null;
   },
 
-  setRpeStats: async (deviceId: string, exerciseName: string, stats: any): Promise<void> => {
+  setRpeStats: async (
+    deviceId: string,
+    exerciseName: string,
+    stats: any,
+  ): Promise<void> => {
     const client = CacheRepo.getClient();
 
     const user = await client.queryOne<{ id: string }>(
-      'SELECT id FROM users WHERE device_id = $deviceId',
-      { deviceId }
+      "SELECT id FROM users WHERE device_id = $deviceId",
+      { deviceId },
     );
 
     if (!user) return;
@@ -424,10 +483,14 @@ export const CacheRepo = {
         userId: user.id,
         exerciseName,
         statsJson: JSON.stringify(stats),
-        updatedAt: getNowISO()
-      }
+        updatedAt: getNowISO(),
+      },
     );
 
-    await CacheService.set(CacheService.keys.rpeStats(user.id, exerciseName), stats, 3600);
-  }
+    await CacheService.set(
+      CacheService.keys.rpeStats(user.id, exerciseName),
+      stats,
+      3600,
+    );
+  },
 };

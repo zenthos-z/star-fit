@@ -38,7 +38,7 @@ services:
       # policy before exiting for a true container self-restart.
       - ./docker-compose.yml:/app/backend/docker-compose.yml:ro
     healthcheck:
-      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:43111/api/ping"]
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:43111/health"]
       interval: 10s
       timeout: 5s
       retries: 5

@@ -141,7 +141,7 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
   }, []);
 
   const handleScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
-    setIsScrolled(e.currentTarget.scrollTop > 8);
+    setIsScrolled(e.currentTarget.scrollTop > 30);
   }, []);
 
   /**
@@ -306,33 +306,40 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
       }}
       className="fixed inset-0 z-[70] bg-star-gray flex flex-col overflow-hidden"
     >
-      {/* iOS Large Title 导航栏 — 与 History 页同规格：滚动折叠居中小标题 */}
+      {/* iOS Large Title 导航栏 — History 页同规格：未滚动时大标题与按钮同行垂直居中；滚动折叠、居中小标题淡入 */}
       <div
-        className="sticky top-0 z-20 bg-star-gray/85 backdrop-blur-md"
-        style={{ paddingTop: 'calc(var(--safe-top, 0px) + 4px)' }}
+        className="sticky top-0 z-20 px-4 bg-star-gray/85 backdrop-blur-md transition-all duration-200 flex items-center justify-between"
+        style={{ paddingTop: 'calc(var(--safe-top, 0px) + 4px)', paddingBottom: '10px', marginBottom: isScrolled ? 0 : 16 }}
       >
-        <div className="relative flex items-center h-11 px-4">
-            {/* HIG：返回钮左上角，44pt 命中区 */}
-            <button
-              onClick={handleBack}
-              aria-label="返回"
-              className="flex items-center -ml-2 pr-3 text-star-accent active:opacity-50 transition-opacity"
-            >
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-7 h-7">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-              </svg>
-            </button>
-            {/* 折叠居中小标题（滚动后淡入） */}
-            <span
-              className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-star-dark transition-opacity duration-200 pointer-events-none"
-              style={{ opacity: isScrolled ? 1 : 0 }}
-              aria-hidden={!isScrolled}
-            >
-              动作库
-            </span>
+          {/* 返回钮 — 项目标准导航按钮：44pt 白底正圆 + 灰图标（History「···」同规格） */}
+          <button
+            onClick={handleBack}
+            aria-label="返回"
+            className="w-11 h-11 shrink-0 rounded-full bg-white shadow-sm flex items-center justify-center text-gray-600 active:scale-90 transition-all"
+          >
+            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+          {/* Large Title — 与按钮同行垂直居中（History 页同规格），滚动时折叠 */}
+          <h2
+            className="ml-3 text-[34px] leading-[41px] font-bold text-star-dark tracking-tight transition-all duration-200 overflow-hidden"
+            style={{ opacity: isScrolled ? 0 : 1, maxHeight: isScrolled ? 0 : 41 }}
+            aria-hidden={isScrolled}
+          >
+            动作库
+          </h2>
+          {/* 折叠居中小标题（滚动后淡入） */}
+          <span
+            className="absolute left-1/2 -translate-x-1/2 text-[17px] font-semibold text-star-dark transition-opacity duration-200 pointer-events-none"
+            style={{ opacity: isScrolled ? 1 : 0 }}
+            aria-hidden={!isScrolled}
+          >
+            动作库
+          </span>
 
-            {/* HIG：动作与状态贴近——「最近更新 + 更新钮」一体放在导航栏右侧 */}
-            <div className="ml-auto flex items-center gap-2">
+          {/* HIG：动作与状态贴近——「最近更新 + 更新钮」一体放在导航栏右侧 */}
+          <div className="ml-auto flex items-center gap-2">
                 <span
                   className={`text-xs whitespace-nowrap ${
                     showSyncError
@@ -351,21 +358,12 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
                     onClick={handleRefresh}
                     disabled={isRefreshing}
                     aria-label="更新动作库"
-                    className="w-9 h-9 rounded-full bg-white shadow-sm text-gray-500 flex items-center justify-center active:scale-90 transition-transform disabled:opacity-50"
+                    className="w-11 h-11 rounded-full bg-white shadow-sm text-gray-500 flex items-center justify-center active:scale-90 transition-transform disabled:opacity-50"
                   >
                     <RefreshCw size={17} className={isRefreshing ? 'animate-spin' : ''} />
                   </button>
                 )}
-            </div>
-        </div>
-
-        {/* Large Title — 滚动时折叠（History 页同规格） */}
-        <h2
-          className="px-4 text-[34px] leading-[41px] font-black text-star-dark tracking-tight transition-all duration-200 overflow-hidden"
-          style={{ opacity: isScrolled ? 0 : 1, maxHeight: isScrolled ? 0 : 60, marginBottom: isScrolled ? 0 : 8 }}
-        >
-          动作库
-        </h2>
+          </div>
       </div>
 
       {/* Search — iOS 风格圆角灰底搜索框 */}

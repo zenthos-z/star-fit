@@ -30,10 +30,13 @@ export const transitions = {
   slower: { duration: 0.5, ease: [0.4, 0, 0.2, 1] },
   spring: { type: 'spring' as const, stiffness: 300, damping: 25 },
   springGentle: { type: 'spring' as const, stiffness: 200, damping: 20 },
-  springBouncy: { type: 'spring' as const, stiffness: 400, damping: 15 },
   springStiff: { type: 'spring' as const, stiffness: 400, damping: 38, mass: 1 },
   /** 布局切换弹簧（卡片形态切换/拖拽跟手）：欠阻尼 ζ≈0.65，Apple 手感基准 */
   springSmooth: { type: 'spring' as const, stiffness: 400, damping: 30, mass: 0.8 },
+  /** iOS push 级页面转场（全屏面板滑入/滑出）：UINavigationTransition 曲线基准 */
+  springPush: { type: 'spring' as const, stiffness: 340, damping: 34, mass: 1 },
+  /** iOS sheet 呈现（底部滑入/滑出）：与 AICoachOverlay 等全屏页同一曲线，全 App 统一进出场 */
+  sheet: { duration: 0.42, ease: [0.32, 0.72, 0, 1] },
 } as const;
 
 // ============================================

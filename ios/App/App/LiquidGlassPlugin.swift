@@ -26,6 +26,8 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "hideTabBar", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "showMenu", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "hideMenu", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "setMenuItems", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "clearMenuItems", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "setLens", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "setLabel", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "hideLens", returnType: CAPPluginReturnNone)
@@ -202,10 +204,11 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    // MARK: - 旧桥兼容（no-op，迁移期保留）
-
-    @objc func showMenu(_ call: CAPPluginCall) { call.resolve() }
-    @objc func hideMenu(_ call: CAPPluginCall) { call.resolve() }
+    // MARK: - 原生 Liquid Glass 菜单（点按触发，官方组件 UIButton.showsMenuAsPrimaryAction）
+    //
+    // showMenu/hideMenu 实现在 LiquidGlassMenuSection.swift：
+    // 透明锚点按钮挂在 bridge.viewController.view 层级，坐标经 convert(_:from:) 换算，
+    // 点按弹系统 UIMenu（Liquid Glass 材质）。旧的 context menu 长按管线已整体废弃。
     @objc func setLens(_ call: CAPPluginCall) { call.resolve() }
     @objc func setLabel(_ call: CAPPluginCall) { call.resolve() }
     @objc func hideLens(_ call: CAPPluginCall) { call.resolve() }
