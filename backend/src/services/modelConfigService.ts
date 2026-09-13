@@ -6,7 +6,7 @@ import { ProxyAgent, request } from "undici";
 // default provider. Gemini remains an ordinary selectable option but is no
 // longer the default for anything.
 export const KNOWN_PROVIDERS = ["gemini", "openai", "deepseek", "glm"] as const;
-export type Provider = typeof KNOWN_PROVIDERS[number];
+export type Provider = (typeof KNOWN_PROVIDERS)[number];
 
 /**
  * Raised when a resolved provider is not in KNOWN_PROVIDERS (P012 vacuity probe).
@@ -15,7 +15,9 @@ export type Provider = typeof KNOWN_PROVIDERS[number];
 export class UnknownProviderError extends Error {
   readonly code = "UNKNOWN_PROVIDER" as const;
   constructor(provider: string) {
-    super(`Unknown AI provider: "${provider}". Expected one of: ${KNOWN_PROVIDERS.join(", ")}`);
+    super(
+      `Unknown AI provider: "${provider}". Expected one of: ${KNOWN_PROVIDERS.join(", ")}`,
+    );
     this.name = "UnknownProviderError";
   }
 }
@@ -45,7 +47,9 @@ export class MissingApiKeyError extends Error {
   }
 }
 
-export function assertKnownProvider(provider: string): asserts provider is Provider {
+export function assertKnownProvider(
+  provider: string,
+): asserts provider is Provider {
   if (!isKnownProvider(provider)) {
     throw new UnknownProviderError(provider);
   }
@@ -85,8 +89,8 @@ export interface AllModelConfigs {
 }
 
 // Image generation model configuration (separate from Agent LLM)
-export const IMAGE_PROVIDERS = ["dmx", "openai"] as const;
-export type ImageProvider = typeof IMAGE_PROVIDERS[number];
+export const IMAGE_PROVIDERS = ["dmx", "openai", "gemini"] as const;
+export type ImageProvider = (typeof IMAGE_PROVIDERS)[number];
 
 export interface ImageModelConfig {
   provider: ImageProvider;
@@ -105,7 +109,7 @@ const GEMINI_MODELS = [
   "gemini-2.5-pro",
   "gemini-2.0-flash",
   "gemini-1.5-pro",
-  "gemini-1.5-flash"
+  "gemini-1.5-flash",
 ];
 
 const OPENAI_MODELS = [
@@ -113,7 +117,7 @@ const OPENAI_MODELS = [
   "gpt-4o",
   "gpt-4-turbo",
   "gpt-4",
-  "gpt-3.5-turbo"
+  "gpt-3.5-turbo",
 ];
 
 // Default configurations
@@ -127,7 +131,8 @@ const DEFAULT_BASE_URL = "https://api.openai.com/v1";
 // DeepSeek API users can override both via env (DEEPSEEK_MODEL_FLASH /
 // DEEPSEEK_BASE_URL) or the admin DB config (DB > env > default).
 export const DEFAULT_DEEPSEEK_FLASH = "deepseek-v4-flash-ga-260731";
-const DEFAULT_DEEPSEEK_BASE_URL = "https://ark.cn-beijing.volces.com/api/coding/v3";
+const DEFAULT_DEEPSEEK_BASE_URL =
+  "https://ark.cn-beijing.volces.com/api/coding/v3";
 const DEEPSEEK_MODELS = [DEFAULT_DEEPSEEK_FLASH, "deepseek-v4-pro"];
 
 // ----------------------------------------------------------------------------
@@ -147,7 +152,7 @@ const DEFAULT_IMAGE_BASE_URL = "";
 const DEFAULT_IMAGE_PROVIDER = "dmx";
 const IMAGE_MODELS: Record<string, string[]> = {
   dmx: [],
-  openai: ["dall-e-3", "dall-e-2"]
+  openai: ["dall-e-3", "dall-e-2"],
 };
 
 export interface DeepSeekModelConfig {
@@ -166,7 +171,9 @@ export interface GLMModelConfig {
  * Keys: GLM_MODEL (default "glm-5.3-flash"), GLM_BASE_URL
  * (default https://api.z.ai/api/paas/v4). OpenAI-compatible chat/completions.
  */
-export async function resolveGLMModel(task: string = "default"): Promise<GLMModelConfig> {
+export async function resolveGLMModel(
+  task: string = "default",
+): Promise<GLMModelConfig> {
   const taskUpper = task.toUpperCase();
 
   // DB > env, task-scoped first (GLM_MODEL_<TASK>), then global (GLM_MODEL).
@@ -175,7 +182,12 @@ export async function resolveGLMModel(task: string = "default"): Promise<GLMMode
   const globalModelDb = await safeGetConfig("GLM_MODEL");
   const globalModelEnv = process.env.GLM_MODEL?.trim();
 
-  const model = taskModelDb || taskModelEnv || globalModelDb || globalModelEnv || DEFAULT_GLM_MODEL;
+  const model =
+    taskModelDb ||
+    taskModelEnv ||
+    globalModelDb ||
+    globalModelEnv ||
+    DEFAULT_GLM_MODEL;
 
   const baseURL =
     (await safeGetConfig("GLM_BASE_URL")) ||
@@ -193,9 +205,10 @@ export async function resolveGLMModel(task: string = "default"): Promise<GLMMode
  * thinking is always false (DeepSeek reasoning toggled off by default).
  */
 export async function resolveDeepSeekModel(
-  tier: "flash" | "pro" = "flash"
+  tier: "flash" | "pro" = "flash",
 ): Promise<DeepSeekModelConfig> {
-  const modelKey = tier === "pro" ? "DEEPSEEK_MODEL_PRO" : "DEEPSEEK_MODEL_FLASH";
+  const modelKey =
+    tier === "pro" ? "DEEPSEEK_MODEL_PRO" : "DEEPSEEK_MODEL_FLASH";
 
   const dbModel = await safeGetConfig(modelKey);
   const envModel = process.env[modelKey]?.trim();
@@ -215,7 +228,9 @@ export async function resolveDeepSeekModel(
  * Resolve the effective provider for a scenario. GLM is the final fallback
  * (single source of truth with resolveTaskConfig / modelRouter / getProxyConfig).
  */
-export async function resolveDefaultedProvider(scenario: string = "default"): Promise<string> {
+export async function resolveDefaultedProvider(
+  scenario: string = "default",
+): Promise<string> {
   const taskUpper = scenario.toUpperCase();
   const dbTask = await safeGetConfig(`AI_PROVIDER_${taskUpper}`);
   if (dbTask) {
@@ -266,7 +281,9 @@ async function getBaseURL(): Promise<string> {
  * Resolve configuration for a single task with source tracking
  * Priority: DB > Env > Default
  */
-export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSource> {
+export async function resolveTaskConfig(
+  task: string,
+): Promise<ModelConfigWithSource> {
   const taskUpper = task.toUpperCase();
 
   // Provider resolution
@@ -276,18 +293,21 @@ export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSo
   const providerDbKey = `AI_PROVIDER_${taskUpper}`;
   const dbProvider = await ConfigRepo.getConfig("system", providerDbKey);
   if (dbProvider) {
-    provider = (dbProvider.trim() as Provider);
+    provider = dbProvider.trim() as Provider;
     providerSource = "db";
   } else if (process.env[providerDbKey]) {
-    provider = (process.env[providerDbKey]!.trim() as Provider);
+    provider = process.env[providerDbKey]!.trim() as Provider;
     providerSource = "env";
   } else {
-    const globalDbProvider = await ConfigRepo.getConfig("system", "AI_PROVIDER");
+    const globalDbProvider = await ConfigRepo.getConfig(
+      "system",
+      "AI_PROVIDER",
+    );
     if (globalDbProvider) {
-      provider = (globalDbProvider.trim() as Provider);
+      provider = globalDbProvider.trim() as Provider;
       providerSource = "db";
     } else if (process.env.AI_PROVIDER) {
-      provider = (process.env.AI_PROVIDER.trim() as Provider);
+      provider = process.env.AI_PROVIDER.trim() as Provider;
       providerSource = "env";
     } else {
       provider = "glm";
@@ -309,7 +329,10 @@ export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSo
       model = process.env[modelDbKey]!.trim();
       modelSource = "env";
     } else {
-      const globalDbModel = await ConfigRepo.getConfig("system", "GEMINI_MODEL");
+      const globalDbModel = await ConfigRepo.getConfig(
+        "system",
+        "GEMINI_MODEL",
+      );
       if (globalDbModel) {
         model = globalDbModel.trim();
         modelSource = "db";
@@ -377,7 +400,10 @@ export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSo
       model = process.env[modelDbKey]!.trim();
       modelSource = "env";
     } else {
-      const globalDbModel = await ConfigRepo.getConfig("system", "OPENAI_MODEL");
+      const globalDbModel = await ConfigRepo.getConfig(
+        "system",
+        "OPENAI_MODEL",
+      );
       if (globalDbModel) {
         model = globalDbModel.trim();
         modelSource = "db";
@@ -450,11 +476,11 @@ export async function resolveTaskConfig(task: string): Promise<ModelConfigWithSo
  * Get all model configurations
  */
 export async function getAllConfigs(): Promise<AllModelConfigs> {
-  console.log('[ModelConfigService] Getting all configs...');
+  console.log("[ModelConfigService] Getting all configs...");
 
-  console.log('[ModelConfigService] Resolving default config...');
+  console.log("[ModelConfigService] Resolving default config...");
   const defaultConfig = await resolveTaskConfig("default");
-  console.log('[ModelConfigService] Default config resolved:', defaultConfig);
+  console.log("[ModelConfigService] Default config resolved:", defaultConfig);
 
   return { default: defaultConfig };
 }
@@ -464,7 +490,7 @@ export async function getAllConfigs(): Promise<AllModelConfigs> {
  */
 export async function updateTaskConfig(
   task: string,
-  config: ModelConfig
+  config: ModelConfig,
 ): Promise<void> {
   const taskUpper = task.toUpperCase();
 
@@ -508,7 +534,11 @@ export async function testConnection(config: ModelConfig): Promise<{
   const start = Date.now();
 
   try {
-    if (config.provider === "openai" || config.provider === "deepseek" || config.provider === "glm") {
+    if (
+      config.provider === "openai" ||
+      config.provider === "deepseek" ||
+      config.provider === "glm"
+    ) {
       const isDeepSeek = config.provider === "deepseek";
       const isGLM = config.provider === "glm";
       const apiKey = await getApiKey(config.provider);
@@ -519,7 +549,7 @@ export async function testConnection(config: ModelConfig): Promise<{
             ? "DeepSeek API Key not configured"
             : isGLM
               ? "GLM API Key not configured"
-              : "OpenAI API Key not configured"
+              : "OpenAI API Key not configured",
         };
       }
 
@@ -534,16 +564,16 @@ export async function testConnection(config: ModelConfig): Promise<{
       const response = await request(endpoint, {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${apiKey}`,
-          "Content-Type": "application/json"
+          Authorization: `Bearer ${apiKey}`,
+          "Content-Type": "application/json",
         },
         headersTimeout: 15000,
         bodyTimeout: 15000,
         body: JSON.stringify({
           model: config.model,
           messages: [{ role: "user", content: "ping" }],
-          max_tokens: 5
-        })
+          max_tokens: 5,
+        }),
       });
 
       if (response.statusCode >= 400) {
@@ -571,8 +601,8 @@ export async function testConnection(config: ModelConfig): Promise<{
         headersTimeout: 15000,
         bodyTimeout: 15000,
         body: JSON.stringify({
-          contents: [{ role: "user", parts: [{ text: "ping" }] }]
-        })
+          contents: [{ role: "user", parts: [{ text: "ping" }] }],
+        }),
       });
 
       if (response.statusCode >= 400) {
@@ -614,7 +644,9 @@ export function isCustomModel(provider: Provider, model: string): boolean {
 // Image Generation Model Config
 // ============================================================================
 
-export function isKnownImageProvider(provider: string): provider is ImageProvider {
+export function isKnownImageProvider(
+  provider: string,
+): provider is ImageProvider {
   return (IMAGE_PROVIDERS as readonly string[]).includes(provider);
 }
 
@@ -629,7 +661,10 @@ export async function resolveImageModelConfig(): Promise<ImageModelConfigWithSou
   if (dbProvider && isKnownImageProvider(dbProvider.trim())) {
     provider = dbProvider.trim() as ImageProvider;
     providerSource = "db";
-  } else if (process.env.IMAGE_GEN_PROVIDER?.trim() && isKnownImageProvider(process.env.IMAGE_GEN_PROVIDER.trim())) {
+  } else if (
+    process.env.IMAGE_GEN_PROVIDER?.trim() &&
+    isKnownImageProvider(process.env.IMAGE_GEN_PROVIDER.trim())
+  ) {
     provider = process.env.IMAGE_GEN_PROVIDER.trim() as ImageProvider;
     providerSource = "env";
   } else {
@@ -677,7 +712,7 @@ export async function resolveImageModelConfig(): Promise<ImageModelConfigWithSou
     Math.min(
       sourcePriority.indexOf(providerSource),
       sourcePriority.indexOf(modelSource),
-      sourcePriority.indexOf(baseURLSource)
+      sourcePriority.indexOf(baseURLSource),
     )
   ] as "db" | "env" | "default";
 
@@ -687,7 +722,9 @@ export async function resolveImageModelConfig(): Promise<ImageModelConfigWithSou
 /**
  * Update image generation model config in database
  */
-export async function updateImageGenConfig(config: ImageModelConfig): Promise<void> {
+export async function updateImageGenConfig(
+  config: ImageModelConfig,
+): Promise<void> {
   await ConfigRepo.setConfig("system", "IMAGE_GEN_PROVIDER", config.provider);
   await ConfigRepo.setConfig("system", "IMAGE_GEN_MODEL", config.model);
   if (config.baseURL) {
@@ -714,7 +751,9 @@ export async function getImageGenApiKey(): Promise<string> {
 /**
  * Test image generation provider connection
  */
-export async function testImageGenConnection(config: ImageModelConfig): Promise<{
+export async function testImageGenConnection(
+  config: ImageModelConfig,
+): Promise<{
   success: boolean;
   latency?: number;
   error?: string;
@@ -723,7 +762,10 @@ export async function testImageGenConnection(config: ImageModelConfig): Promise<
   try {
     const apiKey = await getImageGenApiKey();
     if (!apiKey) {
-      return { success: false, error: "Image Generation API Key not configured" };
+      return {
+        success: false,
+        error: "Image Generation API Key not configured",
+      };
     }
 
     const baseURL = config.baseURL || "";
@@ -732,8 +774,8 @@ export async function testImageGenConnection(config: ImageModelConfig): Promise<
     const response = await request(endpoint, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
       headersTimeout: 15000,
       bodyTimeout: 15000,
@@ -741,8 +783,8 @@ export async function testImageGenConnection(config: ImageModelConfig): Promise<
         model: config.model || "dall-e-2",
         prompt: "ping",
         n: 1,
-        size: "256x256"
-      })
+        size: "256x256",
+      }),
     });
 
     if (response.statusCode >= 400) {
