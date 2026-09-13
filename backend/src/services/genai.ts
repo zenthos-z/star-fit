@@ -8,10 +8,15 @@ import {
 } from "./modelConfigService.js";
 
 async function wait(ms: number) {
-  return new Promise(res => setTimeout(res, ms));
+  return new Promise((res) => setTimeout(res, ms));
 }
 
-async function withRetry<T>(fn: () => Promise<T>, log: FastifyBaseLogger, maxAttempts = 5, baseMs = 250) {
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  log: FastifyBaseLogger,
+  maxAttempts = 5,
+  baseMs = 250,
+) {
   let attempt = 0;
   while (true) {
     try {
@@ -19,7 +24,8 @@ async function withRetry<T>(fn: () => Promise<T>, log: FastifyBaseLogger, maxAtt
     } catch (err: any) {
       attempt++;
       const status = err?.status || err?.code;
-      const retryable = [429, 500, 503].includes(Number(status)) || err?.retryable;
+      const retryable =
+        [429, 500, 503].includes(Number(status)) || err?.retryable;
       if (!retryable || attempt >= maxAttempts) {
         log.error({ err, attempt }, "genai_request_failed");
         throw err;
@@ -44,14 +50,21 @@ const IMAGE_GEN_TIMEOUT_MS = 120_000;
  * to 400) — no placeholder SVG anymore, unless DEBUG_PLACEHOLDER=true explicitly
  * opts back into the old dev placeholder.
  */
-export async function generateImage(prompt: string, log: FastifyBaseLogger): Promise<string> {
+export async function generateImage(
+  prompt: string,
+  log: FastifyBaseLogger,
+): Promise<string> {
   const apiKey = await getImageGenApiKey();
   if (!apiKey) {
     if (process.env.DEBUG_PLACEHOLDER === "true") {
-      log.warn("IMAGE_GEN_API_KEY missing; DEBUG_PLACEHOLDER=true — returning placeholder SVG");
+      log.warn(
+        "IMAGE_GEN_API_KEY missing; DEBUG_PLACEHOLDER=true — returning placeholder SVG",
+      );
       return promptToSVG(prompt);
     }
-    throw new Error("IMAGE_GEN_API_KEY missing: image generation is not configured. Set the key in Admin → Settings (IMAGE_GEN_API_KEY).");
+    throw new Error(
+      "IMAGE_GEN_API_KEY missing: image generation is not configured. Set the key in Admin → Settings (IMAGE_GEN_API_KEY).",
+    );
   }
 
   const cfg = await resolveImageModelConfig();
@@ -63,8 +76,8 @@ export async function generateImage(prompt: string, log: FastifyBaseLogger): Pro
     const response = await request(endpoint, {
       method: "POST",
       headers: {
-        "Authorization": `Bearer ${apiKey}`,
-        "Content-Type": "application/json"
+        Authorization: `Bearer ${apiKey}`,
+        "Content-Type": "application/json",
       },
       headersTimeout: IMAGE_GEN_TIMEOUT_MS,
       bodyTimeout: IMAGE_GEN_TIMEOUT_MS,
@@ -73,8 +86,8 @@ export async function generateImage(prompt: string, log: FastifyBaseLogger): Pro
         prompt,
         n: 1,
         size: "1024x1024",
-        response_format: "b64_json"
-      })
+        response_format: "b64_json",
+      }),
     });
 
     if (response.statusCode >= 400) {
@@ -91,10 +104,23 @@ export async function generateImage(prompt: string, log: FastifyBaseLogger): Pro
 
     const j: any = await response.body.json();
     const b64 = j?.data?.[0]?.b64_json;
-    if (!b64) {
-      throw new Error("Image generation response missing data[0].b64_json");
+    if (b64) {
+      return "data:image/png;base64," + b64;
     }
-    return "data:image/png;base64," + b64;
+    // Some OpenAI-compatible providers (e.g. bigmodel CogView) return a URL
+    // instead of b64_json — fetch and inline it so callers always get a data URL.
+    const imageUrl = j?.data?.[0]?.url;
+    if (!imageUrl) {
+      throw new Error("Image generation response missing data[0].b64_json/url");
+    }
+    const imgRes = await request(imageUrl, { method: "GET" });
+    if (imgRes.statusCode >= 400) {
+      throw new Error(
+        `Failed to fetch generated image URL: HTTP ${imgRes.statusCode}`,
+      );
+    }
+    const imgBuf = await imgRes.body.arrayBuffer();
+    return "data:image/png;base64," + Buffer.from(imgBuf).toString("base64");
   }, log);
 
   try {
@@ -129,5 +155,7 @@ function promptToSVG(prompt: string) {
   <text x='60' y='100' font-size='32' font-family='monospace' fill='#FF5F1F'>ACID_POSTER</text>
   <text x='60' y='160' font-size='18' font-family='monospace' fill='#FFDFCF'>${text}</text>
 </svg>`;
-  return "data:image/svg+xml;base64," + Buffer.from(svg, "utf-8").toString("base64");
+  return (
+    "data:image/svg+xml;base64," + Buffer.from(svg, "utf-8").toString("base64")
+  );
 }
