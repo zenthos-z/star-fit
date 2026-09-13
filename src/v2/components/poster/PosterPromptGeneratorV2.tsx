@@ -48,6 +48,22 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
   const [posterDataUrl, setPosterDataUrl] = useState<string | null>(null);
   const [showResult, setShowResult] = useState(false);
   const [generateError, setGenerateError] = useState<string | null>(null);
+  // 持久化恢复：按 session 维度缓存生成结果，关闭页面后重开还能看到，无需重新生成。
+  // ★走 localStorage 同步读写（WKWebView 的 IndexedDB 不可靠，教训同 useLoginStatus——IDB 只当缓存，
+  //   关键状态用 localStorage 做权威；且 dataURL 体积大，避免 storageGet 的 IDB open 超时拖慢挂载）。
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const cached = localStorage.getItem(`starfit_poster:${session.id}`);
+      if (!cancelled && cached && cached.startsWith('data:image/')) {
+        setPosterDataUrl(cached);
+      }
+    } catch (e) {
+      console.warn('[Poster] cache read failed:', e);
+    }
+    return () => { cancelled = true; };
+     
+  }, [session.id]);
 
   // iOS sheet 规范：全屏 sheet 呈现时盖住原生 tab bar，关闭恢复（同 SettlementV2）
   useEffect(() => {
@@ -145,6 +161,12 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
         throw new Error('生成结果格式异常');
       }
       setPosterDataUrl(payload.dataUrl);
+      // 持久化到 localStorage（session 维度），关闭页面后重开可恢复
+      try {
+        localStorage.setItem(`starfit_poster:${session.id}`, payload.dataUrl);
+      } catch (e) {
+        console.warn('[Poster] cache save failed:', e);
+      }
       haptic('success');
     } catch (error) {
       console.error('Generate image error:', error);

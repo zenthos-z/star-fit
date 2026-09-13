@@ -13,20 +13,25 @@ export const SCENE_TEMPLATES: Record<string, SceneTemplate> = {
   Industrial_Dark: {
     name: "工业重金属 (DEFAULT)",
     style: "Acid Graphics, Maximalism, David Carson Grunge Style",
-    background: "Dark, moody close-up of a Squat Rack (Industrial metal, scratched, oily surfaces)",
+    background:
+      "Dark, moody close-up of a Squat Rack (Industrial metal, scratched, oily surfaces)",
     texture: "Heavy grainy noise, scan-line textures, vintage film dust",
     lighting: "High-contrast Cyberpunk Blue & Purple rim lights, hard shadows",
     character:
-      "Flat 2D neon-orange fluid abstract blob, wearing a fierce determination expression (咆哮/发力感), emanating fighting spirit in a combative stance"
+      "Flat 2D neon-orange fluid abstract blob, wearing a fierce determination expression (咆哮/发力感), emanating fighting spirit in a combative stance",
   },
   Liquid_Chrome: {
     name: "超限流体 (LIQUID_CHROME)",
-    style: "Ultra-high contrast, Liquid Metal Acid, Organic Distortion, Y2K Chromaticism",
-    background: "Deep matte black with iridescent oil spill reflections, macro view of distorted chrome dumbbells",
-    texture: "Chromatic aberration, liquid mercury ripples, high-gloss plastic finish, spectral gradients",
-    lighting: "Hard Neon Green and Hot Pink top-down spotlighting, sharp caustic light refractions",
+    style:
+      "Ultra-high contrast, Liquid Metal Acid, Organic Distortion, Y2K Chromaticism",
+    background:
+      "Deep matte black with iridescent oil spill reflections, macro view of distorted chrome dumbbells",
+    texture:
+      "Chromatic aberration, liquid mercury ripples, high-gloss plastic finish, spectral gradients",
+    lighting:
+      "Hard Neon Green and Hot Pink top-down spotlighting, sharp caustic light refractions",
     character:
-      "An amorphous 3D chrome liquid entity, sharp jagged edges, reflecting the entire gym environment on its surface, high-intensity combative posture"
+      "An amorphous 3D chrome liquid entity, sharp jagged edges, reflecting the entire gym environment on its surface, high-intensity combative posture",
   },
   Cyber_Neon: {
     name: "赛博霓虹 (HYPER-VIBE)",
@@ -34,16 +39,86 @@ export const SCENE_TEMPLATES: Record<string, SceneTemplate> = {
     background: "Blurry neon city gym lights, reflections on chrome plates",
     texture: "Digital glitch, pixel noise, glowing screen edge",
     lighting: "Neon Pink and Electric Cyan bi-color lighting, hyper-glow",
-    character: "Electric blue holographic creature, muscular silhouette, dynamic motion blur"
+    character:
+      "Electric blue holographic creature, muscular silhouette, dynamic motion blur",
   },
   Vintage_Punk: {
     name: "复古朋克 (OLD_SCHOOL)",
     style: "90s Zine Culture, Punk Rock Xerox Style",
-    background: "High-contrast photocopied gym environment, gritty black and white",
+    background:
+      "High-contrast photocopied gym environment, gritty black and white",
     texture: "Paper grain, ink bleed, halftone patterns",
     lighting: "Stark flash photography style, high-key white and deep blacks",
-    character: "Sketch-style orange ink blob, raw brush strokes, chaotic energy"
-  }
+    character:
+      "Sketch-style orange ink blob, raw brush strokes, chaotic energy",
+  },
+  // ---- 以下 key 与前端 STYLE_PRESETS id 对齐（PosterPromptGeneratorV2.tsx）----
+  shanshui: {
+    name: "青绿山水",
+    style:
+      "Chinese Shan Shui ink-wash painting, teal-green mineral palette (石青石绿), Song dynasty landscape, elegant minimalism",
+    background:
+      "Misty layered mountains and flowing rivers rendered in ink wash, distant pine trees, negative space (留白), subtle gold-leaf accents",
+    texture:
+      "Rice paper grain, ink bleed gradients, dry-brush strokes, silk scroll feel",
+    lighting:
+      "Soft diffuse natural light, atmospheric perspective, luminous mist",
+    character:
+      "A serene ink-brush spirit creature practicing a powerful martial stance among the clouds, flowing ribbon-like energy trails",
+  },
+  bauhaus: {
+    name: "包豪斯",
+    style:
+      "Bauhaus geometric modernism, primary colors red/blue/yellow on off-white, functional design, 1920s Dessau",
+    background:
+      "Clean geometric composition of overlapping primary-color shapes, arcs and grids, abstract gym equipment silhouettes built from circles and bars",
+    texture: "Flat vector surfaces, crisp print grain, no gradients",
+    lighting: "Flat graphic lighting, no cast shadows, poster-plate clarity",
+    character:
+      "A geometric abstract figure built from circles, squares and triangles in primary colors, dynamic athletic pose, constructivist energy",
+  },
+  industrial: {
+    name: "工业重金属 (DEFAULT)",
+    style: "Acid Graphics, Maximalism, David Carson Grunge Style",
+    background:
+      "Dark, moody close-up of a Squat Rack (Industrial metal, scratched, oily surfaces)",
+    texture: "Heavy grainy noise, scan-line textures, vintage film dust",
+    lighting: "High-contrast Cyberpunk Blue & Purple rim lights, hard shadows",
+    character:
+      "Flat 2D neon-orange fluid abstract blob, wearing a fierce determination expression (咆哮/发力感), emanating fighting spirit in a combative stance",
+  },
+  liquid: {
+    name: "超限流体",
+    style:
+      "Ultra-high contrast, Liquid Metal Acid, Organic Distortion, Y2K Chromaticism",
+    background:
+      "Deep matte black with iridescent oil spill reflections, macro view of distorted chrome dumbbells",
+    texture:
+      "Chromatic aberration, liquid mercury ripples, high-gloss plastic finish, spectral gradients",
+    lighting:
+      "Hard Neon Green and Hot Pink top-down spotlighting, sharp caustic light refractions",
+    character:
+      "An amorphous 3D chrome liquid entity, sharp jagged edges, reflecting the entire gym environment on its surface, high-intensity combative posture",
+  },
+  cyber: {
+    name: "赛博霓虹",
+    style: "Cyber-Acid, Neo-Tokyo, Futuristic Grunge",
+    background: "Blurry neon city gym lights, reflections on chrome plates",
+    texture: "Digital glitch, pixel noise, glowing screen edge",
+    lighting: "Neon Pink and Electric Cyan bi-color lighting, hyper-glow",
+    character:
+      "Electric blue holographic creature, muscular silhouette, dynamic motion blur",
+  },
+  punk: {
+    name: "复古朋克",
+    style: "90s Zine Culture, Punk Rock Xerox Style",
+    background:
+      "High-contrast photocopied gym environment, gritty black and white",
+    texture: "Paper grain, ink bleed, halftone patterns",
+    lighting: "Stark flash photography style, high-key white and deep blacks",
+    character:
+      "Sketch-style orange ink blob, raw brush strokes, chaotic energy",
+  },
 };
 
 type VibeConfig = {
@@ -61,11 +136,16 @@ type UserData = {
 };
 
 class AcidVisualEngine {
-  constructor(private userData: UserData, private scene: SceneTemplate, private vibe: VibeConfig) {}
+  constructor(
+    private userData: UserData,
+    private scene: SceneTemplate,
+    private vibe: VibeConfig,
+  ) {}
 
   generateFinalPrompt() {
     const { Date: dateStr, Duration, Workout_List } = this.userData;
-    const finalNickname = this.vibe.brandingName || this.userData.Nickname || "ANONYMOUS";
+    const finalNickname =
+      this.vibe.brandingName || this.userData.Nickname || "ANONYMOUS";
     return `
 # SYSTEM ROLE: ACID_POSTER_AI_SYSTEM
 # TASK: 严格按照以下渲染函数逻辑执行，生成一张 3:4 比例的酸性风格海报图片。
@@ -124,10 +204,15 @@ END FUNCTION
   }
 }
 
-export async function buildPosterPrompt(session: UserData, templateKey?: string, vibeOverride?: VibeConfig, userId: string = 'global') {
+export async function buildPosterPrompt(
+  session: UserData,
+  templateKey?: string,
+  vibeOverride?: VibeConfig,
+  userId: string = "global",
+) {
   // Try to load user-specific template if it exists in DB
   let scene: SceneTemplate | undefined;
-  
+
   if (templateKey) {
     // 1. Check if user has a custom style config for this key
     const customParams = await ConfigRepo.getStyleParams(userId, templateKey);
@@ -136,25 +221,31 @@ export async function buildPosterPrompt(session: UserData, templateKey?: string,
       // For now, if we have custom blocks, we might need a different builder
       // But for image templates, let's assume they might store the template object directly in app_configs
     }
-    
+
     // 2. Fallback to hardcoded templates
     scene = SCENE_TEMPLATES[templateKey];
   }
 
-  const key = templateKey && SCENE_TEMPLATES[templateKey] ? templateKey : "Industrial_Dark";
+  const key =
+    templateKey && SCENE_TEMPLATES[templateKey]
+      ? templateKey
+      : "Industrial_Dark";
   scene = scene || SCENE_TEMPLATES[key];
 
   const defaultVibe: VibeConfig = {
     brandingName: session.Nickname || "ANONYMOUS",
     slogans: "SYSTEM OVERLOAD, LEG DAY, NO PAIN NO GAIN, LOWER BODY POWER",
     palette: "High contrast Neon Orange (#FF5F1F) vs Midnight Blue (#000080)",
-    brandingStyle: "Chrome Metallic 3D style (带有流体反光的镀铬质感)"
+    brandingStyle: "Chrome Metallic 3D style (带有流体反光的镀铬质感)",
   };
 
   // Check for user-specific default vibe in app_configs
-  const userVibe = await ConfigRepo.getConfig(userId, 'poster_vibe_config');
-  
-  const engine = new AcidVisualEngine(session, scene, { ...defaultVibe, ...userVibe, ...vibeOverride });
+  const userVibe = await ConfigRepo.getConfig(userId, "poster_vibe_config");
+
+  const engine = new AcidVisualEngine(session, scene, {
+    ...defaultVibe,
+    ...userVibe,
+    ...vibeOverride,
+  });
   return engine.generateFinalPrompt();
 }
-

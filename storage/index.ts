@@ -31,7 +31,8 @@ const STORAGE_WHITELIST = [
   'chat_messages:',
   Keys.pendingSummary,
   Keys.nextPlan,
-  'starfit_day_plan:'
+  'starfit_day_plan:',
+  'starfit_poster:'
 ];
 
 export async function storageGet<T = any>(key: string): Promise<T | null> {

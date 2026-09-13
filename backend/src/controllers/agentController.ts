@@ -3,6 +3,7 @@ import { z } from "zod";
 import { buildPosterPrompt } from "../services/promptEngine.js";
 import { generateImage } from "../services/genai.js";
 import { getUserId } from "../utils/requestUtils.js";
+import { getPostgresClient } from "../db/postgresql/index.js";
 
 const WorkoutItemSchema = z.object({
   name: z.string().min(1).optional(),
@@ -62,6 +63,34 @@ export async function postImage(req: FastifyRequest, reply: FastifyReply) {
     // was generated with empty workout data.
     const raw = (body.session ?? {}) as Record<string, unknown>;
     const exercises = Array.isArray(raw.exercises) ? raw.exercises : [];
+    // exerciseId 形如 fit://library/exercise/<id> —— 批量查库还原中文动作名
+    const exerciseIds = exercises
+      .map((e: any) =>
+        typeof e?.exerciseId === "string"
+          ? e.exerciseId.replace("fit://library/exercise/", "")
+          : "",
+      )
+      .filter(Boolean);
+    const idToName = new Map<string, string>();
+    if (exerciseIds.length > 0) {
+      try {
+        // id 段只允许字母数字下划线连字符，杜绝注入后字面拼接
+        const safeIds = exerciseIds.filter((s: string) => /^[\w-]+$/.test(s));
+        if (safeIds.length > 0) {
+          const db = getPostgresClient();
+          const list = safeIds.map((s: string) => `'${s}'`).join(",");
+          const result = await db.query(
+            `SELECT id, name FROM exercises WHERE id IN (${list})`,
+            {},
+          );
+          for (const row of result.rows ?? []) {
+            if (row?.id && row?.name) idToName.set(row.id, row.name);
+          }
+        }
+      } catch (err) {
+        req.log.warn({ err }, "poster_exercise_name_lookup_failed");
+      }
+    }
     const workoutList = exercises.map((e: any) => {
       const sets = Array.isArray(e?.sets) ? e.sets : [];
       const done = sets.filter(
@@ -75,8 +104,17 @@ export async function postImage(req: FastifyRequest, reply: FastifyReply) {
         (n: number, s: any) => n + (Number(s?.reps) || 0),
         0,
       );
+      const eid =
+        typeof e?.exerciseId === "string"
+          ? e.exerciseId.replace("fit://library/exercise/", "")
+          : "";
+      const name =
+        (eid && idToName.get(eid)) ||
+        (typeof e?.name === "string" && e.name) ||
+        eid ||
+        "Unknown";
       return {
-        name: typeof e?.name === "string" ? e.name : "Unknown",
+        name,
         weight: topWeight > 0 ? `${topWeight}kg` : "bodyweight",
         sets: `${done.length}x${done[0]?.reps ?? "-"} (${totalReps} reps)`,
       };
