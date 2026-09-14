@@ -308,6 +308,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   const isGalleryMode = typeof window !== 'undefined' &&
     /([?&#])bubbleGallery/.test(window.location.search + window.location.hash);
   const [showContent, setShowContent] = useState(true);
+  // 消息图片全屏查看器：{ dataUrl 本地预览, mediaId 服务器引用 }
+  const [viewingImage, setViewingImage] = useState<{ dataUrl?: string; mediaId?: string } | null>(null);
   // 模拟器入口：Welcome 屏 STARFIT 标志长按 1 秒切换气泡画廊（URL ?bubbleGallery 之外的等效通道）
   // 长按而非连点：WKWebView 触摸层连点易与系统手势/双击缩放冲突，长按更可靠
   const [galleryToggled, setGalleryToggled] = useState(false);
@@ -654,6 +656,23 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                       : 'w-full bg-[#E9E9EB] text-gray-900 rounded-[24px] rounded-bl-[8px]'
                     }
                   `}>
+                    {/* 图片消息：气泡内缩略图，点击全屏查看（stopPropagation 防触发外层手势） */}
+                    {msg.role === 'user' && (msg as any).imageDataUrl && (
+                      <img
+                        src={(msg as any).imageDataUrl}
+                        alt="附件图片"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          haptic('light');
+                          setViewingImage({
+                            dataUrl: (msg as any).imageDataUrl,
+                            mediaId: (msg as any).mediaId,
+                          });
+                        }}
+                        className="w-full max-w-[240px] rounded-[16px] mb-2 cursor-pointer active:opacity-80 transition-opacity"
+                        style={{ touchAction: 'manipulation' }}
+                      />
+                    )}
                     <ReactMarkdown
                       remarkPlugins={[remarkGfm, remarkMath]}
                       rehypePlugins={[rehypeKatex]}
@@ -991,6 +1010,17 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         onCreateNewThread={onCreateNewThread}
         formatRelativeTime={formatRelativeTime}
       />
+
+      {/* 消息图片全屏查看器：本地 dataUrl 优先，降级服务器引用 */}
+      <AnimatePresence>
+        {viewingImage && (
+          <MessageImageViewer
+            src={viewingImage.dataUrl || `${API_BASE}/media/${viewingImage.mediaId}`}
+            fallbackSrc={viewingImage.dataUrl ? `${API_BASE}/media/${viewingImage.mediaId}` : undefined}
+            onClose={() => setViewingImage(null)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 };
@@ -1122,4 +1152,38 @@ const WelcomeChip: React.FC<{ label: string; icon: string }> = ({ label, icon })
     <span className="text-sm">{icon}</span>
     <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{label}</span>
   </div>
+);
+
+/**
+ * 消息图片全屏查看器（点击气泡缩略图打开）。
+ * 黑底 + 缩放淡入（复用海报结果查看器的视觉语言），点任意处关闭。
+ * 媒体加载失败 → 降级显示服务器引用路径，不白屏。
+ */
+const MessageImageViewer: React.FC<{
+  src: string;
+  fallbackSrc?: string;
+  onClose: () => void;
+}> = ({ src, fallbackSrc, onClose }) => (
+  <motion.div
+    initial={{ opacity: 0 }}
+    animate={{ opacity: 1 }}
+    exit={{ opacity: 0 }}
+    transition={{ duration: 0.2 }}
+    className="fixed inset-0 z-[200] bg-black flex items-center justify-center"
+    onClick={onClose}
+  >
+    <img
+      src={src}
+      alt="消息图片"
+      className="max-w-full max-h-full object-contain"
+      onError={(e) => {
+        const img = e.currentTarget;
+        if (fallbackSrc && img.src !== fallbackSrc) {
+          img.src = fallbackSrc;
+        } else if (!fallbackSrc) {
+          onClose();
+        }
+      }}
+    />
+  </motion.div>
 );
