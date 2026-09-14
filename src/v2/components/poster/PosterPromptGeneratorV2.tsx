@@ -151,6 +151,8 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
           session,
           templateKey: selectedStyle,
           vibeOverride: isAcid ? vibeConfig : undefined,
+          // 所见即所得：界面显示的提示词就是生图用的提示词（后端优先用它，跳过自拼）
+          promptOverride: finalPrompt || undefined,
         }),
       });
       const payload = await res.json().catch(() => ({}));
@@ -174,7 +176,7 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
     } finally {
       setIsGenerating(false);
     }
-  }, [session, selectedStyle, vibeConfig]);
+  }, [session, selectedStyle, vibeConfig, finalPrompt]);
 
   const handlePrimaryAction = () => {
     if (posterDataUrl && !isGenerating) {
