@@ -184,6 +184,13 @@ export async function loadNextPlan(): Promise<any[] | null> {
   return null;
 }
 
+/** nextPlan 保存元信息（含 savedAt），供到期清理判断 */
+export async function loadNextPlanMeta(): Promise<{ savedAt?: number } | null> {
+  const payload = await storageGet<{ plan?: any[]; savedAt?: number }>(Keys.nextPlan);
+  if (payload) return { savedAt: payload.savedAt };
+  return null;
+}
+
 export async function clearNextPlan(): Promise<void> {
   await storageRemove(Keys.nextPlan);
 }

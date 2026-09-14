@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { getExerciseTypeLabel } from '../../../../utils/exerciseTypeLabels';
 import { ChatCardHeader } from './ChatCardHeader';
 import { ChatCardShell, ChatPrimaryButton, ChatSecondaryButton } from './ChatCardShell';
@@ -12,30 +12,71 @@ interface PlanCardProps {
       added: string[];
       modified: string[];
     };
+    /** 消费状态（持久化在 ChatMessage.uiHint 上，重开对话不丢失） */
+    consumed?: PlanConsumeRecord;
   };
   onConfirm?: (payload: { mode: 'append' | 'replace'; plan: any[] }) => void;
 }
 
 /**
+ * 一次性消费记录：挂在消息的 uiHint 上随 thread 持久化。
+ * targetDate = 锁定的目标日期（点击时刻的下一天，而非重开时的"明天"）。
+ */
+export interface PlanConsumeRecord {
+  /** tomorrow = 存为未来某天的计划；session = 已加入当前训练会话 */
+  kind: 'tomorrow' | 'session';
+  mode: 'append' | 'replace';
+  targetDate: string;   // yyyy-mm-dd（kind=tomorrow 时为锁定目标日；kind=session 为当天）
+  consumedAt: number;   // epoch ms
+  count: number;        // 导入动作数
+}
+
+/** yyyy-mm-dd（本地时区） */
+export const planTargetDateLabel = (dateStr: string): string => {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  return `${m}/${d}`;
+};
+
+/**
  * PlanCard (PLAN_CARD) - Training Plan Proposer
  *
- * Implements "Coach Authority" principle. Displays incremental or full plans
- * with Diff highlighting. Supports Overwrite and Append modes.
- *
- * 2026-09-11 聊天卡片视觉统一：竖条装饰 → 空心小蓝圈（ChatCardHeader），
- * 圆角 40px → 24px，按钮斜体大写 → 胶囊 semibold。
+ * 一次性消费语义（2026-09-14 拍板）：
+ * - pending：按钮可点；消费后整卡折叠为摘要条，显示导入结果（目标日期 + 动作数）
+ * - 训练结束后（post_finish）：「设为明日计划」+「追加到明日计划」双按钮
+ *   （旧版只有硬编码 replace 的单按钮，append 无入口 → 用户报"无法追加到第二天"）
+ * - 消费记录存 ChatMessage.uiHint.consumed，随 saveChatMessages 持久化，
+ *   重开对话/切换会话不会重置回可点状态，杜绝重复消费导致的动作翻倍
  */
 export const PlanCard: React.FC<PlanCardProps> = ({ uiHint, onConfirm }) => {
   // Defensive check for data
   const plan = Array.isArray(uiHint?.data) ? uiHint.data : [];
   const diff = uiHint?.diff || { added: [], modified: [] };
   const isPostFinish = uiHint?.context === 'post_finish';
-  const [clickedMode, setClickedMode] = useState<'append' | 'replace' | null>(null);
+  const consumed = uiHint?.consumed;
 
-  const handleClick = (mode: 'append' | 'replace') => {
-    setClickedMode(mode);
-    onConfirm?.({ mode, plan });
-  };
+  if (consumed) {
+    // 已消费：折叠为摘要条（用户拍板：自动折叠，不保留完整动作列表）
+    const summaryLine = consumed.kind === 'tomorrow'
+      ? `已保存为 ${planTargetDateLabel(consumed.targetDate)} 的训练计划`
+      : '已加入当前训练';
+    return (
+      <ChatCardShell testId="plan-card-consumed">
+        <div className="px-4 py-3.5 flex items-center gap-3">
+          <span className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+          <div className="min-w-0 flex-1">
+            <p className="text-[15px] font-semibold text-gray-900 leading-snug">{summaryLine}</p>
+            <p className="text-xs text-gray-500 mt-0.5">
+              {consumed.mode === 'append' ? '追加' : '覆盖'} · {consumed.count} 个动作
+            </p>
+          </div>
+        </div>
+      </ChatCardShell>
+    );
+  }
 
   return (
     <ChatCardShell testId="plan-card">
@@ -109,28 +150,33 @@ export const PlanCard: React.FC<PlanCardProps> = ({ uiHint, onConfirm }) => {
 
       <div className="p-5 pt-0 flex gap-3">
         {isPostFinish ? (
-          <ChatPrimaryButton
-            className="flex-1"
-            onClick={() => handleClick('replace')}
-            disabled={!!clickedMode}
-          >
-            {clickedMode ? '已添加' : '明日训练'}
-          </ChatPrimaryButton>
+          <>
+            <ChatPrimaryButton
+              className="flex-1"
+              onClick={() => onConfirm?.({ mode: 'replace', plan })}
+            >
+              设为明日计划
+            </ChatPrimaryButton>
+            <ChatSecondaryButton
+              className="flex-1"
+              onClick={() => onConfirm?.({ mode: 'append', plan })}
+            >
+              追加到明日
+            </ChatSecondaryButton>
+          </>
         ) : (
           <>
             <ChatPrimaryButton
               className="flex-1"
-              onClick={() => handleClick('replace')}
-              disabled={!!clickedMode}
+              onClick={() => onConfirm?.({ mode: 'replace', plan })}
             >
-              {clickedMode === 'replace' ? '已添加' : '完全覆盖'}
+              完全覆盖
             </ChatPrimaryButton>
             <ChatSecondaryButton
               className="flex-1"
-              onClick={() => handleClick('append')}
-              disabled={!!clickedMode}
+              onClick={() => onConfirm?.({ mode: 'append', plan })}
             >
-              {clickedMode === 'append' ? '已添加' : '追加到末尾'}
+              追加到末尾
             </ChatSecondaryButton>
           </>
         )}

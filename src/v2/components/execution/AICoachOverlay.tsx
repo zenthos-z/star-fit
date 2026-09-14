@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { ExerciseRenderer } from './ExerciseRenderer';
+import type { PlanConsumeRecord } from './cards/PlanCard';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatMessage, ProgressItem } from '../../hooks/useAICoach';
 import type { ChatThread } from '@/storage';
@@ -240,7 +241,13 @@ interface AICoachOverlayProps {
     scenarioOverride?: string,
     opts?: { silent?: boolean }
   ) => void;
-  handleConfirmPlan: (plan: any[], mode: 'append' | 'replace') => void;
+  handleConfirmPlan: (
+    plan: any[],
+    mode: 'append' | 'replace',
+    opts?: { onConsumed?: (record: PlanConsumeRecord) => void }
+  ) => void;
+  /** 计划卡一次性消费：把消费记录回写到 chatHistory[i].uiHint.consumed（随 thread 持久化） */
+  onPlanConsumed?: (msgIndex: number, record: PlanConsumeRecord) => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   attachedContext?: any;
@@ -283,6 +290,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   setAttachedContext,
   onRemoveAttachment,
   onViewDetails,
+  onPlanConsumed,
   sessionStatus,
   sessionSessionId,
   isTransitioning = false,
@@ -693,7 +701,11 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                               reps: ex?.reps
                             }))
                           });
-                          handleConfirmPlan(msg.uiHint.data, payload.mode);
+                          // 一次性消费：消费成功后把记录回写到该消息的 uiHint.consumed，
+                          // 随 thread 持久化 → 卡片折叠为摘要条，重开对话不再可点
+                          handleConfirmPlan(msg.uiHint.data, payload.mode, {
+                            onConsumed: (record) => onPlanConsumed?.(i, record)
+                          });
                         } else if (uiHintType === 'survey_card') {
                           // Survey card: use helper function to handle upload
                           handleSurveyUpload(String(payload));

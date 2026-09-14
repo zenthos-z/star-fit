@@ -48,9 +48,11 @@ import {
   saveNextPlan,
   saveDayPlan,
   loadNextPlan,
+  loadNextPlanMeta,
   clearNextPlan,
   migrateLegacyLoginData
 } from './storage';
+import type { PlanConsumeRecord } from './src/v2/components/execution/cards/PlanCard';
 
 interface ChatMessage {
     role: 'user' | 'ai';
@@ -354,9 +356,22 @@ const App: React.FC = () => {
       if (draft && draft.items && Array.isArray(draft.items) && draft.items.length > 0) {
         setSession(prev => ({ ...prev, exercises: draft.items as any }));
       }
+      const storedNextPlanMeta = await loadNextPlanMeta();
       const storedNextPlan = await loadNextPlan();
       if (storedNextPlan && Array.isArray(storedNextPlan) && storedNextPlan.length > 0) {
         setNextPlan(storedNextPlan);
+      }
+      // nextPlan 到期清理：它语义上是「下一次训练」的暂存。已过保存日（保存时刻的
+      // 明天 < 今天）还在主页显示「今日计划」入口，会误导用户导入过期计划。
+      if (storedNextPlanMeta?.savedAt) {
+        const savedNextDay = tomorrowDateKey(storedNextPlanMeta.savedAt);
+        const todayKey = (() => {
+          const n = new Date();
+          return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}-${String(n.getDate()).padStart(2,'0')}`;
+        })();
+        if (savedNextDay < todayKey) {
+          await clearNextPlan();
+        }
       }
     })();
     return () => {
@@ -524,21 +539,38 @@ const App: React.FC = () => {
     });
   };
 
-  const handleConfirmPlan = (planData: any[], mode: 'append' | 'replace') => {
+  /**
+   * 计划卡一次性消费（2026-09-14）：
+   * - 目标日期按「点击时刻」锁定为 nextDayKey，与卡片上展示的日期一致
+   * - 消费记录经 onPlanConsumed 回写 ChatMessage.uiHint.consumed（随 thread 持久化），
+   *   卡片折叠为摘要条，重开对话不再出现可重复点击的按钮
+   */
+  const tomorrowDateKey = (from: number = Date.now()): string => {
+    const t = new Date(from + 86400000);
+    return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
+  };
+
+  const handleConfirmPlan = (planData: any[], mode: 'append' | 'replace', opts?: { onConsumed?: (record: PlanConsumeRecord) => void }) => {
     const safePlan = Array.isArray(planData) ? planData : [];
     const newExercises = buildExercisesFromPlan(safePlan);
 
     if (session.status === 'finished') {
+      const targetDate = tomorrowDateKey();
       setNextPlan(prev => {
         const merged = mode === 'append' && prev && prev.length > 0 ? [...prev, ...safePlan] : safePlan;
         saveNextPlan(merged).catch(console.error);
-        const tomorrow = new Date(Date.now() + 86400000);
-        const d = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth()+1).padStart(2,'0')}-${String(tomorrow.getDate()).padStart(2,'0')}`;
-        saveDayPlan(d, merged).catch(console.error);
+        saveDayPlan(targetDate, merged).catch(console.error);
         window.dispatchEvent(new CustomEvent('starfit:dayplans-changed'));
         return merged;
       });
-      showToast(mode === 'replace' ? `已保存为明日训练计划 (${newExercises.length} 个动作)` : `已将动作追加到明日训练计划 (${newExercises.length} 个动作)`);
+      opts?.onConsumed?.({
+        kind: 'tomorrow',
+        mode,
+        targetDate,
+        consumedAt: Date.now(),
+        count: newExercises.length
+      });
+      showToast(mode === 'replace' ? `已保存为 ${tomorrowDateKey()} 的训练计划 (${newExercises.length} 个动作)` : `已追加到 ${tomorrowDateKey()} 的训练计划 (${newExercises.length} 个动作)`);
       return;
     }
 
@@ -546,6 +578,14 @@ const App: React.FC = () => {
       ...prev,
       exercises: mode === 'replace' ? newExercises : [...prev.exercises, ...newExercises]
     }));
+
+    opts?.onConsumed?.({
+      kind: 'session',
+      mode,
+      targetDate: tomorrowDateKey(Date.now() - 86400000), // 今天
+      consumedAt: Date.now(),
+      count: newExercises.length
+    });
 
     showToast(mode === 'replace' ? `已覆盖为新的训练计划 (${newExercises.length} 个动作)` : `已追加 ${newExercises.length} 个动作`);
   };
@@ -561,6 +601,7 @@ const App: React.FC = () => {
       isLoading,
       handleChatSubmit,
       handleConfirmPlan: handleAiConfirmPlan,
+      markPlanConsumed,
       openAiCoach,
       chatEndRef,
       textareaRef,
@@ -1420,6 +1461,7 @@ const App: React.FC = () => {
                 setIsPlanMode={setIsPlanMode}
                 handleChatSubmit={handleChatSubmit}
                 handleConfirmPlan={handleAiConfirmPlan}
+                onPlanConsumed={markPlanConsumed}
                 chatEndRef={chatEndRef}
                 textareaRef={textareaRef}
                 attachedContext={attachedContext}
