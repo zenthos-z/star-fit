@@ -404,11 +404,12 @@ export class DeepAgentService implements AgentService {
     }
 
     try {
-      // Run the full agent loop to completion (model→tool→…→final answer). We
-      // do NOT stream intermediate tokens here — only the final answer is
-      // surfaced, after the whole turn finishes. Checkpoint state still
-      // persists in agent_runtime via the injected checkpointer, so the thread
-      // resumes correctly on the next message.
+      // Stream the full agent loop live (model→tool→…→final answer). Per-step
+      // model narration (intermediate AI messages that carry tool_calls, e.g.
+      // "先看看你的状态…") streams to the UI as `thinking` events — visible in
+      // the collapsible thinking block WHILE the agent works — but only the
+      // terminal tool-free AI message is surfaced as answer prose (`token`).
+      // Checkpoint state still persists via the injected checkpointer.
       //
       // Time grounding: the model has NO clock tool and the system prompt is
       // built once (cached), so "today" is injected as a per-request context
@@ -429,18 +430,117 @@ export class DeepAgentService implements AgentService {
         imageAttachments,
       );
 
-      const result = (await agent.invoke(
+      const config = {
+        configurable: {
+          thread_id: threadId,
+          // P006/P012: per-request userId for the MCP write tools.
+          userId: req.userId,
+        },
+      };
+
+      // Dual stream mode: 'updates' gives us each completed graph step's state
+      // (so the final answer can be pulled from the FULL message list exactly
+      // as `.invoke` did), while 'messages' gives per-token text deltas for the
+      // live thinking narration. A step is classified as FINAL once its state
+      // contains a tool-free AI message; until then every streamed text delta
+      // belongs to intermediate narration and is emitted as `thinking`.
+      const stream = await agent.stream(
         { messages: [{ role: "user", content: userContent }] },
         {
-          configurable: {
-            thread_id: threadId,
-            // P006/P012: per-request userId for the MCP write tools.
-            userId: req.userId,
-          },
+          ...config,
+          streamMode: ["messages", "updates"] as ["messages", "updates"],
         },
-      )) as { messages?: unknown[] };
+      );
 
-      const finalText = finalAnswerText(result?.messages ?? []);
+      // Track which AI messages are FINAL (no tool_calls). LangGraph multi-mode
+      // stream yields `[mode, data]` tuples: 'messages' data = [chunk, metadata]
+      // (per-token deltas), 'updates' data = { node: { messages } } (per-step
+      // completed state). Deltas are BUFFERED per model step and classified
+      // when that step's `updates` snapshot lands:
+      //   - AI message WITH tool_calls  -> intermediate narration: flush the
+      //     buffered text as `thinking` (live, collapsible).
+      //   - AI message WITHOUT tool_calls -> terminal answer: captured as
+      //     finalText and emitted ONCE as `token` (identical rule to the old
+      //     `.invoke` + finalAnswerText path; the buffer is discarded so the
+      //     answer is never duplicated into the thinking block).
+      let finalText: string | undefined;
+      let buffered = ""; // current model step's narration, pending classification
+
+      for await (const raw of stream) {
+        // Unwrap the [mode, data] tuple (defensive: also accept untagged).
+        let mode: string | undefined;
+        let data: unknown = raw;
+        if (
+          Array.isArray(raw) &&
+          typeof raw[0] === "string" &&
+          (raw[0] === "messages" || raw[0] === "updates")
+        ) {
+          mode = raw[0];
+          data = raw[1];
+        }
+
+        const isMessages =
+          mode === "messages" || (mode === undefined && Array.isArray(data));
+        if (isMessages) {
+          // [AIMessageChunk, metadata] — per-token delta of the running step.
+          const delta = extractText(data);
+          if (delta) {
+            buffered += delta;
+          }
+          continue;
+        }
+
+        // updates: { nodeName: { messages: [...] } } — a graph step completed.
+        // Only the `model_request` node carries the model's own output. Other
+        // nodes (SkillsMiddleware.before_agent re-emits checkpoint history;
+        // *Middleware.after_model carry no messages) must NOT be classified:
+        // Object.values order is graph-internal, and before_agent snapshots
+        // would mislabel persisted history as the final answer while trailing
+        // after_model snapshots would clobber a captured finalText with
+        // undefined.
+        const update = data as Record<string, { messages?: unknown[] }>;
+        const state = update?.["model_request"];
+        const msgs = state?.messages;
+        if (!Array.isArray(msgs) || msgs.length === 0) continue;
+        const last = msgs[msgs.length - 1] as {
+          _getType?: () => string;
+          role?: string;
+          tool_calls?: unknown[];
+          additional_kwargs?: { tool_calls?: unknown[] };
+          content?: unknown;
+        } | null;
+        if (!last) continue;
+        const isAi =
+          typeof last._getType === "function"
+            ? last._getType() === "ai"
+            : last.role === "assistant";
+        if (!isAi) continue; // tool / system step — narration stays buffered
+        const hasTools =
+          (Array.isArray(last.tool_calls) && last.tool_calls.length > 0) ||
+          (Array.isArray(last.additional_kwargs?.tool_calls) &&
+            last.additional_kwargs!.tool_calls!.length > 0);
+        if (hasTools) {
+          // Intermediate model step: its prose was narration around a tool call.
+          if (buffered) {
+            yield { type: "thinking", text: buffered };
+            buffered = "";
+          }
+        } else {
+          // Terminal answer: emit as answer prose only (buffer discarded so the
+          // final answer never leaks into the thinking block as duplication).
+          finalText = extractText([last, {}]);
+          buffered = "";
+        }
+      }
+
+      // Stream ended mid-step (no closing updates): any residual buffer is
+      // narration by definition (the final answer path always arrives via an
+      // updates snapshot) — surface it as thinking so nothing is silently lost.
+      if (buffered) {
+        yield { type: "thinking", text: buffered };
+        buffered = "";
+      }
+
       if (finalText) {
         yield { type: "token", text: finalText };
       }

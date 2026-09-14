@@ -37,7 +37,7 @@
  * retained so a partial ``` or a half-arrived card is never mistaken for prose.
  */
 
-import type { AgentEvent, UiHintCard } from 'shared/contracts';
+import type { AgentEvent, UiHintCard } from "shared/contracts";
 
 // ---------------------------------------------------------------------------
 // Pure card parser — exported for unit testing
@@ -54,7 +54,7 @@ import type { AgentEvent, UiHintCard } from 'shared/contracts';
  */
 export function tryParseCard(jsonStr: string): Record<string, unknown> | null {
   const trimmed = jsonStr.trim();
-  if (!trimmed.startsWith('{')) {
+  if (!trimmed.startsWith("{")) {
     return null;
   }
   let parsed: unknown;
@@ -65,9 +65,9 @@ export function tryParseCard(jsonStr: string): Record<string, unknown> | null {
   }
   if (
     parsed &&
-    typeof parsed === 'object' &&
+    typeof parsed === "object" &&
     !Array.isArray(parsed) &&
-    typeof (parsed as { type?: unknown }).type === 'string' &&
+    typeof (parsed as { type?: unknown }).type === "string" &&
     (parsed as { type: string }).type.length > 0
   ) {
     return parsed as Record<string, unknown>;
@@ -88,7 +88,7 @@ export function tryParseCard(jsonStr: string): Record<string, unknown> | null {
 export function findFenceOpen(
   text: string,
 ): { index: number; length: number } | null {
-  const start = text.indexOf('```');
+  const start = text.indexOf("```");
   if (start === -1) {
     return null;
   }
@@ -106,13 +106,13 @@ export function findFenceOpen(
   if (i >= text.length) {
     return null;
   }
-  while (i < text.length && (text[i] === ' ' || text[i] === '\t')) {
+  while (i < text.length && (text[i] === " " || text[i] === "\t")) {
     i += 1;
   }
   // Consume at most one newline right after the opener (common: ```json\n{).
-  if (text[i] === '\n') {
+  if (text[i] === "\n") {
     i += 1;
-  } else if (text[i] === '\r' && text[i + 1] === '\n') {
+  } else if (text[i] === "\r" && text[i + 1] === "\n") {
     i += 2;
   }
   return { index: start, length: i - start };
@@ -136,7 +136,7 @@ const FENCE_TAIL_KEEP = 12;
 function findBalancedCard(
   text: string,
 ): { start: number; end: number; card: Record<string, unknown> } | null {
-  const from = text.indexOf('{');
+  const from = text.indexOf("{");
   if (from === -1) {
     return null;
   }
@@ -148,7 +148,7 @@ function findBalancedCard(
     if (inStr) {
       if (escape) {
         escape = false;
-      } else if (ch === '\\') {
+      } else if (ch === "\\") {
         escape = true;
       } else if (ch === '"') {
         inStr = false;
@@ -157,9 +157,9 @@ function findBalancedCard(
     }
     if (ch === '"') {
       inStr = true;
-    } else if (ch === '{') {
+    } else if (ch === "{") {
       depth += 1;
-    } else if (ch === '}') {
+    } else if (ch === "}") {
       depth -= 1;
       if (depth === 0) {
         const candidate = text.slice(from, i + 1);
@@ -189,7 +189,7 @@ function openBraceHoldback(text: string): number {
     if (inStr) {
       if (escape) {
         escape = false;
-      } else if (ch === '\\') {
+      } else if (ch === "\\") {
         escape = true;
       } else if (ch === '"') {
         inStr = false;
@@ -198,12 +198,12 @@ function openBraceHoldback(text: string): number {
     }
     if (ch === '"') {
       inStr = true;
-    } else if (ch === '{') {
+    } else if (ch === "{") {
       if (depth === 0) {
         outerStart = i;
       }
       depth += 1;
-    } else if (ch === '}') {
+    } else if (ch === "}") {
       depth -= 1;
       if (depth === 0) {
         outerStart = -1;
@@ -223,9 +223,9 @@ function openBraceHoldback(text: string): number {
  */
 class StreamCardExtractor {
   /** Prose / undecided text while scanning OUTSIDE a fence. */
-  private outsideBuf = '';
+  private outsideBuf = "";
   /** Accumulated fence body while INSIDE a fence (no closing ``` yet). */
-  private insideBuf = '';
+  private insideBuf = "";
   private inFence = false;
 
   /** Feed one token text chunk; returns zero or more events to emit now. */
@@ -237,20 +237,23 @@ class StreamCardExtractor {
   flush(): AgentEvent[] {
     const out: AgentEvent[] = [];
     if (this.inFence) {
-      // Stream ended mid-fence (no closing ```). Best-effort: try to recover a
-      // card from what accumulated; otherwise surface the raw text as prose so
-      // nothing is silently dropped.
+      // Stream ended mid-fence (no closing ```). Best-effort: recover a card
+      // from what accumulated. If it is NOT a parseable card, it is model
+      // scratch work (malformed JSON / reasoning draft) — downgrade to a
+      // `thinking` event instead of leaking it into the answer prose.
       const card = tryParseCard(this.insideBuf);
       if (card) {
         out.push(this.uiHint(card));
       } else if (this.insideBuf.trim()) {
-        out.push(this.token(this.insideBuf));
+        out.push(this.thinking(this.insideBuf.trim()));
       }
-      this.insideBuf = '';
+      this.insideBuf = "";
       this.inFence = false;
     }
     // OUTSIDE residuals: a complete unfenced card may still be sitting in the
-    // buffer; otherwise emit the residual prose verbatim.
+    // buffer; residual prose is emitted verbatim — EXCEPT an unparsable
+    // balanced-looking object (malformed card JSON), which downgrades to
+    // `thinking` so broken card payloads never reach the answer bubble.
     if (this.outsideBuf) {
       const balanced = findBalancedCard(this.outsideBuf);
       if (balanced) {
@@ -262,11 +265,26 @@ class StreamCardExtractor {
           out.push(this.token(this.outsideBuf.slice(balanced.end)));
         }
       } else {
-        out.push(this.token(this.outsideBuf));
+        out.push(...this.emitOutsideResidual(this.outsideBuf));
       }
-      this.outsideBuf = '';
+      this.outsideBuf = "";
     }
     return out;
+  }
+
+  /**
+   * Emit outside-buffer residual text, hiding malformed card payloads from the
+   * answer prose. An unparsable JSON-looking object (starts with `{`, braces
+   * balanced or still open) is model scratch work — route it to `thinking`.
+   * Genuine prose passes through untouched.
+   */
+  private emitOutsideResidual(text: string): AgentEvent[] {
+    const trimmed = text.trim();
+    if (trimmed.startsWith("{")) {
+      // JSON-ish残片：未闭合或解析失败的卡片载荷，降级为 thinking，不进正文。
+      return [this.thinking(trimmed)];
+    }
+    return text ? [this.token(text)] : [];
   }
 
   // -- OUTSIDE fence --------------------------------------------------------
@@ -285,20 +303,21 @@ class StreamCardExtractor {
           out.push(this.token(prose));
         }
         const after = this.outsideBuf.slice(open.index + open.length);
-        const close = after.indexOf('```');
+        const close = after.indexOf("```");
         if (close !== -1) {
           const card = tryParseCard(after.slice(0, close));
           if (card) {
             out.push(this.uiHint(card));
           } else if (after.slice(0, close).trim()) {
-            out.push(this.token(after.slice(0, close)));
+            // Unparsable fenced body — downgrade to thinking (leak guard).
+            out.push(this.thinking(after.slice(0, close).trim()));
           }
           this.outsideBuf = after.slice(close + 3);
           continue; // more fences may follow in the remainder.
         }
         // Opener found, close not yet seen — switch to INSIDE and accumulate.
         this.insideBuf = after;
-        this.outsideBuf = '';
+        this.outsideBuf = "";
         this.inFence = true;
         break;
       }
@@ -318,14 +337,19 @@ class StreamCardExtractor {
       //    long language word), AND any in-progress (unmatched) `{`, so a
       //    half-arrived fence or card is never flushed as prose.
       let holdback = FENCE_TAIL_KEEP;
-      const fenceFrag = this.outsideBuf.lastIndexOf('```');
+      const fenceFrag = this.outsideBuf.lastIndexOf("```");
       if (fenceFrag !== -1) {
         holdback = Math.max(holdback, this.outsideBuf.length - fenceFrag);
       }
       holdback = Math.max(holdback, openBraceHoldback(this.outsideBuf));
       if (this.outsideBuf.length > holdback) {
-        const safe = this.outsideBuf.slice(0, this.outsideBuf.length - holdback);
-        this.outsideBuf = this.outsideBuf.slice(this.outsideBuf.length - holdback);
+        const safe = this.outsideBuf.slice(
+          0,
+          this.outsideBuf.length - holdback,
+        );
+        this.outsideBuf = this.outsideBuf.slice(
+          this.outsideBuf.length - holdback,
+        );
         if (safe) {
           out.push(this.token(safe));
         }
@@ -339,14 +363,14 @@ class StreamCardExtractor {
 
   private feedInside(text: string): AgentEvent[] {
     this.insideBuf += text;
-    const close = this.insideBuf.indexOf('```');
+    const close = this.insideBuf.indexOf("```");
     if (close === -1) {
       // Still accumulating the fenced body; emit nothing yet.
       return [];
     }
     const body = this.insideBuf.slice(0, close);
     const rest = this.insideBuf.slice(close + 3);
-    this.insideBuf = '';
+    this.insideBuf = "";
     this.inFence = false;
     // Hand the remainder (after the closing fence) back to OUTSIDE processing.
     this.outsideBuf = rest;
@@ -355,21 +379,28 @@ class StreamCardExtractor {
     if (card) {
       out.push(this.uiHint(card));
     } else if (body.trim()) {
-      out.push(this.token(body));
+      // Unparsable fence body (malformed JSON / reasoning draft): downgrade to
+      // thinking — model scratch work must not leak into the answer prose.
+      out.push(this.thinking(body.trim()));
     }
     // Continue draining OUTSIDE (rest may itself open another fence / hold prose).
-    out.push(...this.feedOutside(''));
+    out.push(...this.feedOutside(""));
     return out;
   }
 
   // -- Event constructors ---------------------------------------------------
 
   private token(text: string): AgentEvent {
-    return { type: 'token', text };
+    return { type: "token", text };
+  }
+
+  /** Model scratch work (malformed card JSON / drafts) — never answer prose. */
+  private thinking(text: string): AgentEvent {
+    return { type: "thinking", text };
   }
 
   private uiHint(card: Record<string, unknown>): AgentEvent {
-    return { type: 'uiHint', card: card as UiHintCard };
+    return { type: "uiHint", card: card as UiHintCard };
   }
 }
 
@@ -393,7 +424,11 @@ export async function* extractUiHintEvents(
   const extractor = new StreamCardExtractor();
   try {
     for await (const event of events) {
-      if (event.type === 'token' && typeof event.text === 'string' && event.text.length > 0) {
+      if (
+        event.type === "token" &&
+        typeof event.text === "string" &&
+        event.text.length > 0
+      ) {
         for (const out of extractor.feed(event.text)) {
           yield out;
         }

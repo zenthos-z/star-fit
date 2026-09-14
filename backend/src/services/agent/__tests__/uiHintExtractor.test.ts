@@ -21,7 +21,9 @@ import {
 import type { AgentEvent, ChatRequest } from "shared/contracts";
 
 /** Build a raw AgentService that emits the given token chunks then `done`. */
-function rawFromTokens(tokens: string[]): { chat: (req: ChatRequest) => AsyncIterable<AgentEvent> } {
+function rawFromTokens(tokens: string[]): {
+  chat: (req: ChatRequest) => AsyncIterable<AgentEvent>;
+} {
   return {
     async *chat(): AsyncIterable<AgentEvent> {
       for (const t of tokens) {
@@ -54,12 +56,12 @@ test("tryParseCard: accepts a JSON object with a string type", () => {
 });
 
 test("tryParseCard: rejects non-objects and type-less objects", () => {
-  assert.equal(tryParseCard('[1,2,3]'), null); // array
+  assert.equal(tryParseCard("[1,2,3]"), null); // array
   assert.equal(tryParseCard('"hi"'), null); // string
   assert.equal(tryParseCard('{"summary":"x"}'), null); // no type
   assert.equal(tryParseCard('{"type":123}'), null); // non-string type
   assert.equal(tryParseCard('{"type":""}'), null); // empty type
-  assert.equal(tryParseCard('not json'), null); // non-json
+  assert.equal(tryParseCard("not json"), null); // non-json
 });
 
 test("tryParseCard: accepts a card missing required fields (liberal — B4)", () => {
@@ -83,7 +85,7 @@ test("findFenceOpen: locates ```json opener and consumes lang + newline", () => 
 });
 
 test("findFenceOpen: bare ``` opener before an object", () => {
-  const r = findFenceOpen("```\n{\"type\":\"x\"}");
+  const r = findFenceOpen('```\n{"type":"x"}');
   assert.ok(r);
   assert.equal(r!.index, 0);
 });
@@ -113,8 +115,15 @@ test("extractUiHintEvents: fenced card mid-stream -> token + uiHint + token + do
   const hint = out.find((e) => e.type === "uiHint");
   assert.equal((hint?.card as { type?: string }).type, "plan_card");
   // The raw JSON text must NOT leak into the token stream as a separate card.
-  const tokenText = out.filter((e) => e.type === "token").map((e) => e.text).join("");
-  assert.equal(tokenText.includes("plan_card"), false, "card JSON suppressed from prose");
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  assert.equal(
+    tokenText.includes("plan_card"),
+    false,
+    "card JSON suppressed from prose",
+  );
   assert.ok(tokenText.includes("Here is your plan"), "intro prose preserved");
   assert.ok(tokenText.includes("Let me know"), "closing prose preserved");
 });
@@ -125,7 +134,10 @@ test("extractUiHintEvents: fence marker split across many token chunks", async (
   const tokens = [...full];
   const raw = rawFromTokens(tokens);
   const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
-  assert.ok(out.some((e) => e.type === "uiHint"), "card still recovered despite split fence");
+  assert.ok(
+    out.some((e) => e.type === "uiHint"),
+    "card still recovered despite split fence",
+  );
   assert.ok(out.some((e) => e.type === "done"));
 });
 
@@ -133,7 +145,10 @@ test("extractUiHintEvents: unfenced card recovered via brace-balance fallback", 
   // No fence at all; the card is inline JSON. Recovered at flush.
   const raw = rawFromTokens(["plan: ", PLAN_CARD, " done"]);
   const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
-  assert.ok(out.some((e) => e.type === "uiHint"), "unfenced card recovered");
+  assert.ok(
+    out.some((e) => e.type === "uiHint"),
+    "unfenced card recovered",
+  );
   const hint = out.find((e) => e.type === "uiHint");
   assert.equal((hint?.card as { type?: string }).type, "plan_card");
 });
@@ -141,10 +156,16 @@ test("extractUiHintEvents: unfenced card recovered via brace-balance fallback", 
 test("extractUiHintEvents: no card -> only tokens + done", async () => {
   const raw = rawFromTokens(["just", " a", " plain reply"]);
   const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
-  assert.equal(out.some((e) => e.type === "uiHint"), false);
+  assert.equal(
+    out.some((e) => e.type === "uiHint"),
+    false,
+  );
   assert.equal(out[out.length - 1]!.type, "done");
   assert.equal(
-    out.filter((e) => e.type === "token").map((e) => e.text).join(""),
+    out
+      .filter((e) => e.type === "token")
+      .map((e) => e.text)
+      .join(""),
     "just a plain reply",
   );
 });
@@ -167,11 +188,15 @@ test("extractUiHintEvents: error event forwarded after flushing prose", async ()
   // Prose may be split across token events by the holdback buffer; assert the
   // semantic invariant: prose is fully preserved, then the error is forwarded
   // and is terminal (never lost, never reordered before prose).
-  const tokenText = out.filter((e) => e.type === "token").map((e) => e.text).join("");
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
   assert.equal(tokenText, "partial prose ");
   assert.equal(out[out.length - 1]!.type, "error");
   assert.deepEqual(
-    (out[out.length - 1] as { error?: { code: string; message: string } }).error,
+    (out[out.length - 1] as { error?: { code: string; message: string } })
+      .error,
     { code: "INTERNAL", message: "boom" },
   );
 });
@@ -198,4 +223,103 @@ test("extractUiHintEvents: multiple fenced cards in one stream", async () => {
   assert.equal(hints.length, 2);
   assert.equal((hints[0]?.card as { type?: string }).type, "plan_card");
   assert.equal((hints[1]?.card as { type?: string }).type, "summary_card");
+});
+
+// ---------------------------------------------------------------------------
+// Chain-of-thought leak guard (2026-09-14): malformed card payloads must NEVER
+// reach the answer prose (`token`) — they downgrade to `thinking` events.
+// ---------------------------------------------------------------------------
+
+test("leak guard: malformed fenced card (trailing commas) -> thinking, not token", async () => {
+  const raw = rawFromTokens([
+    "这是你的计划：\n```json\n",
+    '{"type": "plan", "data": [{"name": "卧推",},],}',
+    "\n```\n祝训练愉快",
+  ]);
+  const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  const thinkText = out
+    .filter((e) => e.type === "thinking")
+    .map((e) => e.text)
+    .join("");
+  assert.equal(
+    tokenText.includes('"type"'),
+    false,
+    "malformed card JSON must not reach prose",
+  );
+  assert.ok(
+    thinkText.includes("plan"),
+    "malformed card JSON downgraded to thinking",
+  );
+  assert.ok(tokenText.includes("祝训练愉快"), "surrounding prose preserved");
+  assert.equal(
+    out.some((e) => e.type === "uiHint"),
+    false,
+    "no card emitted for unparsable JSON",
+  );
+});
+
+test("leak guard: reasoning draft inside fence -> thinking, not token", async () => {
+  const raw = rawFromTokens([
+    "```json\n让我想想，用户想要胸计划，我应该安排卧推、上斜、飞鸟\n```",
+  ]);
+  const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  const thinkText = out
+    .filter((e) => e.type === "thinking")
+    .map((e) => e.text)
+    .join("");
+  assert.equal(
+    tokenText.includes("让我想想"),
+    false,
+    "draft prose must not leak into answer",
+  );
+  assert.ok(thinkText.includes("让我想想"), "draft downgraded to thinking");
+});
+
+test("leak guard: truncated fence at stream end (no close) -> thinking, not token", async () => {
+  const raw = rawFromTokens([
+    "好的，我来生成：\n```json\n",
+    '{"type": "plan", "data": [{"name": "卧推"',
+  ]);
+  const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  assert.equal(
+    tokenText.includes('"data"'),
+    false,
+    "truncated card payload must not reach prose",
+  );
+  assert.ok(
+    out.some((e) => e.type === "thinking"),
+    "truncated payload downgraded to thinking",
+  );
+  assert.ok(
+    tokenText.includes("好的，我来生成："),
+    "prose before fence preserved",
+  );
+});
+
+test("leak guard: genuine prose (no braces) still passes through as tokens", async () => {
+  const raw = rawFromTokens(["plain trailing prose without any braces"]);
+  const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
+  assert.equal(
+    out
+      .filter((e) => e.type === "token")
+      .map((e) => e.text)
+      .join(""),
+    "plain trailing prose without any braces",
+  );
+  assert.equal(
+    out.some((e) => e.type === "thinking"),
+    false,
+  );
 });
