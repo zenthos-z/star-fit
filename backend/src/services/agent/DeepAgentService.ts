@@ -574,15 +574,48 @@ function extractFileAttachments(
 }
 
 /**
+ * 从请求 metadata.intent_context 提取上下文附件（type='interaction_context'，
+ * 由动作教学 sheet「咨询教练」等入口产生，携带动作 ID/名称等结构化上下文）。
+ * 兼容单对象与数组两种形态。
+ */
+/** 导出仅供验证脚本使用；运行时仅模块内部调用 */
+export function extractInteractionContexts(
+  req: ChatRequest,
+): Array<Record<string, any>> {
+  const ic = (req.metadata ?? {})["intent_context"] as unknown;
+  const items = Array.isArray(ic) ? ic : ic ? [ic] : [];
+  return items.filter(
+    (x: any) => x && typeof x === "object" && x.type === "interaction_context",
+  ) as Array<Record<string, any>>;
+}
+
+/**
  * 组装 user content：无图 → 纯文本；带图 → 多模态 content 数组
  * [{type:'text'}, {type:'image_url', image_url:{url:dataUrl}}...] 直接进视觉模型。
  * 图片下载失败 → 降级为纯文本 + 提示，不阻塞主链路。
  */
-async function buildUserContent(
+/** 导出仅供验证脚本使用；运行时仅模块内部调用 */
+export async function buildUserContent(
   req: ChatRequest,
   timeContext: string,
   images: Array<{ mediaId: string; mime?: string }>,
 ): Promise<string | Array<Record<string, unknown>>> {
+  // 上下文附件（咨询教练等）：结构化字段注入为文本前缀，Agent 可感知动作 ID/名称
+  const interactions = extractInteractionContexts(req);
+  const interactionContext = interactions
+    .map((ctx) => {
+      const parts: string[] = [];
+      if (ctx.exerciseName) parts.push(`动作名称: ${ctx.exerciseName}`);
+      if (ctx.exerciseId) parts.push(`动作ID: ${ctx.exerciseId}`);
+      if (ctx.exerciseType) parts.push(`动作类型: ${ctx.exerciseType}`);
+      if (typeof ctx.content === "string" && ctx.content) {
+        parts.push(`说明: ${ctx.content}`);
+      }
+      return parts.length > 0 ? parts.join("；") : null;
+    })
+    .filter((s): s is string => s !== null)
+    .map((s) => `\n\n[用户上下文附件] ${s}`)
+    .join("");
   // 文件附件：文本全文注入 user 消息（带文件名），模型可直接读取。
   const files = extractFileAttachments(req);
   const fileContext = files
@@ -595,11 +628,14 @@ async function buildUserContent(
     )
     .join("");
   if (images.length === 0) {
-    return `${timeContext}${req.message}${fileContext}`;
+    return `${timeContext}${req.message}${interactionContext}${fileContext}`;
   }
   const { getObject } = await import("../mediaStorage.js");
   const blocks: Array<Record<string, unknown>> = [
-    { type: "text", text: `${timeContext}${req.message}${fileContext}` },
+    {
+      type: "text",
+      text: `${timeContext}${req.message}${interactionContext}${fileContext}`,
+    },
   ];
   let failed = 0;
   for (const img of images) {

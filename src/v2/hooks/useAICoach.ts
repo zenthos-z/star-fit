@@ -21,6 +21,10 @@ import {
 export interface ChatMessage {
   role: 'user' | 'ai';
   text: string;
+  /** 用户消息附带的图片预览（本地 dataUrl，仅 UI 展示；发送走 mediaId） */
+  imageDataUrl?: string;
+  /** 图片在服务器图床的引用 ID（内容寻址），线程删除时可据此释放服务器存储 */
+  mediaId?: string;
   isThinking?: boolean;
   /** Agent 自我修订过程的思考文本（质量门打回重试轮次）——折叠显示，非正文 */
   thinkingText?: string;
@@ -70,6 +74,20 @@ const formatThreadTitle = (firstMessage: string): string => {
   const trimmed = firstMessage.trim();
   if (trimmed.length <= 10) return trimmed;
   return `${trimmed.slice(0, 10)}...`;
+};
+
+/**
+ * 向服务器发送媒体释放信号（fire-and-forget）：线程被删除/挤出时，
+ * 其消息里引用的图片立即从服务器图床释放，不等 N 天未引用的定期清理。
+ */
+const reclaimMediaIds = (messages: ChatMessage[]): void => {
+  const ids = Array.from(
+    new Set(messages.map(m => (m as any).mediaId).filter((id: any): id is string => typeof id === 'string' && id.length > 0)),
+  );
+  ids.forEach(id => {
+    fetch(`${API_BASE}/media/reclaim/${id}`, { method: 'DELETE', headers: getHeaders() })
+      .catch(() => { /* 释放失败无碍：N 天未引用清理会兜底 */ });
+  });
 };
 
 /**
@@ -126,8 +144,12 @@ export const useAICoach = (
     const sorted = [...currentThreads].sort((a, b) => a.updatedAt - b.updatedAt);
     const toDelete = sorted.slice(0, currentThreads.length - MAX_THREADS);
 
-    // Delete oldest threads
-    toDelete.forEach(thread => {
+    // Delete oldest threads (其图片附件随线程释放：立即发服务器释放信号，定期清理兜底)
+    toDelete.forEach(async thread => {
+      try {
+        const msgs = await loadChatMessages(thread.id);
+        if (msgs?.length) reclaimMediaIds(msgs);
+      } catch { /* 读取失败也照删线程 */ }
       deleteChatThread(thread.id);
     });
 
@@ -581,8 +603,15 @@ ${JSON.stringify(uploadData, null, 2)}`
     setChatMessage("");
     setAttachedContext(null); // Clear attachment after send
     // 静默轮（画像确认等系统回传）：不把指令文本推入聊天流，用户只看到 Agent 的回复
+    // 图片消息：本地 dataUrl 挂上气泡供查看（上传失败已在上面的分支中断，到这里必已换到 mediaId）
     if (!opts?.silent) {
-      setChatHistory(prev => [...prev, { role: 'user', text: userMsg }]);
+      setChatHistory(prev => [...prev, {
+        role: 'user',
+        text: userMsg,
+        ...(currentAttachment?.type === 'image' && currentAttachment.dataUrl && sendAttachment?.type === 'image'
+          ? { imageDataUrl: currentAttachment.dataUrl, mediaId: sendAttachment.mediaId }
+          : {}),
+      }]);
     }
 
     if (textareaRef.current) textareaRef.current.style.height = '64px';

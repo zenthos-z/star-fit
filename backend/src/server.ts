@@ -14,6 +14,7 @@ import {
   getConfig,
 } from "./controllers/syncController.js";
 import { wsService } from "./services/wsService.js";
+import { startMediaCleanup, deleteObject } from "./services/mediaStorage.js";
 import {
   uploadMedia,
   listUserMedia,
@@ -526,6 +527,22 @@ const start = async () => {
         api.get("/media/list", listUserMedia);
         api.delete("/media/:id", deleteMedia);
 
+        // 立即释放媒体对象（「跳过后发信号清理」通道）：前端删除含图消息/线程时调用，
+        // 与定期清理互为补充。对象只被内容寻址引用，删除即释放存储。
+        api.delete("/media/reclaim/:id", async (req, reply) => {
+          const id = (req.params as any)?.id as string;
+          // 防路径穿越：id 必须是纯十六进制（sha256 内容寻址格式）
+          if (!/^[a-f0-9]{8,64}$/i.test(id)) {
+            return reply
+              .status(400)
+              .send({ error: "Invalid media id", traceId: req.id });
+          }
+          const ok = await deleteObject(id);
+          return reply
+            .status(ok ? 200 : 404)
+            .send({ success: ok, traceId: req.id });
+        });
+
         // Dashboard Routes (New)
         api.get("/admin/dashboard/latest-training", getLatestTraining);
         api.get("/admin/server-info", getServerInfo);
@@ -700,6 +717,9 @@ const start = async () => {
     const host = process.env.HOST || "0.0.0.0";
     await server.listen({ port, host });
     console.log(`Server running at http://${host}:${port}`);
+
+    // 「N 天未引用自动清理」媒体维护任务（默认 14 天，MEDIA_RETENTION_DAYS 可调）
+    startMediaCleanup();
   } catch (err) {
     server.log.error(err);
     process.exit(1);
