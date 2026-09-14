@@ -171,7 +171,7 @@ IMMEDIATE RENDERING REQUESTED.`;
 
 export function generateAcidTemplate(context: TemplateContext): string {
   const { data, config, vibeConfig } = context;
-  const finalNickname = vibeConfig?.brandingName || data.nickname || "ANONYMOUS";
+  const finalNickname = data.nickname || "ANONYMOUS";
   
   const workoutList = data.exercises.map(ex => ({
     name: ex.name,

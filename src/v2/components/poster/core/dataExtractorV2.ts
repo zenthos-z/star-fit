@@ -73,7 +73,7 @@ export function extractWorkoutData(session: WorkoutSession): ExtractedWorkoutDat
     .filter((ex) => ex !== null) as ExerciseItem[];
 
   return {
-    nickname: '你的昵称',
+    nickname: 'ANONYMOUS',
     date: dateStr,
     duration: `${durationMinutes} MINS`,
     exercises

@@ -32,7 +32,6 @@ const STYLE_OPTIONS = [
 const ACID_STYLE_IDS = ['industrial', 'liquid', 'cyber', 'punk'];
 
 const VIBE_FIELDS: Array<{ key: keyof VibeConfig; label: string; placeholder: string }> = [
-  { key: 'brandingName', label: '品牌名称', placeholder: '你的昵称' },
   { key: 'slogans', label: '标语', placeholder: 'SYSTEM OVERLOAD, LEG DAY' },
   { key: 'palette', label: '色彩方案', placeholder: 'Neon Orange vs Midnight Blue' },
   { key: 'brandingStyle', label: '品牌质感', placeholder: 'Chrome Metallic 3D style' },
@@ -73,47 +72,73 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
 
   const workoutData = extractWorkoutData(session);
 
+  // 海报昵称：所有风格共用。初值从 localStorage 恢复（上次输入），
+  // 也可在 UI 直接改；无输入时兜底 dataExtractor 的默认值。
+  const [posterNickname, setPosterNickname] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('starfit_poster_nickname');
+      return typeof saved === 'string' ? saved : '';
+    } catch {
+      return '';
+    }
+  });
+  const handleNicknameChange = (v: string) => {
+    setPosterNickname(v);
+    try {
+      localStorage.setItem('starfit_poster_nickname', v);
+    } catch (e) {
+      console.warn('[Poster] nickname persist failed:', e);
+    }
+  };
+
   const generatePrompt = useCallback(() => {
     let context: TemplateContext;
     let config: any;
 
+    // 昵称注入：所有风格模板都读 data.nickname（山水 User_ID / 包豪斯 Text_Content /
+    // Acid finalNickname 的兜底），覆盖写死值，保证"改一处全风格生效"。
+    const posterData: typeof workoutData = {
+      ...workoutData,
+      nickname: posterNickname.trim() || workoutData.nickname,
+    };
+
     switch (selectedStyle) {
       case 'shanshui':
         config = shanshuiConfig;
-        context = { data: workoutData, config };
+        context = { data: posterData, config };
         setFinalPrompt(generateShanShuiTemplate(context));
         break;
       case 'bauhaus':
         config = bauhausConfig;
-        context = { data: workoutData, config };
+        context = { data: posterData, config };
         setFinalPrompt(generateBauhausTemplate(context));
         break;
       case 'industrial':
         config = industrialConfig;
-        context = { data: workoutData, config, vibeConfig };
+        context = { data: posterData, config, vibeConfig };
         setFinalPrompt(generateAcidTemplate(context));
         break;
       case 'liquid':
         config = liquidConfig;
-        context = { data: workoutData, config, vibeConfig };
+        context = { data: posterData, config, vibeConfig };
         setFinalPrompt(generateAcidTemplate(context));
         break;
       case 'cyber':
         config = cyberConfig;
-        context = { data: workoutData, config, vibeConfig };
+        context = { data: posterData, config, vibeConfig };
         setFinalPrompt(generateAcidTemplate(context));
         break;
       case 'punk':
         config = punkConfig;
-        context = { data: workoutData, config, vibeConfig };
+        context = { data: posterData, config, vibeConfig };
         setFinalPrompt(generateAcidTemplate(context));
         break;
       default:
         config = shanshuiConfig;
-        context = { data: workoutData, config };
+        context = { data: posterData, config };
         setFinalPrompt(generateShanShuiTemplate(context));
     }
-  }, [selectedStyle, vibeConfig, workoutData]);
+  }, [selectedStyle, vibeConfig, workoutData, posterNickname]);
 
   useEffect(() => {
     generatePrompt();
@@ -245,6 +270,21 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
               </button>
             ))}
           </div>
+        </div>
+
+        {/* 海报昵称：所有风格通用（山水/包豪斯/Acid 模板都读 data.nickname） */}
+        <div className="shrink-0 bg-white rounded-[40px] p-5 shadow-sm border border-gray-50">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-2 h-2 rounded-full border-2 border-blue-500" />
+            <span className="text-sm font-semibold text-gray-900">海报昵称</span>
+          </div>
+          <input
+            type="text"
+            value={posterNickname}
+            onChange={(e) => handleNicknameChange(e.target.value)}
+            placeholder="输入昵称（留空则用默认值）"
+            className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-3 py-2.5 text-[13px] font-medium text-gray-900 placeholder:text-gray-300 outline-none focus:border-blue-400 focus:bg-white transition-all"
+          />
         </div>
 
         {/* 氛围参数：仅 acid 系风格需要，其余风格不渲染（免空卡片占位） */}
