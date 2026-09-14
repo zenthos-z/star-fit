@@ -28,25 +28,38 @@ export function extractWorkoutData(session: WorkoutSession): ExtractedWorkoutDat
 
   const exercises: ExerciseItem[] = session.exercises
     .map(ex => {
-      const completedSets = ex.sets.filter(s => s.status === 'COMPLETED');
+      // 完成组判定要兼容历史数据：协议是 status:'COMPLETED'，但实际落库/旧版本
+      // 常只有 completed:false + reps>0（甚至不写 completed）。以"有实际训练量"为准。
+      const hasVolume = (s: any) =>
+        s?.status === 'COMPLETED' ||
+        s?.completed === true ||
+        (Number(s?.reps) > 0 || Number(s?.duration) > 0 || Number(s?.distance) > 0);
+      const completedSets = ex.sets.filter(hasVolume);
       if (completedSets.length === 0) return null;
 
       const maxWeight = Math.max(...completedSets.map(s => s.weight || 0));
       const totalReps = completedSets.reduce((acc, s) => acc + (s.reps || 0), 0);
+      const totalDuration = completedSets.reduce((acc, s) => acc + (s.duration || 0), 0);
 
       let meta: string;
 
       if (ex.type === 'cardio' || ex.type === 'outdoor') {
-        const avgDuration = completedSets.reduce((acc, s) => acc + (s.duration || 0), 0) / completedSets.length;
+        const avgDuration = totalDuration / completedSets.length;
         meta = `[${avgDuration.toFixed(0)} · ${completedSets.length}组]`;
       } else if (ex.type === 'isometric') {
-        const avgDuration = completedSets.reduce((acc, s) => acc + (s.duration || 0), 0) / completedSets.length;
+        const avgDuration = totalDuration / completedSets.length;
         meta = `[${avgDuration.toFixed(0)}SEC · ${completedSets.length}组]`;
       } else {
         meta = `[${maxWeight}KG · ${totalReps} · ${completedSets.length}组]`;
       }
 
-      const exerciseName = ex.exerciseId.replace('fit://library/exercise/', '');
+      // 动作名兼容：协议只有 exerciseId(fit://...)，实存数据带 name/metadata.name（中文）。
+      const exerciseName =
+        (ex as any).name?.trim?.() ||
+        ex.metadata?.name?.trim?.() ||
+        ex.exerciseId?.replace('fit://library/exercise/', '') ||
+        (ex as any).libraryId ||
+        '未知动作';
 
       return {
         name: exerciseName,

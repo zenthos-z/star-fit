@@ -19,7 +19,8 @@ export function generateShanShuiTemplate(context: TemplateContext): string {
   
   const exerciseLines = data.exercises.map((ex, index) => {
     const lineNum = index + 1;
-    const content = `"${ex.name}     ${ex.sets}"`;
+    const parts = [ex.name, ex.weight, `${ex.sets}${ex.reps ? ` / 共${ex.reps}次` : ''}`, ex.duration].filter(Boolean);
+    const content = `"${parts.join('  ')}"`;
     return `            Line_${lineNum}: ${content.padEnd(40)} // Center`;
   }).join('\n');
 
@@ -99,7 +100,10 @@ IMMEDIATE RENDERING REQUESTED.`;
 export function generateBauhausTemplate(context: TemplateContext): string {
   const { data, config } = context;
   
-  const matrixLines = data.exercises.map(item => `            - "${item.name}     ${item.sets}"`).join('\n');
+  const matrixLines = data.exercises.map(item => {
+            const parts = [item.name, item.weight, `${item.sets}${item.reps ? ` / 共${item.reps}次` : ''}`, item.duration].filter(Boolean);
+            return `            - "${parts.join('  ')}"`;
+          }).join('\n');
 
   return `# SYSTEM ROLE: BAUHAUS_ATHLETE_VISUAL_SYSTEM
 # TASK: Execute the rendering function below to generate a 3:4 ratio poster with high-level architectural aesthetics and fitness-specific structural hints.
