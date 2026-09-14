@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ExerciseAction, LoadAnchors } from '../../../types/protocol';
 import { Attachment } from '../FloatingAttachment';
+import { haptic } from '../../../../lib/nativeHaptics';
 import { CardHeader } from './CardHeader';
 
 /**
@@ -126,12 +127,14 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
       
       setActiveSetIndex(numericIndex);
       setElapsedMap(prev => ({ ...prev, [numericIndex]: prev[numericIndex] || 0 }));
+      haptic('light'); // 开始计时：轻触感
       
     } else if (isActive) {
       // 2. 运动中 -> 运动终止
       const finalDuration = elapsedMap[numericIndex] || 0;
       setActiveSetIndex(null);
       handleBatchUpdate(numericIndex, { status: 'COMPLETED', duration: finalDuration });
+      haptic('success'); // 完成：成功通知触感
       
     } else if (isCompleted) {
       // 3. 运动终止 -> 待开始 (重置)

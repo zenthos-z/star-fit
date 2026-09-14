@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ExerciseAction, LoadAnchors } from '../../../types/protocol';
 import { Attachment } from '../FloatingAttachment';
+import { haptic } from '../../../../lib/nativeHaptics';
 import { db } from '../../../storage/db';
 import { CardHeader } from './CardHeader';
 
@@ -79,6 +80,7 @@ export const CardioCard: React.FC<CardioCardProps> = ({
             // [FIX] 使用 setTimeout 将 side effects 移出 render/updater 阶段，防止 React 警告
             setTimeout(() => {
               onUpdate?.({ sets: updatedSets as ExerciseAction['sets'] });
+              haptic('success'); // 倒计时自动完成：成功通知触感
             }, 0);
           } else {
             next[set.index] = { ...state, elapsed: newElapsed };
@@ -156,6 +158,7 @@ export const CardioCard: React.FC<CardioCardProps> = ({
         ...prev,
         [setIndex]: { ...currentState, running: true },
       }));
+      haptic('light'); // 开始计时：轻触感
       // 触发一次同步以保持活跃
       handleBatchUpdate(setIndex, { status: 'PLANNED' });
       
@@ -168,6 +171,7 @@ export const CardioCard: React.FC<CardioCardProps> = ({
         [setIndex]: { elapsed: finalDuration, running: false },
       }));
       handleBatchUpdate(setIndex, { status: 'COMPLETED', duration: finalDuration });
+      haptic('success'); // 完成：成功通知触感
       
     } else if (isCompleted) {
       // 3. 运动终止 -> 待开始 (重置/归零)
