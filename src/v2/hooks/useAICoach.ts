@@ -7,6 +7,7 @@ import { buildSessionPayload } from '../utils/workoutSummary';
 // seam; this hook consumes the SSE stream and synthesizes renderable uiHint
 // cards, with no awareness of the backend agent implementation.
 import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/agent/sseAgentClient';
+import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
 import type { AgentScenario, UiHintCard } from 'shared/contracts';
 import {
   saveChatThreadList,
@@ -83,7 +84,11 @@ const formatThreadTitle = (firstMessage: string): string => {
  */
 export const useAICoach = (
   session: any,
-  onPlanConfirm: (plan: any[], mode: 'append' | 'replace') => void
+  onPlanConfirm: (
+    plan: any[],
+    mode: 'append' | 'replace',
+    opts?: { onConsumed?: (record: PlanConsumeRecord) => void }
+  ) => void
 ) => {
   const [isAiOverlayOpen, setIsAiOverlayOpen] = useState(false);
   const [isPlanMode, setIsPlanMode] = useState(false);
@@ -648,9 +653,26 @@ ${JSON.stringify(uploadData, null, 2)}`
     }
   };
 
-  const handleConfirmPlan = (planData: any[], mode: 'append' | 'replace') => {
-    onPlanConfirm(planData, mode);
+  const handleConfirmPlan = (
+    planData: any[],
+    mode: 'append' | 'replace',
+    opts?: { onConsumed?: (record: PlanConsumeRecord) => void }
+  ) => {
+    onPlanConfirm(planData, mode, opts);
   };
+
+  /**
+   * 计划卡一次性消费（2026-09-14）：把消费记录写入指定消息的 uiHint.consumed。
+   * chatHistory 变化会被现有 effect 自动 saveChatMessages 持久化，
+   * 重开对话/切会话后卡片保持「已消费」折叠态，不会重新出现操作按钮。
+   */
+  const markPlanConsumed = useCallback((msgIndex: number, record: PlanConsumeRecord) => {
+    setChatHistory(prev => prev.map((m, i) => (
+      i === msgIndex && m.uiHint?.type === 'plan_card'
+        ? { ...m, uiHint: { ...m.uiHint, consumed: record } }
+        : m
+    )));
+  }, []);
 
   const openAiCoach = async (attachment?: any) => {
 
@@ -902,6 +924,7 @@ ${JSON.stringify(uploadData, null, 2)}`
     isLoading,
     handleChatSubmit,
     handleConfirmPlan,
+    markPlanConsumed,
     openAiCoach,
     chatEndRef,
     textareaRef,
