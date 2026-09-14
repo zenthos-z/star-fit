@@ -554,57 +554,6 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
     handleChatSubmit(undefined, payload);
   };
 
-  // Handle strategy save API call
-  const handleStrategySave = async (content: string) => {
-    try {
-      // Get user ID from localStorage (might be username or UUID)
-      const userIdInput = localStorage.getItem('starfit_user_id') || 'global';
-
-      // First, try to get the actual user UUID by username
-      let actualUserId = userIdInput;
-
-      // If the input looks like a username (not a UUID), fetch the actual UUID
-      if (!userIdInput.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
-        try {
-          const userLookupResponse = await fetch(`${API_BASE}/admin/users/by-username/${encodeURIComponent(userIdInput)}`, {
-            method: 'GET',
-            headers: getHeaders()
-          });
-
-          if (userLookupResponse.ok) {
-            const userData = await userLookupResponse.json();
-            if (userData.success && userData.data?.id) {
-              actualUserId = userData.data.id;
-              console.log('[AICoachOverlay] Resolved userId:', userIdInput, '->', actualUserId);
-            }
-          }
-        } catch (e) {
-          console.warn('[AICoachOverlay] Failed to resolve userId, using input:', userIdInput);
-        }
-      }
-
-      // training_strategy is stored in profile_static, use PUT /profile/static
-      const response = await fetch(`${API_BASE}/admin/users/${actualUserId}/profile/static`, {
-        method: 'PUT',
-        headers: getHeaders(),
-        body: JSON.stringify({ training_strategy: content })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('[AICoachOverlay] API error:', errorText);
-        throw new Error(`保存失败 (${response.status}): ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('[AICoachOverlay] Strategy saved successfully:', result);
-      return result;
-    } catch (error) {
-      console.error('[AICoachOverlay] Failed to save strategy:', error);
-      throw error; // Re-throw to let StrategyConfirmCard handle the error
-    }
-  };
-
   return (
     <div
       style={{
@@ -760,11 +709,6 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                           } else {
                             // Legacy save poster logic or other actions
                             console.log('[SavePoster] Workout summary save requested', msg.uiHint.data);
-                          }
-                        } else if (uiHintType === 'strategy_confirm') {
-                          if (payload?.action === 'save') {
-                            // Save strategy via API - returns Promise for async handling
-                            return handleStrategySave(payload.content);
                           }
                         } else if (uiHintType === 'profile_update_confirm') {
                           // [画像更新闭环] docs/profile-update-frontend-spec.md §3.3

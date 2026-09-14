@@ -85,30 +85,14 @@ export const ProfileStaticDatabaseSchema = z.object({
   risk_preference: z.enum(['UNKNOWN', 'conservative', 'moderate', 'aggressive']).optional(),
   accountability: z.enum(['UNKNOWN', 'low', 'medium', 'high']).optional(),
 
-  // Permanent limitations
-  permanent_injuries: z.array(z.object({
-    part: z.string(),
-    description: z.string().optional(),
-    severity: z.number().min(1).max(10).optional(),
-  })).optional(),
-
-  // Fitness level classification
-  fitness_level: z.enum(['UNKNOWN', 'beginner', 'intermediate', 'advanced']).optional(),
-
   // User tags and classifications
   tags: z.array(z.string()).optional(),
-
-  // Health red flags (injuries, conditions, etc.)
-  red_flags: z.array(z.string()).optional(),
 
   // Nested schemas for extended profile data
   basic_info: BasicInfoDatabaseSchema.optional(),
   preferences: PreferencesDatabaseSchema.optional(),
   physiological: PhysiologicalDatabaseSchema.optional(),
   psychological: PsychologicalDatabaseSchema.optional(),
-
-  // Training strategy (free text format, similar to AI system prompt)
-  training_strategy: z.string().optional().nullable(),
 });
 
 export type ProfileStaticDatabase = z.infer<typeof ProfileStaticDatabaseSchema>;
@@ -159,20 +143,6 @@ export const ProfileDynamicDatabaseSchema = z.object({
     last_workout_date: z.string().datetime().optional(),
     recommended_rest_days: z.number().int().min(0).optional(),
   }).nullish(),
-
-  // Heart rate baseline for recovery tracking
-  hr_baseline: z.object({
-    resting_hr: z.number().int().positive().optional(),
-    hrv: z.number().optional(),
-    last_measured: z.string().datetime().optional(),
-  }).optional(),
-
-  // Protocol status tracking
-  protocol_status: z.object({
-    current_phase: z.string().optional(),
-    days_in_phase: z.number().int().min(0).optional(),
-    last_phase_change: z.string().datetime().optional(),
-  }).optional(),
 });
 
 export type ProfileDynamicDatabase = z.infer<typeof ProfileDynamicDatabaseSchema>;

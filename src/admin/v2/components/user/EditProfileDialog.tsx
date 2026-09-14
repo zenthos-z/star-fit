@@ -35,8 +35,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
   const [loadAnchors, setLoadAnchors] = useState<any>({});
   const [physiological, setPhysiological] = useState<any>({});
   const [psychological, setPsychological] = useState<any>({});
-  const [fitnessLevel, setFitnessLevel] = useState<string>('beginner');
-  const [redFlags, setRedFlags] = useState<string[]>([]);
 
   const initializedRef = useRef(false);
 
@@ -51,8 +49,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
       setLoadAnchors(parseData(initialData.load_anchors));
       setPhysiological(parseData(initialData.physiological));
       setPsychological(parseData(initialData.psychological));
-      setFitnessLevel(initialData.fitness_level || 'beginner');
-      setRedFlags(Array.isArray(initialData.red_flags) ? initialData.red_flags : []);
 
       setSaveError(null);
       initializedRef.current = true;
@@ -71,8 +67,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
         load_anchors: loadAnchors,
         physiological,
         psychological,
-        fitness_level: fitnessLevel,
-        red_flags: redFlags,
         modifiedBy: 'admin',
         changeReason: 'Admin manual update'
       });
@@ -106,10 +100,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
           <PhysioSection
             basicInfo={basicInfo}
             setBasicInfo={setBasicInfo}
-            fitnessLevel={fitnessLevel}
-            setFitnessLevel={setFitnessLevel}
-            redFlags={redFlags}
-            setRedFlags={setRedFlags}
           />
 
           {/* 区块 2: 生理状态 */}

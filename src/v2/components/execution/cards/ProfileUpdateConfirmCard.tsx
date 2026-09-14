@@ -11,7 +11,7 @@ import { ChatCardShell, ChatPrimaryButton, ChatSecondaryButton } from './ChatCar
  * 点击后气泡冻结为已选状态，防止重复提交。确认/取消均由父级
  * （AICoachOverlay onConfirm）发起 scenario=update_profile 的执行轮。
  *
- * 视觉语言与 AuditCompleteCard / StrategyConfirmCard 统一：
+ * 视觉语言与 AuditCompleteCard 统一：
  * 白底圆角卡 + bg-star-dark 深色头部 + star-accent 主操作按钮。
  */
 

@@ -35,14 +35,6 @@ interface FormFieldProps {
 // Constants
 // ============================================================================
 
-const NEURO_TYPE_OPTIONS = [
-  { value: 'UNKNOWN', label: '未知' },
-  { value: 'type_1', label: 'Type 1 (耐力型)' },
-  { value: 'type_2a', label: 'Type 2A (均衡型)' },
-  { value: 'type_2b', label: 'Type 2B (力量型)' },
-  { value: 'type_3', label: 'Type 3 (神经敏感型)' },
-] as const;
-
 const RISK_PREFERENCE_OPTIONS = [
   { value: 'UNKNOWN', label: '未知' },
   { value: 'conservative', label: '保守' },
@@ -107,14 +99,22 @@ function NumberInput({
         return;
       }
       const num = parseFloat(val);
+      // 允许任意中间态（逐键输入 '31' 时首键 '3' 可能低于 min，不能在此拒绝），
+      // 范围钳制放到失焦时（handleBlur），保证键盘可正常输入多位数。
       if (!isNaN(num)) {
-        if (min !== undefined && num < min) return;
-        if (max !== undefined && num > max) return;
         onChange(num);
       }
     },
-    [onChange, min, max]
+    [onChange]
   );
+
+  const handleBlur = useCallback(() => {
+    if (value === undefined) return;
+    let clamped = value;
+    if (min !== undefined && clamped < min) clamped = min;
+    if (max !== undefined && clamped > max) clamped = max;
+    if (clamped !== value) onChange(clamped);
+  }, [value, min, max, onChange]);
 
   return (
     <div className="relative">
@@ -122,11 +122,12 @@ function NumberInput({
         type="number"
         value={value ?? ''}
         onChange={handleChange}
+        onBlur={handleBlur}
         placeholder={placeholder}
         className="w-full rounded-2xl border-2 border-gray-200 px-4 py-3 text-gray-900
-                   placeholder:text-gray-400
-                   focus:border-star-accent focus:outline-none focus:ring-0
-                   transition-colors"
+                  placeholder:text-gray-400
+                  focus:border-star-accent focus:outline-none focus:ring-0
+                  transition-colors"
       />
       {suffix && (
         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm text-gray-500">
@@ -249,9 +250,9 @@ export function BasicInfoForm({
       variants={slideUp}
       initial="initial"
       animate="animate"
-      className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 ${className}`}
+      className={`bg-white rounded-[24px] shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-5 ${className}`}
     >
-      <h2 className="text-xl font-black text-star-dark italic uppercase mb-4">
+      <h2 className="text-lg font-bold text-gray-900 tracking-tight mb-4">
         基本信息
       </h2>
 
@@ -319,19 +320,6 @@ export function BasicInfoForm({
             心理特征
           </h3>
 
-          <FormField label="神经类型">
-            <SelectInput
-              value={formData.neuro_type}
-              onChange={(v) =>
-                handleFieldChange(
-                  'neuro_type',
-                  v as ProfileStatic['neuro_type']
-                )
-              }
-              options={NEURO_TYPE_OPTIONS}
-            />
-          </FormField>
-
           <div className="grid grid-cols-2 gap-4">
             <FormField label="风险偏好">
               <SelectInput
@@ -375,22 +363,22 @@ export function BasicInfoForm({
                 type="button"
                 onClick={handleReset}
                 disabled={isSubmitting}
-                className="flex-1 rounded-[2rem] border-2 border-gray-200 py-3 px-6
-                           font-semibold text-gray-700
-                           hover:bg-gray-50
-                           disabled:opacity-50 disabled:cursor-not-allowed
-                           transition-colors"
+                className="flex-1 rounded-full border border-gray-200 py-3 px-6
+                          font-semibold text-gray-700 bg-white
+                          hover:bg-gray-50
+                          disabled:opacity-50 disabled:cursor-not-allowed
+                          transition-colors"
               >
                 重置
               </button>
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="flex-1 rounded-[2rem] bg-star-dark py-3 px-6
-                           font-black text-white italic uppercase
-                           hover:bg-star-dark/90
-                           disabled:opacity-50 disabled:cursor-not-allowed
-                           transition-colors flex items-center justify-center gap-2"
+                className="flex-1 rounded-full bg-star-accent py-3 px-6
+                          font-semibold text-white
+                          hover:bg-star-accent/90
+                          disabled:opacity-50 disabled:cursor-not-allowed
+                          transition-colors flex items-center justify-center gap-2"
               >
                 {isSubmitting ? (
                   <>

@@ -231,9 +231,7 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
   // Seed two real users + two exercises before the PG-dependent tests.
   async function seed(): Promise<void> {
     const minimalProfile = JSON.stringify({
-      fitness_level: "BEGINNER",
       tags: ["r3-test"],
-      red_flags: [],
     });
     for (const id of [userA, userB]) {
       await client.query(

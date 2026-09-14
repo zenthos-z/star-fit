@@ -118,7 +118,6 @@ export const UIHintSchema = z.object({
     'survey_card',
     'deviation_card',
     'instruction_card',
-    'strategy_confirm',
     'skeleton',
     'audit_complete',
     'survey_success',

@@ -63,19 +63,27 @@ export async function postImage(req: FastifyRequest, reply: FastifyReply) {
     // was generated with empty workout data.
     const raw = (body.session ?? {}) as Record<string, unknown>;
     const exercises = Array.isArray(raw.exercises) ? raw.exercises : [];
-    // exerciseId 形如 fit://library/exercise/<id> —— 批量查库还原中文动作名
-    const exerciseIds = exercises
-      .map((e: any) =>
-        typeof e?.exerciseId === "string"
-          ? e.exerciseId.replace("fit://library/exercise/", "")
-          : "",
-      )
+    // 动作名：客户端 exercises[] 自带中文 name（来自动作库）；libraryId 可兜底查库。
+    // （历史 bug：曾读不存在的 exerciseId 字段 → 全部 fallback 成 "Unknown"。）
+    const libraryIds = exercises
+      .map((e: any) => {
+        if (typeof e?.name === "string" && e.name.trim()) return ""; // 有名字无需查库
+        const lib =
+          typeof e?.libraryId === "string"
+            ? e.libraryId
+            : typeof e?.metadata?.libraryId === "string"
+              ? e.metadata.libraryId
+              : "";
+        return lib;
+      })
       .filter(Boolean);
     const idToName = new Map<string, string>();
-    if (exerciseIds.length > 0) {
+    if (libraryIds.length > 0) {
       try {
-        // id 段只允许字母数字下划线连字符，杜绝注入后字面拼接
-        const safeIds = exerciseIds.filter((s: string) => /^[\w-]+$/.test(s));
+        // 只允许字母数字下划线连字符，杜绝注入后字面拼接
+        const safeIds = [...new Set(libraryIds)].filter((s: string) =>
+          /^[\w-]+$/.test(s),
+        );
         if (safeIds.length > 0) {
           const db = getPostgresClient();
           const list = safeIds.map((s: string) => `'${s}'`).join(",");
@@ -93,8 +101,9 @@ export async function postImage(req: FastifyRequest, reply: FastifyReply) {
     }
     const workoutList = exercises.map((e: any) => {
       const sets = Array.isArray(e?.sets) ? e.sets : [];
+      // 完成组 = completed!==false 或 reps>0（旧版本不写 completed）
       const done = sets.filter(
-        (s: any) => s?.completed !== false || s?.reps > 0,
+        (s: any) => s?.completed !== false || Number(s?.reps) > 0,
       );
       const topWeight = Math.max(
         0,
@@ -104,19 +113,33 @@ export async function postImage(req: FastifyRequest, reply: FastifyReply) {
         (n: number, s: any) => n + (Number(s?.reps) || 0),
         0,
       );
-      const eid =
-        typeof e?.exerciseId === "string"
-          ? e.exerciseId.replace("fit://library/exercise/", "")
-          : "";
+      const totalSecs = done.reduce(
+        (n: number, s: any) => n + (Number(s?.duration) || 0),
+        0,
+      );
+      const libId =
+        typeof e?.libraryId === "string"
+          ? e.libraryId
+          : typeof e?.metadata?.libraryId === "string"
+            ? e.metadata.libraryId
+            : "";
       const name =
-        (eid && idToName.get(eid)) ||
-        (typeof e?.name === "string" && e.name) ||
-        eid ||
+        (typeof e?.name === "string" && e.name.trim()) ||
+        (libId && idToName.get(libId)) ||
         "Unknown";
+      // 组数x次数 or 组数x时长（平板支撑等 isometric）
+      const setsDesc =
+        totalSecs > 0 && topWeight === 0
+          ? `${done.length}x${done[0]?.duration ?? "?"}s`
+          : `${done.length}x${done[0]?.reps ?? "-"}`;
+      const loadDesc = topWeight > 0 ? `${topWeight}kg` : "bodyweight";
       return {
         name,
-        weight: topWeight > 0 ? `${topWeight}kg` : "bodyweight",
-        sets: `${done.length}x${done[0]?.reps ?? "-"} (${totalReps} reps)`,
+        weight: loadDesc,
+        sets:
+          totalSecs > 0 && topWeight === 0
+            ? `${setsDesc} (${totalSecs}s total)`
+            : `${setsDesc} (${totalReps} reps)`,
       };
     });
     const startTime =
@@ -143,12 +166,16 @@ export async function postImage(req: FastifyRequest, reply: FastifyReply) {
       ? VibeOverrideSchema.parse(body.vibeOverride)
       : undefined;
 
-    const prompt = await buildPosterPrompt(
-      session,
-      templateKey,
-      vibeOverride,
-      userId,
-    );
+    // 所见即所得：前端把界面展示的提示词原样发来时，直接用它生图，
+    // 跳过后端 SCENE_TEMPLATES 自拼（两套 prompt 体系不一致会导致
+    // "界面显示包豪斯、生图却是工业酸画风"）。仅在缺省时走后端拼装。
+    const promptOverride =
+      typeof body.promptOverride === "string" && body.promptOverride.trim()
+        ? body.promptOverride
+        : undefined;
+    const prompt =
+      promptOverride ??
+      (await buildPosterPrompt(session, templateKey, vibeOverride, userId));
     const dataUrl = await generateImage(prompt, req.log);
 
     return reply.status(200).send({ dataUrl, traceId: req.id });

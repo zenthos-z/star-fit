@@ -21,6 +21,8 @@
  * - `write_memory`        (write) keyed free-text memory note under profile_dynamic.memories
  * - `update_profile`      (write) structured update of profile_dynamic
  *                                 (load_anchors / active_limitations / recovery_state)
+ *                                 + profile_static.psychological
+ *                                 (neurotype / risk_preference / accountability)
  * - `create_exercise`     (write) insert a USER-BOUND custom exercise into the
  *                                 library. User-binding rides in
  *                                 `attributes.owner_user_id` (HC-2: no schema
@@ -238,6 +240,20 @@ export class UserScopedWriteRepository extends BaseRepository {
     await this.execute(
       `UPDATE users
          SET profile_dynamic = COALESCE(profile_dynamic, '{}'::jsonb) || $updates::jsonb,
+             updated_at = NOW()
+       WHERE id = $userId`,
+      { userId, updates: this.stringifyJSONB(data) },
+    );
+  }
+
+  /** Shallow-merge `data` into the `profile_static` JSONB of user `userId`. */
+  async mergeProfileStatic(
+    userId: string,
+    data: Record<string, unknown>,
+  ): Promise<void> {
+    await this.execute(
+      `UPDATE users
+         SET profile_static = COALESCE(profile_static, '{}'::jsonb) || $updates::jsonb,
              updated_at = NOW()
        WHERE id = $userId`,
       { userId, updates: this.stringifyJSONB(data) },
@@ -528,10 +544,32 @@ const updateProfileSchema = z
       .passthrough()
       .optional()
       .describe("Replacement recovery_state."),
+    psychological: z
+      .object({
+        neurotype: z
+          .enum(["type_1", "type_2a", "type_2b", "type_3"])
+          .optional()
+          .describe(
+            "Neuro type (PsychoOS) inferred from coaching conversations. Only set it when the user explicitly aligns with the type description during the chat — never guess.",
+          ),
+        risk_preference: z
+          .enum(["conservative", "moderate", "aggressive"])
+          .optional()
+          .describe("User's stated risk preference for load progression."),
+        accountability: z
+          .enum(["low", "medium", "high"])
+          .optional()
+          .describe("User's self-reported accountability level."),
+      })
+      .passthrough()
+      .optional()
+      .describe(
+        "Replacement psychological sub-object inside profile_static (neurotype / risk_preference / accountability). Only write what the user explicitly stated.",
+      ),
   })
   .passthrough()
   .describe(
-    "Structured update to the current user profile_dynamic (load_anchors / active_limitations / recovery_state). Shallow-merges into profile_dynamic; always targets the calling user. Use after a workout to record new anchors, limitations, or recovery.",
+    "Structured update to the current user profile (profile_dynamic: load_anchors / active_limitations / recovery_state; profile_static.psychological: neurotype / risk_preference / accountability). Shallow-merges into the target JSONB; always targets the calling user. Use after a workout to record new anchors, limitations, recovery, or after a conversation to record explicitly stated psychological traits.",
   );
 
 export type SessionInput = z.infer<typeof writeSessionSchema>;
@@ -594,7 +632,17 @@ export async function updateProfileForUser(
   const filtered = Object.fromEntries(
     Object.entries(update).filter(([, v]) => v !== undefined),
   );
-  await writeRepo.mergeProfileDynamic(targetUserId, filtered);
+  // 分流：psychological 写入 profile_static（neuro_type 等低频画像字段），
+  // 其余字段写入 profile_dynamic（load_anchors / active_limitations / recovery_state）
+  const { psychological, ...dynamicPart } = filtered;
+  if (psychological !== undefined) {
+    await writeRepo.mergeProfileStatic(targetUserId, {
+      psychological,
+    });
+  }
+  if (Object.keys(dynamicPart).length > 0) {
+    await writeRepo.mergeProfileDynamic(targetUserId, dynamicPart);
+  }
   return {
     ok: true,
     userId: targetUserId,
@@ -831,8 +879,8 @@ export function buildMcpToolsWith(
   const updateProfile = new DynamicStructuredTool({
     name: "update_profile",
     description:
-      "Structured update of the current user dynamic profile (load_anchors / active_limitations / recovery_state). " +
-      "Use AFTER a workout to record new performance anchors, fresh limitations, or recovery state. Always writes to the calling user.",
+      "Structured update of the current user profile (load_anchors / active_limitations / recovery_state, plus psychological: neurotype / risk_preference / accountability). " +
+      "Use AFTER a workout to record new performance anchors, fresh limitations, or recovery state, or after a conversation where the user explicitly stated psychological traits. Always writes to the calling user.",
     schema: updateProfileSchema,
     func: async (input, _runManager, config) => {
       const userId = getUserIdFromContext({

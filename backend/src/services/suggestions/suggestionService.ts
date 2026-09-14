@@ -28,14 +28,14 @@ import {
   type SuggestionRequest,
   type SuggestionResponse,
   type SuggestionValues,
-} from 'shared/contracts';
+} from "shared/contracts";
 
 import {
   buildCapabilityProfile,
   collectFingerprintInput,
   type SuggestionExerciseInput,
   type SuggestionUserContext,
-} from './suggestionProfiles.js';
+} from "./suggestionProfiles.js";
 
 // ---------------------------------------------------------------------------
 // 端口定义（依赖注入，便于单测 fake）
@@ -70,7 +70,6 @@ export interface AgentAdjustmentInput {
   userId: string;
   profileSummary: {
     goal: string;
-    fitness_level: string;
     training_age_months: number | undefined;
     bodyweight_kg: number | undefined;
     limitations: string[];
@@ -88,8 +87,8 @@ export interface SuggestionLogger {
 // 环境开关
 // ---------------------------------------------------------------------------
 
-export function resolveAgentMode(): 'off' | 'hybrid' {
-  return process.env.SUGGESTION_AGENT_MODE === 'hybrid' ? 'hybrid' : 'off';
+export function resolveAgentMode(): "off" | "hybrid" {
+  return process.env.SUGGESTION_AGENT_MODE === "hybrid" ? "hybrid" : "off";
 }
 
 // ---------------------------------------------------------------------------
@@ -120,25 +119,34 @@ export class SuggestionService {
     // ② 剖面 + ③ 公式基准
     const staged = exercises.map((exercise) => {
       const profile = buildCapabilityProfile(exercise.name, exercise.type, ctx);
-      const baseline = computeBaseline(profile, profile.exercise_type, req.target_rpe, goal);
+      const baseline = computeBaseline(
+        profile,
+        profile.exercise_type,
+        req.target_rpe,
+        goal,
+      );
       return { exercise, profile, baseline };
     });
 
     // ④ Agent 调整（可关；故障降级）
     let intents = new Map<string, AdjustmentIntent>();
     let degradedReason: string | undefined;
-    if (agentMode === 'hybrid' && this.agent) {
+    if (agentMode === "hybrid" && this.agent) {
       try {
-        const result = await this.agent.adjust(this.buildAgentInput(userId, ctx, staged));
+        const result = await this.agent.adjust(
+          this.buildAgentInput(userId, ctx, staged),
+        );
         if (result) {
-          intents = new Map(result.map((intent) => [intent.exercise_name, intent]));
+          intents = new Map(
+            result.map((intent) => [intent.exercise_name, intent]),
+          );
         } else {
-          degradedReason = 'agent_adjustment_unavailable';
-          log?.warn({ userId }, 'suggestion_agent_degraded');
+          degradedReason = "agent_adjustment_unavailable";
+          log?.warn({ userId }, "suggestion_agent_degraded");
         }
       } catch (err) {
-        degradedReason = 'agent_adjustment_failed';
-        log?.warn({ err, userId }, 'suggestion_agent_error');
+        degradedReason = "agent_adjustment_failed";
+        log?.warn({ err, userId }, "suggestion_agent_error");
       }
     }
 
@@ -146,24 +154,26 @@ export class SuggestionService {
     const fingerprint = computeContextFingerprint(
       collectFingerprintInput(ctx, exercises, agentMode),
     );
-    const suggestions: ExerciseSuggestion[] = staged.map(({ exercise, profile, baseline }) => {
-      const intent = matchIntent(intents, exercise.name);
-      const injuryLimited = profile.modifiers.injury_scale < 1;
-      const adjusted = applyAdjustment(baseline, intent, { injuryLimited });
-      const values = finalizeValues(adjusted, profile.exercise_type);
-      const entry: ExerciseSuggestion = {
-        exercise_name: exercise.name,
-        exercise_type: profile.exercise_type,
-        baseline_rpe: req.target_rpe,
-        values,
-        profile,
-        adjustment: intent,
-        source: intent ? 'hybrid' : 'formula',
-        generated_at: Date.now(),
-        context_fingerprint: fingerprint,
-      };
-      return validateOrThrow(ExerciseSuggestionSchema, entry);
-    });
+    const suggestions: ExerciseSuggestion[] = staged.map(
+      ({ exercise, profile, baseline }) => {
+        const intent = matchIntent(intents, exercise.name);
+        const injuryLimited = profile.modifiers.injury_scale < 1;
+        const adjusted = applyAdjustment(baseline, intent, { injuryLimited });
+        const values = finalizeValues(adjusted, profile.exercise_type);
+        const entry: ExerciseSuggestion = {
+          exercise_name: exercise.name,
+          exercise_type: profile.exercise_type,
+          baseline_rpe: req.target_rpe,
+          values,
+          profile,
+          adjustment: intent,
+          source: intent ? "hybrid" : "formula",
+          generated_at: Date.now(),
+          context_fingerprint: fingerprint,
+        };
+        return validateOrThrow(ExerciseSuggestionSchema, entry);
+      },
+    );
 
     return {
       suggestions,
@@ -180,9 +190,7 @@ export class SuggestionService {
     const [profileStatic, profileDynamic, history] = await Promise.all([
       this.userRepo.getProfileStatic(userId).catch(() => null),
       this.userRepo.getProfileDynamic(userId).catch(() => null),
-      this.userRepo
-        .getHistorySummary(userId)
-        .catch(() => null),
+      this.userRepo.getHistorySummary(userId).catch(() => null),
     ]);
     // HistorySummary typed schema 落后于运行时 JSONB（sessions[]），按原始形状消费
     return {
@@ -203,26 +211,29 @@ export class SuggestionService {
     }>,
   ): AgentAdjustmentInput {
     const now = Date.now();
-    const limitations = ((ctx.profileDynamic?.active_limitations ?? []) as Array<{
-      part: string;
-      severity?: number;
-      expire_at: string;
-    }>)
+    const limitations = (
+      (ctx.profileDynamic?.active_limitations ?? []) as Array<{
+        part: string;
+        severity?: number;
+        expire_at: string;
+      }>
+    )
       .filter((l) => l?.part && Date.parse(l.expire_at) > now)
-      .map((l) => `${l.part}(severity ${l.severity ?? '?'})`);
+      .map((l) => `${l.part}(severity ${l.severity ?? "?"})`);
 
-    const recoveryRaw = (ctx.profileDynamic as unknown as Record<string, unknown> | null)
-      ?.recovery_state as Record<string, unknown> | undefined;
+    const recoveryRaw = (
+      ctx.profileDynamic as unknown as Record<string, unknown> | null
+    )?.recovery_state as Record<string, unknown> | undefined;
 
     return {
       userId,
       profileSummary: {
-        goal: ctx.profileStatic?.preferences?.goal ?? 'UNKNOWN',
-        fitness_level: ctx.profileStatic?.fitness_level ?? 'UNKNOWN',
+        goal: ctx.profileStatic?.preferences?.goal ?? "UNKNOWN",
         training_age_months: ctx.profileStatic?.basic_info?.training_age,
-        bodyweight_kg: ctx.profileStatic?.weight ?? ctx.profileStatic?.basic_info?.weight,
+        bodyweight_kg:
+          ctx.profileStatic?.weight ?? ctx.profileStatic?.basic_info?.weight,
         limitations,
-        recovery: recoveryRaw ? JSON.stringify(recoveryRaw) : 'UNKNOWN',
+        recovery: recoveryRaw ? JSON.stringify(recoveryRaw) : "UNKNOWN",
       },
       items: staged.map(({ exercise, baseline, profile }) => ({
         name: exercise.name,
@@ -242,22 +253,24 @@ function matchIntent(
 ): AdjustmentIntent | undefined {
   const exact = intents.get(exerciseName);
   if (exact) return exact;
-  const norm = (s: string) => s.toLowerCase().replace(/[\s\-_（）()]/g, '');
+  const norm = (s: string) => s.toLowerCase().replace(/[\s\-_（）()]/g, "");
   for (const [key, intent] of intents) {
     if (norm(key) === norm(exerciseName)) return intent;
   }
   return undefined;
 }
 
-function summarizeAnchor(profile: ReturnType<typeof buildCapabilityProfile>): string {
+function summarizeAnchor(
+  profile: ReturnType<typeof buildCapabilityProfile>,
+): string {
   switch (profile.data_basis) {
-    case 'anchor':
-      return `锚点 est_1rm ${profile.est_1rm?.toFixed(1)}kg（置信度 ${profile.anchor_confidence ?? '未知'}）`;
-    case 'history':
-      return `历史最佳推导 est_1rm ${profile.est_1rm?.toFixed(1)}kg（置信度 ${profile.anchor_confidence ?? '未知'}）`;
-    case 'bodyweight_estimate':
-      return '无历史，按体重系数推算（保守）';
+    case "anchor":
+      return `锚点 est_1rm ${profile.est_1rm?.toFixed(1)}kg（置信度 ${profile.anchor_confidence ?? "未知"}）`;
+    case "history":
+      return `历史最佳推导 est_1rm ${profile.est_1rm?.toFixed(1)}kg（置信度 ${profile.anchor_confidence ?? "未知"}）`;
+    case "bodyweight_estimate":
+      return "无历史，按体重系数推算（保守）";
     default:
-      return '无任何锚点，类型默认值（保守）';
+      return "无任何锚点，类型默认值（保守）";
   }
 }

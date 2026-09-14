@@ -367,7 +367,6 @@ export const UIHintTypeEnum = z.enum([
   "summary_card",
   "deviation_card",
   "audit_complete",
-  "strategy_confirm",
   "profile_update_confirm",
 ]);
 
@@ -405,18 +404,6 @@ export const UIHintSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("audit_complete"),
     data: AuditCompleteDataSchema,
-  }),
-  // strategy_confirm
-  z.object({
-    type: z.literal("strategy_confirm"),
-    data: z.object({
-      title: z.string().optional(),
-      message: z.string().optional(),
-      actionLabel: z.string().optional(),
-      preview: z.string().min(1, "Preview content cannot be empty"),
-      fullContent: z.string().min(1, "Full strategy content cannot be empty"),
-      updatedAt: z.string().datetime().optional(),
-    }),
   }),
   // profile_update_confirm
   z.object({
@@ -512,18 +499,6 @@ export function getFallbackUIHint(type: UIHintType): UIHint {
         actionLabel: "继续",
         requiresConfirmation: true,
         updates: [],
-      },
-    },
-    strategy_confirm: {
-      type: "strategy_confirm",
-      data: {
-        title: "训练策略更新",
-        message: "AI 已为您生成新的训练策略",
-        actionLabel: "查看策略",
-        preview: "基于您的目标和当前水平，我们为您定制了新的训练计划...",
-        fullContent:
-          "# 训练策略\n\n基于您的目标和当前水平，我们为您定制了新的训练计划。",
-        updatedAt: new Date().toISOString(),
       },
     },
     profile_update_confirm: {

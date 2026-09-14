@@ -54,10 +54,6 @@ const fmtDate = (v: string | number | undefined): string => {
   return new Date(v).toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
 };
 
-const FITNESS_LEVEL_TEXT: Record<string, string> = {
-  beginner: '初学者', intermediate: '进阶', advanced: '高级', UNKNOWN: '未知',
-};
-
 const NEURO_TYPE_TEXT: Record<string, string> = {
   UNKNOWN: '未知', type_1: 'Type I（耐力型）', type_2a: 'Type IIa（混合型）',
   type_2b: 'Type IIb（爆发型）', type_3: 'Type III',
@@ -287,34 +283,20 @@ export const ProfileFullSheet: React.FC<ProfileFullSheetProps> = ({
                 </AttachableSection>
 
                 <AttachableSection
-                  attachId="profile:fitness_level"
-                  title="能力分级与标签"
+                  attachId="profile:tags"
+                  title="标签"
                   content={{
-                    fitness_level: profile.fitness_level,
                     tags: profile.tags ?? [],
-                    red_flags: profile.red_flags ?? [],
-                    training_strategy: profile.training_strategy ?? null,
                   }}
-                  hasData={!unknownIfEmpty([profile.fitness_level, profile.tags ?? [], profile.red_flags ?? []].flat())}
-                  attached={attachedIds.has('profile:fitness_level')}
-                  onAttach={(t) => handleAttach('profile:fitness_level', t)}
+                  hasData={!unknownIfEmpty(profile.tags ?? [])}
+                  attached={attachedIds.has('profile:tags')}
+                  onAttach={(t) => handleAttach('profile:tags', t)}
                 >
                   <div className="flex flex-wrap gap-1.5">
-                    {profile.fitness_level && (
-                      <span className="text-xs px-2 py-0.5 rounded-md bg-gray-900 text-white">
-                        {FITNESS_LEVEL_TEXT[profile.fitness_level] ?? profile.fitness_level}
-                      </span>
-                    )}
                     {(profile.tags ?? []).map((t) => (
                       <span key={t} className="text-xs px-2 py-0.5 rounded-md bg-gray-50 text-gray-600 border border-gray-200">{t}</span>
                     ))}
-                    {(profile.red_flags ?? []).map((t) => (
-                      <span key={t} className="text-xs px-2 py-0.5 rounded-md bg-red-50 text-red-600 border border-red-200">{t}</span>
-                    ))}
                   </div>
-                  {profile.training_strategy && (
-                    <p className="text-xs text-gray-500 mt-2 whitespace-pre-wrap leading-relaxed">{profile.training_strategy}</p>
-                  )}
                 </AttachableSection>
 
                 <AttachableSection

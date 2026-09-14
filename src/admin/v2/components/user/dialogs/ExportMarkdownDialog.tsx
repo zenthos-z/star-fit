@@ -92,9 +92,7 @@ export const ExportMarkdownDialog: React.FC<ExportMarkdownDialogProps> = ({ user
           preferences: parseData(p?.preferences),
           load_anchors: parseData(p?.load_anchors),
           physiological: parseData(p?.physiological),
-          psychological: parseData(p?.psychological),
-          training_strategy: p?.training_strategy || null,
-          red_flags: Array.isArray(p?.red_flags) ? p.red_flags : (parseJSONSafe(p?.red_flags, 'red_flags') || [])
+          psychological: parseData(p?.psychological)
         },
         stats: s,
         sessions: Array.isArray(s) ? s : (s?.recent_sessions || [])

@@ -50,7 +50,6 @@ const GALLERY_MESSAGES: Partial<ChatMessage>[] = [
     ],
     auditContent: '## 审计报告示例\n\n- **卧推** 60kg×10 完成质量高\n- 建议｜下次下肢日恢复',
   }),
-  wrapUiHint('strategy_confirm', { title: '训练策略更新', message: 'AI 已根据你近两周的训练数据生成新的训练策略。' }),
   wrapUiHint('profile_update_confirm', {
     message: '教练希望更新你的训练画像，请确认以下改动。',
     trigger: 'day_end',

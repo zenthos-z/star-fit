@@ -22,7 +22,7 @@ import {
   type ActiveLimitation,
   type ProfileDynamic,
   type ProfileStatic,
-} from 'shared/contracts';
+} from "shared/contracts";
 
 // ---------------------------------------------------------------------------
 // 输入上下文（由 SuggestionService 经 Repository 组装，禁止在此直连库）
@@ -60,23 +60,27 @@ export interface SuggestionExerciseInput {
 // ---------------------------------------------------------------------------
 
 function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === 'object' && !Array.isArray(value)
+  return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
     : null;
 }
 
 function num(value: unknown): number | undefined {
-  return typeof value === 'number' && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
-function parseHistorySessions(history: Record<string, unknown> | null): HistorySessionRecord[] {
+function parseHistorySessions(
+  history: Record<string, unknown> | null,
+): HistorySessionRecord[] {
   const sessions = history?.sessions;
   if (!Array.isArray(sessions)) return [];
   return sessions.filter((s): s is HistorySessionRecord => !!asRecord(s));
 }
 
 function nameMatches(a: string, b: string): boolean {
-  const norm = (s: string) => s.toLowerCase().replace(/[\s\-_（）()]/g, '');
+  const norm = (s: string) => s.toLowerCase().replace(/[\s\-_（）()]/g, "");
   return norm(a) === norm(b);
 }
 
@@ -99,7 +103,9 @@ function findAnchor(
   profileDynamic: ProfileDynamic | null,
   exerciseName: string,
 ): FlatAnchor | null {
-  const anchors = asRecord((profileDynamic as unknown as Record<string, unknown> | null)?.load_anchors);
+  const anchors = asRecord(
+    (profileDynamic as unknown as Record<string, unknown> | null)?.load_anchors,
+  );
   if (!anchors) return null;
   for (const [key, value] of Object.entries(anchors)) {
     if (nameMatches(key, exerciseName)) {
@@ -165,7 +171,10 @@ export function deriveHistoryBest(
 }
 
 /** 新近度置信度：14 天内 1.0，30 天内 0.8，90 天内 0.6，更早 0.4 */
-export function recencyConfidence(isoDate: string | undefined, now = Date.now()): number {
+export function recencyConfidence(
+  isoDate: string | undefined,
+  now = Date.now(),
+): number {
   if (!isoDate) return 0.4;
   const ts = Date.parse(isoDate);
   if (Number.isNaN(ts)) return 0.4;
@@ -180,7 +189,10 @@ export function recencyConfidence(isoDate: string | undefined, now = Date.now())
 // 画像调制因子（安全钳制的数据来源）
 // ---------------------------------------------------------------------------
 
-function injuryScale(profileDynamic: ProfileDynamic | null, now = Date.now()): number {
+function injuryScale(
+  profileDynamic: ProfileDynamic | null,
+  now = Date.now(),
+): number {
   const limitations = profileDynamic?.active_limitations ?? [];
   let scale = 1;
   for (const limitation of limitations as readonly ActiveLimitation[]) {
@@ -196,26 +208,26 @@ function injuryScale(profileDynamic: ProfileDynamic | null, now = Date.now()): n
 }
 
 function recoveryScale(profileDynamic: ProfileDynamic | null): number {
-  const raw = asRecord((profileDynamic as unknown as Record<string, unknown> | null)?.recovery_state);
+  const raw = asRecord(
+    (profileDynamic as unknown as Record<string, unknown> | null)
+      ?.recovery_state,
+  );
   if (!raw) return 1;
   const totalScore = num(raw.total_score);
   const cnsFusing = raw.cns_fusing === true;
-  const fatigueLevel = typeof raw.fatigue_level === 'string' ? raw.fatigue_level : undefined;
+  const fatigueLevel =
+    typeof raw.fatigue_level === "string" ? raw.fatigue_level : undefined;
   const poor =
     (totalScore !== undefined && totalScore < 50) ||
     cnsFusing ||
-    fatigueLevel === 'high' ||
-    fatigueLevel === 'very_high';
+    fatigueLevel === "high" ||
+    fatigueLevel === "very_high";
   return poor ? 0.85 : 1;
 }
 
-function noviceCap(fitnessLevel: string | undefined, hasRealHistory: boolean): number {
-  if (fitnessLevel === 'beginner') return 0.7;
-  if (!fitnessLevel || fitnessLevel === 'UNKNOWN') {
-    // 无等级信息：有真实锚点/历史说明已在训练，取温和上限；否则按新手试探
-    return hasRealHistory ? 0.85 : 0.7;
-  }
-  return 1;
+function noviceCap(hasRealHistory: boolean): number {
+  // 无等级字段（已移除）：有真实锚点/历史说明已在训练，取温和上限；否则按新手试探
+  return hasRealHistory ? 0.85 : 0.7;
 }
 
 export function computeModifiers(
@@ -226,7 +238,7 @@ export function computeModifiers(
 ): SuggestionModifiers {
   return {
     injury_scale: injuryScale(profileDynamic, now),
-    novice_cap: noviceCap(profileStatic?.fitness_level, hasRealHistory),
+    novice_cap: noviceCap(hasRealHistory),
     recovery_scale: recoveryScale(profileDynamic),
   };
 }
@@ -241,15 +253,14 @@ const COEFFICIENT_WORKING_PCT = 0.78;
 function bodyweightEstimate(
   exerciseName: string,
   bodyweightKg: number | undefined,
-  fitnessLevel: string | undefined,
+  hasRealHistory: boolean,
 ): number | undefined {
   if (!bodyweightKg || bodyweightKg <= 0) return undefined;
   for (const entry of BODYWEIGHT_COEFFICIENTS) {
     if (entry.keywords.some((keyword) => exerciseName.includes(keyword))) {
       const [min, max] = entry.range;
-      // 初学者/未知取下限，中级取中值，高级取上限（knowledge §3.2）
-      const coef =
-        fitnessLevel === 'advanced' ? max : fitnessLevel === 'intermediate' ? (min + max) / 2 : min;
+      // 无等级字段（已移除）：有真实锚点/历史取中值，否则取下限（knowledge §3.2）
+      const coef = hasRealHistory ? (min + max) / 2 : min;
       return (bodyweightKg * coef) / COEFFICIENT_WORKING_PCT;
     }
   }
@@ -274,39 +285,58 @@ export function buildCapabilityProfile(
   now = Date.now(),
 ): CapabilityProfile {
   const type = normalizeSuggestionExerciseType(exerciseType);
-  const bodyweightKg = ctx.profileStatic?.weight ?? ctx.profileStatic?.basic_info?.weight;
+  const bodyweightKg =
+    ctx.profileStatic?.weight ?? ctx.profileStatic?.basic_info?.weight;
 
   const anchor = findAnchor(ctx.profileDynamic, exerciseName);
   const sessions = parseHistorySessions(ctx.history);
   const historyBest = deriveHistoryBest(sessions, exerciseName);
 
   // 有氧类优先用锚点配速/距离
-  if (type === 'cardio' || type === 'outdoor') {
-    const modifiers = computeModifiers(ctx.profileStatic, ctx.profileDynamic, !!anchor || !!historyBest, now);
+  if (type === "cardio" || type === "outdoor") {
+    const modifiers = computeModifiers(
+      ctx.profileStatic,
+      ctx.profileDynamic,
+      !!anchor || !!historyBest,
+      now,
+    );
     return {
       exercise_name: exerciseName,
       exercise_type: type,
-      data_basis: anchor || historyBest ? 'anchor' : 'type_default',
-      best_pace_sec_per_km: anchor?.best_pace && anchor.best_pace > 0 ? anchor.best_pace : undefined,
+      data_basis: anchor || historyBest ? "anchor" : "type_default",
+      best_pace_sec_per_km:
+        anchor?.best_pace && anchor.best_pace > 0
+          ? anchor.best_pace
+          : undefined,
       bodyweight_kg: bodyweightKg,
       modifiers,
     };
   }
 
   // 自重类：锚点的 progression_level / 次数记录
-  if (type === 'bodyweight' || type === 'rep_training') {
-    const modifiers = computeModifiers(ctx.profileStatic, ctx.profileDynamic, !!anchor || !!historyBest, now);
+  if (type === "bodyweight" || type === "rep_training") {
+    const modifiers = computeModifiers(
+      ctx.profileStatic,
+      ctx.profileDynamic,
+      !!anchor || !!historyBest,
+      now,
+    );
     return {
       exercise_name: exerciseName,
       exercise_type: type,
-      data_basis: anchor ? 'anchor' : historyBest ? 'history' : 'type_default',
+      data_basis: anchor ? "anchor" : historyBest ? "history" : "type_default",
       progression_level: anchor?.progression_level,
       best_set: historyBest
         ? { reps: historyBest.bestReps, weight: 0 }
         : undefined,
       bodyweight_kg: bodyweightKg,
       anchor_confidence: anchor
-        ? recencyConfidence(anchor.last_updated ? new Date(anchor.last_updated).toISOString() : undefined, now)
+        ? recencyConfidence(
+            anchor.last_updated
+              ? new Date(anchor.last_updated).toISOString()
+              : undefined,
+            now,
+          )
         : historyBest
           ? recencyConfidence(historyBest.lastDate, now)
           : undefined,
@@ -314,44 +344,58 @@ export function buildCapabilityProfile(
     };
   }
 
-  if (type === 'isometric') {
-    const modifiers = computeModifiers(ctx.profileStatic, ctx.profileDynamic, !!anchor, now);
+  if (type === "isometric") {
+    const modifiers = computeModifiers(
+      ctx.profileStatic,
+      ctx.profileDynamic,
+      !!anchor,
+      now,
+    );
     return {
       exercise_name: exerciseName,
       exercise_type: type,
-      data_basis: anchor ? 'anchor' : 'type_default',
-      best_set: anchor?.best_duration ? { duration_sec: anchor.best_duration } : undefined,
+      data_basis: anchor ? "anchor" : "type_default",
+      best_set: anchor?.best_duration
+        ? { duration_sec: anchor.best_duration }
+        : undefined,
       modifiers,
     };
   }
 
-  if (type === 'flexibility' || type === 'unknown') {
-    const modifiers = computeModifiers(ctx.profileStatic, ctx.profileDynamic, !!anchor || !!historyBest, now);
+  if (type === "flexibility" || type === "unknown") {
+    const modifiers = computeModifiers(
+      ctx.profileStatic,
+      ctx.profileDynamic,
+      !!anchor || !!historyBest,
+      now,
+    );
     return {
       exercise_name: exerciseName,
       exercise_type: type,
-      data_basis: 'type_default',
+      data_basis: "type_default",
       bodyweight_kg: bodyweightKg,
       modifiers,
     };
   }
 
   // 负重类（resistance/unilateral/heavy_weight/assisted）
-  const fitnessLevel = ctx.profileStatic?.fitness_level;
+  const hasRealHistoryForBw = !!anchor || !!historyBest;
   const anchorEst1rm =
     anchor?.est_1rm && anchor.est_1rm > 0
       ? anchor.est_1rm
-      : anchor?.best_weight && anchor.best_weight > 0 && (anchor.best_reps ?? 1) >= 1
+      : anchor?.best_weight &&
+          anchor.best_weight > 0 &&
+          (anchor.best_reps ?? 1) >= 1
         ? estimate1RM(anchor.best_weight, anchor.best_reps ?? 1)
         : undefined;
 
-  let dataBasis: CapabilityProfile['data_basis'];
+  let dataBasis: CapabilityProfile["data_basis"];
   let est1rm: number | undefined;
   let bestSet: SuggestionValues | undefined;
   let confidence: number | undefined;
 
   if (anchorEst1rm && anchorEst1rm > 0) {
-    dataBasis = 'anchor';
+    dataBasis = "anchor";
     est1rm = anchorEst1rm;
     bestSet = anchor?.best_weight
       ? { weight: anchor.best_weight, reps: anchor.best_reps }
@@ -360,21 +404,30 @@ export function buildCapabilityProfile(
       ? recencyConfidence(new Date(anchor.last_updated).toISOString(), now)
       : 0.8;
   } else if (historyBest && historyBest.bestE1RM > 0) {
-    dataBasis = 'history';
+    dataBasis = "history";
     est1rm = historyBest.bestE1RM;
     bestSet = { weight: historyBest.bestWeight, reps: historyBest.bestReps };
     confidence = recencyConfidence(historyBest.lastDate, now);
   } else {
-    const bwEstimate = bodyweightEstimate(exerciseName, bodyweightKg, fitnessLevel);
+    const bwEstimate = bodyweightEstimate(
+      exerciseName,
+      bodyweightKg,
+      hasRealHistoryForBw,
+    );
     if (bwEstimate && bwEstimate > 0) {
-      dataBasis = 'bodyweight_estimate';
+      dataBasis = "bodyweight_estimate";
       est1rm = bwEstimate;
     } else {
-      dataBasis = 'type_default';
+      dataBasis = "type_default";
     }
   }
 
-  const modifiers = computeModifiers(ctx.profileStatic, ctx.profileDynamic, dataBasis === 'anchor' || dataBasis === 'history', now);
+  const modifiers = computeModifiers(
+    ctx.profileStatic,
+    ctx.profileDynamic,
+    dataBasis === "anchor" || dataBasis === "history",
+    now,
+  );
 
   return {
     exercise_name: exerciseName,
@@ -395,7 +448,7 @@ export function buildCapabilityProfile(
 export function collectFingerprintInput(
   ctx: SuggestionUserContext,
   exercises: readonly SuggestionExerciseInput[],
-  agentMode: 'off' | 'hybrid',
+  agentMode: "off" | "hybrid",
   now = Date.now(),
 ): SuggestionFingerprintInput {
   const static_ = ctx.profileStatic;
@@ -412,17 +465,21 @@ export function collectFingerprintInput(
     }
   }
 
-  const limitations = ((ctx.profileDynamic?.active_limitations ?? []) as readonly ActiveLimitation[])
+  const limitations = (
+    (ctx.profileDynamic?.active_limitations ??
+      []) as readonly ActiveLimitation[]
+  )
     .filter((l) => l?.part && l.expire_at && Date.parse(l.expire_at) > now)
-    .map((l) => `${l.part}:${l.severity ?? '?'}`);
+    .map((l) => `${l.part}:${l.severity ?? "?"}`);
 
   return {
     goal: static_?.preferences?.goal,
-    fitness_level: static_?.fitness_level,
     bodyweight_kg: static_?.weight ?? static_?.basic_info?.weight,
     limitations,
     anchorUpdates,
-    exercises: exercises.map((e) => `${e.name}:${normalizeSuggestionExerciseType(e.type)}`),
+    exercises: exercises.map(
+      (e) => `${e.name}:${normalizeSuggestionExerciseType(e.type)}`,
+    ),
     agent_mode: agentMode,
   };
 }

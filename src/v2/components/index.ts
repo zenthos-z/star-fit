@@ -14,9 +14,6 @@ export {
   LoadAnchorsForm,
   AnchorCard,
   AnchorTypeForm,
-  LimitationsManager,
-  LimitationCard,
-  AddLimitationForm,
 } from './profile/index.js';
 export type {
   ProfileActions,

@@ -49,10 +49,6 @@ interface UserProfilePanelProps {
   onProfileUpdate?: () => void;
 }
 
-const FITNESS_LEVEL_TEXT: Record<string, string> = {
-  beginner: '初学者', intermediate: '进阶', advanced: '高级', UNKNOWN: '未知',
-};
-
 const formatDateTime = (timestamp: number | string | undefined): string => {
   if (!timestamp) return '-';
   return new Date(timestamp).toLocaleString('zh-CN', {
@@ -145,7 +141,6 @@ export const UserProfilePanelV2: React.FC<UserProfilePanelProps> = ({
 
   const displayName = display_name || username || short_id || userId.slice(0, 8);
   const limitationsCount = (p.active_limitations ?? []).length;
-  const hasRedFlags = (p.red_flags ?? []).length > 0;
 
   return (
     <div className="h-full bg-star-white flex flex-col overflow-hidden" data-testid="user-profile-panel-v2">
@@ -156,15 +151,9 @@ export const UserProfilePanelV2: React.FC<UserProfilePanelProps> = ({
             <User size={20} />
           </div>
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
-              <h1 className="text-base font-semibold text-gray-900 truncate">{displayName}</h1>
-              <span className="text-[11px] px-2 py-0.5 rounded-md bg-gray-50 text-gray-500 border border-gray-200 shrink-0">
-                {FITNESS_LEVEL_TEXT[p.fitness_level] ?? p.fitness_level}
-              </span>
-            </div>
+            <h1 className="text-base font-semibold text-gray-900 truncate">{displayName}</h1>
             <p className="text-[11px] text-gray-400">
               {(short_id || userId.slice(0, 8)) + ' · 更新于 ' + formatDateTime(p.updated_at || p.created_at)}
-              {hasRedFlags && <span className="text-red-500 ml-1.5">· {p.red_flags!.length} 项红旗</span>}
             </p>
           </div>
         </div>

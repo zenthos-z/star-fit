@@ -28,7 +28,6 @@ import type {
   RecoveryState,
   Trends,
   KeyMetrics,
-  PermanentInjury,
 } from 'shared/contracts';
 
 type ApiErrorDetails = {
@@ -57,14 +56,12 @@ interface ApiResponse<T> {
 export interface FlattenedProfile {
   // Core fields
   user_id: string;
-  fitness_level: 'beginner' | 'intermediate' | 'advanced';
 
   // Static data (profile_static)
   basic_info?: BasicInfo;
   preferences?: Preferences;
   physiological?: Physiological;
   psychological?: Psychological;
-  permanent_injuries?: PermanentInjury[];
 
   // Dynamic data (profile_dynamic)
   load_anchors?: LoadAnchors;
@@ -76,8 +73,6 @@ export interface FlattenedProfile {
   key_metrics?: KeyMetrics;
 
   // Other fields
-  training_strategy?: string | null;
-  red_flags?: string[];
   tags?: string[];
 
   // Metadata

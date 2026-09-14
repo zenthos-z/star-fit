@@ -9,10 +9,9 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
  */
 
 import React from 'react';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import { LoadAnchorsForm } from '../LoadAnchorsForm';
-import type { LoadAnchors, LoadAnchor } from 'shared/contracts';
+import type { LoadAnchors } from 'shared/contracts';
 
 // Mock framer-motion
 vi.mock('framer-motion', () => ({
@@ -64,7 +63,6 @@ describe('LoadAnchorsForm', () => {
     vi.clearAllMocks();
     defaultProps = {
       anchors: createMockLoadAnchors(),
-      onUpdate: vi.fn().mockResolvedValue(undefined),
     };
   });
 
@@ -212,80 +210,12 @@ describe('LoadAnchorsForm', () => {
   });
 
   describe('User interactions', () => {
-    it('should open edit modal when clicking on an anchor', async () => {
-      const user = userEvent.setup();
+    it('should render anchors as read-only cards (no edit affordance)', () => {
       render(<LoadAnchorsForm {...defaultProps} />);
 
-      const benchPressCard = screen.getByText('bench_press').closest('div');
-      await user.click(benchPressCard!);
-
-      expect(screen.getByText('编辑负荷锚点')).toBeInTheDocument();
       expect(screen.getByText('bench_press')).toBeInTheDocument();
-    });
-
-    it('should close edit modal when clicking backdrop', async () => {
-      const user = userEvent.setup();
-      render(<LoadAnchorsForm {...defaultProps} />);
-
-      // Open modal
-      const benchPressCard = screen.getByText('bench_press').closest('div');
-      await user.click(benchPressCard!);
-
-      expect(screen.getByText('编辑负荷锚点')).toBeInTheDocument();
-
-      // Close by clicking backdrop (the modal overlay)
-      const backdrop = document.querySelector('.fixed.inset-0.z-50');
-      await user.click(backdrop!);
-
-      await waitFor(() => {
-        expect(screen.queryByText('编辑负荷锚点')).not.toBeInTheDocument();
-      });
-    });
-
-    it('should close edit modal when clicking close button', async () => {
-      const user = userEvent.setup();
-      render(<LoadAnchorsForm {...defaultProps} />);
-
-      // Open modal
-      const benchPressCard = screen.getByText('bench_press').closest('div');
-      await user.click(benchPressCard!);
-
-      const closeButton = screen.getByText('关闭');
-      await user.click(closeButton);
-
-      await waitFor(() => {
-        expect(screen.queryByText('编辑负荷锚点')).not.toBeInTheDocument();
-      });
-    });
-
-    it('should show current anchor values in modal', async () => {
-      const user = userEvent.setup();
-      render(<LoadAnchorsForm {...defaultProps} />);
-
-      // 点击卡片打开编辑弹窗
-      const benchPressCard = screen.getByText('bench_press').closest('div');
-      await user.click(benchPressCard!);
-
-      // 弹窗内展示锚点当前值
-      expect(screen.getByText('编辑负荷锚点')).toBeInTheDocument();
-      expect(screen.getAllByText(/100kg/).length).toBeGreaterThan(0);
-    });
-
-    it('should call onUpdate when edit button is clicked', async () => {
-      const user = userEvent.setup();
-      const mockOnUpdate = vi.fn().mockResolvedValue(undefined);
-
-      render(<LoadAnchorsForm anchors={defaultProps.anchors} onUpdate={mockOnUpdate} />);
-
-      const benchPressCard = screen.getByText('bench_press').closest('div');
-      await user.click(benchPressCard!);
-
-      const editButton = screen.getByText('编辑');
-      await user.click(editButton);
-
-      // Note: The current implementation just closes the modal and doesn't actually
-      // open the full editor. This test verifies the button exists and is clickable.
-      expect(mockOnUpdate).not.toHaveBeenCalled(); // Because it only closes modal in current impl
+      // 只读展示：不再有编辑弹窗入口
+      expect(screen.queryByText('编辑负荷锚点')).not.toBeInTheDocument();
     });
   });
 
@@ -402,15 +332,12 @@ describe('LoadAnchorsForm', () => {
       expect(screen.getByText('负荷锚点')).toBeInTheDocument();
     });
 
-    it('should have clickable cards for each anchor', () => {
+    it('should render anchor cards', () => {
       render(<LoadAnchorsForm {...defaultProps} />);
 
       const anchors = Object.keys(defaultProps.anchors);
       anchors.forEach(anchor => {
-        // 卡片自身带 cursor-pointer（可点击打开编辑弹窗）；closest('div') 命中的是卡片内层布局 div，需向上找 motion 容器
-        const textEl = screen.getByText(anchor);
-        const card = textEl.closest('[class*="cursor-pointer"]');
-        expect(card).not.toBeNull();
+        expect(screen.getByText(anchor)).toBeInTheDocument();
       });
     });
   });

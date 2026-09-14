@@ -1,16 +1,17 @@
 /**
- * LoadAnchorsForm - Load Anchors Overview Display
+ * LoadAnchorsForm - Load Anchors Overview Display (只读)
  *
- * Displays user's load anchors in a list/grid format
- * Shows exercise name, best weight/reps, and last updated time
+ * Displays user's load anchors in a list format.
+ * Anchors are maintained automatically after workouts (and by the Agent via
+ * profile updates) — no manual editing surface here (2026-09-11 拍板).
  *
  * @version 2.0.0
  */
 
-import React, { useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import React from 'react';
+import { motion } from 'framer-motion';
 import type { LoadAnchors, LoadAnchor } from 'shared/contracts';
-import { slideUp, fadeScale, staggerContainer, staggerItem } from '../../lib/animations';
+import { slideUp, staggerContainer, staggerItem } from '../../lib/animations';
 
 // ============================================================================
 // Types
@@ -19,16 +20,8 @@ import { slideUp, fadeScale, staggerContainer, staggerItem } from '../../lib/ani
 interface LoadAnchorsFormProps {
   /** Load anchors data */
   anchors: LoadAnchors | undefined;
-  /** Callback when an anchor is updated */
-  onUpdate?: (exerciseId: string, anchor: LoadAnchor) => Promise<void>;
   /** Optional className for styling */
   className?: string;
-}
-
-interface AnchorDisplayProps {
-  exerciseId: string;
-  anchor: LoadAnchor;
-  onEdit?: () => void;
 }
 
 // ============================================================================
@@ -91,25 +84,17 @@ function getAnchorSummary(anchor: LoadAnchor): string {
 // Components
 // ============================================================================
 
-function AnchorDisplay({ exerciseId, anchor, onEdit }: AnchorDisplayProps): JSX.Element {
+function AnchorDisplay({ exerciseId, anchor }: { exerciseId: string; anchor: LoadAnchor }): JSX.Element {
   const summary = getAnchorSummary(anchor);
   const relativeTime = formatRelativeTime(anchor.last_updated);
 
   return (
     <motion.div
       variants={staggerItem}
-      whileHover={{ scale: 1.01 }}
-      whileTap={{ scale: 0.99 }}
-      onClick={onEdit}
-      className="bg-gray-50 rounded-xl p-4 cursor-pointer
-                 hover:bg-gray-100 transition-colors
-                 border border-transparent hover:border-gray-200"
+      className="bg-gray-50 rounded-2xl p-4"
     >
-      <div className="flex items-center justify-between"
-      >
-        <h4 className="font-semibold text-gray-900 truncate"
-          style={{ maxWidth: '60%' }}
-        >
+      <div className="flex items-center justify-between">
+        <h4 className="font-semibold text-gray-900 truncate" style={{ maxWidth: '60%' }}>
           {exerciseId}
         </h4>
         <span className="text-xs text-gray-400 whitespace-nowrap">
@@ -145,19 +130,8 @@ function EmptyState(): JSX.Element {
 
 export function LoadAnchorsForm({
   anchors,
-  onUpdate,
   className = '',
 }: LoadAnchorsFormProps): JSX.Element {
-  const [editingId, setEditingId] = useState<string | null>(null);
-
-  const handleEdit = useCallback((exerciseId: string) => {
-    setEditingId(exerciseId);
-  }, []);
-
-  const handleCloseEdit = useCallback(() => {
-    setEditingId(null);
-  }, []);
-
   const anchorEntries = anchors ? Object.entries(anchors) : [];
 
   return (
@@ -165,10 +139,10 @@ export function LoadAnchorsForm({
       variants={slideUp}
       initial="initial"
       animate="animate"
-      className={`bg-white rounded-2xl border border-gray-100 shadow-sm p-4 ${className}`}
+      className={`bg-white rounded-[24px] shadow-[0_2px_12px_rgba(0,0,0,0.08)] p-5 ${className}`}
     >
       <div className="flex items-center justify-between mb-4">
-        <h2 className="text-xl font-black text-star-dark italic uppercase">
+        <h2 className="text-lg font-bold text-gray-900 tracking-tight">
           负荷锚点
         </h2>
         <span className="text-xs text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
@@ -190,62 +164,10 @@ export function LoadAnchorsForm({
               key={exerciseId}
               exerciseId={exerciseId}
               anchor={anchor}
-              onEdit={() => handleEdit(exerciseId)}
             />
           ))}
         </motion.div>
       )}
-
-      {/* Edit Modal Placeholder */}
-      <AnimatePresence>
-        {editingId && (
-          <motion.div
-            variants={fadeScale}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50"
-            onClick={handleCloseEdit}
-          >
-            <div
-              className="bg-white rounded-2xl p-6 max-w-md w-full"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <h3 className="text-lg font-bold text-gray-900 mb-4">
-                编辑负荷锚点
-              </h3>
-              <p className="text-gray-600 mb-4">
-                动作: {editingId}
-              </p>
-              <p className="text-sm text-gray-500 mb-4">
-                当前值: {getAnchorSummary(anchors?.[editingId] || { last_updated: Date.now() })}
-              </p>
-              <div className="flex gap-3">
-                <button
-                  onClick={handleCloseEdit}
-                  className="flex-1 rounded-[2rem] border-2 border-gray-200 py-3 px-6
-                             font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
-                >
-                  关闭
-                </button>
-                {onUpdate && (
-                  <button
-                    onClick={() => {
-                      // This would open the full editor
-                      handleCloseEdit();
-                    }}
-                    className="flex-1 rounded-[2rem] bg-star-dark py-3 px-6
-                               font-black text-white italic uppercase
-                               hover:bg-star-dark/90 transition-colors"
-                  >
-                    编辑
-                  </button>
-                )}
-              </div>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
     </motion.div>
   );
 }

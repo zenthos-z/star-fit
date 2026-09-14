@@ -15,8 +15,6 @@ import { PsychologicalSection } from './PsychologicalSection';
 import { LoadAnchorsSection } from './LoadAnchorsSection';
 import { EditProfileDialog } from './dialogs/EditProfileDialog';
 import { ExportMarkdownDialog } from './dialogs/ExportMarkdownDialog';
-import { EditTrainingStrategyDialog } from './EditTrainingStrategyDialog';
-import { TrainingStrategySection } from './edit-sections/TrainingStrategySection';
 import { LoadAnchorsEditor } from './edit-sections/LoadAnchorsEditor';
 import { LimitationsEditor } from './edit-sections/LimitationsEditor';
 import { AdminService } from '../../services/api';
@@ -61,7 +59,6 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
 }) => {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [markdownExportOpen, setMarkdownExportOpen] = useState(false);
-  const [strategyDialogOpen, setStrategyDialogOpen] = useState(false);
   const [localProfile, setLocalProfile] = useState<AdminUserProfile | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -101,9 +98,6 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
           load_anchors: parseData(response.profile.load_anchors) as Record<string, unknown>,
           physiological: parseData(response.profile.physiological) as Record<string, unknown>,
           psychological: parseData(response.profile.psychological) as Record<string, unknown>,
-          red_flags: Array.isArray(response.profile.red_flags)
-            ? response.profile.red_flags
-            : parseJSONSafe(response.profile.red_flags, 'UserProfilePanel red_flags parsing') || []
         };
 
         console.log('[UserProfilePanel] Parsed profile.load_anchors:', parsedProfile.load_anchors);
@@ -141,17 +135,6 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
     };
 
     await handleEditProfile(updatedProfile);
-  };
-
-  const handleTrainingStrategyUpdate = async (strategy: string) => {
-    if (!localProfile) return;
-
-    const updatedProfile: Partial<AdminUserProfile> = {
-      ...localProfile,
-      training_strategy: strategy
-    };
-
-    await handleEditProfile(updatedProfile, { silent: true });
   };
 
   const handleLimitationAdd = async (limitation: Omit<ActiveLimitation, 'logged_at' | 'expire_at'>) => {
@@ -233,7 +216,6 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
         {/* Physiological Stats */}
         <PhysioStatsSection
           basicInfo={localProfile?.basic_info || {}}
-          fitnessLevel={localProfile?.fitness_level || 'beginner'}
         />
 
         {/* Psychological Profile */}
@@ -266,12 +248,6 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
             onRemove={handleLimitationRemove}
           />
         </div>
-
-        {/* Training Strategy */}
-        <TrainingStrategySection
-          data={localProfile}
-          onEdit={() => setStrategyDialogOpen(true)}
-        />
       </div>
 
       {/* Edit Dialog */}
@@ -291,13 +267,6 @@ export const UserProfilePanel: React.FC<UserProfilePanelProps> = ({
         userId={userId}
         isOpen={markdownExportOpen}
         onClose={() => setMarkdownExportOpen(false)}
-      />
-
-      <EditTrainingStrategyDialog
-        initialData={localProfile?.training_strategy || null}
-        open={strategyDialogOpen}
-        onClose={() => setStrategyDialogOpen(false)}
-        onSave={handleTrainingStrategyUpdate}
       />
     </div>
   );

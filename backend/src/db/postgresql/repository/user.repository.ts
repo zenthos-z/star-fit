@@ -7,20 +7,26 @@
  * - Provides a clean interface for the application layer
  */
 
-import { PostgresClient } from '../client/postgres-client.js';
-import { BaseRepository } from './base.repository.js';
+import { PostgresClient } from "../client/postgres-client.js";
+import { BaseRepository } from "./base.repository.js";
 import type {
   ProfileStaticDatabase,
-  ProfileDynamicDatabase
-} from '../../../../../shared/dist/contracts/database/user-profile.schema.js';
+  ProfileDynamicDatabase,
+} from "../../../../../shared/dist/contracts/database/user-profile.schema.js";
 import type {
   ProfileStatic,
   ProfileDynamic,
-  HistorySummary
-} from '../../../../../shared/dist/contracts/index.js';
-import { toDatabaseFormat, toApiFormat } from '../../../../../shared/dist/contracts/mapping/user-profile.mapper.js';
-import { z } from 'zod';
-import { ServiceError, ServiceErrorCode } from '../../../services/errors/ServiceError.js';
+  HistorySummary,
+} from "../../../../../shared/dist/contracts/index.js";
+import {
+  toDatabaseFormat,
+  toApiFormat,
+} from "../../../../../shared/dist/contracts/mapping/user-profile.mapper.js";
+import { z } from "zod";
+import {
+  ServiceError,
+  ServiceErrorCode,
+} from "../../../services/errors/ServiceError.js";
 
 /**
  * User Repository
@@ -43,10 +49,12 @@ export class UserRepository extends BaseRepository {
       WHERE id = $userId
     `;
 
-    const row = await this.queryOne<{ profile_static: unknown }>(sql, { userId });
+    const row = await this.queryOne<{ profile_static: unknown }>(sql, {
+      userId,
+    });
 
     // DEBUG: 记录原始数据库数据
-    console.log('[UserRepository] getProfileStatic raw data:', {
+    console.log("[UserRepository] getProfileStatic raw data:", {
       userId,
       hasRow: !!row,
       profile_static: row?.profile_static,
@@ -60,9 +68,7 @@ export class UserRepository extends BaseRepository {
     // If profile_static is null or empty, return default profile
     if (!row.profile_static) {
       return {
-        fitness_level: 'UNKNOWN' as const,
         tags: [],
-        red_flags: [],
       };
     }
 
@@ -70,13 +76,13 @@ export class UserRepository extends BaseRepository {
     // row.profile_static is the raw JSONB data from the database
     const dbData = this.parseJSONB(
       row.profile_static,
-      z.any() // Will be validated by toApiFormat
+      z.any(), // Will be validated by toApiFormat
     );
 
     const result = toApiFormat(dbData);
 
     // DEBUG: 记录解析后的数据
-    console.log('[UserRepository] getProfileStatic parsed data:', {
+    console.log("[UserRepository] getProfileStatic parsed data:", {
       userId,
       dbData: JSON.stringify(dbData),
       result_basic_info: result?.basic_info,
@@ -92,7 +98,10 @@ export class UserRepository extends BaseRepository {
    * @param userId - User ID (UUID)
    * @param data - Profile data in API format (camelCase)
    */
-  async updateProfileStatic(userId: string, data: ProfileStatic): Promise<void> {
+  async updateProfileStatic(
+    userId: string,
+    data: ProfileStatic,
+  ): Promise<void> {
     // Convert to database format
     const dbData = toDatabaseFormat(data);
 
@@ -113,7 +122,7 @@ export class UserRepository extends BaseRepository {
       throw new ServiceError(
         ServiceErrorCode.NOT_FOUND,
         `User not found: ${userId}`,
-        { userId }
+        { userId },
       );
     }
   }
@@ -131,7 +140,9 @@ export class UserRepository extends BaseRepository {
       WHERE id = $userId
     `;
 
-    const row = await this.queryOne<{ profile_dynamic: unknown }>(sql, { userId });
+    const row = await this.queryOne<{ profile_dynamic: unknown }>(sql, {
+      userId,
+    });
 
     if (!row) {
       return null;
@@ -152,7 +163,10 @@ export class UserRepository extends BaseRepository {
    * @param userId - User ID (UUID)
    * @param data - Profile data in API format (camelCase)
    */
-  async updateProfileDynamic(userId: string, data: Partial<ProfileDynamic>): Promise<void> {
+  async updateProfileDynamic(
+    userId: string,
+    data: Partial<ProfileDynamic>,
+  ): Promise<void> {
     const sql = `
       UPDATE users
       SET
@@ -217,7 +231,9 @@ export class UserRepository extends BaseRepository {
       WHERE id = $userId
     `;
 
-    const row = await this.queryOne<{ history_summary: unknown }>(sql, { userId });
+    const row = await this.queryOne<{ history_summary: unknown }>(sql, {
+      userId,
+    });
 
     if (!row) {
       return null;
@@ -238,7 +254,10 @@ export class UserRepository extends BaseRepository {
    * @param userId - User ID (UUID)
    * @param data - History summary data in API format (camelCase)
    */
-  async updateHistorySummary(userId: string, data: Partial<HistorySummary>): Promise<void> {
+  async updateHistorySummary(
+    userId: string,
+    data: Partial<HistorySummary>,
+  ): Promise<void> {
     const sql = `
       UPDATE users
       SET
@@ -262,7 +281,10 @@ export class UserRepository extends BaseRepository {
    * @param userId - User ID (UUID)
    * @param data - Partial history summary data to merge
    */
-  async mergeHistorySummary(userId: string, data: Partial<HistorySummary>): Promise<HistorySummary> {
+  async mergeHistorySummary(
+    userId: string,
+    data: Partial<HistorySummary>,
+  ): Promise<HistorySummary> {
     // First get current history summary
     const current = await this.getHistorySummary(userId);
 
@@ -287,7 +309,11 @@ export class UserRepository extends BaseRepository {
    */
   async resolveUserId(userRef: string): Promise<string> {
     // Check if it's a UUID (format: xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx)
-    if (userRef.match(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i)) {
+    if (
+      userRef.match(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+    ) {
       return userRef;
     }
 
@@ -300,7 +326,7 @@ export class UserRepository extends BaseRepository {
     throw new ServiceError(
       ServiceErrorCode.NOT_FOUND,
       `User not found: ${userRef}`,
-      { userRef }
+      { userRef },
     );
   }
 }

@@ -1373,7 +1373,6 @@ const App: React.FC = () => {
                 sessions={history}
                 onClose={() => dispatchNav({ type: 'HOME' })}
                 onSelect={(s) => dispatchNav({ type: 'OPEN_HISTORY_DETAIL', sessionId: s.id })}
-                onImport={handleImportHistory}
                 onDelete={handleDeleteSession}
                 onOpenSettings={() => dispatchNav({ type: 'OPEN_SETTINGS' })}
               />
@@ -1383,6 +1382,8 @@ const App: React.FC = () => {
               <SettingsPage
                 key="settings"
                 userId={userId || ''}
+                sessions={history}
+                onImport={handleImportHistory}
                 onClose={() => dispatchNav({ type: 'BACK' })}
               />
             )}

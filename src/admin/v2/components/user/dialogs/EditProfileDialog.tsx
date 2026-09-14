@@ -20,13 +20,11 @@ interface EditProfileDialogProps {
     basic_info?: BasicInfo;
     physiological?: Physiological;
     psychological?: Psychological;
-    fitness_level?: string;
   };
   onSave: (data: {
     basic_info: BasicInfo;
     physiological: Physiological;
     psychological: Psychological;
-    fitness_level: string;
   }) => Promise<void>;
   onClose: () => void;
 }
@@ -37,12 +35,6 @@ const tabs = [
   { id: 'basic' as TabType, label: '基本信息', icon: User },
   { id: 'physiological' as TabType, label: '生理状态', icon: Heart },
   { id: 'psychological' as TabType, label: '心理状态', icon: Brain },
-];
-
-const fitnessLevels = [
-  { value: 'beginner', label: '初学者' },
-  { value: 'intermediate', label: '中级' },
-  { value: 'advanced', label: '高级' },
 ];
 
 const neuroTypes = [
@@ -112,8 +104,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
     risk_preference: undefined,
   });
 
-  const [fitnessLevel, setFitnessLevel] = useState('beginner');
-
   // Initialize form data from profile
   useEffect(() => {
     if (profile) {
@@ -134,7 +124,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
         accountability: profile.psychological?.accountability,
         risk_preference: profile.psychological?.risk_preference,
       });
-      setFitnessLevel(profile.fitness_level || 'beginner');
     }
   }, [profile]);
 
@@ -145,7 +134,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
         basic_info: basicInfo,
         physiological,
         psychological,
-        fitness_level: fitnessLevel,
       });
     } finally {
       setSaving(false);
@@ -276,25 +264,6 @@ export const EditProfileDialog: React.FC<EditProfileDialogProps> = ({
                     className={inputClass}
                     placeholder="%"
                   />
-                </div>
-
-                <div>
-                  <label className={labelClass}>健身水平</label>
-                  <div className="flex gap-3">
-                    {fitnessLevels.map((level) => (
-                      <button
-                        key={level.value}
-                        onClick={() => setFitnessLevel(level.value)}
-                        className={`flex-1 py-2.5 px-4 rounded-xl text-sm font-medium transition-all ${
-                          fitnessLevel === level.value
-                            ? 'bg-star-accent text-white shadow-md'
-                            : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                        }`}
-                      >
-                        {level.label}
-                      </button>
-                    ))}
-                  </div>
                 </div>
               </motion.div>
             )}

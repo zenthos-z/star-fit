@@ -140,15 +140,49 @@ class AcidVisualEngine {
     private userData: UserData,
     private scene: SceneTemplate,
     private vibe: VibeConfig,
+    private sceneStyleKey?: string,
   ) {}
 
   generateFinalPrompt() {
     const { Date: dateStr, Duration, Workout_List } = this.userData;
     const finalNickname =
       this.vibe.brandingName || this.userData.Nickname || "ANONYMOUS";
+    // 酸性专属元素（Glitch/条形码/警示条纹/Industrial 噪声）只对 Acid 系场景输出，
+    // 否则会把包豪斯/山水等风格拽回工业酸性风（用户实测：选包豪斯却生成工业金属）。
+    const ACID_KEYS = new Set([
+      "Industrial_Dark",
+      "industrial",
+      "Liquid_Chrome",
+      "liquid",
+      "Cyber_Neon",
+      "cyber",
+      "Vintage_Punk",
+      "punk",
+    ]);
+    const isAcid = ACID_KEYS.has(this.sceneStyleKey ?? "");
+    const genre = isAcid ? "酸性风格" : `${this.scene.name}风格`;
+    const dataBlockObject = isAcid
+      ? "Massive Rectangular Industrial Specification Label (磨砂半透明质感)"
+      : "Clean Specification Card whose frame language matches the scene style (e.g., geometric primary-color border for Bauhaus, ink-brush scroll panel for Shan Shui)";
+    const dataBlockGraphics = isAcid
+      ? `"Borders": "Black/Yellow diagonal warning hazard stripes (█ ░ █ ░)",
+            "Details": "Micro-typography (TORQUE_CHECK, STABILITY_OK), QR codes, Functional Barcodes",
+            "Texture": "Digital noise particles (░▒▓█)"`
+      : `"Borders": "Frame ornament strictly derived from the scene style (minimal, matching palette)",
+            "Details": "Micro-typography of the workout spec, styled to the scene",
+            "Texture": "Surface texture consistent with the scene style"`;
+    const atmosphereAcid = isAcid
+      ? `"Glitch": "应用字符位移/重复故障效果 (e.g., L-L-LEG D-DAY)",
+            "Layout": "在画面左右边缘添加垂直排布的条形码 (║█║▌║█║▌│║▌)",
+        `
+      : "";
+    const industrialNoise = isAcid
+      ? `        Industrial_Noise= "随机填充代码: [BATCH_NO: 20251218-A], [PRESSURE: CRITICAL]"
+`
+      : "";
     return `
 # SYSTEM ROLE: ACID_POSTER_AI_SYSTEM
-# TASK: 严格按照以下渲染函数逻辑执行，生成一张 3:4 比例的酸性风格海报图片。
+# TASK: 严格按照以下渲染函数逻辑执行，生成一张 3:4 比例的${genre}海报图片。整体视觉语言以 Scene_Setup 的风格为准，Atmosphere_Elements 不得覆盖或稀释场景风格。
 
 // ==========================================
 // 🎨 执行函数: Render_Poster(Final_Data)
@@ -166,12 +200,10 @@ FUNCTION Render_Poster(Final_Data):
 
     // [2. 数据承载容器 (The Anchor)]
     SET Data_Block_Container:
-        Object          = "Massive Rectangular Industrial Specification Label (磨砂半透明质感)"
-        Position        = "Diagonal (倾斜 15-25 度) across the main visual anchor"
+        Object          = "${dataBlockObject}"
+        Position        = "${isAcid ? "Diagonal (倾斜 15-25 度) across the main visual anchor" : "Balanced, aligned with scene composition rules"}"
         Graphics        = {
-            "Borders": "Black/Yellow diagonal warning hazard stripes (█ ░ █ ░)",
-            "Details": "Micro-typography (TORQUE_CHECK, STABILITY_OK), QR codes, Functional Barcodes",
-            "Texture": "Digital noise particles (░▒▓█)"
+            ${dataBlockGraphics}
         }
         Text_Render     = "清楚显示提炼后的训练数据":
         ${JSON.stringify(Workout_List, null, 2)}
@@ -180,13 +212,12 @@ FUNCTION Render_Poster(Final_Data):
     SET Atmosphere_Elements:
         Texts_FX        = {
             "Slogans": "${this.vibe.slogans}",
-            "Glitch": "应用字符位移/重复故障效果 (e.g., L-L-LEG D-DAY)",
-            "Layout": "在画面左右边缘添加垂直排布的条形码 (║█║▌║█║▌│║▌)"
+            ${atmosphereAcid}"Layout": "Text placement follows the scene style composition"
         }
         Color_Palette   = "${this.vibe.palette}"
         Branding        = "Render ${finalNickname} in ${this.vibe.brandingStyle}"
-        Time_Widget     = "Digital clock box (8-bit style) displaying ${Duration} / ${dateStr}"
-        Industrial_Noise= "随机填充代码: [BATCH_NO: 20251218-A], [PRESSURE: CRITICAL]"
+        Time_Widget     = "${isAcid ? "Digital clock box (8-bit style)" : "Minimal timestamp card in scene style"} displaying ${Duration} / ${dateStr}"
+${industrialNoise}
 
     // [4. 执行合成]
     RETURN Image(Combine(Scene_Setup, Data_Block_Container, Atmosphere_Elements))
@@ -242,10 +273,33 @@ export async function buildPosterPrompt(
   // Check for user-specific default vibe in app_configs
   const userVibe = await ConfigRepo.getConfig(userId, "poster_vibe_config");
 
-  const engine = new AcidVisualEngine(session, scene, {
-    ...defaultVibe,
-    ...userVibe,
-    ...vibeOverride,
-  });
+  const isAcidKey = [
+    "Industrial_Dark",
+    "industrial",
+    "Liquid_Chrome",
+    "liquid",
+    "Cyber_Neon",
+    "cyber",
+    "Vintage_Punk",
+    "punk",
+  ].includes(key);
+  const sceneAwareVibe: VibeConfig = isAcidKey
+    ? defaultVibe
+    : {
+        brandingName: session.Nickname || "ANONYMOUS",
+        slogans: "Push beyond, one rep at a time",
+        palette: "Derived from the scene style palette",
+        brandingStyle: "Typography treatment consistent with the scene style",
+      };
+  const engine = new AcidVisualEngine(
+    session,
+    scene,
+    {
+      ...sceneAwareVibe,
+      ...userVibe,
+      ...vibeOverride,
+    },
+    key,
+  );
   return engine.generateFinalPrompt();
 }

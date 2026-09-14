@@ -402,30 +402,6 @@ export const PsychoOSSchema = z.object({
 export type PsychoOS = z.infer<typeof PsychoOSSchema>;
 
 /**
- * HR Baseline Schema
- * Heart rate baseline measurements for recovery tracking
- */
-export const HRBaselineSchema = z.object({
-  resting_hr: z.number().optional(),
-  hrv: z.number().optional(),
-  last_measured: z.string().datetime().optional(),
-});
-
-export type HRBaseline = z.infer<typeof HRBaselineSchema>;
-
-/**
- * Protocol Status Schema
- * Core protocol status tracking
- */
-export const ProtocolStatusSchema = z.object({
-  lastCoreCheck: z.string().datetime().optional(),
-  hrFuseCount: z.number().optional(),
-  weakSideAligned: z.boolean().optional(),
-});
-
-export type ProtocolStatus = z.infer<typeof ProtocolStatusSchema>;
-
-/**
  * User Profile Schema
  * Complete user profile with all attributes
  *
@@ -434,14 +410,11 @@ export type ProtocolStatus = z.infer<typeof ProtocolStatusSchema>;
 export const UserProfileSchema = z.object({
   user_id: z.string(),
   tags: z.array(z.string()).default([]),
-  fitness_level: z.enum(['beginner', 'intermediate', 'advanced']).default('beginner'),
   basic_info: BasicInfoSchema.optional().default({}),
   preferences: PreferencesSchema.optional().default({}),
   physiological: PhysiologicalSchema.optional().default({}),
   psychological: PsychologicalSchema.optional().default({}),
   load_anchors: LoadAnchorsSchema.optional().default({}),
-  red_flags: z.array(z.string()).default([]),
-  training_strategy: z.string().optional().nullable(),
   psycho_os: PsychoOSSchema.optional().default({}),
   updated_at: z.number().default(() => Date.now()),
 });
@@ -451,18 +424,6 @@ export type UserProfile = z.infer<typeof UserProfileSchema>;
 // ============================================================================
 // Three-State Model Schemas (Core-Flex Architecture)
 // ============================================================================
-
-/**
- * Permanent Injury Schema
- * Records permanent physical limitations that don't auto-heal
- */
-export const PermanentInjurySchema = z.object({
-  part: z.string(), // Body part (e.g., "left_shoulder", "lower_back")
-  note: z.string(), // Description of the injury
-  diagnosed_at: z.string().datetime().optional(), // ISO 8601 UTC
-});
-
-export type PermanentInjury = z.infer<typeof PermanentInjurySchema>;
 
 /**
  * Profile Static Schema
@@ -483,17 +444,8 @@ export const ProfileStaticSchema = z.object({
   risk_preference: z.enum(['UNKNOWN', 'conservative', 'moderate', 'aggressive']).optional(),
   accountability: z.enum(['UNKNOWN', 'low', 'medium', 'high']).optional(),
 
-  // Permanent limitations
-  permanent_injuries: z.array(PermanentInjurySchema).optional(),
-
-  // Fitness level classification
-  fitness_level: z.enum(['UNKNOWN', 'beginner', 'intermediate', 'advanced']).optional(),
-
   // User tags and classifications
   tags: z.array(z.string()).optional(),
-
-  // Health red flags (injuries, conditions, etc.)
-  red_flags: z.array(z.string()).optional(),
 
   // Nested schemas for extended profile data
   basic_info: BasicInfoSchema.optional(),
@@ -503,9 +455,6 @@ export const ProfileStaticSchema = z.object({
 
   // Neuromuscular operating system profile
   psycho_os: PsychoOSSchema.optional(),
-
-  // Training strategy (free text format, similar to AI system prompt)
-  training_strategy: z.string().optional().nullable(),
 });
 
 export type ProfileStatic = z.infer<typeof ProfileStaticSchema>;
@@ -552,12 +501,6 @@ export const ProfileDynamicSchema = z.object({
 
   // Recovery state: Fatigue monitoring (nullable for new users)
   recovery_state: RecoveryStateSchema.nullish(),
-
-  // Heart rate baseline for recovery tracking
-  hr_baseline: HRBaselineSchema.optional(),
-
-  // Protocol status tracking
-  protocol_status: ProtocolStatusSchema.optional(),
 });
 
 export type ProfileDynamic = z.infer<typeof ProfileDynamicSchema>;
@@ -639,7 +582,7 @@ export const UserProfileV2Schema = z.object({
 
   // Flex layer fields (JSONB containers)
   // NOTE: All profile fields are now within these sub-objects
-  // - tags, fitness_level, red_flags, training_strategy are in profile_static
+  // - tags are in profile_static
   // - load_anchors, active_limitations are in profile_dynamic
   profile_static: ProfileStaticSchema.optional(),
   profile_dynamic: ProfileDynamicSchema.optional(),

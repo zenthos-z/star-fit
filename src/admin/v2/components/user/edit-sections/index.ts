@@ -5,4 +5,3 @@ export { PreferencesSection } from './PreferencesSection';
 export { LoadAnchorsSection } from './LoadAnchorsSection';
 export { AnchorTypeSection } from './AnchorTypeSection';
 export { AddAnchorDialog } from './AddAnchorDialog';
-export { TrainingStrategySection } from './TrainingStrategySection';

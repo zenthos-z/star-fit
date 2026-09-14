@@ -39,7 +39,6 @@ export const QuickActions: React.FC<QuickActionsProps> = ({ onNavigate }) => {
           height: 175,
           weight: 70,
           fitness_goal: 'muscle_gain',
-          fitness_level: 'intermediate',
         }
       };
 

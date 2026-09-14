@@ -25,8 +25,6 @@ interface CachedProfile<T> {
 
 interface UserProfile {
   user_id: string;
-  fitness_level: string;
-  red_flags: string[];
   basic_info: Record<string, any>;
   preferences: Record<string, any>;
   physiological: Record<string, any>;
@@ -75,8 +73,6 @@ export const UserProfileService = {
         // Return default profile with empty load_anchors
         return {
           user_id: userId,
-          fitness_level: 'beginner',
-          red_flags: [],
           basic_info: {},
           preferences: {},
           physiological: {},
@@ -91,8 +87,6 @@ export const UserProfileService = {
       // Return default profile on error
       return {
         user_id: userId,
-        fitness_level: 'beginner',
-        red_flags: [],
         basic_info: {},
         preferences: {},
         physiological: {},

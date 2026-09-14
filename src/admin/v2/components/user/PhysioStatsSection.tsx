@@ -11,7 +11,7 @@
  */
 
 import React from 'react';
-import { Activity, Award, Stethoscope } from 'lucide-react';
+import { Activity, Stethoscope } from 'lucide-react';
 
 interface PhysioStatsSectionProps {
   basicInfo: {
@@ -23,12 +23,10 @@ interface PhysioStatsSectionProps {
     injuries?: string[];
     health_status?: '良好' | '有伤' | '需注意';
   };
-  fitnessLevel: 'beginner' | 'intermediate' | 'advanced';
 }
 
 export const PhysioStatsSection: React.FC<PhysioStatsSectionProps> = ({
-  basicInfo,
-  fitnessLevel
+  basicInfo
 }) => {
   // Calculate BMI if height and weight are available
   const calculateBMI = () => {
@@ -60,24 +58,6 @@ export const PhysioStatsSection: React.FC<PhysioStatsSectionProps> = ({
       case '有伤': return 'bg-red-500';
       case '需注意': return 'bg-yellow-500';
       default: return 'bg-gray-400';
-    }
-  };
-
-  const getFitnessLevelLabel = (level: string) => {
-    switch (level) {
-      case 'beginner': return '初级';
-      case 'intermediate': return '中级';
-      case 'advanced': return '高级';
-      default: return '未知';
-    }
-  };
-
-  const getFitnessLevelStyle = (level: string) => {
-    switch (level) {
-      case 'beginner': return 'bg-gradient-to-r from-blue-500 to-blue-600 text-white';
-      case 'intermediate': return 'bg-gradient-to-r from-green-500 to-green-600 text-white';
-      case 'advanced': return 'bg-gradient-to-r from-purple-500 to-purple-600 text-white';
-      default: return 'bg-gray-100 text-gray-700';
     }
   };
 
@@ -181,14 +161,6 @@ export const PhysioStatsSection: React.FC<PhysioStatsSectionProps> = ({
               </span>
             </div>
           )}
-        </div>
-
-        {/* Fitness Level Badge */}
-        <div className="pt-3 border-t border-gray-100">
-          <div className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-medium gap-2 ${getFitnessLevelStyle(fitnessLevel)}`}>
-            <Award size={16} />
-            {getFitnessLevelLabel(fitnessLevel)}
-          </div>
         </div>
 
         {/* Injuries Section */}

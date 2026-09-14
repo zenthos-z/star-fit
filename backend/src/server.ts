@@ -1,15 +1,19 @@
-import Fastify from 'fastify';
-import cors from '@fastify/cors';
-import formbody from '@fastify/formbody';
-import multipart from '@fastify/multipart';
-import fastifyStatic from '@fastify/static';
-import websocket from '@fastify/websocket';
-import path from 'path';
-import fs from 'fs';
-import agentRoutes from './routes/agent.js';
-import { getPostgresClient as getDb } from './db/index.js';
-import { pushHistory, pullSync, getConfig } from './controllers/syncController.js';
-import { wsService } from './services/wsService.js';
+import Fastify from "fastify";
+import cors from "@fastify/cors";
+import formbody from "@fastify/formbody";
+import multipart from "@fastify/multipart";
+import fastifyStatic from "@fastify/static";
+import websocket from "@fastify/websocket";
+import path from "path";
+import fs from "fs";
+import agentRoutes from "./routes/agent.js";
+import { getPostgresClient as getDb } from "./db/index.js";
+import {
+  pushHistory,
+  pullSync,
+  getConfig,
+} from "./controllers/syncController.js";
+import { wsService } from "./services/wsService.js";
 import {
   uploadMedia,
   listUserMedia,
@@ -51,15 +55,20 @@ import {
   exportUserTrainingMarkdown,
   updateUserDisplayName,
   updateUserProfileStatic,
+  getUserProfile as getAdminUserProfile,
+  updateUserProfileDynamic,
+  updateUserLoadAnchor,
+  addUserLimitation,
+  removeUserLimitation,
   getImageGenConfig,
   updateImageGenConfig,
-  testImageGenConnection
-} from './controllers/adminController.js';
+  testImageGenConnection,
+} from "./controllers/adminController.js";
 import {
   getLatestTraining,
   getServerInfo,
-  getExerciseStats as getDashboardExerciseStats
-} from './controllers/dashboardController.js';
+  getExerciseStats as getDashboardExerciseStats,
+} from "./controllers/dashboardController.js";
 import {
   getAllExercises,
   getExerciseById,
@@ -70,15 +79,15 @@ import {
   createExercise,
   updateExercise as updateExerciseById,
   deleteExercise as deleteExerciseById,
-  getExerciseStats
-} from './controllers/exerciseController.js';
+  getExerciseStats,
+} from "./controllers/exerciseController.js";
 import {
   getUserProfile,
   updateUserProfile,
-  deleteLoadAnchor
-} from './controllers/userProfileController.js';
-import { generateTextUnified } from './services/llm.js';
-import { getPostgresClient } from './db/postgresql/client/postgres-client.js';
+  deleteLoadAnchor,
+} from "./controllers/userProfileController.js";
+import { generateTextUnified } from "./services/llm.js";
+import { getPostgresClient } from "./db/postgresql/client/postgres-client.js";
 import {
   uploadVideo,
   getVideoInfo,
@@ -88,32 +97,32 @@ import {
   getVideoTask,
   retryVideoTask,
   deleteVideoTask,
-  getVideoStats
-} from './controllers/videoController.js';
+  getVideoStats,
+} from "./controllers/videoController.js";
 import {
   exportExercises,
   importExercises,
   precheckImport,
   getImportStatus,
   cancelImport,
-  getImportList
-} from './controllers/exerciseLibraryIOController.js';
-import { WebSocketProgressBroadcaster } from './services/websocketProgressService.js';
-import { MissingUserIdError } from './utils/requestUtils.js';
+  getImportList,
+} from "./controllers/exerciseLibraryIOController.js";
+import { WebSocketProgressBroadcaster } from "./services/websocketProgressService.js";
+import { MissingUserIdError } from "./utils/requestUtils.js";
 
-const ACCESS_LOG = path.join(process.cwd(), 'access.log');
+const ACCESS_LOG = path.join(process.cwd(), "access.log");
 
 const server = Fastify({
   logger: {
     transport: {
-      target: 'pino-pretty',
+      target: "pino-pretty",
       options: {
-        translateTime: 'HH:MM:ss Z',
-        ignore: 'pid,hostname',
+        translateTime: "HH:MM:ss Z",
+        ignore: "pid,hostname",
       },
     },
   },
-  bodyLimit: 10 * 1024 * 1024 // 10MB global limit for JSON etc.
+  bodyLimit: 10 * 1024 * 1024, // 10MB global limit for JSON etc.
 });
 
 // Missing X-User-Id is a client error (400), not a server fault (500).
@@ -125,7 +134,7 @@ server.setErrorHandler((error, request, reply) => {
 });
 
 // Helper for access logging
-server.addHook('onRequest', async (request) => {
+server.addHook("onRequest", async (request) => {
   const logMsg = `[${new Date().toISOString()}] ${request.method} ${request.url} from ${request.ip}\n`;
   fs.appendFileSync(ACCESS_LOG, logMsg);
 });
@@ -137,20 +146,22 @@ server.addHook('onRequest', async (request) => {
 // 放行：/health（LAN 扫描识别）、OPTIONS 预检、静态资源 /uploads/*（素材直链）。
 const ACCESS_TOKEN = process.env.STARFIT_ACCESS_TOKEN;
 if (ACCESS_TOKEN) {
-  server.addHook('onRequest', async (request, reply) => {
-    const url = request.url.split('?')[0];
+  server.addHook("onRequest", async (request, reply) => {
+    const url = request.url.split("?")[0];
     if (
-      url === '/health' ||
-      request.method === 'OPTIONS' ||
-      url.startsWith('/uploads/')
+      url === "/health" ||
+      request.method === "OPTIONS" ||
+      url.startsWith("/uploads/")
     ) {
       return;
     }
     const provided =
-      (request.headers['x-access-token'] as string | undefined) ??
+      (request.headers["x-access-token"] as string | undefined) ??
       (request.query as Record<string, string> | undefined)?.token;
     if (provided !== ACCESS_TOKEN) {
-      return reply.status(401).send({ error: 'invalid or missing access token' });
+      return reply
+        .status(401)
+        .send({ error: "invalid or missing access token" });
     }
   });
 }
@@ -161,16 +172,24 @@ const start = async () => {
     getDb();
 
     // Plugins
-    await server.register(cors, { 
+    await server.register(cors, {
       origin: (origin, cb) => {
         // Allow all origins for now to avoid mobile issues
         cb(null, true);
       },
-      methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin', 'X-User-Id', 'X-Access-Token'],
+      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      allowedHeaders: [
+        "Content-Type",
+        "Authorization",
+        "X-Requested-With",
+        "Accept",
+        "Origin",
+        "X-User-Id",
+        "X-Access-Token",
+      ],
       credentials: true,
       preflight: true,
-      strictPreflight: false
+      strictPreflight: false,
     });
     await server.register(formbody, { bodyLimit: 10 * 1024 * 1024 }); // 10MB
     await server.register(multipart, {
@@ -179,144 +198,168 @@ const start = async () => {
         fieldSize: 10 * 1024 * 1024, // 10MB
         fieldNameSize: 100, // 100 bytes
         fields: 10,
-        files: 10
-      }
+        files: 10,
+      },
     });
     await server.register(websocket);
-    
+
     // Static Files (Uploads)
     await server.register(fastifyStatic, {
-      root: path.join(process.cwd(), 'uploads'),
-      prefix: '/uploads/',
+      root: path.join(process.cwd(), "uploads"),
+      prefix: "/uploads/",
     });
 
     // API Routes
-    server.get('/', async (req, reply) => {
-      return { 
-        ok: true, 
-        message: 'Starfit Agent Backend is running',
-        version: '2.0.0',
-        ws_endpoints: ['/api/ws/sync', '/api/videos/progress']
+    server.get("/", async (req, reply) => {
+      return {
+        ok: true,
+        message: "Starfit Agent Backend is running",
+        version: "2.0.0",
+        ws_endpoints: ["/api/ws/sync", "/api/videos/progress"],
       };
     });
 
     // LAN discovery health probe — 客户端扫描用。区分于 404（其他服务的随机响应），
     // 带 app 标识让前端确认发现的是 Starfit 而非碰巧占用 43111 的别的服务。
-    server.get('/health', async (req, reply) => {
+    server.get("/health", async (req, reply) => {
       return {
         ok: true,
-        app: 'starfit',
-        version: '2.0.0',
+        app: "starfit",
+        version: "2.0.0",
         ts: Date.now(),
       };
     });
 
-    server.register(async (api) => {
-      // Add a request logger for sync push
-      api.addHook('preHandler', async (req) => {
-        if (req.url.includes('/sync/push')) {
-          req.log.info({ 
-            url: req.url,
-            method: req.method,
-            origin: req.headers.origin,
-            deviceId: (req.body as any)?.deviceId,
-            sessionCount: (req.body as any)?.sessions?.length
-          }, 'Incoming Sync Push Request');
-        }
-      });
-
-      // Diagnostic Ping
-      api.get('/ping', async (req, reply) => {
-        return { 
-          pong: true, 
-          ts: Date.now(),
-          ip: req.ip,
-          headers: req.headers
-        };
-      });
-
-      api.get('/', async (_req, reply) => {
-        reply.send({
-          ok: true,
-          routes: [
-            'GET /api/admin/users',
-            'GET /api/admin/stats/:userId',
-            'POST /api/sync/push',
-            'GET /api/sync/pull',
-            'GET /api/config/sync',
-            'POST /api/config/update',
-            'POST /api/media/upload',
-            'GET /api/media/:id',
-            'GET /api/history/summary',
-            'POST /api/agent/plan',
-            'GET /api/tutorial'
-          ]
+    server.register(
+      async (api) => {
+        // Add a request logger for sync push
+        api.addHook("preHandler", async (req) => {
+          if (req.url.includes("/sync/push")) {
+            req.log.info(
+              {
+                url: req.url,
+                method: req.method,
+                origin: req.headers.origin,
+                deviceId: (req.body as any)?.deviceId,
+                sessionCount: (req.body as any)?.sessions?.length,
+              },
+              "Incoming Sync Push Request",
+            );
+          }
         });
-      });
-      // Agent Routes (Legacy)
-      api.register(agentRoutes);
 
-      // Sync Routes
-      api.post('/sync/push', pushHistory);
-      api.get('/sync/pull', pullSync);
-      api.get('/config/sync', getConfig); // Shortcut for just config
+        // Diagnostic Ping
+        api.get("/ping", async (req, reply) => {
+          return {
+            pong: true,
+            ts: Date.now(),
+            ip: req.ip,
+            headers: req.headers,
+          };
+        });
 
-      // WebSocket Sync
-      (api as any).get('/ws/sync', { websocket: true }, (connection: any, req: any) => {
-        // In some versions of @fastify/websocket, connection is a SocketStream (with .socket).
-        // In others, or depending on config, it might be the WebSocket itself.
-        const socket = connection.socket || (connection.send ? connection : null);
+        api.get("/", async (_req, reply) => {
+          reply.send({
+            ok: true,
+            routes: [
+              "GET /api/admin/users",
+              "GET /api/admin/stats/:userId",
+              "POST /api/sync/push",
+              "GET /api/sync/pull",
+              "GET /api/config/sync",
+              "POST /api/config/update",
+              "POST /api/media/upload",
+              "GET /api/media/:id",
+              "GET /api/history/summary",
+              "POST /api/agent/plan",
+              "GET /api/tutorial",
+            ],
+          });
+        });
+        // Agent Routes (Legacy)
+        api.register(agentRoutes);
 
-        if (!socket) {
-          req.log.error({ 
-            hasConnection: !!connection,
-            connectionKeys: Object.keys(connection)
-          }, '[WS] Could not find WebSocket object in connection. Upgrade might have failed.');
-          
-          if (typeof connection.destroy === 'function') connection.destroy();
-          else if (typeof connection.end === 'function') connection.end();
-          return;
-        }
+        // Sync Routes
+        api.post("/sync/push", pushHistory);
+        api.get("/sync/pull", pullSync);
+        api.get("/config/sync", getConfig); // Shortcut for just config
 
-        const userId = req.query?.userId || req.headers['x-user-id'] || 'anonymous';
-        const deviceId = req.query?.deviceId || 'unknown';
-        
-        console.log(`[WS] Connection established for user: ${userId}, device: ${deviceId}. Using ${socket === connection ? 'direct connection' : 'connection.socket'}`);
-        socket.deviceId = deviceId; 
-        
-        wsService.registerClient(userId, socket);
-        
-        socket.on('message', async (message: any) => {
-          try {
-            const envelope = JSON.parse(message.toString());
-            
-            const messageType = envelope.type || envelope.method;
-            const payload = envelope.data ?? envelope.payload ?? envelope.params;
+        // WebSocket Sync
+        (api as any).get(
+          "/ws/sync",
+          { websocket: true },
+          (connection: any, req: any) => {
+            // In some versions of @fastify/websocket, connection is a SocketStream (with .socket).
+            // In others, or depending on config, it might be the WebSocket itself.
+            const socket =
+              connection.socket || (connection.send ? connection : null);
 
-            if (messageType === 'ping') {
-              socket.send(JSON.stringify({ type: 'pong', ts: Date.now() }));
+            if (!socket) {
+              req.log.error(
+                {
+                  hasConnection: !!connection,
+                  connectionKeys: Object.keys(connection),
+                },
+                "[WS] Could not find WebSocket object in connection. Upgrade might have failed.",
+              );
+
+              if (typeof connection.destroy === "function")
+                connection.destroy();
+              else if (typeof connection.end === "function") connection.end();
               return;
             }
 
-            switch (messageType) {
-              case 'deviation_event':
-                // Deviation events are now batched and submitted with session metadata
-                console.log(`[WS] Deviation event received (batched for session end)`);
-                break;
-              case 'tutor.generate_tutorial': {
-                const exerciseId = String((payload as any)?.exerciseId || "");
-                const exerciseName = String((payload as any)?.exerciseName || (payload as any)?.exerciseId || "");
-                const lang = String((payload as any)?.lang || "zh");
-                const name = exerciseName || exerciseId || "动作";
-                const fallback =
-                  lang === "zh"
-                    ? `# ${name}\n\n> ⚠️ AI 生成失败\n\n抱歉，暂时无法生成该动作的详细教程。这可能是由于网络连接问题或服务繁忙。\n\n请检查网络连接，或稍后点击下方的 **重新生成教程** 按钮重试。`
-                    : `# ${name}\n\n> ⚠️ Generation Failed\n\nSorry, we cannot generate the tutorial at the moment. This may be due to network issues.\n\nPlease check your connection or try clicking the **Regenerate** button below.`;
+            const userId =
+              req.query?.userId || req.headers["x-user-id"] || "anonymous";
+            const deviceId = req.query?.deviceId || "unknown";
 
-                const aiPromise = (async () => {
-                  const systemPrompt =
-                    "你是一个专业的健身百科全书与教练，擅长用清晰、详细的方式解释动作细节，能够深入浅出地讲解动作原理、发力技巧和注意事项。输出使用 Markdown 格式。";
-                  const userPrompt = `请为动作 "${exerciseName || exerciseId}" 生成一份非常详细的健身教程。要求：
+            console.log(
+              `[WS] Connection established for user: ${userId}, device: ${deviceId}. Using ${socket === connection ? "direct connection" : "connection.socket"}`,
+            );
+            socket.deviceId = deviceId;
+
+            wsService.registerClient(userId, socket);
+
+            socket.on("message", async (message: any) => {
+              try {
+                const envelope = JSON.parse(message.toString());
+
+                const messageType = envelope.type || envelope.method;
+                const payload =
+                  envelope.data ?? envelope.payload ?? envelope.params;
+
+                if (messageType === "ping") {
+                  socket.send(JSON.stringify({ type: "pong", ts: Date.now() }));
+                  return;
+                }
+
+                switch (messageType) {
+                  case "deviation_event":
+                    // Deviation events are now batched and submitted with session metadata
+                    console.log(
+                      `[WS] Deviation event received (batched for session end)`,
+                    );
+                    break;
+                  case "tutor.generate_tutorial": {
+                    const exerciseId = String(
+                      (payload as any)?.exerciseId || "",
+                    );
+                    const exerciseName = String(
+                      (payload as any)?.exerciseName ||
+                        (payload as any)?.exerciseId ||
+                        "",
+                    );
+                    const lang = String((payload as any)?.lang || "zh");
+                    const name = exerciseName || exerciseId || "动作";
+                    const fallback =
+                      lang === "zh"
+                        ? `# ${name}\n\n> ⚠️ AI 生成失败\n\n抱歉，暂时无法生成该动作的详细教程。这可能是由于网络连接问题或服务繁忙。\n\n请检查网络连接，或稍后点击下方的 **重新生成教程** 按钮重试。`
+                        : `# ${name}\n\n> ⚠️ Generation Failed\n\nSorry, we cannot generate the tutorial at the moment. This may be due to network issues.\n\nPlease check your connection or try clicking the **Regenerate** button below.`;
+
+                    const aiPromise = (async () => {
+                      const systemPrompt =
+                        "你是一个专业的健身百科全书与教练，擅长用清晰、详细的方式解释动作细节，能够深入浅出地讲解动作原理、发力技巧和注意事项。输出使用 Markdown 格式。";
+                      const userPrompt = `请为动作 "${exerciseName || exerciseId}" 生成一份非常详细的健身教程。要求：
 
 ## 内容结构
 必须包含以下四个部分，每个部分都要有详细说明：
@@ -351,234 +394,310 @@ const start = async () => {
 - 每个部分的文字要充实，不要过于简略
 - 保持信息密度的同时，也要保证阅读体验
 - 语言：${lang === "zh" ? "中文" : "英文"}`;
-                  return generateTextUnified(userPrompt, req.log, "tutorial", systemPrompt);
-                })();
+                      return generateTextUnified(
+                        userPrompt,
+                        req.log,
+                        "tutorial",
+                        systemPrompt,
+                      );
+                    })();
 
-                let firstMarkdown: string | null = null;
-                try {
-                  firstMarkdown = await aiPromise;
-                  req.log.info({ 
-                    exercise: name, 
-                    contentLength: firstMarkdown?.length, 
-                    isSuccess: !!firstMarkdown,
-                    preview: firstMarkdown?.substring(0, 100)
-                  }, "ai_generation_result");
-                } catch (err: any) {
-                  req.log.warn({ err, exercise: name }, "tutor_ws_generation_failed_falling_back");
-                }
+                    let firstMarkdown: string | null = null;
+                    try {
+                      firstMarkdown = await aiPromise;
+                      req.log.info(
+                        {
+                          exercise: name,
+                          contentLength: firstMarkdown?.length,
+                          isSuccess: !!firstMarkdown,
+                          preview: firstMarkdown?.substring(0, 100),
+                        },
+                        "ai_generation_result",
+                      );
+                    } catch (err: any) {
+                      req.log.warn(
+                        { err, exercise: name },
+                        "tutor_ws_generation_failed_falling_back",
+                      );
+                    }
 
-                const tutorialPayload = {
-                  exerciseId: exerciseId || exerciseName,
-                  content_md: firstMarkdown || fallback,
-                  source: firstMarkdown ? "ai" : "internal",
-                  isFinal: true,
-                };
+                    const tutorialPayload = {
+                      exerciseId: exerciseId || exerciseName,
+                      content_md: firstMarkdown || fallback,
+                      source: firstMarkdown ? "ai" : "internal",
+                      isFinal: true,
+                    };
 
-                // AI 生成成功后回写 exercises.tutorials（服务端持久化，换设备不丢）。
-                // 只回写 AI 真实生成的内容；fallback 文本不落库。失败仅记日志，不影响 WS 回包。
-                if (firstMarkdown && exerciseId) {
-                  try {
-                    const db = getPostgresClient();
-                    const cur = await db.queryOne<{ tutorials: any }>(
-                      'SELECT tutorials FROM exercises WHERE id = $id',
-                      { id: exerciseId }
-                    );
-                    if (cur) {
-                      const prev = typeof cur.tutorials === 'string'
-                        ? (JSON.parse(cur.tutorials || '{}') as Record<string, unknown>)
-                        : ((cur.tutorials as Record<string, unknown>) || {});
-                      await db.query(
-                        `UPDATE exercises
+                    // AI 生成成功后回写 exercises.tutorials（服务端持久化，换设备不丢）。
+                    // 只回写 AI 真实生成的内容；fallback 文本不落库。失败仅记日志，不影响 WS 回包。
+                    if (firstMarkdown && exerciseId) {
+                      try {
+                        const db = getPostgresClient();
+                        const cur = await db.queryOne<{ tutorials: any }>(
+                          "SELECT tutorials FROM exercises WHERE id = $id",
+                          { id: exerciseId },
+                        );
+                        if (cur) {
+                          const prev =
+                            typeof cur.tutorials === "string"
+                              ? (JSON.parse(cur.tutorials || "{}") as Record<
+                                  string,
+                                  unknown
+                                >)
+                              : (cur.tutorials as Record<string, unknown>) ||
+                                {};
+                          await db.query(
+                            `UPDATE exercises
                            SET tutorials = $tutorials::jsonb,
                                modified_by = 'system',
                                modified_at = $modifiedAt,
                                updated_at = $modifiedAt
                          WHERE id = $id`,
-                        {
-                          tutorials: JSON.stringify({
-                            ...prev,
-                            ai: { content_md: firstMarkdown, lang, generated_at: new Date().toISOString() }
-                          }),
-                          modifiedAt: new Date().toISOString(),
-                          id: exerciseId
+                            {
+                              tutorials: JSON.stringify({
+                                ...prev,
+                                ai: {
+                                  content_md: firstMarkdown,
+                                  lang,
+                                  generated_at: new Date().toISOString(),
+                                },
+                              }),
+                              modifiedAt: new Date().toISOString(),
+                              id: exerciseId,
+                            },
+                          );
+                          req.log.info(
+                            { exerciseId, lang },
+                            "tutorial_ai_persisted",
+                          );
+                        } else {
+                          req.log.info(
+                            { exerciseId },
+                            "tutorial_ai_persist_skipped_no_row",
+                          );
                         }
-                      );
-                      req.log.info({ exerciseId, lang }, "tutorial_ai_persisted");
-                    } else {
-                      req.log.info({ exerciseId }, "tutorial_ai_persist_skipped_no_row");
+                      } catch (persistErr: any) {
+                        req.log.warn(
+                          { err: persistErr, exerciseId },
+                          "tutorial_ai_persist_failed",
+                        );
+                      }
                     }
-                  } catch (persistErr: any) {
-                    req.log.warn({ err: persistErr, exerciseId }, "tutorial_ai_persist_failed");
+
+                    try {
+                      socket.send(
+                        JSON.stringify({
+                          type: "tutor.tutorial_result",
+                          data: tutorialPayload,
+                          payload: tutorialPayload,
+                          ts: Date.now(),
+                        }),
+                      );
+                    } catch {}
+                    wsService.broadcastToUser(
+                      userId,
+                      "tutor.tutorial_result",
+                      tutorialPayload,
+                      socket.deviceId,
+                    );
+                    break;
                   }
+                  default:
+                    console.log(`[WS] Unhandled message type: ${messageType}`);
                 }
-
-                try {
-                  socket.send(JSON.stringify({ type: "tutor.tutorial_result", data: tutorialPayload, payload: tutorialPayload, ts: Date.now() }));
-                } catch {}
-                wsService.broadcastToUser(userId, "tutor.tutorial_result", tutorialPayload, socket.deviceId);
-                break;
+              } catch (e) {
+                console.error("[WS] Message parse error:", e);
               }
-              default:
-                console.log(`[WS] Unhandled message type: ${messageType}`);
+            });
+
+            socket.on("close", () => {
+              console.log(`[WS] Connection closed for user: ${userId}`);
+              wsService.unregisterClient(userId, socket);
+            });
+
+            socket.on("error", (err: any) => {
+              console.error(`[WS] Socket error for user ${userId}:`, err);
+            });
+          },
+        );
+
+        // Media Routes
+        api.post("/media/upload", uploadMedia);
+        api.get("/media/list", listUserMedia);
+        api.delete("/media/:id", deleteMedia);
+
+        // Dashboard Routes (New)
+        api.get("/admin/dashboard/latest-training", getLatestTraining);
+        api.get("/admin/server-info", getServerInfo);
+        api.get("/admin/dashboard/exercises/stats", getDashboardExerciseStats);
+
+        // Admin Routes
+        // Public auth endpoint (must be before other admin routes)
+        api.post("/admin/login-or-create", loginOrCreate);
+
+        api.get("/admin/users", getUsers);
+        api.get("/admin/stats/:userId", getUserStats);
+        api.get("/admin/proxy", getProxyConfig);
+        api.post("/admin/proxy", updateProxyConfig);
+        api.get("/admin/proxy/test", testProxy);
+        api.get("/admin/proxy/ip-info", getIPInfo);
+        api.post("/config/update", updateConfig);
+        api.post("/knowledge/exercise", updateExercise);
+        api.delete("/knowledge/exercise/:id", deleteExercise);
+        api.get("/knowledge/guidance", getGuidance);
+        api.post("/knowledge/guidance", updateGuidance);
+        api.post("/prompt/style", updatePromptStyle);
+
+        api.delete("/admin/sessions/:id", deleteUserSession);
+        api.delete("/admin/users/:userId", deleteUserAccount);
+
+        // System Health & Logs Routes
+        api.get("/admin/health", getSystemHealth);
+        api.get("/admin/logs", getSystemLogs);
+        api.get("/admin/capabilities", getAdminCapabilities);
+
+        // Quick Actions Routes
+        api.post("/admin/restart", restartService);
+        api.post("/admin/backup", backupDatabase);
+        api.post("/admin/emergency-stop", emergencyStop);
+
+        // AI Configuration Routes
+        api.get("/admin/ai-config", getAIConfig);
+        api.post("/admin/ai-config", updateAIConfig);
+
+        // Model Configuration Routes
+        api.get("/admin/model-config", getModelConfig);
+        api.post("/admin/model-config", updateModelConfig);
+        api.get("/admin/model-config/test", testModelConnection);
+
+        // Image Generation Configuration Routes
+        api.get("/admin/image-gen-config", getImageGenConfig);
+        api.post("/admin/image-gen-config", updateImageGenConfig);
+        api.get("/admin/image-gen-config/test", testImageGenConnection);
+
+        // Exercise Library IO Routes (Import/Export)
+        // NOTE: More specific routes must come before parameterized routes
+        api.get("/exercises/export", exportExercises);
+        api.post("/exercises/import", importExercises);
+        api.post("/exercises/import/precheck", precheckImport);
+        api.get("/exercises/import/status/:batchId", getImportStatus);
+        api.post("/exercises/import/cancel/:batchId", cancelImport);
+        api.get("/exercises/import/list", getImportList);
+
+        // Exercise Library Routes (New)
+        api.get("/exercises", getAllExercises);
+        api.get("/exercises/stats", getExerciseStats);
+        api.get("/exercises/by-name/:name", getExerciseByName);
+        api.get("/exercises/target/:target", getExercisesByTarget);
+        api.get("/exercises/difficulty/:difficulty", getExercisesByDifficulty);
+        api.get("/exercises/by-equipment", getExercisesByEquipment);
+        api.get("/exercises/:id", getExerciseById);
+        api.post("/exercises", createExercise);
+        api.put("/exercises/:id", updateExerciseById);
+        api.delete("/exercises/:id", deleteExerciseById);
+
+        // User Profile Routes (New)
+        api.get("/profiles/:userId", getUserProfile);
+        api.put("/profiles/:userId", updateUserProfile);
+        api.delete("/profiles/:userId/anchors/:exerciseId", deleteLoadAnchor);
+
+        // Admin Config Routes (New for User Management Refactoring)
+        api.get("/admin/configs", getAllAdminConfigs);
+        api.get("/admin/configs/:key", getAdminConfig);
+        api.post("/admin/configs", setAdminConfig);
+        api.get("/admin/configs/pinned-users", getPinnedUsers);
+        api.post("/admin/configs/pinned-users", setPinnedUsers);
+        api.post("/admin/configs/pinned-users/toggle", togglePinnedUser);
+        api.post("/admin/users/batch-delete", batchDeleteUsers);
+        api.get("/admin/users/:userId/sessions", getUserSessions);
+        api.get(
+          "/admin/users/:userId/export-markdown",
+          exportUserTrainingMarkdown,
+        );
+        api.put("/admin/users/:userId/display-name", updateUserDisplayName);
+        api.put("/admin/users/:userId/profile/static", updateUserProfileStatic);
+        api.get("/admin/users/:userId/profile", getAdminUserProfile);
+        api.put(
+          "/admin/users/:userId/profile/dynamic",
+          updateUserProfileDynamic,
+        );
+        api.post(
+          "/admin/users/:userId/anchors/:exerciseId",
+          updateUserLoadAnchor,
+        );
+        api.post("/admin/users/:userId/limitations", addUserLimitation);
+        api.delete(
+          "/admin/users/:userId/limitations/:part",
+          removeUserLimitation,
+        );
+
+        // Video Routes (New)
+        // NOTE: More specific routes must come before parameterized routes
+        api.post("/videos/upload", uploadVideo);
+        api.get("/videos/status/ffmpeg", checkFFmpegStatus);
+
+        // Video Task Routes (must come before /:exerciseName)
+        api.get("/videos/tasks", getAllVideoTasks);
+        api.get("/videos/tasks/:id", getVideoTask);
+        api.post("/videos/tasks/:id/retry", retryVideoTask);
+        api.delete("/videos/tasks/:id", deleteVideoTask);
+        api.get("/videos/stats", getVideoStats);
+
+        // Video Progress WebSocket
+        (api as any).get(
+          "/videos/progress",
+          { websocket: true },
+          (connection: any, req: any) => {
+            const socket =
+              connection.socket || (connection.send ? connection : null);
+
+            if (!socket) {
+              console.error(
+                "[WebSocket] Could not find WebSocket object in connection",
+              );
+              if (typeof connection.destroy === "function")
+                connection.destroy();
+              else if (typeof connection.end === "function") connection.end();
+              return;
             }
-          } catch (e) {
-            console.error('[WS] Message parse error:', e);
-          }
-        });
 
-        socket.on('close', () => {
-          console.log(`[WS] Connection closed for user: ${userId}`);
-          wsService.unregisterClient(userId, socket);
-        });
+            // 从 URL 提取 taskId
+            const taskId = req.query?.taskId;
+            if (!taskId) {
+              console.error("[WebSocket] No taskId provided");
+              socket.close();
+              return;
+            }
 
-        socket.on('error', (err: any) => {
-          console.error(`[WS] Socket error for user ${userId}:`, err);
-        });
-      });
+            console.log(
+              `[WebSocket] Video progress client connected for task: ${taskId}`,
+            );
+            WebSocketProgressBroadcaster.subscribe(taskId, socket);
 
-      // Media Routes
-      api.post('/media/upload', uploadMedia);
-      api.get('/media/list', listUserMedia);
-      api.delete('/media/:id', deleteMedia);
+            socket.on("close", () => {
+              console.log(
+                `[WebSocket] Video progress client disconnected for task: ${taskId}`,
+              );
+            });
 
-      // Dashboard Routes (New)
-      api.get('/admin/dashboard/latest-training', getLatestTraining);
-      api.get('/admin/server-info', getServerInfo);
-      api.get('/admin/dashboard/exercises/stats', getDashboardExerciseStats);
+            socket.on("error", (err: any) => {
+              console.error(
+                `[WebSocket] Socket error for task ${taskId}:`,
+                err,
+              );
+            });
+          },
+        );
 
-      // Admin Routes
-      // Public auth endpoint (must be before other admin routes)
-      api.post('/admin/login-or-create', loginOrCreate);
-
-      api.get('/admin/users', getUsers);
-      api.get('/admin/stats/:userId', getUserStats);
-      api.get('/admin/proxy', getProxyConfig);
-  api.post('/admin/proxy', updateProxyConfig);
-  api.get('/admin/proxy/test', testProxy);
-  api.get('/admin/proxy/ip-info', getIPInfo);
-  api.post('/config/update', updateConfig);
-      api.post('/knowledge/exercise', updateExercise);
-      api.delete('/knowledge/exercise/:id', deleteExercise);
-      api.get('/knowledge/guidance', getGuidance);
-      api.post('/knowledge/guidance', updateGuidance);
-      api.post('/prompt/style', updatePromptStyle);
-
-      api.delete('/admin/sessions/:id', deleteUserSession);
-      api.delete('/admin/users/:userId', deleteUserAccount);
-
-      // System Health & Logs Routes
-      api.get('/admin/health', getSystemHealth);
-      api.get('/admin/logs', getSystemLogs);
-      api.get('/admin/capabilities', getAdminCapabilities);
-
-      // Quick Actions Routes
-      api.post('/admin/restart', restartService);
-      api.post('/admin/backup', backupDatabase);
-      api.post('/admin/emergency-stop', emergencyStop);
-
-      // AI Configuration Routes
-      api.get('/admin/ai-config', getAIConfig);
-      api.post('/admin/ai-config', updateAIConfig);
-
-      // Model Configuration Routes
-      api.get('/admin/model-config', getModelConfig);
-      api.post('/admin/model-config', updateModelConfig);
-      api.get('/admin/model-config/test', testModelConnection);
-
-      // Image Generation Configuration Routes
-      api.get('/admin/image-gen-config', getImageGenConfig);
-      api.post('/admin/image-gen-config', updateImageGenConfig);
-      api.get('/admin/image-gen-config/test', testImageGenConnection);
-
-      // Exercise Library IO Routes (Import/Export)
-      // NOTE: More specific routes must come before parameterized routes
-      api.get('/exercises/export', exportExercises);
-      api.post('/exercises/import', importExercises);
-      api.post('/exercises/import/precheck', precheckImport);
-      api.get('/exercises/import/status/:batchId', getImportStatus);
-      api.post('/exercises/import/cancel/:batchId', cancelImport);
-      api.get('/exercises/import/list', getImportList);
-
-      // Exercise Library Routes (New)
-      api.get('/exercises', getAllExercises);
-      api.get('/exercises/stats', getExerciseStats);
-      api.get('/exercises/by-name/:name', getExerciseByName);
-      api.get('/exercises/target/:target', getExercisesByTarget);
-      api.get('/exercises/difficulty/:difficulty', getExercisesByDifficulty);
-      api.get('/exercises/by-equipment', getExercisesByEquipment);
-      api.get('/exercises/:id', getExerciseById);
-      api.post('/exercises', createExercise);
-      api.put('/exercises/:id', updateExerciseById);
-      api.delete('/exercises/:id', deleteExerciseById);
-
-      // User Profile Routes (New)
-      api.get('/profiles/:userId', getUserProfile);
-      api.put('/profiles/:userId', updateUserProfile);
-      api.delete('/profiles/:userId/anchors/:exerciseId', deleteLoadAnchor);
-
-      // Admin Config Routes (New for User Management Refactoring)
-      api.get('/admin/configs', getAllAdminConfigs);
-      api.get('/admin/configs/:key', getAdminConfig);
-      api.post('/admin/configs', setAdminConfig);
-      api.get('/admin/configs/pinned-users', getPinnedUsers);
-      api.post('/admin/configs/pinned-users', setPinnedUsers);
-      api.post('/admin/configs/pinned-users/toggle', togglePinnedUser);
-      api.post('/admin/users/batch-delete', batchDeleteUsers);
-      api.get('/admin/users/:userId/sessions', getUserSessions);
-      api.get('/admin/users/:userId/export-markdown', exportUserTrainingMarkdown);
-      api.put('/admin/users/:userId/display-name', updateUserDisplayName);
-      api.put('/admin/users/:userId/profile/static', updateUserProfileStatic);
-
-      // Video Routes (New)
-      // NOTE: More specific routes must come before parameterized routes
-      api.post('/videos/upload', uploadVideo);
-      api.get('/videos/status/ffmpeg', checkFFmpegStatus);
-
-      // Video Task Routes (must come before /:exerciseName)
-      api.get('/videos/tasks', getAllVideoTasks);
-      api.get('/videos/tasks/:id', getVideoTask);
-      api.post('/videos/tasks/:id/retry', retryVideoTask);
-      api.delete('/videos/tasks/:id', deleteVideoTask);
-      api.get('/videos/stats', getVideoStats);
-
-      // Video Progress WebSocket
-      (api as any).get('/videos/progress', { websocket: true }, (connection: any, req: any) => {
-        const socket = connection.socket || (connection.send ? connection : null);
-
-        if (!socket) {
-          console.error('[WebSocket] Could not find WebSocket object in connection');
-          if (typeof connection.destroy === 'function') connection.destroy();
-          else if (typeof connection.end === 'function') connection.end();
-          return;
-        }
-
-        // 从 URL 提取 taskId
-        const taskId = req.query?.taskId;
-        if (!taskId) {
-          console.error('[WebSocket] No taskId provided');
-          socket.close();
-          return;
-        }
-
-        console.log(`[WebSocket] Video progress client connected for task: ${taskId}`);
-        WebSocketProgressBroadcaster.subscribe(taskId, socket);
-
-        socket.on('close', () => {
-          console.log(`[WebSocket] Video progress client disconnected for task: ${taskId}`);
-        });
-
-        socket.on('error', (err: any) => {
-          console.error(`[WebSocket] Socket error for task ${taskId}:`, err);
-        });
-      });
-
-      // Exercise-specific routes (must come last)
-      api.get('/videos/:exerciseName', getVideoInfo);
-      api.delete('/videos/:exerciseName', deleteVideo);
-    }, { prefix: '/api' });
+        // Exercise-specific routes (must come last)
+        api.get("/videos/:exerciseName", getVideoInfo);
+        api.delete("/videos/:exerciseName", deleteVideo);
+      },
+      { prefix: "/api" },
+    );
 
     const port = Number(process.env.PORT) || 43111;
-    const host = process.env.HOST || '0.0.0.0';
+    const host = process.env.HOST || "0.0.0.0";
     await server.listen({ port, host });
     console.log(`Server running at http://${host}:${port}`);
   } catch (err) {

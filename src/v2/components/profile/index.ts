@@ -16,8 +16,3 @@ export { LoadAnchorsForm } from './LoadAnchorsForm.js';
 // Load Anchor Editor Components
 export { AnchorCard } from './AnchorCard.js';
 export { AnchorTypeForm } from './AnchorTypeForm.js';
-
-// Limitation Manager Components
-export { LimitationsManager } from './LimitationsManager.js';
-export { LimitationCard } from './LimitationCard.js';
-export { AddLimitationForm } from './AddLimitationForm.js';

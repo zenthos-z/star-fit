@@ -67,8 +67,7 @@ describe('BasicInfoForm', () => {
       expect(screen.getByDisplayValue('180')).toBeInTheDocument(); // height
       expect(screen.getByDisplayValue('15')).toBeInTheDocument(); // body fat
 
-      // Psychological profile
-      expect(screen.getByDisplayValue('Type 2A (均衡型)')).toBeInTheDocument(); // neuro_type
+      // Psychological profile (neuro_type 手动入口已移除，AI 评估写)
       expect(screen.getByDisplayValue('适中')).toBeInTheDocument(); // risk_preference
       expect(screen.getByDisplayValue('高')).toBeInTheDocument(); // accountability
     });
@@ -122,25 +121,26 @@ describe('BasicInfoForm', () => {
 
   // C2: Form Validation
   describe('C2: Form Validation', () => {
-    it('should prevent age input below minimum (10)', async () => {
+    it('should allow typing intermediate values below minimum and clamp on blur (age)', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
-      // Get input by display value since it has a value
       const ageInput = screen.getByDisplayValue('30') as HTMLInputElement;
 
-      // Clear current value and try to enter 9
       await user.clear(ageInput);
       await user.type(ageInput, '9');
 
-      // Value should not be accepted - input should be empty or reject the value
-      // Since NumberInput returns early for invalid values, the DOM won't update
+      // 中间态允许输入（逐键不拒绝）
+      expect(ageInput.value).toBe('9');
+
+      // 失焦时钳制到 min
+      fireEvent.blur(ageInput);
       await waitFor(() => {
-        expect(ageInput.value).not.toBe('9');
+        expect(ageInput.value).toBe('10');
       });
     });
 
-    it('should prevent age input above maximum (100)', async () => {
+    it('should clamp age to maximum (100) on blur', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
@@ -149,13 +149,15 @@ describe('BasicInfoForm', () => {
       await user.clear(ageInput);
       await user.type(ageInput, '101');
 
-      // Value should not be accepted
+      expect(ageInput.value).toBe('101');
+
+      fireEvent.blur(ageInput);
       await waitFor(() => {
-        expect(ageInput.value).not.toBe('101');
+        expect(ageInput.value).toBe('100');
       });
     });
 
-    it('should prevent weight input below minimum (30)', async () => {
+    it('should clamp weight to minimum (30) on blur', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
@@ -164,12 +166,15 @@ describe('BasicInfoForm', () => {
       await user.clear(weightInput);
       await user.type(weightInput, '29');
 
+      expect(weightInput.value).toBe('29');
+
+      fireEvent.blur(weightInput);
       await waitFor(() => {
-        expect(weightInput.value).not.toBe('29');
+        expect(weightInput.value).toBe('30');
       });
     });
 
-    it('should prevent weight input above maximum (200)', async () => {
+    it('should clamp weight to maximum (200) on blur', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
@@ -178,12 +183,15 @@ describe('BasicInfoForm', () => {
       await user.clear(weightInput);
       await user.type(weightInput, '201');
 
+      expect(weightInput.value).toBe('201');
+
+      fireEvent.blur(weightInput);
       await waitFor(() => {
-        expect(weightInput.value).not.toBe('201');
+        expect(weightInput.value).toBe('200');
       });
     });
 
-    it('should prevent height input below minimum (100)', async () => {
+    it('should clamp height to minimum (100) on blur', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
@@ -192,12 +200,15 @@ describe('BasicInfoForm', () => {
       await user.clear(heightInput);
       await user.type(heightInput, '99');
 
+      expect(heightInput.value).toBe('99');
+
+      fireEvent.blur(heightInput);
       await waitFor(() => {
-        expect(heightInput.value).not.toBe('99');
+        expect(heightInput.value).toBe('100');
       });
     });
 
-    it('should prevent height input above maximum (250)', async () => {
+    it('should clamp height to maximum (250) on blur', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
@@ -206,12 +217,15 @@ describe('BasicInfoForm', () => {
       await user.clear(heightInput);
       await user.type(heightInput, '251');
 
+      expect(heightInput.value).toBe('251');
+
+      fireEvent.blur(heightInput);
       await waitFor(() => {
-        expect(heightInput.value).not.toBe('251');
+        expect(heightInput.value).toBe('250');
       });
     });
 
-    it('should prevent body fat percentage below minimum (3)', async () => {
+    it('should clamp body fat percentage to minimum (3) on blur', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
@@ -220,12 +234,15 @@ describe('BasicInfoForm', () => {
       await user.clear(bodyFatInput);
       await user.type(bodyFatInput, '2');
 
+      expect(bodyFatInput.value).toBe('2');
+
+      fireEvent.blur(bodyFatInput);
       await waitFor(() => {
-        expect(bodyFatInput.value).not.toBe('2');
+        expect(bodyFatInput.value).toBe('3');
       });
     });
 
-    it('should prevent body fat percentage above maximum (50)', async () => {
+    it('should clamp body fat percentage to maximum (50) on blur', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
 
@@ -234,8 +251,11 @@ describe('BasicInfoForm', () => {
       await user.clear(bodyFatInput);
       await user.type(bodyFatInput, '51');
 
+      expect(bodyFatInput.value).toBe('51');
+
+      fireEvent.blur(bodyFatInput);
       await waitFor(() => {
-        expect(bodyFatInput.value).not.toBe('51');
+        expect(bodyFatInput.value).toBe('50');
       });
     });
 
@@ -409,26 +429,6 @@ describe('BasicInfoForm', () => {
       resolveUpdate!();
     });
 
-    it('should update neuro_type selection', async () => {
-      const user = userEvent.setup();
-      render(<BasicInfoForm {...defaultProps} />);
-
-      const neuroSelect = screen.getByDisplayValue('Type 2A (均衡型)');
-
-      await user.selectOptions(neuroSelect, 'type_1');
-
-      const saveButton = await screen.findByText('保存');
-      await user.click(saveButton);
-
-      await waitFor(() => {
-        expect(mockOnUpdate).toHaveBeenCalledWith(
-          expect.objectContaining({
-            neuro_type: 'type_1',
-          })
-        );
-      });
-    });
-
     it('should update risk_preference selection', async () => {
       const user = userEvent.setup();
       render(<BasicInfoForm {...defaultProps} />);
@@ -480,7 +480,6 @@ describe('BasicInfoForm', () => {
       expect(screen.getByText('体重')).toBeInTheDocument();
       expect(screen.getByText('身高')).toBeInTheDocument();
       expect(screen.getByText('体脂率')).toBeInTheDocument();
-      expect(screen.getByText('神经类型')).toBeInTheDocument();
       expect(screen.getByText('风险偏好')).toBeInTheDocument();
       expect(screen.getByText('自律性')).toBeInTheDocument();
     });

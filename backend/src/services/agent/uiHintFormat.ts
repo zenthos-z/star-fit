@@ -10,7 +10,7 @@
  * The seven allowed `type` values match the migrated canonical schema
  * (`./schemas/uiHintSchemas.js`):
  * plan_card, summary_card, survey_card, deviation_card, audit_complete,
- * strategy_confirm, profile_update_confirm.
+ * audit_complete, profile_update_confirm.
  *
  * Note: `survey_card` is now allowed for workout_complete scenario (v3 amendment).
  */
@@ -25,7 +25,6 @@ export const ALLOWED_UIHINT_TYPES = [
   "survey_card", // v3: now allowed for workout_complete
   "deviation_card",
   "audit_complete",
-  "strategy_confirm",
   "profile_update_confirm", // 2026-09: user-profile auto-update consent bubble
 ] as const;
 
@@ -100,9 +99,6 @@ export function loadUiHintFormatSkill(): string {
     "  profile_dynamic keys load_anchors/active_limitations/recovery_state/",
     "  memories, and `details` when present MUST be an ARRAY of strings, never a",
     "  single string), `sessionId`, `auditContent`.",
-    "- `strategy_confirm` — training strategy for confirmation. `data`: `preview`",
-    "  (non-empty string), `fullContent` (non-empty string), optional `title`,",
-    "  `message`, `actionLabel`, `updatedAt` (ISO 8601 datetime).",
     "- `profile_update_confirm` — user-profile auto-update CONSENT bubble",
     "  (HITL gate for profile writes). Emit this BEFORE calling `update_profile`",
     "  when a trigger fires (day_end / injury_report / key_parameter_change).",

@@ -33,7 +33,7 @@ export {
   LoadAnchorsSchema,
   type LoadAnchors,
   EXERCISE_TYPE_FIELDS,
-} from '../../../shared/contracts/index.js';
+} from "../../../shared/contracts/index.js";
 
 // UserProfile Schemas
 export {
@@ -47,8 +47,6 @@ export {
   type Psychological,
   UserProfileSchema,
   type UserProfile,
-  PermanentInjurySchema,
-  type PermanentInjury,
   ProfileStaticSchema,
   type ProfileStatic,
   ActiveLimitationSchema,
@@ -67,15 +65,13 @@ export {
   type HistorySummary,
   UserProfileV2Schema,
   type UserProfileV2,
-} from '../../../shared/contracts/index.js';
+} from "../../../shared/contracts/index.js";
 
 // Legacy Types
 export {
   type LoadAnchorLegacy,
   type LoadAnchorsLegacy,
-} from '../../../shared/contracts/index.js';
+} from "../../../shared/contracts/index.js";
 
 // Utility functions
-export {
-  validateAnchorForExerciseType,
-} from '../../../shared/contracts/index.js';
+export { validateAnchorForExerciseType } from "../../../shared/contracts/index.js";

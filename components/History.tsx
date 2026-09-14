@@ -59,7 +59,6 @@ interface HistoryProps {
   sessions: Session[];
   onClose: () => void;
   onSelect: (s: Session) => void;
-  onImport: (data: Session[]) => void;
   onDelete: (sessionId: string) => void;
   onOpenSettings?: () => void;
   isTransitioning?: boolean;
@@ -161,18 +160,15 @@ function MenuItem({ icon, label, onClick, danger = false }: { icon: string; labe
 
 // 原生 Liquid Glass 菜单项（iOS：SF Symbol 图标原生渲染；separator 原生分组线）。
 // index 与下方 runGlassMenuAction 的分支一一对应
+// （导出/导入/备份已迁往设置页「运行环境」区，2026-09-11）
 const GLASS_MENU_ITEMS: GlassMenuItem[] = [
-  { title: '导出 Markdown 战报', sfSymbol: 'square.and.arrow.up' },
-  { title: '导出 JSON 备份', sfSymbol: 'curlybraces.square' },
-  { title: '导入备份', sfSymbol: 'square.and.arrow.down' },
-  { separator: true },
   { title: '设置', sfSymbol: 'gearshape' },
   { title: '诊断', sfSymbol: 'stethoscope' },
   { separator: true },
   { title: '注销登录', sfSymbol: 'rectangle.portrait.and.arrow.right', danger: true },
 ];
 
-const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelete, onOpenSettings }) => {
+const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenSettings }) => {
   const [menuOpen, setMenuOpen] = useState(false);
   const [isScrolled, setIsScrolled] = useState(false);
   const menuButtonRef = useRef<HTMLButtonElement>(null);
@@ -245,19 +241,15 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
   const runGlassMenuAction = (index: number) => {
     haptic('light');
     switch (index) {
-      case 0: handleExportMarkdown(); break;
-      case 1: handleExportJSON(); break;
-      case 2: handleImportClick(); break;
-      case 4: onOpenSettings?.(); break;
-      case 5: setShowDebug(true); break;
-      case 7: handleLogout(); break;
+      case 0: onOpenSettings?.(); break;
+      case 1: setShowDebug(true); break;
+      case 3: handleLogout(); break;
     }
   };
   // 镜像最新分发器给原生菜单监听（空依赖 effect 持有首帧闭包，直接引用会读到过期 sessions）
   const runActionRef = useRef<(index: number) => void>(() => {});
   runActionRef.current = runGlassMenuAction;
 
-  const fileInputRef = useRef<HTMLInputElement>(null);
   // Sync Debug State
   const [showDebug, setShowDebug] = useState(false);
   // iOS sheet 规范：诊断 sheet 呈现时盖住原生 tab bar，关闭恢复（引用计数，与全项目 sheet 一致）
@@ -372,42 +364,6 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
     }
   };
 
-  const handleImportClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-        try {
-            const result = evt.target?.result as string;
-            const parsed = JSON.parse(result);
-            if (Array.isArray(parsed)) {
-                // Simple validation check
-                const isValid = parsed.every(s => s.id && s.startTime && Array.isArray(s.exercises));
-                if (!isValid) {
-                    alert("文件格式不正确，无法识别为 Starfit 数据。");
-                    return;
-                }
-
-                if (window.confirm(`解析到 ${parsed.length} 条记录。\n是否导入并合并到现有记录中？`)) {
-                    onImport(parsed);
-                }
-            } else {
-                alert("文件格式错误 (非数组)。");
-            }
-        } catch (err) {
-            alert("文件解析失败，请确保是有效的 JSON 备份文件。");
-        }
-    };
-    reader.readAsText(file);
-    // Reset to allow selecting same file again
-    e.target.value = '';
-  };
-
   const handlePing = async () => {
     setPingResult('Testing...');
     const logs: string[] = [];
@@ -513,17 +469,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
       className="fixed inset-0 bg-star-gray z-[100] overflow-y-auto"
       onScroll={handleScroll}
     >
-      {/* 隐藏文件选择器 */}
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept=".json,application/json"
-        onChange={handleFileChange}
-        className="hidden"
-        aria-hidden="true"
-        tabIndex={-1}
-      />
-
+      {/* 隐藏文件选择器（导入已迁设置页「运行环境」区，2026-09-11） */}
       <div className="h-full flex flex-col px-4 pb-20 max-w-md mx-auto">
 
         {/* Navbar — iOS Large Title：未滚动时大标题与右侧「···」同行垂直居中（原生规范）；滚动后大标题收起、居中小标题淡入 */}
@@ -580,10 +526,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onImport, onDelet
                 className="liquid-glass absolute right-4 z-40 w-60 rounded-2xl p-1.5 flex flex-col gap-0.5"
                 style={{ top: 'calc(var(--safe-top, 0px) + 60px)', transformOrigin: 'top right' }}
               >
-                <MenuItem icon="export" label="导出 Markdown 战报" onClick={() => { setMenuOpen(false); handleExportMarkdown(); haptic('light'); }} />
-                <MenuItem icon="json" label="导出 JSON 备份" onClick={() => { setMenuOpen(false); handleExportJSON(); haptic('light'); }} />
-                <MenuItem icon="import" label="导入备份" onClick={() => { setMenuOpen(false); handleImportClick(); haptic('medium'); }} />
-                <div className="my-1 h-px bg-gray-100/60 mx-2" />
+                {/* 导出/导入已迁往设置页「运行环境」区（2026-09-11） */}
                 {onOpenSettings && <MenuItem icon="settings" label="设置" onClick={() => { setMenuOpen(false); onOpenSettings(); haptic('light'); }} />}
                 <MenuItem icon="debug" label="诊断" onClick={() => { setMenuOpen(false); setShowDebug(true); haptic('light'); }} />
                 <div className="my-1 h-px bg-gray-100/60 mx-2" />

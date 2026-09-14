@@ -519,7 +519,6 @@ export function deriveSuggestion(
 
 export interface SuggestionFingerprintInput {
   goal?: string;
-  fitness_level?: string;
   bodyweight_kg?: number;
   /** 未过期伤病签名（part:severity 排序后拼接） */
   limitations?: readonly string[];
@@ -549,7 +548,6 @@ export function computeContextFingerprint(input: SuggestionFingerprintInput): st
     `v${SUGGESTION_FORMULA_VERSION}`,
     `mode:${input.agent_mode}`,
     `goal:${input.goal ?? '-'}`,
-    `lvl:${input.fitness_level ?? '-'}`,
     `bw:${input.bodyweight_kg ?? '-'}`,
     `lim:${[...(input.limitations ?? [])].sort().join(',') || '-'}`,
   ];
