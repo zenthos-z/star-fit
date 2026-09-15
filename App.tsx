@@ -6,6 +6,7 @@ import { navigationReducer, initialNavigation } from './src/v2/lib/navigation';
 import { computeSettlementSummary } from './src/v2/lib/settlementSummary';
 import { LoadAnchors } from './src/v2/types/protocol';
 import TimerCapsule from './components/TimerCapsule';
+import LockScreen from './src/v2/components/execution/LockScreen';
 import { ExerciseCardV2 } from './src/v2/components/execution/ExerciseCardV2';
 import ReorderMode from './src/v2/components/execution/ReorderMode';
 import SettlementV2 from './src/v2/components/settlement/SettlementV2';
@@ -132,6 +133,9 @@ const App: React.FC = () => {
   // New Exercise Creation State
   const [pendingExercise, setPendingExercise] = useState<Exercise | null>(null);
   const [isDragEnded, setIsDragEnded] = useState(false);
+
+  // 锁定训练屏（2026-09-15）：训练中把计时胶囊往下滑进入
+  const [isLockScreenOpen, setIsLockScreenOpen] = useState(false);
 
   // Initialize Sync Service
   useEffect(() => {
@@ -938,6 +942,19 @@ const App: React.FC = () => {
     });
   };
 
+  // --- 锁定训练屏回调（2026-09-15）：大按钮语义与卡内逻辑共用 handleUpdateSet 通道 ---
+  const handleLockCompleteSet = (exId: string, setId: string) => {
+    handleUpdateSet(exId, setId, { completed: true });
+  };
+
+  const handleLockFinishCountdown = (exId: string, setId: string, durationSec: number) => {
+    handleUpdateSet(exId, setId, { completed: true, duration: durationSec });
+  };
+
+  const handleLockEndRest = (exId: string, setId: string) => {
+    handleUpdateSet(exId, setId, { restEndTime: undefined });
+  };
+
   const handleUpdateExerciseSettings = (exId: string, updates: Partial<Exercise> | Partial<ExerciseAction>) => {
     setSession(prev => {
       const updatedExercises: Exercise[] = prev.exercises.map(ex => {
@@ -1330,6 +1347,7 @@ const App: React.FC = () => {
             onResume={handleResumeSession}
             onOpenManual={() => setShowTimeEditor(true)}
             onEnd={() => handleEndSession()}
+            onLockScreen={() => setIsLockScreenOpen(true)}
             startOptions={[
               {
                 key: 'library',
@@ -1377,6 +1395,23 @@ const App: React.FC = () => {
           />
         </div>
       </motion.div>
+
+      {/* 锁定训练屏（z-[140] > History z-[100]；放路由容器外，主训练页也能渲染。训练中下拉胶囊进入） */}
+      <AnimatePresence>
+        {isLockScreenOpen && (session.status === 'active' || session.status === 'paused') && (
+          <LockScreen
+            key="lockscreen"
+            status={session.status}
+            startTime={session.startTime}
+            pausedDuration={session.pausedDuration}
+            exercises={session.exercises}
+            onExit={() => setIsLockScreenOpen(false)}
+            onCompleteSet={handleLockCompleteSet}
+            onFinishCountdown={handleLockFinishCountdown}
+            onEndRest={handleLockEndRest}
+          />
+        )}
+      </AnimatePresence>
 
       <AnimatePresence>
         {(currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession || isAiOverlayOpen || pendingExercise || (showSettingsId && session.exercises.find(e => e.id === showSettingsId))) && (

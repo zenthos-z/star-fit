@@ -21,6 +21,8 @@ interface TimerCapsuleProps {
   onEnd: () => void;
   // 空状态点击「开始运动」时弹出的分裂菜单选项；不传则保持旧行为（直接 onStart）
   startOptions?: StartMenuOption[];
+  // 训练中（active/paused）把胶囊往下滑 → 进入锁定训练屏
+  onLockScreen?: () => void;
 }
 
 const TimerCapsule: React.FC<TimerCapsuleProps> = ({
@@ -33,7 +35,8 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
   onResume,
   onOpenManual,
   onEnd,
-  startOptions
+  startOptions,
+  onLockScreen
 }) => {
   const [displayTime, setDisplayTime] = useState("00:00");
   const [textIndex, setTextIndex] = useState(0);
@@ -109,6 +112,44 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
   const isPaused = status === 'paused';
   const isFinished = status === 'finished';
 
+  // --- 下滑进入锁定屏（训练中）：下拉拖拽 + 阈值触发 ---
+  // iOS WebKit 坑：touchstart 后浏览器会合成 click 二次触发，须在 touchend 后窗口期拦截
+  const dragStartY = useRef<number | null>(null);
+  const dragAccum = useRef(0);
+  const lastTouchEnd = useRef(0);
+  const LOCK_DRAG_THRESHOLD = 90; // px，约 1.2 个胶囊高度的下滑量
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    if (status === 'idle' || status === 'finished') return;
+    dragStartY.current = e.touches[0]?.clientY ?? null;
+    dragAccum.current = 0;
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (dragStartY.current === null) return;
+    const y = e.touches[0]?.clientY;
+    if (typeof y !== 'number') return;
+    dragAccum.current = y - dragStartY.current;
+  };
+
+  const handleTouchEnd = () => {
+    lastTouchEnd.current = Date.now();
+    const dy = dragAccum.current;
+    dragStartY.current = null;
+    dragAccum.current = 0;
+    // 只有明确往下拖过阈值才进入锁定；轻点（|dy| 小）交给 click 走暂停逻辑
+    if (dy > LOCK_DRAG_THRESHOLD && onLockScreen) {
+      haptic('medium');
+      onLockScreen();
+    }
+  };
+
+  // 合成 click 防护：拖拽后 500ms 内的 click 不当暂停
+  const guardClick = (fn: () => void) => {
+    if (Date.now() - lastTouchEnd.current < 500) return;
+    fn();
+  };
+
   // iOS-style spring configuration
   const springConfig = { type: 'spring', stiffness: 400, damping: 38, mass: 1 } as const;
 
@@ -155,6 +196,9 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
             maskImage: 'radial-gradient(white, black)',
           }}
           onClick={status === 'idle' ? handleCapsuleTap : undefined}
+          onTouchStart={handleTouchStart}
+          onTouchMove={handleTouchMove}
+          onTouchEnd={handleTouchEnd}
           animate={{
             width: status === 'idle' ? 208 : (isPaused ? 320 : 180),
             height: 64,
@@ -220,7 +264,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
 
                 {/* Time Display - Center */}
                 <motion.button
-                  onClick={isFinished ? undefined : (isPaused ? onOpenManual : onPause)}
+                  onClick={isFinished ? undefined : () => guardClick(isPaused ? onOpenManual : onPause)}
                   className={`
                     flex-1 flex items-center justify-center h-full
                     ${isFinished ? 'cursor-default' : 'cursor-pointer active:scale-95'}
