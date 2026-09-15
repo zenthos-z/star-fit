@@ -483,6 +483,7 @@ export class DeepAgentService implements AgentService {
       //     answer is never duplicated into the thinking block).
       let finalText: string | undefined;
       let buffered = ""; // current model step's narration, pending classification
+      let leakedThinking = ""; // reasoning stripped from terminal messages
 
       for await (const raw of stream) {
         // Unwrap the [mode, data] tuple (defensive: also accept untagged).
@@ -546,7 +547,18 @@ export class DeepAgentService implements AgentService {
         } else {
           // Terminal answer: emit as answer prose only (buffer discarded so the
           // final answer never leaks into the thinking block as duplication).
-          finalText = extractText([last, {}]);
+          // Belt-and-braces: even with the "no visible reasoning" system-prompt
+          // rule, deepseek-v4-flash (thinking: disabled) sometimes writes its
+          // English deliberation INTO the tool-free message ahead of the
+          // Chinese answer. Split it: deliberation → thinking, answer → token.
+          const raw = extractText([last, {}]) ?? "";
+          const split = splitLeakedReasoning(raw);
+          if (split.reasoning) {
+            leakedThinking = leakedThinking
+              ? `${leakedThinking}\n\n${split.reasoning}`
+              : split.reasoning;
+          }
+          finalText = split.answer || undefined;
           buffered = "";
         }
       }
@@ -557,6 +569,12 @@ export class DeepAgentService implements AgentService {
       if (buffered) {
         yield { type: "thinking", text: buffered };
         buffered = "";
+      }
+
+      // Reasoning that leaked into terminal messages goes to the collapsible
+      // thinking panel, never the answer prose.
+      if (leakedThinking) {
+        yield { type: "thinking", text: leakedThinking };
       }
 
       if (finalText) {
@@ -613,6 +631,53 @@ function extractText(chunk: unknown): string | undefined {
     return text.length > 0 ? text : undefined;
   }
   return undefined;
+}
+
+/**
+ * Split a terminal (tool-free) AI message into [reasoning, answer].
+ *
+ * deepseek-v4-flash with thinking disabled sometimes writes multi-paragraph
+ * English deliberation into the final message body before the user-facing
+ * Chinese answer (it has no separate reasoning_content field to hold it).
+ * Heuristic: the deliberation is English-dominant, the answer is
+ * Chinese-dominant. Walk paragraph blocks; once the running text turns
+ * majority-CJK, everything from that block on is answer. Blocks before that
+ * point (and any majority-Latin block at the very start) are reasoning.
+ * A message that is already majority-CJK (or majority-Latin throughout, e.g.
+ * an English-language app test) is returned untouched.
+ */
+export function splitLeakedReasoning(text: string): {
+  reasoning: string;
+  answer: string;
+} {
+  const blocks = text.split(/\n{2,}/).filter((b) => b.trim().length > 0);
+  if (blocks.length < 2) {
+    return { reasoning: "", answer: text };
+  }
+
+  const cjkRatio = (s: string): number => {
+    const cjk = (s.match(/[\u4e00-\u9fff\u3400-\u4dbf]/g) ?? []).length;
+    const letters = (s.match(/[A-Za-z]/g) ?? []).length;
+    return cjk + letters === 0 ? 0 : cjk / (cjk + letters);
+  };
+
+  // Find the first block where CJK clearly dominates — the answer's start.
+  let answerStart = -1;
+  for (let i = 0; i < blocks.length; i++) {
+    if (cjkRatio(blocks[i]) >= 0.5) {
+      answerStart = i;
+      break;
+    }
+  }
+
+  if (answerStart <= 0) {
+    // No leading Latin-dominant deliberation (or none at all) — untouched.
+    return { reasoning: "", answer: text };
+  }
+
+  const reasoning = blocks.slice(0, answerStart).join("\n\n");
+  const answer = blocks.slice(answerStart).join("\n\n");
+  return { reasoning, answer };
 }
 
 /**
