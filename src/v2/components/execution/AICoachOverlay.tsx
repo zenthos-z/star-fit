@@ -15,6 +15,13 @@ import type { ChatThread } from '@/storage';
 import { API_BASE, getHeaders } from '../../../services/geminiService';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
 import { showGlassPanel, hideGlassPanel, onGlassPanelSelect, onGlassPanelDismiss } from '../../../lib/nativeGlassPanel';
+import {
+  isSpeechInputSupported,
+  requestSpeechPermissions,
+  startSpeechInput,
+  stopSpeechInput,
+  getSpeechPartial,
+} from '../../../lib/speechInput';
 import { BubbleGallery, GALLERY_MESSAGES } from './BubbleGallery';
 
 interface MessageProgressIndicatorProps {
@@ -342,6 +349,9 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   const [kbHeight, setKbHeight] = useState(0);
   const [isStrategyActive, setIsStrategyActive] = useState(false);
   const [chatHistoryWithProgress, setChatHistoryWithProgress] = useState<ChatMessage[]>(chatHistory);
+  // 语音输入（iOS 原生 SFSpeechRecognizer）：true=录音中，中间结果轮询回填输入框
+  const [isListening, setIsListening] = useState(false);
+  const speechPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── 附件面板（材质升级：iOS 26 走原生 SwiftUI .glassEffect 面板）──
   // 「+」点按 → 上报输入栏 rect 试原生面板；原生拒绝（旧系统/无桥）时回落
@@ -555,6 +565,55 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
       setIsStrategyActive(false);
     }
   };
+
+  // ── 语音输入（iOS SFSpeechRecognizer，原生免费）──
+  // 点麦克风开始，再点停止；中间结果经 getPartialResult 轮询回填输入框
+  // （本工程 notifyListeners 事件通道不可靠，nativeGlassPanel 同源教训）。
+  const stopSpeechPolling = () => {
+    if (speechPollRef.current !== null) {
+      clearInterval(speechPollRef.current);
+      speechPollRef.current = null;
+    }
+  };
+
+  const handleMicTap = async () => {
+    if (isBusy || !isSpeechInputSupported) return;
+    if (isListening) {
+      // 停止：取最终文本回填输入框，交用户确认发送（不自动发送）
+      stopSpeechPolling();
+      setIsListening(false);
+      const finalText = await stopSpeechInput();
+      if (finalText) setChatMessage(finalText);
+      haptic('success');
+      return;
+    }
+    // 开始：先要权限（首次弹系统授权）
+    const perms = await requestSpeechPermissions();
+    if (!perms || perms.speech !== 'granted' || perms.mic !== 'granted') {
+      alert('语音输入需要麦克风和语音识别权限，请在系统设置中开启。');
+      return;
+    }
+    const ok = await startSpeechInput('zh-CN');
+    if (!ok) {
+      alert('语音识别启动失败，请稍后重试。');
+      return;
+    }
+    haptic('light');
+    setIsListening(true);
+    // 轮询中间结果，实时回填（用户仍可手动修改文本）
+    speechPollRef.current = setInterval(async () => {
+      const { text } = await getSpeechPartial();
+      if (text) setChatMessage(text);
+    }, 350);
+  };
+
+  // 卸载 / 关闭浮层时兜底清理录音轮询与原生会话
+  useEffect(() => {
+    return () => {
+      stopSpeechPolling();
+      void import('../../../lib/speechInput').then((m) => m.cancelSpeechInput());
+    };
+  }, []);
 
   // 教学页「咨询教练」等入口挂入附件后，聚焦输入框引导用户直接提问（iMessage 行为）
   useEffect(() => {
@@ -989,19 +1048,44 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
               onChange={handleInputChange}
               onKeyDown={handleKeyDown}
               placeholder={
-                isAnalyzing
-                  ? "正在分析本次训练…"
-                  : isPlanMode
-                    ? "描述你想调整的内容…"
-                    : "给教练发消息"
+                isListening
+                  ? "正在聆听…"
+                  : isAnalyzing
+                    ? "正在分析本次训练…"
+                    : isPlanMode
+                      ? "描述你想调整的内容…"
+                      : "给教练发消息"
               }
               disabled={isBusy}
               className="flex-1 resize-none bg-transparent outline-none text-[16px] leading-[1.4] py-1.5 max-h-24 text-gray-900 placeholder-gray-400 custom-scrollbar"
             />
-            {/* 发送 / 麦克风：空文本=麦克风，有文本=蓝色发送箭头 */}
+            {/* 发送 / 麦克风：有文本=蓝色发送箭头；空文本=语音输入（iOS 原生，录音中变停止态） */}
+            {!chatMessage.trim() && isSpeechInputSupported && !isBusy ? (
+              <button
+                type="button"
+                onClick={handleMicTap}
+                aria-label={isListening ? '停止录音' : '语音输入'}
+                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 ${
+                  isListening
+                    ? 'bg-[#FF3B30] text-white shadow-sm animate-pulse'
+                    : 'bg-gray-200 text-gray-400'
+                }`}
+              >
+                {isListening ? (
+                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                    <rect x="6" y="6" width="12" height="12" rx="2" />
+                  </svg>
+                ) : (
+                  <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                    <path d="M6 12v.75a6 6 0 0012 0V12m-6 9v-3.75" stroke="currentColor" strokeWidth={1.8} fill="none" strokeLinecap="round" />
+                  </svg>
+                )}
+              </button>
+            ) : (
             <button
               type="submit"
-              disabled={isBusy || !chatMessage.trim()}
+              disabled={isBusy || !chatMessage.trim() || isListening}
               className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 ${
                 chatMessage.trim() && !isBusy
                   ? 'bg-[#0A84FF] text-white shadow-sm'
@@ -1020,6 +1104,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 </svg>
               )}
             </button>
+            )}
             </div>
             </form>
           </div>

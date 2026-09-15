@@ -16,6 +16,7 @@
 		504EC3121FED79650016851F /* LaunchScreen.storyboard in Resources */ = {isa = PBXBuildFile; fileRef = 504EC3101FED79650016851F /* LaunchScreen.storyboard */; };
 		50B271D11FEDC1A000F3C39B /* public in Resources */ = {isa = PBXBuildFile; fileRef = 50B271D01FEDC1A000F3C39B /* public */; };
 		5BF2C7AE83EC55489B9E91D5 /* LiquidGlassPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1EF3DAB9C166500F8F454ACB /* LiquidGlassPlugin.swift */; };
+		A1B2C3D4E5F60718293A4B5C /* SpeechRecognitionPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = D1E2F3A4B5C6D7E8F9012345 /* SpeechRecognitionPlugin.swift */; };
 		F2E1D0C9B8A7F6E5D4C3B2A1 /* LiquidGlassMenuSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6A7B8C9D0E1F2 /* LiquidGlassMenuSection.swift */; };
 		9A2B3C4D5E6F7A8B9C0D1E2F /* LiquidGlassPanelSection.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9F2E1D0C9B8A7F6E5D4C3B2A1 /* LiquidGlassPanelSection.swift */; };
 		A1B2C3D4E5F6071809000001 /* LiveActivityPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F6071809000000 /* LiveActivityPlugin.swift */; };
@@ -53,6 +54,7 @@
 
 /* Begin PBXFileReference section */
 		1EF3DAB9C166500F8F454ACB /* LiquidGlassPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassPlugin.swift; sourceTree = "<group>"; };
+		D1E2F3A4B5C6D7E8F9012345 /* SpeechRecognitionPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognitionPlugin.swift; sourceTree = "<group>"; };
 		A1B2C3D4E5F6A7B8C9D0E1F2 /* LiquidGlassMenuSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassMenuSection.swift; sourceTree = "<group>"; };
 		9F2E1D0C9B8A7F6E5D4C3B2A1 /* LiquidGlassPanelSection.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LiquidGlassPanelSection.swift; sourceTree = "<group>"; };
 		2FAD9762203C412B000D30F8 /* config.xml */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = config.xml; sourceTree = "<group>"; };
@@ -109,6 +111,7 @@
 				50379B222058CBB4000EE86E /* capacitor.config.json */,
 				504EC3071FED79650016851F /* AppDelegate.swift */,
 				1EF3DAB9C166500F8F454ACB /* LiquidGlassPlugin.swift */,
+				D1E2F3A4B5C6D7E8F9012345 /* SpeechRecognitionPlugin.swift */,
 				A1B2C3D4E5F6A7B8C9D0E1F2 /* LiquidGlassMenuSection.swift */,
 				9F2E1D0C9B8A7F6E5D4C3B2A1 /* LiquidGlassPanelSection.swift */,
 				504EC30B1FED79650016851F /* Main.storyboard */,
@@ -246,6 +249,7 @@
 			files = (
 				504EC3081FED79650016851F /* AppDelegate.swift in Sources */,
 				5BF2C7AE83EC55489B9E91D5 /* LiquidGlassPlugin.swift in Sources */,
+				A1B2C3D4E5F60718293A4B5C /* SpeechRecognitionPlugin.swift in Sources */,
 				F2E1D0C9B8A7F6E5D4C3B2A1 /* LiquidGlassMenuSection.swift in Sources */,
 				9A2B3C4D5E6F7A8B9C0D1E2F /* LiquidGlassPanelSection.swift in Sources */,
 				A1B2C3D4E5F6071809000001 /* LiveActivityPlugin.swift in Sources */,
