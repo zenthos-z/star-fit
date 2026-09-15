@@ -8,6 +8,8 @@ interface PlanCardProps {
     type: 'plan_card';
     data: any[];
     context?: 'post_finish' | 'default';
+    /** Agent 打标：'next_day' = 用户要求制定「明天/第二天」的计划（2026-09-14） */
+    target?: 'next_day';
     diff?: {
       added: string[];
       modified: string[];
@@ -52,6 +54,9 @@ export const PlanCard: React.FC<PlanCardProps> = ({ uiHint, onConfirm }) => {
   const plan = Array.isArray(uiHint?.data) ? uiHint.data : [];
   const diff = uiHint?.diff || { added: [], modified: [] };
   const isPostFinish = uiHint?.context === 'post_finish';
+  // 明日卡：训练结束时由 sessionStatus 合成的 post_finish，或 Agent 按用户
+  // 「制定明天计划」意图显式打标 target='next_day'（2026-09-14）——两者同款双按钮
+  const isTomorrow = isPostFinish || uiHint?.target === 'next_day';
   const consumed = uiHint?.consumed;
 
   if (consumed) {
@@ -149,7 +154,7 @@ export const PlanCard: React.FC<PlanCardProps> = ({ uiHint, onConfirm }) => {
       </div>
 
       <div className="p-5 pt-0 flex gap-3">
-        {isPostFinish ? (
+        {isTomorrow ? (
           <>
             <ChatPrimaryButton
               className="flex-1"

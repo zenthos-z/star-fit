@@ -8,6 +8,8 @@ import { buildSessionPayload } from '../utils/workoutSummary';
 // cards, with no awareness of the backend agent implementation.
 import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/agent/sseAgentClient';
 import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
+import type { SurveySubmitRecord } from '../components/execution/cards/SurveyCard';
+import type { ProfileUpdateDecisionRecord } from '../components/execution/cards/ProfileUpdateConfirmCard';
 import type { AgentScenario, UiHintCard } from 'shared/contracts';
 import {
   saveChatThreadList,
@@ -105,7 +107,7 @@ export const useAICoach = (
   onPlanConfirm: (
     plan: any[],
     mode: 'append' | 'replace',
-    opts?: { onConsumed?: (record: PlanConsumeRecord) => void }
+    opts?: { onConsumed?: (record: PlanConsumeRecord) => void; isTomorrow?: boolean }
   ) => void
 ) => {
   const [isAiOverlayOpen, setIsAiOverlayOpen] = useState(false);
@@ -685,7 +687,7 @@ ${JSON.stringify(uploadData, null, 2)}`
   const handleConfirmPlan = (
     planData: any[],
     mode: 'append' | 'replace',
-    opts?: { onConsumed?: (record: PlanConsumeRecord) => void }
+    opts?: { onConsumed?: (record: PlanConsumeRecord) => void; isTomorrow?: boolean }
   ) => {
     onPlanConfirm(planData, mode, opts);
   };
@@ -699,6 +701,30 @@ ${JSON.stringify(uploadData, null, 2)}`
     setChatHistory(prev => prev.map((m, i) => (
       i === msgIndex && m.uiHint?.type === 'plan_card'
         ? { ...m, uiHint: { ...m.uiHint, consumed: record } }
+        : m
+    )));
+  }, []);
+
+  /**
+   * 问卷提交状态固化（2026-09-14）：把提交记录写入指定消息的 uiHint.submitted，
+   * 随 thread 持久化 → 重开对话/切话题问卷保持「已提交」只读态，不再弹回可填。
+   */
+  const markSurveySubmitted = useCallback((msgIndex: number, record: SurveySubmitRecord) => {
+    setChatHistory(prev => prev.map((m, i) => (
+      i === msgIndex && m.uiHint?.type === 'survey_card'
+        ? { ...m, uiHint: { ...m.uiHint, submitted: record } }
+        : m
+    )));
+  }, []);
+
+  /**
+   * 画像更新决定固化（2026-09-14）：把确认/取消决定写入指定消息的 uiHint.decision，
+   * 随 thread 持久化 → 重开对话保持「已更新/已放弃」终态，杜绝重复确认二次写库。
+   */
+  const markProfileDecision = useCallback((msgIndex: number, record: ProfileUpdateDecisionRecord) => {
+    setChatHistory(prev => prev.map((m, i) => (
+      i === msgIndex && m.uiHint?.type === 'profile_update_confirm'
+        ? { ...m, uiHint: { ...m.uiHint, decision: record } }
         : m
     )));
   }, []);
@@ -954,6 +980,8 @@ ${JSON.stringify(uploadData, null, 2)}`
     handleChatSubmit,
     handleConfirmPlan,
     markPlanConsumed,
+    markSurveySubmitted,
+    markProfileDecision,
     openAiCoach,
     chatEndRef,
     textareaRef,

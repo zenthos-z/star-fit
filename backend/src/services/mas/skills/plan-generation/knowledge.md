@@ -180,6 +180,9 @@
 - weight >= 0；无 load_anchor 的动作 weight 留 0 并在 explanation
   中说明「首次尝试请自选重量」
 - explanation 为非空字符串
+- **target 标记**：用户明确要「明天/第二天」的计划（非训练结束时），
+  在卡片顶层加 `target: "next_day"`（例：`{ "type": "plan_card",
+"target": "next_day", "data": [...] }`）；普通当次训练计划不要加
 
 格式错误会被 uiHint 校验回路打回重试（修订文本以 thinking 事件呈现），
 届时按错误信息修正字段后重新输出整张卡片。

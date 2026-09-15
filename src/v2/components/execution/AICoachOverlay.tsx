@@ -7,6 +7,8 @@ import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import { ExerciseRenderer } from './ExerciseRenderer';
 import type { PlanConsumeRecord } from './cards/PlanCard';
+import type { SurveySubmitRecord } from './cards/SurveyCard';
+import type { ProfileUpdateDecisionRecord } from './cards/ProfileUpdateConfirmCard';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatMessage, ProgressItem } from '../../hooks/useAICoach';
 import type { ChatThread } from '@/storage';
@@ -244,10 +246,14 @@ interface AICoachOverlayProps {
   handleConfirmPlan: (
     plan: any[],
     mode: 'append' | 'replace',
-    opts?: { onConsumed?: (record: PlanConsumeRecord) => void }
+    opts?: { onConsumed?: (record: PlanConsumeRecord) => void; isTomorrow?: boolean }
   ) => void;
   /** 计划卡一次性消费：把消费记录回写到 chatHistory[i].uiHint.consumed（随 thread 持久化） */
   onPlanConsumed?: (msgIndex: number, record: PlanConsumeRecord) => void;
+  /** 问卷提交固化：把提交记录回写到 chatHistory[i].uiHint.submitted（随 thread 持久化） */
+  onSurveySubmitted?: (msgIndex: number, record: SurveySubmitRecord) => void;
+  /** 画像更新决定固化：把决定回写到 chatHistory[i].uiHint.decision（随 thread 持久化） */
+  onProfileDecision?: (msgIndex: number, record: ProfileUpdateDecisionRecord) => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   attachedContext?: any;
@@ -291,6 +297,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   onRemoveAttachment,
   onViewDetails,
   onPlanConsumed,
+  onSurveySubmitted,
+  onProfileDecision,
   sessionStatus,
   sessionSessionId,
   isTransitioning = false,
@@ -723,11 +731,21 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                           // 一次性消费：消费成功后把记录回写到该消息的 uiHint.consumed，
                           // 随 thread 持久化 → 卡片折叠为摘要条，重开对话不再可点
                           handleConfirmPlan(msg.uiHint.data, payload.mode, {
+                            // Agent 明日卡（target='next_day'）：按日历日期落库，不进当前会话
+                            isTomorrow: msg.uiHint.target === 'next_day',
                             onConsumed: (record) => onPlanConsumed?.(i, record)
                           });
                         } else if (uiHintType === 'survey_card') {
                           // Survey card: use helper function to handle upload
                           handleSurveyUpload(String(payload));
+                          // 提交状态固化：随 thread 持久化，重开对话不再弹回可填问卷
+                          if (onSurveySubmitted) {
+                            let answers: Record<string, string> = {};
+                            try {
+                              answers = JSON.parse(String(payload).replace('[UPLOAD_SURVEY_DATA]:', ''))?.responses || {};
+                            } catch { /* 摘要解析失败不阻断提交 */ }
+                            onSurveySubmitted(i, { submittedAt: Date.now(), answers });
+                          }
                         } else if (uiHintType === 'survey_success') {
                           // [方案 B] Survey success: user confirmed, request plan generation
                           console.log('[AICoachOverlay] SURVEY_SUCCESS confirmed, sending plan request');
@@ -749,6 +767,14 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                           // 取消 → scenario=chat 纯文本确认轮，不做任何写入
                           const proposals = Array.isArray(payload?.proposals) ? payload.proposals : [];
                           const silentOpts = { silent: true };
+                          // 决定固化：点击瞬间写入持久化状态，杜绝重启/切话题后重复确认二次写库
+                          if (onProfileDecision) {
+                            onProfileDecision(i, {
+                              action: payload?.action,
+                              decidedAt: Date.now(),
+                              result: payload?.action === 'confirm_update' ? 'pending' : undefined
+                            });
+                          }
                           if (payload?.action === 'confirm_update') {
                             const proposalsText = proposals.map((p: any) =>
                               `${p.label}(${p.field}): ${p.change}` + (p.value !== undefined ? ` 新值: ${JSON.stringify(p.value)}` : '')

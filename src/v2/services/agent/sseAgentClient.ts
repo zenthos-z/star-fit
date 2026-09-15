@@ -262,6 +262,8 @@ export interface RenderableUiHint {
   data?: Record<string, unknown>;
   actionUri?: string;
   priority?: number;
+  /** plan 专用：'next_day' = 明日计划卡（Agent 按「制定明天计划」意图打标） */
+  target?: 'next_day';
 }
 
 export function synthesizeUiHint(card?: UiHintCard): RenderableUiHint | undefined {
@@ -273,5 +275,8 @@ export function synthesizeUiHint(card?: UiHintCard): RenderableUiHint | undefine
   if (card.title !== undefined) hint.title = card.title;
   if (card.actionUri !== undefined) hint.actionUri = card.actionUri;
   if (card.priority !== undefined) hint.priority = card.priority;
+  // plan 明日卡（2026-09-14）：Agent 对「制定明天计划」的请求打 target='next_day'，
+  // 卡片在前端按「存为明日计划」消费，而不是灌进当前训练会话
+  if (card.target !== undefined) hint.target = card.target;
   return hint;
 }

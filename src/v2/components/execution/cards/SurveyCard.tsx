@@ -29,8 +29,17 @@ interface SurveyCardProps {
       options?: Array<{ label: string; value: string }>;
       multiSelect?: boolean;
     };
+    /** 提交状态（持久化在 ChatMessage.uiHint 上，切话题/重启不回弹，2026-09-14） */
+    submitted?: SurveySubmitRecord;
   };
   onConfirm?: (value: string | string[]) => void;
+}
+
+/** 问卷提交记录：固化已提交状态，随 thread 持久化 */
+export interface SurveySubmitRecord {
+  submittedAt: number;  // epoch ms
+  /** 已提交的回答摘要（questionId → 选项 label 或文本输入），用于只读回显 */
+  answers: Record<string, string>;
 }
 
 /**
@@ -46,6 +55,8 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
   const [isUploading, setIsUploading] = useState(false);
   // [FIX] Use ref to prevent race conditions with state updates
   const isUploadingRef = useRef(false);
+
+  const submitted = uiHint?.submitted;
 
   // Support both new multi-question format and legacy single-question format
   const data = uiHint?.data || {};
@@ -64,6 +75,28 @@ export const SurveyCard: React.FC<SurveyCardProps> = ({ uiHint, onConfirm }) => 
 
   const title = data.title || '补充训练信息';
   const subtitle = data.subtitle;
+
+  // ── 已提交只读态（状态固化：随 thread 持久化，重开对话不回弹为可填问卷）──
+  if (submitted) {
+    return (
+      <ChatCardShell testId="survey-card-submitted">
+        <ChatCardHeader title={title} subtitle="已提交" />
+        <div className="px-4 py-3.5 flex items-center gap-3">
+          <span className="w-6 h-6 rounded-full bg-emerald-50 text-emerald-500 flex items-center justify-center shrink-0">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+          <p className="text-[15px] font-semibold text-gray-900 leading-snug flex-1">
+            问卷已提交
+          </p>
+          <span className="text-xs text-gray-400 shrink-0">
+            {new Date(submitted.submittedAt).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })}
+          </span>
+        </div>
+      </ChatCardShell>
+    );
+  }
 
   const handleOptionClick = (questionId: string, value: string, isMultiSelect: boolean = false) => {
     setSelectedOptions(prev => {

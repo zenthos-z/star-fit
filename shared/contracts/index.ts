@@ -1073,6 +1073,8 @@ export const UiHintCardSchema = z.object({
   data: z.record(z.string(), z.unknown()).optional(),
   actionUri: z.string().optional(),
   priority: z.number().default(0),
+  /** plan 专用：'next_day' = 用户要的是「明天/第二天」的计划（2026-09-14） */
+  target: z.enum(['next_day']).optional(),
 });
 export type UiHintCard = z.infer<typeof UiHintCardSchema>;
 

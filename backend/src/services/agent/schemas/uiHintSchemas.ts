@@ -389,6 +389,8 @@ export const UIHintSchema = z.discriminatedUnion("type", [
     type: z.literal("plan_card"),
     data: PlanCardDataSchema,
     diff: PlanDiffSchema.optional(),
+    /** 'next_day' = 用户要求制定「明天/第二天」的计划（2026-09-14 明日卡） */
+    target: z.literal("next_day").optional(),
   }),
   // summary_card
   z.object({

@@ -550,11 +550,13 @@ const App: React.FC = () => {
     return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`;
   };
 
-  const handleConfirmPlan = (planData: any[], mode: 'append' | 'replace', opts?: { onConsumed?: (record: PlanConsumeRecord) => void }) => {
+  const handleConfirmPlan = (planData: any[], mode: 'append' | 'replace', opts?: { onConsumed?: (record: PlanConsumeRecord) => void; isTomorrow?: boolean }) => {
     const safePlan = Array.isArray(planData) ? planData : [];
     const newExercises = buildExercisesFromPlan(safePlan);
 
-    if (session.status === 'finished') {
+    // 「明日」写库：训练刚结束（finished），或 Agent 明日卡（target='next_day'，
+    // 用户平时直接制定明天计划）——两者都按日历日期落 dayPlan，不碰当前会话
+    if (session.status === 'finished' || opts?.isTomorrow) {
       const targetDate = tomorrowDateKey();
       setNextPlan(prev => {
         const merged = mode === 'append' && prev && prev.length > 0 ? [...prev, ...safePlan] : safePlan;
@@ -602,6 +604,8 @@ const App: React.FC = () => {
       handleChatSubmit,
       handleConfirmPlan: handleAiConfirmPlan,
       markPlanConsumed,
+      markSurveySubmitted,
+      markProfileDecision,
       openAiCoach,
       chatEndRef,
       textareaRef,
@@ -1462,6 +1466,8 @@ const App: React.FC = () => {
                 handleChatSubmit={handleChatSubmit}
                 handleConfirmPlan={handleAiConfirmPlan}
                 onPlanConsumed={markPlanConsumed}
+                onSurveySubmitted={markSurveySubmitted}
+                onProfileDecision={markProfileDecision}
                 chatEndRef={chatEndRef}
                 textareaRef={textareaRef}
                 attachedContext={attachedContext}
