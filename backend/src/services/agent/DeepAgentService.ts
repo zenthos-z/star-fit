@@ -186,6 +186,15 @@ const BASE_SYSTEM_PROMPT = [
   "to the plan_card JSON. This is an intent flag the app consumes to save the",
   "plan by calendar date — without it the plan loads into the CURRENT session,",
   "which is wrong for tomorrow requests. Default (current-session plans): omit.",
+  "",
+  "## Tomorrow-plan requests MUST produce a card (never prose-only)",
+  "When the user asks for a tomorrow / next-day training plan, the reply MUST",
+  'contain a plan_card with target "next_day" — in EVERY turn that asks for',
+  "one, even if an earlier turn already delivered a similar plan or the user",
+  "repeats the request. NEVER answer a tomorrow-plan request with prose alone",
+  "(a text summary is NOT a plan delivery): the app can only save a plan the",
+  "user taps from a card, so a prose-only reply silently fails their request.",
+  "Re-emitting a card on repeat asks is correct behavior, not spam.",
 ].join("\n");
 
 /**
@@ -662,9 +671,13 @@ export function splitLeakedReasoning(text: string): {
   };
 
   // Find the first block where CJK clearly dominates — the answer's start.
+  // A fenced code block (```json card) is ALWAYS answer regardless of its
+  // letter ratios: JSON syntax is Latin-heavy and the fence must reach the
+  // uiHint extractor, which only scans token (answer) events — a fence moved
+  // into `thinking` would silently drop the card.
   let answerStart = -1;
   for (let i = 0; i < blocks.length; i++) {
-    if (cjkRatio(blocks[i]) >= 0.5) {
+    if (blocks[i].includes("```") || cjkRatio(blocks[i]) >= 0.5) {
       answerStart = i;
       break;
     }

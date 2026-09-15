@@ -28,6 +28,22 @@ test("splitLeakedReasoning: pure chinese message untouched", () => {
   assert.equal(r.reasoning, "");
 });
 
+test("splitLeakedReasoning: fenced json card is always answer, never reasoning", () => {
+  const leakWithCard = [
+    "The user wants a plan for tomorrow. Looking at history, full-body fits.",
+    "```json",
+    '{"type":"plan_card","title":"明日计划","target":"next_day","data":{"actions":[]}}',
+    "```",
+  ].join("\n\n");
+  const r = splitLeakedReasoning(leakWithCard);
+  assert.ok(r.answer.includes("```json"), "fence stays in answer");
+  assert.ok(r.answer.includes("plan_card"), "card body stays in answer");
+  assert.equal(
+    r.reasoning,
+    "The user wants a plan for tomorrow. Looking at history, full-body fits.",
+  );
+});
+
 test("splitLeakedReasoning: single block untouched", () => {
   const one = "Only one english paragraph, no split possible";
   const r = splitLeakedReasoning(one);
