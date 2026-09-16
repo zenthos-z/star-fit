@@ -118,6 +118,7 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
   const dragAccum = useRef(0);
   const lastTouchEnd = useRef(0);
   const LOCK_DRAG_THRESHOLD = 90; // px，约 1.2 个胶囊高度的下滑量
+  const TAP_SLOP = 8; // px，轻点时的触摸抖动上限（超过=拖拽/滚动，非轻点）
 
   const handleTouchStart = (e: React.TouchEvent) => {
     if (status === 'idle' || status === 'finished') return;
@@ -133,11 +134,16 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
   };
 
   const handleTouchEnd = () => {
-    lastTouchEnd.current = Date.now();
     const dy = dragAccum.current;
     dragStartY.current = null;
     dragAccum.current = 0;
-    // 只有明确往下拖过阈值才进入锁定；轻点（|dy| 小）交给 click 走暂停逻辑
+    // 只有真实拖拽/滚动（位移超轻点抖动）才拦截后续合成 click——
+    // 纯轻点（|dy|≈0）的 touchend→click 间隔 <500ms，若也记录时间戳会把
+    // 正常暂停点击一起拦死（2026-09-15 实锤：锁屏手势上线后单击暂停全灭的根因）
+    if (Math.abs(dy) > TAP_SLOP) {
+      lastTouchEnd.current = Date.now();
+    }
+    // 明确往下拖过阈值 → 进入锁定屏；轻点交给 click 走暂停逻辑
     if (dy > LOCK_DRAG_THRESHOLD && onLockScreen) {
       haptic('medium');
       onLockScreen();
