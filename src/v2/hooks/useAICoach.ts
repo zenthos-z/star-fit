@@ -185,6 +185,8 @@ export const useAICoach = (
     setThreads(limitedThreads);
     setCurrentThreadId(newThreadId);
     setChatHistory([]);
+    // 新对话 = 干净输入区：清掉上一线程残留的附件 chip，否则空「上下文附件」跨线程飘着
+    setAttachedContext(null);
 
     // Save to storage
     await saveChatThreadList(limitedThreads);
@@ -741,7 +743,12 @@ ${JSON.stringify(uploadData, null, 2)}`
     }
 
     if (attachment) {
-      setAttachedContext(attachment);
+      // workout_complete / workout_summary 是内部触发（训练结束自动分析），
+      // 不是用户手动挂的输入附件——不进附件 chip，否则训练后输入框上方
+      // 残留一个无标题的空「上下文附件」chip，且分析完成后无人清除（2026-09-16）
+      if (attachment.type !== 'workout_complete' && attachment.type !== 'workout_summary') {
+        setAttachedContext(attachment);
+      }
 
       // Training end (Phase 1+2): persist session first, then call Agent
       // Phase 1: POST /api/sessions to persist session data
