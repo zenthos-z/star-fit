@@ -7,10 +7,10 @@
  * Phase 1 of workout_complete refactor: 前端先持久化，再调用 Agent 分析
  */
 
-import type { FastifyReply, FastifyRequest } from 'fastify';
-import { z } from 'zod';
-import { getUserId } from '../utils/requestUtils.js';
-import { getPostgresClient } from '../db/postgresql/client/postgres-client.js';
+import type { FastifyReply, FastifyRequest } from "fastify";
+import { z } from "zod";
+import { getUserId } from "../utils/requestUtils.js";
+import { getPostgresClient } from "../db/postgresql/client/postgres-client.js";
 
 // ============================================
 // Schemas
@@ -25,7 +25,7 @@ import { getPostgresClient } from '../db/postgresql/client/postgres-client.js';
  * resistance 类 → weight/reps；isometric → duration。
  */
 const ExerciseEntrySchema = z.object({
-  name: z.string().min(1, 'Exercise name is required'),
+  name: z.string().min(1, "Exercise name is required"),
   type: z.string().optional(),
   /** 计划组数 */
   sets: z.number().int().min(0).optional(),
@@ -38,6 +38,8 @@ const ExerciseEntrySchema = z.object({
   distance: z.number().min(0).optional(), // For cardio/outdoor (meters)
   /** 组级平均心率 bpm（来自心率带/穿戴设备，可选） */
   avg_hr: z.number().min(0).optional(),
+  /** 组间休息时长合计（秒，前端从 completedAt/restEndTime 推算，可选） */
+  rest_sec: z.number().min(0).optional(),
   metadata: z.any().optional(),
 });
 
@@ -45,25 +47,29 @@ const ExerciseEntrySchema = z.object({
  * 训练统计数据
  * 抗阻类看 totalVolume/setsCount；有氧类看 totalCardioDurationSec/totalDistanceM/avgHr。
  */
-const StatsSchema = z.object({
-  totalVolume: z.number().min(0),
-  setsCount: z.number().int().min(0),
-  /** 有氧/户外实际时长合计（秒），可选以兼容旧客户端 */
-  totalCardioDurationSec: z.number().min(0).optional(),
-  /** 有氧/户外实际距离合计（米），可选以兼容旧客户端 */
-  totalDistanceM: z.number().min(0).optional(),
-  durationMinutes: z.number().int().min(0).optional(),
-  avgHr: z.number().min(0).optional(),
-}).optional();
+const StatsSchema = z
+  .object({
+    totalVolume: z.number().min(0),
+    setsCount: z.number().int().min(0),
+    /** 有氧/户外实际时长合计（秒），可选以兼容旧客户端 */
+    totalCardioDurationSec: z.number().min(0).optional(),
+    /** 有氧/户外实际距离合计（米），可选以兼容旧客户端 */
+    totalDistanceM: z.number().min(0).optional(),
+    durationMinutes: z.number().int().min(0).optional(),
+    avgHr: z.number().min(0).optional(),
+  })
+  .optional();
 
 /**
  * Session 持久化请求
  */
 const SessionSchema = z.object({
   sessionId: z.string().uuid().optional(),
-  startTime: z.number().positive('Start time must be a positive timestamp'),
-  endTime: z.number().positive('End time must be a positive timestamp'),
-  exercises: z.array(ExerciseEntrySchema).min(1, 'At least one exercise is required'),
+  startTime: z.number().positive("Start time must be a positive timestamp"),
+  endTime: z.number().positive("End time must be a positive timestamp"),
+  exercises: z
+    .array(ExerciseEntrySchema)
+    .min(1, "At least one exercise is required"),
   stats: StatsSchema,
   notes: z.string().max(2000).optional(),
 });
@@ -85,14 +91,14 @@ const SessionSchema = z.object({
  */
 export async function postSession(
   request: FastifyRequest<{ Body: z.infer<typeof SessionSchema> }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   const userId = getUserId(request);
   const parsed = SessionSchema.safeParse(request.body);
 
   if (!parsed.success) {
     reply.status(400).send({
-      error: 'Invalid session data',
+      error: "Invalid session data",
       details: parsed.error.flatten(),
     });
     return;
@@ -104,8 +110,8 @@ export async function postSession(
   // Validate timestamps
   if (session.startTime >= session.endTime) {
     reply.status(400).send({
-      error: 'Invalid timestamps',
-      details: 'startTime must be before endTime',
+      error: "Invalid timestamps",
+      details: "startTime must be before endTime",
     });
     return;
   }
@@ -134,14 +140,14 @@ export async function postSession(
            updated_at = NOW()
        WHERE id = $userId
        RETURNING history_summary->'sessions' as sessions`,
-      { sessionRecord: JSON.stringify(sessionRecord), userId }
+      { sessionRecord: JSON.stringify(sessionRecord), userId },
     );
 
     const sessions = result.rows[0]?.sessions;
     const sessionsCount = Array.isArray(sessions) ? sessions.length : 0;
 
     request.log.info({
-      msg: 'Session persisted',
+      msg: "Session persisted",
       userId,
       sessionId,
       exercisesCount: session.exercises.length,
@@ -155,14 +161,14 @@ export async function postSession(
     });
   } catch (error) {
     request.log.error({
-      msg: 'Failed to persist session',
+      msg: "Failed to persist session",
       userId,
       sessionId,
       error: (error as Error).message,
     });
 
     reply.status(500).send({
-      error: 'Failed to persist session',
+      error: "Failed to persist session",
       message: (error as Error).message,
     });
   }
@@ -173,7 +179,7 @@ export async function postSession(
  */
 export async function getRecentSessions(
   request: FastifyRequest<{ Querystring: { limit?: number } }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   const userId = getUserId(request);
   const limit = request.query.limit ?? 10;
@@ -185,7 +191,7 @@ export async function getRecentSessions(
       `SELECT history_summary->'sessions' as sessions
          FROM users
        WHERE id = $userId`,
-      { userId }
+      { userId },
     );
 
     if (!result?.sessions) {
@@ -202,13 +208,13 @@ export async function getRecentSessions(
     });
   } catch (error) {
     request.log.error({
-      msg: 'Failed to fetch sessions',
+      msg: "Failed to fetch sessions",
       userId,
       error: (error as Error).message,
     });
 
     reply.status(500).send({
-      error: 'Failed to fetch sessions',
+      error: "Failed to fetch sessions",
       message: (error as Error).message,
     });
   }

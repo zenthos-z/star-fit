@@ -65,10 +65,14 @@ export const CardioCard: React.FC<CardioCardProps> = ({
           const state = next[set.index];
           if (!state || !state.running) return;
 
-          const targetDuration = (set as any)?.targetDuration || (exercise.metadata as any)?.targetDuration || 60;
+          // 仅当组/动作真的配置了目标时长才做倒计时自动完成；
+          // 自由计时（无目标）不再兜底 60s，避免实际时长被截断
+          const rawTarget = (set as any)?.targetDuration ?? (exercise.metadata as any)?.targetDuration;
+          const hasTarget = typeof rawTarget === 'number' && rawTarget > 0;
+          const targetDuration = hasTarget ? rawTarget : Infinity;
           const newElapsed = state.elapsed + 1;
           
-          if (newElapsed >= targetDuration) {
+          if (hasTarget && newElapsed >= targetDuration) {
             const finalDuration = targetDuration;
             next[set.index] = { elapsed: finalDuration, running: false };
             changed = true;
@@ -163,9 +167,10 @@ export const CardioCard: React.FC<CardioCardProps> = ({
       handleBatchUpdate(setIndex, { status: 'PLANNED' });
       
     } else if (currentState.running) {
-      // 2. 运动中 -> 运动终止
-      const targetDuration = (set as any)?.targetDuration || (exercise.metadata as any)?.targetDuration || 60;
-      const finalDuration = Math.min(currentState.elapsed, targetDuration);
+      // 2. 运动中 -> 运动终止：记录实际时长（仅在有目标时封顶到目标）
+      const rawTarget = (set as any)?.targetDuration ?? (exercise.metadata as any)?.targetDuration;
+      const hasTarget = typeof rawTarget === 'number' && rawTarget > 0;
+      const finalDuration = hasTarget ? Math.min(currentState.elapsed, rawTarget) : currentState.elapsed;
       setTimers(prev => ({
         ...prev,
         [setIndex]: { elapsed: finalDuration, running: false },

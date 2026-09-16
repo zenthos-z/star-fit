@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ExerciseSet, ExerciseType } from '../types';
+import { ExerciseSet, ExerciseType, Exercise } from '../types';
+import { setVolume } from '../src/v2/utils/workoutSummary';
 import { ExerciseAction, LoadAnchors as LoadAnchorsType } from '../src/v2/types/protocol';
 import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '../constants';
 import { v4 as uuidv4 } from 'uuid';
@@ -914,27 +915,16 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   };
 
   // --- Calculation Helpers ---
+  // 容量口径统一（2026-09-16）：共用 workoutSummary.setVolume（assisted 负助力取 |w|）。
   const calculateTotalVolume = () => {
       if (type === 'cardio' || type === 'outdoor') return 0;
-      
-      return sets.reduce((acc, set) => {
-          const w = set.weight || 0;
-          const r = set.reps || 0;
-          const d = set.targetDuration || set.duration || 0;
 
-          let setVol = 0;
-          if (type === 'resistance') {
-              setVol = w * r;
-          } else if (type === 'unilateral') {
-              setVol = w * r * 2;
-          } else if (type === 'bodyweight') {
-              setVol = (referenceBodyweight + w) * r;
-          } else if (type === 'assisted') {
-              setVol = Math.max(0, referenceBodyweight - w) * r;
-          } else if (type === 'isometric') {
-              setVol = (w > 0 ? w : referenceBodyweight) * d;
-          }
-          return acc + setVol;
+      return sets.reduce((acc, set) => {
+          const d = set.targetDuration || set.duration || 0;
+          return acc + setVolume(
+            { ...exercise, type, referenceBodyweight } as unknown as Exercise,
+            { ...set, duration: d } as ExerciseSet
+          );
       }, 0);
   };
 

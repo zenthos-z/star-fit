@@ -62,7 +62,11 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
         heartRate: s.heartRate,
         status: s.completed ? 'COMPLETED' : 'PLANNED',
         rpe: s.rpe,
-        restEndTime: s.restEndTime
+        restEndTime: s.restEndTime,
+        // 目标时长透传（计划导入写在 set.targetDuration / metadata.targetDuration）——
+        // IsometricCard 靠它做倒计时目标，缺失会兜底成 30s
+        targetDuration: s.targetDuration,
+        completedAt: s.completedAt
       })),
       uiHint: {
         cardType: (exercise.type === 'outdoor' || exercise.metadata?.isOutdoor) ? 'outdoor_gps' : (cardTypeMap[exercise.type] || 'resistance_standard')
@@ -78,6 +82,7 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
         targetDurationSec: exercise.metadata?.targetDurationSec,
         targetDistanceMeters: exercise.metadata?.targetDistanceMeters,
         targetHeartRateZone: exercise.metadata?.targetHeartRateZone,
+        targetDuration: exercise.metadata?.targetDuration,
         isOutdoor: exercise.metadata?.isOutdoor
       }
     };
@@ -106,7 +111,8 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
                         distance: s.distance,
                         heartRate: s.heartRate,
                         rpe: s.rpe,
-                        restEndTime: s.restEndTime
+                        restEndTime: s.restEndTime,
+                        completedAt: s.completedAt
                     });
                 }
             }

@@ -156,7 +156,10 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
         {exercise.sets.map((set, idx) => {
           const isCompleted = set.status === 'COMPLETED';
           const isActive = activeSetIndex !== null && Number(activeSetIndex) === Number(set.index);
-          const displayDuration = isActive ? (elapsedMap[Number(set.index)] || 0) : ((set as any).targetDuration || (exercise.metadata as any)?.targetDuration || 30);
+          // 完成组显示实际记录时长（用户拍板：真实运动状态优先于目标）；
+          // 未开始的组仍显示目标时长，计时中组显示已计时秒数。
+          const actualDuration = set.duration ?? ((set as any).targetDuration || (exercise.metadata as any)?.targetDuration || 30);
+          const displayDuration = isActive ? (elapsedMap[Number(set.index)] || 0) : actualDuration;
           const targetDuration = (set as any).targetDuration || (exercise.metadata as any)?.targetDuration || 30;
           const progressPercent = Math.min((displayDuration / targetDuration) * 100, 100);
           const shouldGrayOut = isCompleted && !isActive;
@@ -187,8 +190,8 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
                 
                 {/* Progress Mini-Bar */}
                 <div className="absolute -bottom-2 w-12 h-0.5 bg-gray-100 rounded-full overflow-hidden">
-                  <div 
-                    className={`h-full transition-all duration-500 ${isActive ? 'bg-orange-500' : isCompleted ? 'bg-emerald-400' : 'bg-gray-200'}`}
+                  <div
+                    className={`h-full transition-all duration-500 ${isActive ? 'bg-orange-500' : isCompleted ? (displayDuration >= targetDuration ? 'bg-emerald-400' : 'bg-amber-400') : 'bg-gray-200'}`}
                     style={{ width: `${progressPercent}%` }}
                   />
                 </div>

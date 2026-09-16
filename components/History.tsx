@@ -29,28 +29,16 @@ import {
 } from '../src/lib/nativeGlassMenu';
 import { isNativeTabBar, setTabBarHidden } from '../src/lib/nativeTabBar';
 import { List } from 'react-window';
+import { setVolume } from '../src/v2/utils/workoutSummary';
 
+// 容量口径统一（2026-09-16）：单组容量共用 workoutSummary.setVolume
+// （bodyweight 含体重、assisted 真实负荷、unilateral ×2、isometric 体重兜底），
+// 与结算页/落库传输层一致，不再各写一份 switch。
 const calculateVolume = (ex: Exercise) => {
    let vol = 0;
-   const bodyweight = ex.referenceBodyweight || DEFAULT_BODYWEIGHT;
-   const isCardioOrOutdoor = ex.type === 'cardio' || ex.type === 'outdoor' || ex.metadata?.isOutdoor;
-
    ex.sets.forEach(set => {
        if (!set.completed) return;
-       const reps = set.reps || 0;
-       const weight = set.weight || 0;
-       const duration = set.duration || 0;
-
-       switch (ex.type) {
-           case 'resistance': vol += weight * reps; break;
-           case 'unilateral': vol += weight * reps * 2; break;
-           case 'bodyweight': vol += (bodyweight + weight) * reps; break;
-           case 'assisted': vol += Math.max(0, (bodyweight - weight)) * reps; break;
-           case 'isometric': vol += (weight > 0 ? weight : bodyweight) * duration; break;
-           case 'cardio':
-           case 'outdoor':
-               break;
-       }
+       vol += setVolume(ex, set);
    });
    return vol;
 };

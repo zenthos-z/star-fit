@@ -114,7 +114,7 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     expect(stats.totalVolume).toBe(75 * 105);
   });
 
-  it('bodyweight（自重）：次数统计；附加重量才计容量', () => {
+  it('bodyweight（自重）：次数统计；容量 = (体重+配重)×次数（2026-09-16 口径统一）', () => {
     const ex = mkEx({
       name: '俯卧撑',
       type: 'bodyweight',
@@ -125,8 +125,19 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     expect(entry.weight).toBeUndefined();
 
     const stats = buildWorkoutStats([ex]);
-    expect(stats.totalVolume).toBe(0); // 0 重量不虚增容量
+    // 容量 = (默认体重75 + 配重0) × 次数，与 History/结算页口径一致
+    expect(stats.totalVolume).toBe(75 * 35);
     expect(stats.setsCount).toBe(2);
+  });
+
+  it('bodyweight 自重+追加配重：容量 = (体重+配重)×次数', () => {
+    const ex = mkEx({
+      name: '负重俯卧撑',
+      type: 'bodyweight',
+      referenceBodyweight: 70,
+      sets: [mkSet({ weight: 10, reps: 20 })],
+    });
+    expect(buildWorkoutStats([ex]).totalVolume).toBe(80 * 20);
   });
 
   it('assisted（辅助）：负重量记录', () => {
@@ -140,7 +151,7 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     expect(entry.reps).toBe(8);
   });
 
-  it('unilateral（单侧）：与抗阻同口径', () => {
+  it('unilateral（单侧）：容量 = w×r×2（左右各一遍，2026-09-16 口径统一）', () => {
     const ex = mkEx({
       name: '箭步蹲',
       type: 'unilateral',
@@ -149,7 +160,18 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     const entry = formatExerciseEntry(ex);
     expect(entry.weight).toBe(20);
     expect(entry.reps).toBe(12);
-    expect(buildWorkoutStats([ex]).totalVolume).toBe(240);
+    expect(buildWorkoutStats([ex]).totalVolume).toBe(480);
+  });
+
+  it('assisted 容量：真实负荷 = max(0, 体重−|助力|)×次数，totalVolume 恒非负', () => {
+    const ex = mkEx({
+      name: '双杠臂屈伸',
+      type: 'assisted',
+      referenceBodyweight: 70,
+      sets: [mkSet({ weight: -20, reps: 10 })],
+    });
+    // 真实负荷 50kg × 10 = 500（旧口径会算出 -200，触发后端 min(0) 400）
+    expect(buildWorkoutStats([ex]).totalVolume).toBe(500);
   });
 
   it('weight_only / reps_only：单维度记录', () => {
@@ -182,6 +204,50 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     const stats = buildWorkoutStats([ex]);
     expect(stats.setsCount).toBe(0);
     expect(stats.totalCardioDurationSec).toBe(0);
+  });
+
+  it('休息时长（2026-09-16 新增）：completedAt/restEndTime 推算组间休息合计', () => {
+    // 组1 在 T0 完成，restEndTime = T0+90s（被+30s 延长过）；组2 在 T0+60s 完成
+    // 休息 = min(T0+90, T0+60) − T0 = 60s
+    const ex = mkEx({
+      name: '杠铃卧推',
+      type: 'resistance',
+      sets: [
+        mkSet({ weight: 60, reps: 10, completedAt: T0, restEndTime: T0 + 90_000 }),
+        mkSet({ weight: 60, reps: 8, completedAt: T0 + 60_000 }),
+      ],
+    });
+    expect(formatExerciseEntry(ex).rest_sec).toBe(60);
+  });
+
+  it('休息时长：提前结束休息（restEndTime > 下一组completedAt）按实际休息计', () => {
+    // 组1 完成 T0，restEndTime=T0+120s；组2 在 T0+45s 完成 → 休息 45s
+    const ex = mkEx({
+      type: 'resistance',
+      sets: [
+        mkSet({ weight: 40, reps: 10, completedAt: T0, restEndTime: T0 + 120_000 }),
+        mkSet({ weight: 40, reps: 10, completedAt: T0 + 45_000 }),
+      ],
+    });
+    expect(formatExerciseEntry(ex).rest_sec).toBe(45);
+  });
+
+  it('休息时长：缺时间戳（旧数据）或为负时不产出字段', () => {
+    const noTs = mkEx({
+      type: 'resistance',
+      sets: [mkSet({ weight: 40, reps: 10 }), mkSet({ weight: 40, reps: 10 })],
+    });
+    expect(formatExerciseEntry(noTs).rest_sec).toBeUndefined();
+
+    // 时间倒挂（手动改记录等异常）→ 丢弃
+    const inverted = mkEx({
+      type: 'resistance',
+      sets: [
+        mkSet({ weight: 40, reps: 10, completedAt: T0 + 30_000, restEndTime: T0 + 60_000 }),
+        mkSet({ weight: 40, reps: 10, completedAt: T0 }),
+      ],
+    });
+    expect(formatExerciseEntry(inverted).rest_sec).toBeUndefined();
   });
 
   it('buildSessionPayload：非法时间戳 / 空动作返回 null；正常产出完整 payload', () => {

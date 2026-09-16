@@ -26,14 +26,14 @@ describe('calculateExerciseVolume', () => {
     expect(calculateExerciseVolume(ex)).toBe(60 * 10 + 60 * 8);
   });
 
-  it('自重动作无配重时容量为 0（weight 默认 0）', () => {
+  it('自重动作无配重：容量 = (体重75+0)×次数（2026-09-16 口径统一，含体重）', () => {
     const ex = mkEx('bodyweight', [mkSet({ reps: 20, completed: true })]);
-    expect(calculateExerciseVolume(ex)).toBe(0);
+    expect(calculateExerciseVolume(ex)).toBe(75 * 20);
   });
 
-  it('自重动作带配重时按 weight×reps 计', () => {
-    const ex = mkEx('bodyweight', [mkSet({ weight: 10, reps: 20, completed: true })]);
-    expect(calculateExerciseVolume(ex)).toBe(200);
+  it('自重动作带配重：容量 = (体重+配重)×次数', () => {
+    const ex = mkEx('bodyweight', [mkSet({ weight: 10, reps: 20, completed: true })], 80);
+    expect(calculateExerciseVolume(ex)).toBe(90 * 20);
   });
 
   it('等长动作有配重：容量 = weight×duration', () => {

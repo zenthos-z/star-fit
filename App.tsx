@@ -104,7 +104,11 @@ function convertActionSetsToExerciseSets(actionSets: any[] | undefined, existing
     distance: s.distance ?? 0,
     rpe: s.rpe,
     completed: s.status === 'COMPLETED',
-    status: s.status === 'ACTIVE' ? 'PLANNED' : (s.status ?? 'UNKNOWN')
+    status: s.status === 'ACTIVE' ? 'PLANNED' : (s.status ?? 'UNKNOWN'),
+    // 保留休息/计时元数据（此前在这里会丢失，设置页一开一关目标时长归零）
+    restEndTime: s.restEndTime,
+    targetDuration: s.targetDuration,
+    completedAt: s.completedAt
   }));
 }
 
@@ -895,12 +899,8 @@ const App: React.FC = () => {
   };
 
   const handleUpdateSet = (exId: string, setId: string, updates: Partial<ExerciseSet>) => {
-    // [AUTO-RESUME] 如果当前是暂停或未开始状态，且有动作更新（特别是静力动作计时或完成状态），则自动恢复/开始
-    if (session.status === 'paused') {
-      handleResumeSession();
-    } else if (session.status === 'idle') {
-      handleStartSession();
-    }
+    // 暂停/未开始时不自动恢复会话（2026-09-16 用户拍板移除 AUTO-RESUME）：
+    // 改数据不代表马上要运动，暂停中的编辑（改重量/核对组记录）不应触发计时恢复
 
     // [TRACKING] Weight Correction
     if (updates.weight !== undefined) {
@@ -928,10 +928,12 @@ const App: React.FC = () => {
                 const DEFAULT_REST_TIME = 60; // 默认60秒
                 const restSecs = DEFAULT_REST_TIME;
                 newSet.restEndTime = now + restSecs * 1000;
+                newSet.completedAt = now; // 组完成时刻：休息时长 = 下一组completedAt − 本组completedAt（capped by restEndTime）
               }
               // 当取消完成时，清除休息时间
               else if (updates.completed === false) {
                 newSet.restEndTime = undefined;
+                newSet.completedAt = undefined;
               }
 
               return newSet;

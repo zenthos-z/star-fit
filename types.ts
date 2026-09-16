@@ -28,6 +28,7 @@ export interface ExerciseSet {
   status?: 'UNKNOWN' | 'PLANNED' | 'ACTIVE' | 'COMPLETED' | 'SKIPPED';
   rpe?: number; // Actual RPE logged
   restEndTime?: number; // 休息结束时间戳（每个组独立）
+  completedAt?: number; // 组完成时刻时间戳（ms）——休息时长 = min(restEndTime, 下一组completedAt) − 本组completedAt
 }
 
 export type ExerciseType = 'resistance' | 'cardio' | 'bodyweight' | 'isometric' | 'assisted' | 'unilateral' | 'weight_only' | 'reps_only' | 'outdoor';

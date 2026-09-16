@@ -11,7 +11,7 @@
  */
 const API = 'http://localhost:43111/api';
 const USER = '63cab048-c19d-4329-9361-821edccf74b9'; // testuser（既有测试用户）
-const HEADERS = { 'Content-Type': 'application/json', 'X-User-Id': encodeURIComponent(USER) };
+const HEADERS = { 'Content-Type': 'application/json', 'X-User-Id': encodeURIComponent(USER), 'x-access-token': process.env.STARFIT_ACCESS_TOKEN || '' };
 
 const T0 = Date.now() - 46 * 60 * 1000;
 const T1 = Date.now();
