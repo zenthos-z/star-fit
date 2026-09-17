@@ -22,13 +22,18 @@ export class StarfitDatabase extends Dexie {
 
   constructor() {
     super('StarfitV2');
-    
+
     this.version(1).stores({
       workoutSessions: 'id, userId, status, startTime, version',
       userProfiles: 'userId, fitnessLevel, version',
       biometrics: '++id, type, timestamp',
       interactions: 'traceId, agentId, timestamp, role',
       syncQueue: 'id, type, timestamp, status'
+    });
+
+    // v2：户外运动活动轨迹（刷新/闪退恢复用，单条 'active' 记录）
+    this.version(2).stores({
+      activeTracks: 'key, updatedAt'
     });
   }
 }

@@ -2,12 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
-    <key>CAPACITOR_DEBUG</key>
+	<key>CAPACITOR_DEBUG</key>
 	<string>$(CAPACITOR_DEBUG)</string>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>Starfit</string>
+	<string>Starfit</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -27,8 +27,6 @@
 	<string>$(MARKETING_VERSION)</string>
 	<key>CFBundleVersion</key>
 	<string>$(CURRENT_PROJECT_VERSION)</string>
-	<key>NSSupportsLiveActivities</key>
-	<true/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
 	<key>NSAppTransportSecurity</key>
@@ -36,6 +34,20 @@
 		<key>NSAllowsArbitraryLoads</key>
 		<true/>
 	</dict>
+	<key>NSCameraUsageDescription</key>
+	<string>用于拍摄训练动作照片，向 AI 教练咨询动作/表单问题</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>记录户外运动的 GPS 轨迹、距离和配速。轨迹数据仅保存在你的设备上。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>用于语音输入，将你说的话转成文字发给 AI 教练</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>用于保存训练照片</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>用于选择训练照片，向 AI 教练咨询动作/表单问题</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>用于将你的语音实时转成文字输入</string>
+	<key>NSSupportsLiveActivities</key>
+	<true/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -59,15 +71,5 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
-	<key>NSCameraUsageDescription</key>
-	<string>用于拍摄训练动作照片，向 AI 教练咨询动作/表单问题</string>
-	<key>NSMicrophoneUsageDescription</key>
-	<string>用于语音输入，将你说的话转成文字发给 AI 教练</string>
-	<key>NSSpeechRecognitionUsageDescription</key>
-	<string>用于将你的语音实时转成文字输入</string>
-	<key>NSPhotoLibraryUsageDescription</key>
-	<string>用于选择训练照片，向 AI 教练咨询动作/表单问题</string>
-	<key>NSPhotoLibraryAddUsageDescription</key>
-	<string>用于保存训练照片</string>
 </dict>
 </plist>

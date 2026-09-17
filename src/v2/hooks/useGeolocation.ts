@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { TrackSmoother } from '../utils/trackSmoother';
 
 export interface Position {
   latitude: number;
@@ -33,6 +34,8 @@ export interface GeolocationReturn {
   positions: Position[];
   distance: number;
   reset: () => void;
+  /** 暂停时调用：标记轨迹 gap，恢复后首点不算距不画线连接 */
+  markPause: () => void;
   status: LocationStatus;
   error: string | null;
   hasPermission: boolean | null;
@@ -61,6 +64,8 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
   const backgroundStartTimeRef = useRef<number | null>(null);
   const backgroundTimerRef = useRef<number | null>(null);
   const lastPositionRef = useRef<Position | null>(null);
+  // 卡尔曼平滑器：在第 2 层（阈值过滤）之后压噪
+  const smootherRef = useRef<TrackSmoother>(new TrackSmoother());
 
   const calculateDistance = useCallback((pos1: Position, pos2: Position): number => {
     const R = 6371e3;
@@ -222,19 +227,25 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
           }
 
           if (shouldAcceptPosition(lastPos, newPos, isGap)) {
-            const positionWithGapInfo: Position = {
+            // 第 2 层：卡尔曼平滑（gap 点不参与滤波，保持跳变）
+            const [fLat, fLon] = isGap
+              ? [newPos.latitude, newPos.longitude]
+              : smootherRef.current.filter(newPos.latitude, newPos.longitude, newPos.timestamp, newPos.accuracy ?? 50);
+            const smoothedPos: Position = {
               ...newPos,
+              latitude: fLat,
+              longitude: fLon,
               isGapAfter: isGap,
               gapDuration: isGap ? newPos.timestamp - lastPos.timestamp : undefined,
             };
 
-            const distance = calculateDistance(lastPos, positionWithGapInfo);
+            const distance = calculateDistance(lastPos, smoothedPos);
             if (!isGap) {
               setDistance((prevDist) => prevDist + distance);
             }
 
-            lastPositionRef.current = positionWithGapInfo;
-            return [...prev, positionWithGapInfo];
+            lastPositionRef.current = smoothedPos;
+            return [...prev, smoothedPos];
           }
 
           return prev;
@@ -294,6 +305,13 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
     setTotalGapDuration(0);
     setGapCount(0);
     lastPositionRef.current = null;
+    smootherRef.current.reset();
+  }, []);
+
+  /** 暂停标记：把 lastPosition 置空，恢复后首点按 gap 处理（不算距、平滑器 reset） */
+  const markPause = useCallback(() => {
+    lastPositionRef.current = null;
+    smootherRef.current.reset();
   }, []);
 
   const updateConfig = useCallback((newConfig: Partial<GeolocationConfig>) => {
@@ -323,6 +341,7 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
     positions,
     distance,
     reset,
+    markPause,
     status,
     error,
     hasPermission,
