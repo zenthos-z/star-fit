@@ -64,7 +64,7 @@ export function extractWorkoutData(session: Session): ExtractedWorkoutData {
     .filter((ex): ex is ExerciseItem => ex !== null);
 
   return {
-    nickname: '你的昵称',
+    nickname: '', // 署名由用户在 UI 自定义；留空则生成前校验拦截
     date: dateStr,
     duration: `${durationMinutes} MINS`,
     exercises
