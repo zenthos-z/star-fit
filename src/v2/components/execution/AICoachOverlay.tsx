@@ -1100,7 +1100,9 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 </svg>
               </button>
             )}
-            {chatMessage.trim() || !isSpeechInputSupported || isBusy ? null : (
+            {/* 灰色麦克风入口：仅在「非聆听 && 输入框空」时出现。
+                聆听中由上方红色停止键接管（否则空输入框时两个麦克风并存——2026-09-17） */}
+            {chatMessage.trim() || isListening || !isSpeechInputSupported || isBusy ? null : (
               <button
                 type="button"
                 onClick={handleMicTap}
