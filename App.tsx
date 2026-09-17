@@ -1434,6 +1434,9 @@ const App: React.FC = () => {
             onFinishCountdown={handleLockFinishCountdown}
             onEndRest={handleLockEndRest}
             onExtendRest={handleLockExtendRest}
+            onPause={handlePauseSession}
+            onResume={handleResumeSession}
+            onEnd={() => handleEndSession()}
           />
         )}
       </AnimatePresence>

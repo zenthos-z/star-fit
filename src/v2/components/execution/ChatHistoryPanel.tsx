@@ -138,14 +138,28 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
             )}
           </div>
 
-          {/* Bottom hint */}
-          {threads.length > 0 && (
-            <div className="flex-shrink-0 px-4 py-3 bg-gray-50 border-t border-gray-100">
-              <p className="text-[10px] text-gray-400 text-center">
+          {/* 底部操作区：★临时补丁（2026-09-17 安卓 web 用户反馈）——
+              历史面板没有明显「返回主对话」入口（左上角返回钮在安卓 web 上不显眼），
+              列表底部加一颗全宽按钮直达主对话框；后续随历史面板重设计收编 */}
+          <div className="flex-shrink-0 px-4 pt-2 pb-3 bg-gray-50 border-t border-gray-100"
+            style={{ paddingBottom: 'max(12px, env(safe-area-inset-bottom))' }}
+          >
+            <button
+              onClick={onClose}
+              className="w-full h-12 rounded-full bg-white border border-gray-200 shadow-sm flex items-center justify-center gap-2 text-[16px] font-semibold text-gray-900 active:scale-[0.98] transition-all"
+              aria-label="返回主对话"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+              </svg>
+              返回主对话
+            </button>
+            {threads.length > 0 && (
+              <p className="text-[10px] text-gray-400 text-center mt-2">
                 最多保留 10 条历史对话，超出后自动删除最旧的
               </p>
-            </div>
-          )}
+            )}
+          </div>
         </motion.div>
       )}
     </AnimatePresence>
