@@ -592,6 +592,68 @@ export const UserProfileV2Schema = z.object({
 export type UserProfileV2 = z.infer<typeof UserProfileV2Schema>;
 
 // ============================================================================
+// Heart Rate Samples (ADR-0001)
+// ============================================================================
+// 心率时序样本契约（ADR-0001：真源在 HealthKit，本库为 5s 降采样的分析级副本）。
+// 新表 heart_rate_samples 与组内单值 Set.heartRate（样本聚合）并存：
+//  - 样本流（时间序列）→ 走势图 / 脚本分析 / AI 解读的最小数据单元
+//  - 组平均心率（Set.heartRate）→ 兼容现有链路，仅接受样本聚合写入
+
+/** 心率样本来源：watch（HealthKit 采集，默认）/ manual（仅审计用，手动链路已废弃） */
+export const HeartRateSourceSchema = z.enum(['watch', 'manual']).default('watch');
+export type HeartRateSource = z.infer<typeof HeartRateSourceSchema>;
+
+/** 单条心率样本（传输/入库形态，snake_case 对齐数据库列） */
+export const HeartRateSampleSchema = z.object({
+  bpm: z.number().min(1).max(250),
+  recorded_at: z.string().datetime(), // ISO 8601
+  source: HeartRateSourceSchema,
+  exercise_index: z.number().int().optional(), // 组外休息样本可空
+  set_index: z.number().int().optional(),
+});
+export type HeartRateSample = z.infer<typeof HeartRateSampleSchema>;
+
+/** 一批样本（手表训后批量同步载荷） */
+export const HeartRateSamplesBatchSchema = z.object({
+  session_id: z.string().uuid(),
+  samples: z.array(HeartRateSampleSchema).min(1).max(20000),
+});
+export type HeartRateSamplesBatch = z.infer<typeof HeartRateSamplesBatchSchema>;
+
+/** 单次会话心率曲线（get_session_hr_curve 工具输出，聚合已降噪） */
+export const HeartRateCurveSchema = z.object({
+  session_id: z.string().uuid(),
+  start_time: z.string().datetime(),
+  end_time: z.string().datetime().optional(),
+  sample_count: z.number().int(),
+  points: z.array(z.object({
+    t: z.string().datetime(),       // 5s 粒度时间戳
+    bpm: z.number(),
+  })),
+  stats: z.object({
+    avg_bpm: z.number(),
+    max_bpm: z.number(),
+    min_bpm: z.number(),
+  }),
+});
+export type HeartRateCurve = z.infer<typeof HeartRateCurveSchema>;
+
+/** 跨会话心率趋势（get_hr_trend 工具输出） */
+export const HeartRateTrendSchema = z.object({
+  user_id: z.string().uuid(),
+  sessions: z.array(z.object({
+    session_id: z.string().uuid(),
+    started_at: z.string().datetime(),
+    avg_bpm: z.number(),
+    max_bpm: z.number(),
+    min_bpm: z.number(),
+    sample_count: z.number().int(),
+  })),
+  trend: z.enum(['rising', 'stable', 'falling', 'insufficient']).default('insufficient'),
+});
+export type HeartRateTrend = z.infer<typeof HeartRateTrendSchema>;
+
+// ============================================================================
 // Re-export Legacy Protocol Types
 // ============================================================================
 

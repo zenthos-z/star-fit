@@ -71,3 +71,4 @@ ios/**/*.xcuserdata/
 # Hermes agent local scratch
 .hermes/
 .env.local.broken-bak
+deploy/backups/

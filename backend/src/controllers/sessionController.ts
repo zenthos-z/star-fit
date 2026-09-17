@@ -3,6 +3,8 @@
  *
  * 提供：
  * - POST /api/sessions - 持久化训练 session 到 history_summary.sessions
+ * - POST /api/sessions/:sessionId/hr-samples - 心率样本批量入库（ADR-0001，
+ *   手表训后批量同步通路，样本写入 heart_rate_samples 时序表）
  *
  * Phase 1 of workout_complete refactor: 前端先持久化，再调用 Agent 分析
  */
@@ -11,6 +13,7 @@ import type { FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { getUserId } from "../utils/requestUtils.js";
 import { getPostgresClient } from "../db/postgresql/client/postgres-client.js";
+import { createHeartRateRepository } from "../db/postgresql/repository/heartRate.repository.js";
 
 // ============================================
 // Schemas
@@ -171,6 +174,87 @@ export async function postSession(
       error: "Failed to persist session",
       message: (error as Error).message,
     });
+  }
+}
+
+/**
+ * 心率样本批量入库（ADR-0001）：手表训后批量同步通路。
+ * 样本写入 heart_rate_samples 时序表；session 行缺失时按用户补建最小行
+ * （sessions 表由 agent 同步路径维护，训练中可能尚未落行）。
+ */
+export async function postHRSamples(
+  request: FastifyRequest<{ Params: { sessionId: string }; Body: unknown }>,
+  reply: FastifyReply,
+): Promise<void> {
+  const userId = getUserId(request);
+  const { sessionId } = request.params;
+
+  const batchSchema = z.object({
+    session_id: z.string().uuid(),
+    samples: z
+      .array(
+        z.object({
+          bpm: z.number().min(1).max(250),
+          recorded_at: z.string().datetime(),
+          exercise_index: z.number().int().optional(),
+          set_index: z.number().int().optional(),
+        }),
+      )
+      .min(1)
+      .max(20000),
+  });
+  const parsed = batchSchema.safeParse(request.body);
+  if (!parsed.success || parsed.data.session_id !== sessionId) {
+    reply
+      .status(400)
+      .send({
+        error: "Invalid hr-samples payload",
+        details: parsed.error?.flatten(),
+      });
+    return;
+  }
+
+  try {
+    const client = getPostgresClient();
+    // session 行缺失（可能未同步过）→ 按用户补建最小行
+    const exists = await client.queryOne<{ id: string }>(
+      `SELECT id FROM sessions WHERE id = $sessionId`,
+      { sessionId },
+    );
+    if (!exists) {
+      await client.query(
+        `INSERT INTO sessions (id, user_id, start_time, raw_json)
+         VALUES ($sessionId, $userId, NOW(), '{}')`,
+        { sessionId, userId },
+      );
+    }
+
+    const repo = createHeartRateRepository(client);
+    const inserted = await repo.insertBatch(
+      userId,
+      sessionId,
+      parsed.data.samples.map((s) => ({ ...s })),
+    );
+    request.log.info({
+      msg: "HR samples persisted",
+      userId,
+      sessionId,
+      inserted,
+    });
+    reply.status(201).send({ ok: true, inserted });
+  } catch (error) {
+    request.log.error({
+      msg: "Failed to persist HR samples",
+      userId,
+      sessionId,
+      error: (error as Error).message,
+    });
+    reply
+      .status(500)
+      .send({
+        error: "Failed to persist HR samples",
+        message: (error as Error).message,
+      });
   }
 }
 
