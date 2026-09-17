@@ -452,7 +452,16 @@ export const useAICoach = (
                 健康: "health", 一般健康: "health",
                 综合体能: "general_fitness", 体能: "general_fitness"
               };
-              prefs.goal = map[goal] ?? "general_fitness";
+              // 精确命中 → 子串兜底（Agent 生成的 label 是自由文本，如「增肌塑形」
+              // 「提升力量」；2026-09-17 实测「增肌塑形」漏映射 fallback 成 general_fitness）
+              const mapped =
+                map[goal] ??
+                (goal.includes("增肌") || goal.includes("肌肥大") || goal.includes("塑形") ? "muscle_gain"
+                : goal.includes("减脂") || goal.includes("减肥") || goal.includes("燃脂") ? "fat_loss"
+                : goal.includes("力量") ? "strength"
+                : goal.includes("体能") || goal.includes("健康") ? "general_fitness"
+                : undefined);
+              prefs.goal = mapped ?? "general_fitness";
             }
             const equip = pick("equipment", "available_equipment", "器械", "器械条件");
             if (equip) prefs.equipment = equip.split(/[、,，/ ]+/).filter(Boolean);
@@ -561,9 +570,12 @@ ${JSON.stringify(uploadData, null, 2)}`;
         // uiHint 合成：从 SSE card 产出可渲染卡片对象
         let uiHint = synthesizeUiHint(card);
 
-        // [FIX] Defensive check: ensure backend didn't erroneously return plan_card
-        if (uiHint?.type === 'plan_card') {
-          console.error('[useAICoach] BUG: Backend returned plan_card after survey upload!');
+        // [FIX 2026-09-17] plan 场景（初始问卷）本来就要求 Agent 出 plan_card——
+        // 此处旧防御「无条件丢弃 plan_card」把正常卡片吃掉了（实锤：模拟器实测文字
+        // 说「卡片如下」但卡片消失）。仅在 workout_complete（练后补录问卷）场景
+        // 保留防御：练后轮不该再弹计划卡。
+        if (uiHint?.type === 'plan_card' && hasWorkoutData) {
+          console.error('[useAICoach] BUG: Backend returned plan_card after workout survey!');
           uiHint = undefined;  // Clear erroneous uiHint
         }
 
