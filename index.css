@@ -1,5 +1,34 @@
 /* Global styles for Project Starfit */
 
+/* ============================================
+   全局长按选择禁用（2026-09-17 用户拍板）
+   ★除 AI 对话界面外，所有界面禁止长按激活文字选择/复制——
+   WKWebView 里长按会被系统文本选择菜单劫持（拷贝/查询/翻译），
+   会直接打断 HOLD 长按类交互（锁定屏按钮/胶囊手势均受害）。
+   AI 聊天容器 data-chat-scroll-container 内放行 user-select: text；
+   输入类控件天然放行（否则输入框内无法选字/编辑）。
+   ============================================ */
+* {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+[data-chat-scroll-container],
+[data-chat-scroll-container] * {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+input,
+textarea,
+[contenteditable="true"] {
+  -webkit-user-select: auto;
+  user-select: auto;
+  -webkit-touch-callout: default;
+}
+
 /* Tailwind 构建时编译入口（原为 index.html/admin.html 的 CDN script） */
 @tailwind base;
 @tailwind components;

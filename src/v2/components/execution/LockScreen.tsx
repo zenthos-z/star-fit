@@ -3,21 +3,144 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '../../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
-import { HoldToConfirm } from './HoldToConfirm';
+import { HoldToConfirm, HOLD_MS } from './HoldToConfirm';
 import { LOCK_MOTION } from './lockMotion';
 import { broadcastCurrentSet, isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from '../../services/watchConnectivity';
 import type { Exercise, ExerciseType } from '../../../../types';
 
 /**
- * 锁定训练屏 v5（2026-09-15 用户拍板：交互与动效统一重构）：
+ * 胶囊内圆形长按钮（锁屏暂停控制条专用，2026-09-17）：
+ * 环形进度 + HOLD_MS 长按 + 三段震动，与 HoldToConfirm 同语义（防误触铁律）。
+ */
+const HoldCircle: React.FC<{
+  label: string;
+  tone: 'danger' | 'primary';
+  onConfirm: () => void;
+}> = ({ label, tone, onConfirm }) => {
+  const [progress, setProgress] = useState(0);
+  const [pressed, setPressed] = useState(false);
+  const rafRef = useRef<number | null>(null);
+  const startRef = useRef(0);
+  const firedRef = useRef(false);
+  const trackRef = useRef<HTMLDivElement | null>(null);
+  const [size, setSize] = useState({ w: 0, h: 0 });
+
+  useEffect(() => {
+    const el = trackRef.current;
+    if (!el) return;
+    const measure = () => setSize({ w: el.clientWidth, h: el.clientHeight });
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  const stop = () => {
+    if (rafRef.current !== null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+  };
+  useEffect(() => stop, []);
+
+  const tick = () => {
+    const elapsed = Math.min(1, (Date.now() - startRef.current) / HOLD_MS);
+    setProgress(elapsed);
+    if (elapsed >= 1) {
+      stop();
+      if (!firedRef.current) {
+        firedRef.current = true;
+        haptic('success');
+        onConfirm();
+      }
+      return;
+    }
+    rafRef.current = requestAnimationFrame(tick);
+  };
+
+  const handleDown = (e: React.PointerEvent) => {
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    firedRef.current = false;
+    startRef.current = Date.now();
+    haptic('light');
+    setPressed(true);
+    stop();
+    rafRef.current = requestAnimationFrame(tick);
+  };
+  const handleUp = () => {
+    stop();
+    setProgress(0);
+    setPressed(false);
+  };
+
+  const isDanger = tone === 'danger';
+  const ringColor = isDanger ? 'rgba(255,59,48,0.95)' : 'rgba(59,130,246,0.95)';
+  // 正圆进度环：半径按量测尺寸算
+  const pad = 3;
+  const d = Math.max(0, Math.min(size.w, size.h) - pad * 2);
+  const r = d / 2;
+  const perimeter = 2 * Math.PI * r;
+
+  return (
+    <motion.div
+      ref={trackRef}
+      onPointerDown={handleDown}
+      onPointerUp={handleUp}
+      onPointerCancel={handleUp}
+      animate={{ scale: pressed ? LOCK_MOTION.pressScale : 1 }}
+      transition={LOCK_MOTION.spring}
+      className={`relative w-[52px] h-[52px] rounded-full flex items-center justify-center ${
+        isDanger ? 'bg-red-500/15 border border-red-500/40' : 'bg-blue-500/15 border border-blue-500/40'
+      }`}
+      style={{ touchAction: 'none' }}
+      aria-label={label}
+    >
+      {size.w > 0 && (
+        <svg
+          className="absolute pointer-events-none"
+          style={{ inset: 0, overflow: 'visible' }}
+          width={size.w}
+          height={size.h}
+          viewBox={`0 0 ${size.w} ${size.h}`}
+        >
+          <circle
+            cx={size.w / 2}
+            cy={size.h / 2}
+            r={r}
+            fill="none"
+            stroke={ringColor}
+            strokeWidth={3}
+            strokeLinecap="round"
+            strokeDasharray={`${perimeter * progress} ${perimeter}`}
+            transform={`rotate(-90 ${size.w / 2} ${size.h / 2})`}
+            style={{ visibility: progress > 0 ? 'visible' : 'hidden' }}
+          />
+        </svg>
+      )}
+      {isDanger ? (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#FF3B30" className="w-[26px] h-[26px]">
+          <rect x="6.5" y="6.5" width="11" height="11" rx="2" />
+        </svg>
+      ) : (
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#3B82F6" className="w-[26px] h-[26px]">
+          <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+        </svg>
+      )}
+    </motion.div>
+  );
+};
+
+/**
+ * 锁定训练屏 v6（2026-09-17 用户拍板：锁屏交互重构）：
  * - 进入：训练中把计时胶囊往下滑（TimerCapsule 手势，不变）
  * - 解锁：上滑时间胶囊，Android 返回键保留为逃生通道
- * - 布局三段式：上方=时间胶囊（17%），中间=信息区（46%），下方=交互按钮（拇指黄金区）
- * - ★动效统一走 lockMotion.LOCK_MOTION（本文件零散 transition 全部移除）：
- *   a) 入场：三段共用 fade+up，delay 阶梯 0/0.08/0.16 自上而下铺开
- *   b) 状态切换（休息↔确认↔计时↔完成）：AnimatePresence 交叉溶解 0.2s，不再硬切
- *   c) 按压：全部 spring scale 0.97（按钮 + 时间胶囊统一）
- *   d) 解锁手势：拖拽跟手 + 过阈值中震；未过阈值 spring 弹回
+ * - 布局三段式：上方=时间胶囊（17%），中间=信息视窗（固定 340×300 圆角玻璃窗），下方=交互按钮（拇指黄金区）
+ * - ★时间胶囊交互（v6 重构，与未锁屏态区分）：
+ *   a) 单击不暂停（锁屏防误触）；长按 700ms → 暂停 + 胶囊原地展开成控制条
+ *   b) 控制条：左「结束」红钮 / 中时间 / 右「继续」蓝钮，两钮均为环形进度长按激活
+ *   c) 上滑解锁手势不受影响（位移>10px 自动作废长按）；控制条展开时轻点胶囊可收起
+ * - 信息视窗：所有状态（运动/休息/倒计时/全部完成）共用同一固定窗，内容窗内居中、
+ *   超出裁剪；休息态徽章绿点「休息中」+ 刚完成组参数 + 「接下来」前瞻
  * - 按钮防误触：长按 700ms + 环形进度 + 三段震动（HoldToConfirm）
  * - 户外地图实时轨迹：数据模型暂无 GPS 流，本期不伪造，只显示已记录字段
  */
@@ -32,6 +155,10 @@ interface LockScreenProps {
   onFinishCountdown: (exId: string, setId: string, durationSec: number) => void;
   onEndRest: (exId: string, setId: string) => void;
   onExtendRest: (exId: string, setId: string, extraSec: number) => void;
+  // 暂停/继续/结束训练（2026-09-17 锁屏防误触拍板）：App.tsx 既有 handler 透传
+  onPause: () => void;
+  onResume: () => void;
+  onEnd: () => void;
 }
 
 type Focus =
@@ -86,7 +213,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   onCompleteSet,
   onFinishCountdown,
   onEndRest,
-  onExtendRest
+  onExtendRest,
+  onPause,
+  onResume,
+  onEnd
 }) => {
   const [now, setNow] = useState(Date.now());
   const [counting, setCounting] = useState<{ exId: string; setId: string; startedAt: number; target: number } | null>(null);
@@ -252,25 +382,79 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const dragStartY = useRef<number | null>(null);
   const dragAccum = useRef(0);
 
+  // ---- 胶囊长按暂停（2026-09-17 锁屏防误触拍板）----
+  // 交互：长按 700ms → 暂停 + 弹出控制条（左「结束」/右「继续」，均为长按激活）；
+  // 控制条已开时长按胶囊或轻点 → 收起控制条（暂停态保持）；上滑解锁手势不受影响
+  const HOLD_MS = 700;
+  const TAP_SLOP = 10; // px，位移超过此值=拖拽（上滑解锁），取消长按
+  const [pauseMenuOpen, setPauseMenuOpen] = useState(false);
+  const holdRafRef = useRef<number | null>(null);
+  const holdStartRef = useRef(0);
+  const holdFiredRef = useRef(false);
+
+  const stopHold = () => {
+    if (holdRafRef.current !== null) {
+      cancelAnimationFrame(holdRafRef.current);
+      holdRafRef.current = null;
+    }
+  };
+  useEffect(() => stopHold, []);
+
+  const startHold = () => {
+    holdFiredRef.current = false;
+    holdStartRef.current = Date.now();
+    stopHold();
+    const tick = () => {
+      const elapsed = Date.now() - holdStartRef.current;
+      if (elapsed >= HOLD_MS && !holdFiredRef.current) {
+        holdFiredRef.current = true;
+        stopHold();
+        haptic('medium');
+        if (!pauseMenuOpen) {
+          onPause();
+          setPauseMenuOpen(true);
+        } else {
+          setPauseMenuOpen(false); // 控制条已开：长按收起（保持暂停态）
+        }
+        return;
+      }
+      holdRafRef.current = requestAnimationFrame(tick);
+    };
+    holdRafRef.current = requestAnimationFrame(tick);
+  };
+
   const handleUnlockTouchStart = (e: React.TouchEvent) => {
     dragStartY.current = e.touches[0]?.clientY ?? null;
     dragAccum.current = 0;
     setCapsulePressed(true);
+    startHold(); // 长按计时开始；移动超 TAP_SLOP 或抬指早于 HOLD_MS 自动作废
   };
   const handleUnlockTouchMove = (e: React.TouchEvent) => {
     if (dragStartY.current === null) return;
     const y = e.touches[0]?.clientY;
     if (typeof y !== 'number') return;
     dragAccum.current = y - dragStartY.current;
+    if (Math.abs(dragAccum.current) > TAP_SLOP && !holdFiredRef.current) {
+      stopHold(); // 转为拖拽手势：作废长按（上滑解锁优先）
+    }
     // 只跟随向上拖（dy<0），向下拖不位移
     setDragY(Math.max(-56, Math.min(0, dragAccum.current * 0.7)));
   };
   const handleUnlockTouchEnd = () => {
     const dy = dragAccum.current;
+    const holdElapsed = Date.now() - holdStartRef.current;
+    const wasHold = holdFiredRef.current;
+    stopHold();
     dragStartY.current = null;
     dragAccum.current = 0;
     setDragY(0); // LOCK_MOTION.spring 弹回（未过阈值）或随退出动画离场
     setCapsulePressed(false);
+    if (wasHold) return; // 长按已触发（暂停菜单开合），不当滑动处理
+    // 未满 HOLD_MS 的短触：控制条已开时轻点 = 收起
+    if (Math.abs(dy) <= TAP_SLOP && holdElapsed < HOLD_MS && pauseMenuOpen) {
+      setPauseMenuOpen(false);
+      return;
+    }
     if (dy < UNLOCK_DRAG_THRESHOLD) {
       haptic('medium');
       onExit();
@@ -369,25 +553,34 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     }
 
     if (focus.kind === 'rest') {
+      // ★副按钮在上、主按钮压底：容器底对齐，主按钮「结束休息」底边与 confirm 单钮态
+      // 几何恒定（拇指肌肉记忆），副按钮 +10 秒向上生长——否则主按钮进休息态上移 80px
+      // 撞进信息区（2026-09-17 用户实锤反馈）
       return (
         <div className="flex flex-col gap-4">
-          <HoldToConfirm
-            variant="primary"
-            label="结束休息"
-            onConfirm={() => onEndRest(focus.exId, focus.setId)}
-          />
           <HoldToConfirm
             variant="secondary"
             label="+10 秒"
             onConfirm={() => onExtendRest(focus.exId, focus.setId, 10)}
+          />
+          <HoldToConfirm
+            variant="primary"
+            label="结束休息"
+            onConfirm={() => onEndRest(focus.exId, focus.setId)}
           />
         </div>
       );
     }
 
     if (focus.kind === 'countdown' && counting) {
+      // 同休息态：副按钮（放弃）在上、主按钮（结束并记录）压底，主钮位置恒定
       return (
         <div className="flex flex-col gap-4">
+          <HoldToConfirm
+            variant="secondary"
+            label="放弃本次"
+            onConfirm={() => setCounting(null)}
+          />
           <HoldToConfirm
             variant="primary"
             label="结束并记录"
@@ -397,11 +590,6 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               onFinishCountdown(counting.exId, counting.setId, elapsed);
               setCounting(null);
             }}
-          />
-          <HoldToConfirm
-            variant="secondary"
-            label="放弃本次"
-            onConfirm={() => setCounting(null)}
           />
         </div>
       );
@@ -427,8 +615,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     );
   };
 
-  // ---- 信息区（中间）：休息态与运动态同一套排版骨架，只换内容 ----
-  // 统一字号阶梯：类型徽章 14px / 主数值 92px / 动作名 30px / 参数 20px / 说明 16px
+  // ---- 信息视窗（中间固定窗 340×300，2026-09-17 用户拍板）----
+  // 统一字号阶梯（窗内）：状态徽章 13px / 主数值 60px / 动作名 24px / 参数 16px / 说明 14px
+  // 休息态信息层级：休息倒计时为主数值 → 刚完成组的参数 → 「接下来」前瞻 → 组进度
+  // 运动态信息层级：倒计时或动作名为主数值 → 当前组参数 → 组进度
   const renderInfo = () => {
     if (focus.kind === 'done') {
       return (
@@ -443,7 +633,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
             </svg>
           </motion.div>
-          <span className="text-[22px] font-semibold text-white">全部完成</span>
+          <span className="text-[20px] font-semibold text-white">全部完成</span>
         </div>
       );
     }
@@ -456,73 +646,73 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     const heroIsName = !isRest && !isCounting;
 
     return (
-      <div className="flex flex-col items-center gap-3">
-        {/* ① 类型徽章（两态同款）——有氧/户外附加模式标签（目标时长/目标距离/自由模式） */}
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/8 border border-white/10">
-            <span className="w-2 h-2 rounded-full" style={{ background: typeDot }} />
-            <span className="text-[14px] font-medium tracking-wide text-white/70">{typeLabel}</span>
+      <div className="flex flex-col items-center gap-2 px-3 w-full">
+        {/* ① 状态徽章（休息态绿点「休息中」/ 运动态类型点）——有氧/户外附加模式标签 */}
+        <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/8 border border-white/10">
+            <span className="w-1.5 h-1.5 rounded-full" style={{ background: isRest ? '#34D399' : typeDot }} />
+            <span className="text-[12px] font-medium tracking-wide text-white/70">
+              {isRest ? '休息中' : typeLabel}
+            </span>
           </div>
-          {cardioModeLabel && (
-            <div className="flex items-center px-4 py-2 rounded-full bg-white/8 border border-white/10">
-              <span className="text-[14px] font-medium tracking-wide text-white/70">{cardioModeLabel}</span>
+          {!isRest && cardioModeLabel && (
+            <div className="flex items-center px-3 py-1 rounded-full bg-white/8 border border-white/10">
+              <span className="text-[12px] font-medium tracking-wide text-white/70">{cardioModeLabel}</span>
             </div>
           )}
         </div>
 
-        {/* ② 主数值：倒计时大字（两态同规格） */}
+        {/* ② 主数值：休息倒计时 / 组倒计时（窗内 60px） */}
         {heroValue && (
-          <span style={{ fontFeatureSettings: "'tnum'" }} className="font-mono text-[92px] font-light tracking-tight leading-none text-white">
+          <span style={{ fontFeatureSettings: "'tnum'" }} className="font-mono text-[60px] font-light tracking-tight leading-none text-white">
             {heroValue}
           </span>
         )}
 
-        {/* ③ 动作名：休息态作次级说明；运动态（力量）作主视觉大字 */}
-        <span className={`font-bold text-white leading-tight text-center max-w-[86vw] ${heroIsName ? 'text-[44px]' : 'text-[26px] text-white/85'}`}>
+        {/* ③ 动作名：休息态作次级说明；运动态（力量）作主视觉 */}
+        <span className={`font-bold text-white leading-tight text-center max-w-[92%] truncate ${heroIsName ? 'text-[30px]' : 'text-[20px] text-white/85'}`}>
           {focus.exName}
         </span>
 
-        {/* ④ 当前组参数行（力量 = 重量/次数，计时 = 秒数，距离 = km）——两态同款大字 */}
+        {/* ④ 当前组参数行：休息态 = 刚完成组；运动态 = 当前组（窗内紧凑字号） */}
         {setParams && (
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5">
             {setParams.map((p, i) => (
-              <span key={i} className="flex items-baseline gap-1 px-4 py-1.5 rounded-full bg-white/8 border border-white/10">
-                <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[24px] font-bold text-white leading-none">{p.value}</span>
-                <span className="text-[15px] font-medium text-white/60">{p.unit}</span>
+              <span key={i} className="flex items-baseline gap-1 px-2.5 py-0.5 rounded-full bg-white/8 border border-white/10">
+                <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[15px] font-bold text-white leading-none">{p.value}</span>
+                <span className="text-[11px] font-medium text-white/60">{p.unit}</span>
               </span>
             ))}
           </div>
         )}
 
-        {/* ④b 动作间休息前瞻（仅 rest 态且有下一动作时）：信息区预告下一个动作，
-            休息时提前准备换动作/器械 */}
+        {/* ④b 动作间休息前瞻（仅 rest 态且有下一动作时）：窗内预告下一个动作 */}
         {isRest && nextExerciseName && (
-          <span className="text-[17px] font-medium text-white/55">
+          <span className="text-[14px] font-medium text-white/55">
             接下来 · <span className="text-white/85 font-semibold">{nextExerciseName}</span>
           </span>
         )}
 
-        {/* ⑤ 组进度：单组动作（户外跑/有氧）不显示组进度行——单组无"第 1/1 组"信息量，
-            版面让给模式目标与运动数据（用户拍板 2026-09-15） */}
+        {/* ⑤ 组进度：单组动作不显示 */}
         {focus.total > 1 && (
-          <div className="flex flex-col items-center gap-2">
-            <span className="text-[17px] font-medium text-white/65">
-              第 <span className="text-white text-[22px] font-bold">{focus.setNo}</span> / {focus.total} 组
-              <span className="text-white/45">{isRest ? ' · 已完成，休息中' : ''}</span>
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="text-[14px] font-medium text-white/65">
+              第 <span className="text-white text-[16px] font-bold">{focus.setNo}</span> / {focus.total} 组
+              <span className="text-white/45">{isRest ? ' · 已完成' : ''}</span>
             </span>
             {focus.total <= 10 && (
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-1.5">
                 {Array.from({ length: focus.total }).map((_, i) => (
                   <motion.span
                     key={i}
                     animate={{
                       backgroundColor:
                         i < completedCount ? '#34d399' : i === focus.setNo - 1 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.25)',
-                      width: i === focus.setNo - 1 ? 22 : 7
+                      width: i === focus.setNo - 1 ? 18 : 6
                     }}
                     transition={LOCK_MOTION.spring}
                     className="rounded-full"
-                    style={{ height: 7 }}
+                    style={{ height: 6 }}
                   />
                 ))}
               </div>
@@ -530,34 +720,31 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           </div>
         )}
 
-        {/* ⑥ 户外/有氧附加数据：只显示真实记录。
-            ★限高：户外态信息元素多（徽章/倒计时/动作名/参数/进度/统计），统计行最多
-            显示心率+实测距离两项，目标距离已在 setParams 参数行出现过，不重复；
-            无实测数据时只留一行提示，防止总高度下侵按钮区（重叠实锤过） */}
+        {/* ⑥ 户外/有氧附加数据：只显示真实记录，最多两项（窗内紧凑） */}
         {outdoorStats && (
-          <div className="flex items-center gap-3 mt-1 max-h-[76px] overflow-hidden">
+          <div className="flex items-center gap-2 max-h-[52px] overflow-hidden">
             {typeof outdoorStats.lastHr === 'number' && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/8 border border-white/10">
-                <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/8 border border-white/10">
+                <svg className="w-3.5 h-3.5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                 </svg>
-                <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[17px] font-semibold text-white">{outdoorStats.lastHr}</span>
-                <span className="text-[13px] text-white/55">bpm</span>
+                <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[13px] font-semibold text-white">{outdoorStats.lastHr}</span>
+                <span className="text-[11px] text-white/55">bpm</span>
               </div>
             )}
             {outdoorStats.distance > 0 && (
-              <div className="flex items-center gap-2 px-4 py-2 rounded-full bg-white/8 border border-white/10">
-                <svg className="w-4 h-4 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/8 border border-white/10">
+                <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
-                <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[17px] font-semibold text-white">
+                <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[13px] font-semibold text-white">
                   {(outdoorStats.distance / 1000).toFixed(2)}
                 </span>
-                <span className="text-[13px] text-white/55">km</span>
+                <span className="text-[11px] text-white/55">km</span>
               </div>
             )}
             {!outdoorStats.lastHr && outdoorStats.distance === 0 && (
-              <span className="text-[13px] text-white/40">连接 Apple Watch 自动记录心率，完成组后显示</span>
+              <span className="text-[11px] text-white/40">连接 Apple Watch 自动记录心率</span>
             )}
           </div>
         )}
@@ -609,38 +796,77 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           onTouchMove={handleUnlockTouchMove}
           onTouchEnd={handleUnlockTouchEnd}
         >
-          {/* morph 入场：起点=训练态胶囊（顶部 safe-top+12px、180 宽），终点=锁定位（260 宽）。
-              与上滑解锁的 spring 回弹同族参数，形成"下滑进入↔上滑退出"的对称动画语言 */}
-          <motion.button
-            initial={{ opacity: 0.6, scale: 180 / 260, y: -(window.innerHeight * 0.17 - (CAPSULE_ORIGIN_CENTER_Y)) }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={undefined}
-            transition={LOCK_MOTION.spring}
-            aria-label="上滑解锁"
-            className="frost-lens-dark flex items-center justify-center gap-3 origin-top"
-            style={{
-              width: 260,
-              height: 84,
-              borderRadius: 9999
-            }}
-          >
-          {!isPaused && (
-            <span className="relative flex w-2.5 h-2.5">
-              <span className="absolute inline-flex w-full h-full rounded-full bg-green-400 opacity-60 animate-ping" />
-              <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-green-400" />
-            </span>
-          )}
-          <span
-            style={{ fontFeatureSettings: "'tnum'" }}
-            className={`font-mono text-[44px] font-medium tracking-tight leading-none transition-colors duration-300 ${
-              isPaused ? 'text-white/40' : 'text-white'
-            }`}
-          >
-            {mm}:{ss}
-          </span>
-          </motion.button>
+          <AnimatePresence mode="popLayout" initial={false}>
+            {pauseMenuOpen ? (
+              /* 暂停控制条（2026-09-17）：长按胶囊暂停后，胶囊原地展开成
+                 左「结束」红 / 中时间 / 右「继续」蓝，两钮均为长按激活（防误触） */
+              <motion.div
+                key="pause-controls"
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                exit={{ opacity: 0, scale: 0.9 }}
+                transition={LOCK_MOTION.spring}
+                aria-label="暂停控制"
+                className="frost-lens-dark flex items-center justify-between gap-3 origin-top"
+                style={{ width: 336, height: 84, borderRadius: 9999, padding: '0 14px' }}
+              >
+                <HoldCircle
+                  label="结束运动"
+                  tone="danger"
+                  onConfirm={() => {
+                    onEnd();
+                  }}
+                />
+                <span
+                  style={{ fontFeatureSettings: "'tnum'" }}
+                  className="font-mono text-[30px] font-medium tracking-tight leading-none text-white/40"
+                >
+                  {mm}:{ss}
+                </span>
+                <HoldCircle
+                  label="继续训练"
+                  tone="primary"
+                  onConfirm={() => {
+                    onResume();
+                    setPauseMenuOpen(false);
+                  }}
+                />
+              </motion.div>
+            ) : (
+              <motion.button
+                key="capsule"
+                initial={{ opacity: 0.6, scale: 180 / 260, y: -(window.innerHeight * 0.17 - (CAPSULE_ORIGIN_CENTER_Y)) }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={undefined}
+                transition={LOCK_MOTION.spring}
+                aria-label="上滑解锁"
+                className="frost-lens-dark flex items-center justify-center gap-3 origin-top"
+                style={{
+                  width: 260,
+                  height: 84,
+                  borderRadius: 9999
+                }}
+              >
+              {!isPaused && (
+                <span className="relative flex w-2.5 h-2.5">
+                  <span className="absolute inline-flex w-full h-full rounded-full bg-green-400 opacity-60 animate-ping" />
+                  <span className="relative inline-flex w-2.5 h-2.5 rounded-full bg-green-400" />
+                </span>
+              )}
+              <span
+                style={{ fontFeatureSettings: "'tnum'" }}
+                className={`font-mono text-[44px] font-medium tracking-tight leading-none transition-colors duration-300 ${
+                  isPaused ? 'text-white/40' : 'text-white'
+                }`}
+              >
+                {mm}:{ss}
+              </span>
+              </motion.button>
+            )}
+          </AnimatePresence>
         </motion.div>
-        {/* 解锁提示（stage 1 随入场阶梯出现） */}
+        {/* 解锁提示（stage 1 随入场阶梯出现）：置于胶囊下方流式位置——
+            2026-09-17 用户拍板：放上方会顶进状态栏，与灵动岛/时间打架 */}
         <motion.div
           {...LOCK_MOTION.enter(1)}
           className="flex flex-col items-center gap-0.5 mt-3"
@@ -660,20 +886,27 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         </motion.div>
       </div>
 
-      {/* 【中间】信息区（stage 1）：状态切换 = 交叉溶解（AnimatePresence mode=popLayout 防双重占位） */}
+      {/* 【中间】信息视窗（stage 1）：★固定圆角玻璃窗（340×300，2026-09-17 用户拍板）——
+          所有状态（运动/休息/倒计时/全部完成）共用同一视窗排版，内容在窗内居中、
+          超出裁剪（overflow hidden），状态切换 = 交叉溶解（AnimatePresence popLayout） */}
       <motion.div
         className="absolute inset-x-0 flex justify-center"
-        style={{ top: '46%', transform: 'translateY(-50%)', maxHeight: '44vh', overflow: 'hidden' }}
+        style={{ top: '46%', transform: 'translateY(-50%)' }}
       >
-        <AnimatePresence mode="popLayout" initial={false}>
-          <motion.div
-            key={infoKey}
-            {...LOCK_MOTION.swap}
-            className="flex justify-center"
-          >
-            {renderInfo()}
-          </motion.div>
-        </AnimatePresence>
+        <div
+          className="rounded-[28px] border border-white/10 bg-white/[0.06] overflow-hidden"
+          style={{ width: 340, height: 300, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+        >
+          <AnimatePresence mode="popLayout" initial={false}>
+            <motion.div
+              key={infoKey}
+              {...LOCK_MOTION.swap}
+              className="w-full h-full flex justify-center items-center"
+            >
+              {renderInfo()}
+            </motion.div>
+          </AnimatePresence>
+        </div>
       </motion.div>
 
       {/* 【下方】交互按钮区：★固定锚位——容器恒高 172px（主92+间距16+副64），内容底对齐。

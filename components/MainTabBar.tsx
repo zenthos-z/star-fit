@@ -81,9 +81,14 @@ const MainTabBar: React.FC<MainTabBarProps> = ({ tab, onSelect, hidden }) => {
   }
 
   // ===== 非 iOS 回落：CSS 玻璃 3 页签 =====
+  // ★z-[105]（2026-09-17 安卓 web 实锤修复）：History/Settings 全屏路由是 z-[100]，
+  // 原 z-40 的 tab bar 被整页盖住 → 安卓 web 看不到底部菜单、无法切 tab。
+  // 105 > 100（tab 页之上可见）且 < 110/140（AI sheet、锁定屏之下被盖，符合 sheet 盖 tab 规范）。
+  // hidden 语义与 iOS 原生对齐：结算页/AI 浮层打开时隐藏（App.tsx 传入）。
+  if (hidden) return null;
   return createPortal(
     <nav
-      className="fixed bottom-0 left-0 right-0 z-40 flex liquid-glass"
+      className="fixed bottom-0 left-0 right-0 z-[105] flex liquid-glass"
       style={{ paddingBottom: 'var(--safe-bottom, 0px)' }}
       aria-label="主导航"
     >
