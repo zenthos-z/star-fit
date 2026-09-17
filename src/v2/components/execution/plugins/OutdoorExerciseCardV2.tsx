@@ -809,7 +809,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
                     ? 'bg-[#007AFF] shadow-lg shadow-[#007AFF]/40'
                     : 'liquid-glass'
                 }`}
-                style={{ bottom: 'calc(max(1rem, env(safe-area-inset-bottom)) + 168px)' }}
+                style={{ bottom: 'calc(max(1rem, env(safe-area-inset-bottom)) + 196px)' }}
               >
                 <Crosshair className={`w-5 h-5 ${following ? 'text-white' : 'text-[#007AFF]'}`} />
               </button>
