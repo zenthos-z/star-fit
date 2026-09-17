@@ -549,16 +549,30 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
 
   const isAnalyzing = chatHistory.some(msg => msg._isAnalyzing);
   const isBusy = isLoading || isAnalyzing;
+  // 提交统一入口：语音识别未停止时先停掉（取最终文本已在输入框，
+  // 复位 listening 态与轮询，防止录音资源挂着 + 写保护残留）
+  const submitMessage = () => {
+    if (isListening) {
+      stopSpeechPolling();
+      userEditedRef.current = false;
+      setIsListening(false);
+      void stopSpeechInput();
+    }
+    handleChatSubmit();
+  };
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
-      handleChatSubmit();
+      submitMessage();
     }
   };
 
   // Handle input change with strategy active state reset
   const handleInputChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
     const newValue = e.target.value;
+    // 语音识别中用户手动编辑（删除/修改 partial 文本）→ 打开写保护，
+    // 轮询停止回填，否则删一个字 350ms 后又被识别结果填回来
+    if (isListening) userEditedRef.current = true;
     setChatMessage(newValue);
     // Reset strategy active state if user clears the input or types something else
     if (isStrategyActive && newValue !== '更新策略') {
@@ -576,14 +590,20 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
     }
   };
 
+  // 用户正在编辑语音文本的标记：true 后轮询不再覆盖输入框（否则删一个字
+  // 350ms 后就被 partial 结果填回来，无法退出/修改——2026-09-17 bug 1）。
+  // 停止录音 / 发送 / 关浮层时重置。
+  const userEditedRef = useRef(false);
+
   const handleMicTap = async () => {
     if (isBusy || !isSpeechInputSupported) return;
     if (isListening) {
       // 停止：取最终文本回填输入框，交用户确认发送（不自动发送）
       stopSpeechPolling();
       setIsListening(false);
+      userEditedRef.current = false;
       const finalText = await stopSpeechInput();
-      if (finalText) setChatMessage(finalText);
+      if (finalText && !chatMessage.trim()) setChatMessage(finalText);
       haptic('success');
       return;
     }
@@ -599,9 +619,12 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
       return;
     }
     haptic('light');
+    userEditedRef.current = false;
     setIsListening(true);
-    // 轮询中间结果，实时回填（用户仍可手动修改文本）
+    // 轮询中间结果回填。用户一旦手动编辑（删除/修改）即停写保护：
+    // 识别继续在后台跑（最终结果弃用），但不再覆盖用户改过的文本
     speechPollRef.current = setInterval(async () => {
+      if (userEditedRef.current) return; // 用户编辑过 → 不回填
       const { text } = await getSpeechPartial();
       if (text) setChatMessage(text);
     }, 350);
@@ -986,7 +1009,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
           {/* 胶囊输入框：iMessage 官方「胶囊内增高」布局——附件悬浮在胶囊内部上层，
               一条发丝分割线隔开下方文字区（Apple Messages 原版行为，非外部浮层） */}
           <div className="relative flex-1">
-            <form onSubmit={(e) => { e.preventDefault(); handleChatSubmit(); }} className="glass-ring flex flex-col rounded-[22px] overflow-hidden">
+            <form onSubmit={(e) => { e.preventDefault(); submitMessage(); }} className="glass-ring flex flex-col rounded-[22px] overflow-hidden">
             {/* 附件区（胶囊内部上层）：可点 × 移除；出现/消失时胶囊平滑增高/回落 */}
             <AnimatePresence initial={false}>
               {attachedContext && (
@@ -1059,33 +1082,40 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
               disabled={isBusy}
               className="flex-1 resize-none bg-transparent outline-none text-[16px] leading-[1.4] py-1.5 max-h-24 text-gray-900 placeholder-gray-400 custom-scrollbar"
             />
-            {/* 发送 / 麦克风：有文本=蓝色发送箭头；空文本=语音输入（iOS 原生，录音中变停止态） */}
-            {!chatMessage.trim() && isSpeechInputSupported && !isBusy ? (
+            {/* 发送 / 麦克风：有文本=蓝色发送箭头；空文本=语音输入（iOS 原生）。
+                语音识别中两者并存（麦克风在发送键左侧常驻可点=停止录音），
+                发送键不再被 isListening 禁用——语音文本输入完即可直接发送
+                （2026-09-17 bug 3：识别中发送键点击无效） */}
+            {isListening && (
               <button
                 type="button"
                 onClick={handleMicTap}
-                aria-label={isListening ? '停止录音' : '语音输入'}
-                className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 ${
-                  isListening
-                    ? 'bg-[#FF3B30] text-white shadow-sm animate-pulse'
-                    : 'bg-gray-200 text-gray-400'
-                }`}
+                aria-label="停止录音"
+                className="relative w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 bg-[#FF3B30] text-white shadow-sm shrink-0"
               >
-                {isListening ? (
-                  <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
-                    <rect x="6" y="6" width="12" height="12" rx="2" />
-                  </svg>
-                ) : (
-                  <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                    <path d="M6 12v.75a6 6 0 0012 0V12m-6 9v-3.75" stroke="currentColor" strokeWidth={1.8} fill="none" strokeLinecap="round" />
-                  </svg>
-                )}
+                {/* 聆听动画：扩散波纹（2026-09-17 bug 2：无输入反馈感知） */}
+                <span className="absolute inset-0 rounded-full bg-[#FF3B30] animate-ping opacity-30" />
+                <svg className="relative w-3.5 h-3.5" fill="currentColor" viewBox="0 0 24 24">
+                  <rect x="6" y="6" width="12" height="12" rx="2" />
+                </svg>
               </button>
-            ) : (
+            )}
+            {chatMessage.trim() || !isSpeechInputSupported || isBusy ? null : (
+              <button
+                type="button"
+                onClick={handleMicTap}
+                aria-label="语音输入"
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 bg-gray-200 text-gray-400"
+              >
+                <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
+                  <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
+                  <path d="M6 12v.75a6 6 0 0012 0V12m-6 9v-3.75" stroke="currentColor" strokeWidth={1.8} fill="none" strokeLinecap="round" />
+                </svg>
+              </button>
+            )}
             <button
               type="submit"
-              disabled={isBusy || !chatMessage.trim() || isListening}
+              disabled={isBusy || !chatMessage.trim()}
               className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 ${
                 chatMessage.trim() && !isBusy
                   ? 'bg-[#0A84FF] text-white shadow-sm'
@@ -1094,7 +1124,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
               aria-label={chatMessage.trim() ? '发送' : '语音输入'}
             >
               {chatMessage.trim() && !isBusy ? (
-                <svg className="w-4.5 h-4.5 w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
+                <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                 </svg>
               ) : (
@@ -1104,7 +1134,6 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 </svg>
               )}
             </button>
-            )}
             </div>
             </form>
           </div>
