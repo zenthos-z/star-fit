@@ -35,16 +35,12 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   const [isGpsTimeout, setIsGpsTimeout] = useState(false);
   const [elapsed, setElapsed] = useState(currentSet.duration || 0);
   const [isCompleted, setIsCompleted] = useState(currentSet.status === 'COMPLETED');
-  // 心率录入：完成前可手动填（穿戴设备对接后可自动写入）
-  const [heartRateInput, setHeartRateInput] = useState<string>(
-    currentSet.heartRate ? String(currentSet.heartRate) : ''
-  );
+  // 心率链路已废弃手动录入（ADR-0001）：Set.heartRate 只接受手表样本聚合写入，
+  // 手机端不再提供任何手填入口。
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
   // 断点续跑：检测到未完成轨迹时询问用户
   const [resumableTrack, setResumableTrack] = useState<{ elapsedSec: number; distanceM: number; points: number } | null>(null);
-  // 全屏心率快填浮层
-  const [showHrInput, setShowHrInput] = useState(false);
   // 瓦片源降级链：高德(国内直连最快) → 腾讯智图 → 标记失败
   const TILE_SOURCES = [
     {
@@ -229,38 +225,16 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   const syncToParent = (finalElapsed?: number, finalDistance?: number, finalStatus?: 'COMPLETED' | 'PLANNED') => {
     if (onUpdate) {
       const status = finalStatus ?? (isCompleted ? 'COMPLETED' : 'PLANNED');
-      const hr = heartRateInput ? Number(heartRateInput) : undefined;
       onUpdate({
         sets: [{
           index: 0,
           duration: Math.floor(finalElapsed ?? elapsed),
           distance: Math.floor(finalDistance ?? distance),
-          heartRate: hr && hr > 0 ? hr : undefined,
+          // heartRate 不在此写入（ADR-0001：仅接受手表样本聚合写入，手机端封死手动路径）
           status,
           timestamp: new Date().toISOString()
         }]
       });
-    }
-  };
-
-  /** 心率输入变化：即时同步到父层（合法值才写） */
-  const handleHeartRateChange = (value: string) => {
-    setHeartRateInput(value);
-    const n = Number(value);
-    if (Number.isFinite(n) && n > 0) {
-      // 直接带值同步，避免读旧 state
-      if (onUpdate) {
-        onUpdate({
-          sets: [{
-            index: 0,
-            duration: Math.floor(elapsed),
-            distance: Math.floor(distance),
-            heartRate: n,
-            status: isCompleted ? 'COMPLETED' : 'PLANNED',
-            timestamp: new Date().toISOString()
-          }]
-        });
-      }
     }
   };
 
@@ -550,27 +524,16 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
     );
   };
 
-  /** 心率录入行（统一色彩语义：心率=红色系） */
+  /** 心率行：目标 Zone（目标信息保留）+ 手表自动记录提示（手动录入已废弃 ADR-0001） */
   const renderHeartRateInput = () => (
     <div className="w-full px-6 pb-3 pt-1 flex items-center justify-center gap-3">
       <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border shrink-0 bg-white border-rose-100">
         <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-100" />
         <span className="text-[10px] font-semibold tracking-wide text-gray-500">目标 Zone {targetHeartRateZone}</span>
       </div>
-      <div className="flex items-center gap-2 bg-white border border-rose-100 rounded-2xl px-3 py-1 flex-1 max-w-[10rem]">
+      <div className="flex items-center gap-2 bg-white border border-rose-100 rounded-2xl px-3 py-1 flex-1 justify-center">
         <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-100 shrink-0" />
-        <input
-          type="number"
-          inputMode="numeric"
-          min={40}
-          max={220}
-          placeholder="实时"
-          value={heartRateInput}
-          onChange={(e) => handleHeartRateChange(e.target.value)}
-          disabled={isCompleted}
-          className="w-full min-w-0 bg-transparent text-sm font-bold text-rose-600 outline-none placeholder-gray-300 placeholder:text-[10px] placeholder:tracking-wide [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-        />
-        <span className="text-[10px] font-semibold text-rose-400 tracking-wide shrink-0">BPM</span>
+        <span className="text-[10px] font-semibold tracking-wide text-gray-400 truncate">连接手表自动记录</span>
       </div>
     </div>
   );
@@ -787,16 +750,16 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
                       <span className="text-[14px] font-semibold text-[#38BDF8] whitespace-nowrap">/公里</span>
                     </div>
                   </div>
-                  <button
-                    onClick={() => setShowHrInput(true)}
-                    className="flex flex-col gap-2 items-start active:opacity-70 transition-opacity"
+                  <div
+                    className="flex flex-col gap-2"
                   >
                     <span className="text-[15px] font-semibold tracking-wide text-[#FB7185] whitespace-nowrap">心率</span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className={`text-[34px] font-bold tabular-nums leading-none tracking-tight whitespace-nowrap ${heartRateInput ? 'text-white' : 'text-white/30'}`}>{heartRateInput || '--'}</span>
+                      {/* 心率仅由手表样本聚合写入（ADR-0001），此处展示聚合值；无则占位 */}
+                      <span className="text-[34px] font-bold tabular-nums leading-none tracking-tight whitespace-nowrap text-white/30">--</span>
                       <span className="text-[14px] font-semibold text-[#FB7185] whitespace-nowrap">BPM</span>
                     </div>
-                  </button>
+                  </div>
                 </div>
               </div>
 
@@ -813,31 +776,6 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
               >
                 <Crosshair className={`w-5 h-5 ${following ? 'text-white' : 'text-[#007AFF]'}`} />
               </button>
-
-              {/* 心率快填浮层 */}
-              {showHrInput && (
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100003] liquid-glass-dark rounded-3xl p-5 flex items-center gap-3">
-                  <Heart className="w-5 h-5 text-[#FB7185] fill-[#FB7185]/20 shrink-0" />
-                  <input
-                    autoFocus
-                    type="number"
-                    inputMode="numeric"
-                    min={40}
-                    max={220}
-                    placeholder="实时心率"
-                    value={heartRateInput}
-                    onChange={(e) => handleHeartRateChange(e.target.value)}
-                    className="w-24 bg-transparent text-xl font-bold tabular-nums text-white outline-none text-center placeholder-white/30 placeholder:text-sm"
-                  />
-                  <span className="text-xs font-semibold text-white/50 tracking-wide">BPM</span>
-                  <button
-                    onClick={() => setShowHrInput(false)}
-                    className="ml-2 px-5 py-2 bg-[#007AFF] text-white text-sm font-semibold rounded-full active:opacity-70 transition-opacity"
-                  >
-                    完成
-                  </button>
-                </div>
-              )}
             </div>,
             document.body
           )

@@ -6,7 +6,7 @@ export interface ExerciseSet {
   distance?: number; // in meters (Actual recorded distance)
   targetDuration?: number; // [NEW] Target duration in seconds
   targetDistance?: number; // [NEW] Target distance in meters
-  heartRate?: number; // [NEW] Average heart rate bpm recorded for this set (cardio/wearable)
+  heartRate?: number; // 仅由手表样本聚合写入（ADR-0001）；手动录入链路已废弃
   // [NEW] Flexible Intensity Parameters (for Cardio, Rowing, etc.)
   intensityParams?: {
     incline?: number;     // For Treadmill

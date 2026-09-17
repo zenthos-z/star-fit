@@ -64,10 +64,8 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
   const [isRunning, setIsRunning] = useState(false);
   const [elapsed, setElapsed] = useState(currentSet.duration || 0);
   const [isCompleted, setIsCompleted] = useState(currentSet.status === 'COMPLETED');
-  // 心率录入：完成前可手动填（穿戴设备对接后可自动写入）
-  const [heartRateInput, setHeartRateInput] = useState<string>(
-    currentSet.heartRate ? String(currentSet.heartRate) : ''
-  );
+  // 心率链路已废弃手动录入（ADR-0001）：Set.heartRate 只接受手表样本聚合写入，
+  // 手机端不再提供任何手填入口。
   
   const timerRef = useRef<any>(null);
   const lastTickRef = useRef<number>(0);
@@ -95,15 +93,14 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning, isPaused, mode, targetDuration]);
 
-  const syncToParent = (finalElapsed?: number, isCompleted = false, finalHeartRate?: number) => {
+  const syncToParent = (finalElapsed?: number, isCompleted = false) => {
     if (!onUpdate) return;
     const status = isCompleted ? 'COMPLETED' : 'PLANNED';
-    const hr = finalHeartRate ?? (heartRateInput ? Number(heartRateInput) : undefined);
     onUpdate({
       sets: [{
         ...currentSet,
         duration: Math.floor(finalElapsed ?? elapsed),
-        heartRate: hr && hr > 0 ? hr : undefined,
+        // heartRate 不在此写入（ADR-0001：仅接受手表样本聚合写入，手机端封死手动路径）
         status,
         // `completed` is not a property of the set type — remove it; status already
         // captures COMPLETED vs PLANNED. Keeping it in the literal would crash
@@ -112,13 +109,6 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
         timestamp: new Date().toISOString()
       }]
     });
-  };
-
-  /** 心率输入变化：即时同步到父层（合法值才写） */
-  const handleHeartRateChange = (value: string) => {
-    setHeartRateInput(value);
-    const n = Number(value);
-    syncToParent(undefined, isCompleted, Number.isFinite(n) && n > 0 ? n : undefined);
   };
 
   const handleToggle = () => {
@@ -224,26 +214,15 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
             <div className="absolute bottom-0 left-0 h-1 bg-blue-500 transition-all duration-1000 ease-linear" style={{ width: `${Math.min(100, (elapsed / targetDuration) * 100)}%` }} />
           )}
           {renderMetrics()}
-          {/* 心率行：目标 Zone + 实际平均心率录入 */}
+          {/* 心率行：目标 Zone（目标信息保留）+ 手表自动记录提示（手动录入已废弃 ADR-0001） */}
           <div className="mt-4 w-full px-6 flex items-center justify-center gap-3">
             <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border bg-white text-gray-400 border-gray-100 transition-all shrink-0">
               <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100" />
               <span className="text-[10px] font-black uppercase tracking-widest">目标: Zone {targetHeartRateZone}</span>
             </div>
-            <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1 flex-1 max-w-[10rem]">
+            <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1 flex-1 justify-center">
               <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100 shrink-0" />
-              <input
-                type="number"
-                inputMode="numeric"
-                min={40}
-                max={220}
-                placeholder="实时"
-                value={heartRateInput}
-                onChange={(e) => handleHeartRateChange(e.target.value)}
-                disabled={isCompleted}
-                className="w-full min-w-0 bg-transparent text-sm font-bold text-gray-800 outline-none placeholder-gray-300 placeholder:text-[10px] placeholder:uppercase placeholder:tracking-widest [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-              />
-              <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">BPM</span>
+              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">连接手表自动记录</span>
             </div>
           </div>
       </div>

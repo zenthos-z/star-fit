@@ -1,0 +1,391 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		0A362E243C231A5DC317FEE9 /* HoldToConfirmButton.swift in Sources */ = {isa = PBXBuildFile; fileRef = 72FA138CAAE357A2EAED8DFA /* HoldToConfirmButton.swift */; };
+		10D137BDF0481889EF284ABA /* StarfitWatchApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = EC562C93AA9301E1B9A3A976 /* StarfitWatchApp.swift */; };
+		179E0A8375E467A37554B4B2 /* WatchSessionModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4EA15562E0E0CED3B1E4DF49 /* WatchSessionModel.swift */; };
+		1D5114604D4238726747C6F7 /* HeartRateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BA13735519EC3C6F18D1665 /* HeartRateView.swift */; };
+		21203B39BC0966B2AF973DDC /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7C75E1B047AA9C3CC2226511 /* ContentView.swift */; };
+		26AAE4A8898BC568050A71E3 /* HeartRateEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 51E7AFEE6B9291EF95FEB47F /* HeartRateEngine.swift */; };
+		813F96ED3C75B005F3A9CA3F /* RestView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2207999729FDA66929308F21 /* RestView.swift */; };
+		8512507DEA67D379393DEA41 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = DACC0AA353853CB1CBB427E0 /* Assets.xcassets */; };
+		873287C377C58E3AA86C71C8 /* CurrentSetView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0C3856EF4F088A3AE0EAEBE7 /* CurrentSetView.swift */; };
+		8AF575E9A5FE3B66F7F10ECE /* HRSample.swift in Sources */ = {isa = PBXBuildFile; fileRef = B47A0E867662F80D0A54AF47 /* HRSample.swift */; };
+		D5497306CEC75EC02868CCFA /* WorkoutIntents.swift in Sources */ = {isa = PBXBuildFile; fileRef = AE1EE7E67EA0A90F39D13AC5 /* WorkoutIntents.swift */; };
+		E5D23D76E635C83E32C03F16 /* WatchSetState.swift in Sources */ = {isa = PBXBuildFile; fileRef = F6B3A2E4D8880076D528214B /* WatchSetState.swift */; };
+		E8C6935D429E3E9E4ACB892F /* ConnectivityManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = ED76B497E560E6D50B6BC7C2 /* ConnectivityManager.swift */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		0C3856EF4F088A3AE0EAEBE7 /* CurrentSetView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CurrentSetView.swift; sourceTree = "<group>"; };
+		2207999729FDA66929308F21 /* RestView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RestView.swift; sourceTree = "<group>"; };
+		4EA15562E0E0CED3B1E4DF49 /* WatchSessionModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSessionModel.swift; sourceTree = "<group>"; };
+		51E7AFEE6B9291EF95FEB47F /* HeartRateEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartRateEngine.swift; sourceTree = "<group>"; };
+		663AA7B10160A71FCC2C699E /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
+		72FA138CAAE357A2EAED8DFA /* HoldToConfirmButton.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HoldToConfirmButton.swift; sourceTree = "<group>"; };
+		7C75E1B047AA9C3CC2226511 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
+		8BA13735519EC3C6F18D1665 /* HeartRateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HeartRateView.swift; sourceTree = "<group>"; };
+		AAAA5E1FB6A9537003FE1F35 /* StarfitWatch.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = StarfitWatch.entitlements; sourceTree = "<group>"; };
+		AE1EE7E67EA0A90F39D13AC5 /* WorkoutIntents.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WorkoutIntents.swift; sourceTree = "<group>"; };
+		B47A0E867662F80D0A54AF47 /* HRSample.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HRSample.swift; sourceTree = "<group>"; };
+		B4E30BB8AF4CFB5878A19054 /* StarfitWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = StarfitWatch.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		DACC0AA353853CB1CBB427E0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		EC562C93AA9301E1B9A3A976 /* StarfitWatchApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarfitWatchApp.swift; sourceTree = "<group>"; };
+		ED76B497E560E6D50B6BC7C2 /* ConnectivityManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ConnectivityManager.swift; sourceTree = "<group>"; };
+		F6B3A2E4D8880076D528214B /* WatchSetState.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WatchSetState.swift; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXGroup section */
+		0B2FE6D6A63D94A3F081F437 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				B4E30BB8AF4CFB5878A19054 /* StarfitWatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		31B757C69E2EDCFDD29138EE /* Views */ = {
+			isa = PBXGroup;
+			children = (
+				7C75E1B047AA9C3CC2226511 /* ContentView.swift */,
+				0C3856EF4F088A3AE0EAEBE7 /* CurrentSetView.swift */,
+				8BA13735519EC3C6F18D1665 /* HeartRateView.swift */,
+				72FA138CAAE357A2EAED8DFA /* HoldToConfirmButton.swift */,
+				2207999729FDA66929308F21 /* RestView.swift */,
+			);
+			path = Views;
+			sourceTree = "<group>";
+		};
+		5A2622E566A9F9B1A331B34C /* Services */ = {
+			isa = PBXGroup;
+			children = (
+				ED76B497E560E6D50B6BC7C2 /* ConnectivityManager.swift */,
+			);
+			path = Services;
+			sourceTree = "<group>";
+		};
+		6543F1947EA5BA2E2CD992A0 /* StarfitWatch */ = {
+			isa = PBXGroup;
+			children = (
+				DACC0AA353853CB1CBB427E0 /* Assets.xcassets */,
+				663AA7B10160A71FCC2C699E /* Info.plist */,
+				AAAA5E1FB6A9537003FE1F35 /* StarfitWatch.entitlements */,
+				EC562C93AA9301E1B9A3A976 /* StarfitWatchApp.swift */,
+				EB2AF9E150D683ECA327E84D /* Intents */,
+				DE92A03589A6FD022E1DCBEF /* Models */,
+				5A2622E566A9F9B1A331B34C /* Services */,
+				31B757C69E2EDCFDD29138EE /* Views */,
+			);
+			path = StarfitWatch;
+			sourceTree = "<group>";
+		};
+		D43189EBAD9B87749F92B5F8 = {
+			isa = PBXGroup;
+			children = (
+				6543F1947EA5BA2E2CD992A0 /* StarfitWatch */,
+				0B2FE6D6A63D94A3F081F437 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		DE92A03589A6FD022E1DCBEF /* Models */ = {
+			isa = PBXGroup;
+			children = (
+				51E7AFEE6B9291EF95FEB47F /* HeartRateEngine.swift */,
+				B47A0E867662F80D0A54AF47 /* HRSample.swift */,
+				4EA15562E0E0CED3B1E4DF49 /* WatchSessionModel.swift */,
+				F6B3A2E4D8880076D528214B /* WatchSetState.swift */,
+			);
+			path = Models;
+			sourceTree = "<group>";
+		};
+		EB2AF9E150D683ECA327E84D /* Intents */ = {
+			isa = PBXGroup;
+			children = (
+				AE1EE7E67EA0A90F39D13AC5 /* WorkoutIntents.swift */,
+			);
+			path = Intents;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		B6CE709D69516D085F5F7275 /* StarfitWatch */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 5AEFF1171FA35019208CF6CD /* Build configuration list for PBXNativeTarget "StarfitWatch" */;
+			buildPhases = (
+				F77856831CD8416C1C59E7E2 /* Sources */,
+				8FCEA4A22564BF2BACC3514C /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = StarfitWatch;
+			packageProductDependencies = (
+			);
+			productName = StarfitWatch;
+			productReference = B4E30BB8AF4CFB5878A19054 /* StarfitWatch.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		1388E3FE5D44D9AA3F764EED /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastUpgradeCheck = 1430;
+				TargetAttributes = {
+					B6CE709D69516D085F5F7275 = {
+						DevelopmentTeam = "";
+						ProvisioningStyle = Automatic;
+					};
+				};
+			};
+			buildConfigurationList = B12FACB6D50956629B8DCA8C /* Build configuration list for PBXProject "StarfitWatch" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				Base,
+				en,
+			);
+			mainGroup = D43189EBAD9B87749F92B5F8;
+			minimizedProjectReferenceProxies = 1;
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 0B2FE6D6A63D94A3F081F437 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				B6CE709D69516D085F5F7275 /* StarfitWatch */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		8FCEA4A22564BF2BACC3514C /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				8512507DEA67D379393DEA41 /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		F77856831CD8416C1C59E7E2 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				E8C6935D429E3E9E4ACB892F /* ConnectivityManager.swift in Sources */,
+				21203B39BC0966B2AF973DDC /* ContentView.swift in Sources */,
+				873287C377C58E3AA86C71C8 /* CurrentSetView.swift in Sources */,
+				8AF575E9A5FE3B66F7F10ECE /* HRSample.swift in Sources */,
+				26AAE4A8898BC568050A71E3 /* HeartRateEngine.swift in Sources */,
+				1D5114604D4238726747C6F7 /* HeartRateView.swift in Sources */,
+				0A362E243C231A5DC317FEE9 /* HoldToConfirmButton.swift in Sources */,
+				813F96ED3C75B005F3A9CA3F /* RestView.swift in Sources */,
+				10D137BDF0481889EF284ABA /* StarfitWatchApp.swift in Sources */,
+				179E0A8375E467A37554B4B2 /* WatchSessionModel.swift in Sources */,
+				E5D23D76E635C83E32C03F16 /* WatchSetState.swift in Sources */,
+				D5497306CEC75EC02868CCFA /* WorkoutIntents.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		3B690FAC786D87F3E9821CD2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = "";
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"$(inherited)",
+					"DEBUG=1",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_VERSION = 5.10;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		6C78FB424F0E7E9528B576CF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = StarfitWatch/StarfitWatch.entitlements;
+				CODE_SIGN_IDENTITY = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = StarfitWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = io.starfit.app.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Debug;
+		};
+		DA6D88F4C501BD95EACD0828 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGNING_ALLOWED = NO;
+				CODE_SIGNING_REQUIRED = NO;
+				CODE_SIGN_ENTITLEMENTS = StarfitWatch/StarfitWatch.entitlements;
+				CODE_SIGN_IDENTITY = "";
+				ENABLE_PREVIEWS = YES;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = StarfitWatch/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = "$(inherited) @executable_path/Frameworks";
+				PRODUCT_BUNDLE_IDENTIFIER = io.starfit.app.watchkitapp;
+				SDKROOT = watchos;
+				SKIP_INSTALL = YES;
+				TARGETED_DEVICE_FAMILY = 4;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+		F2D65359E455C8ABBCE41FCF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++14";
+				CLANG_CXX_LIBRARY = "libc++";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				CODE_SIGN_STYLE = Automatic;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = "";
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu11;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SDKROOT = watchos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_VERSION = 5.10;
+				WATCHOS_DEPLOYMENT_TARGET = 26.0;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		5AEFF1171FA35019208CF6CD /* Build configuration list for PBXNativeTarget "StarfitWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				6C78FB424F0E7E9528B576CF /* Debug */,
+				DA6D88F4C501BD95EACD0828 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+		B12FACB6D50956629B8DCA8C /* Build configuration list for PBXProject "StarfitWatch" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3B690FAC786D87F3E9821CD2 /* Debug */,
+				F2D65359E455C8ABBCE41FCF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Debug;
+		};
+/* End XCConfigurationList section */
+	};
+	rootObject = 1388E3FE5D44D9AA3F764EED /* Project object */;
+}

@@ -5,6 +5,7 @@ import { haptic } from '../../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
 import { HoldToConfirm } from './HoldToConfirm';
 import { LOCK_MOTION } from './lockMotion';
+import { broadcastCurrentSet, isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from '../../services/watchConnectivity';
 import type { Exercise, ExerciseType } from '../../../../types';
 
 /**
@@ -157,9 +158,72 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   // 焦点变了（组完成/休息切换）→ 组倒计时作废
   const focusKey = focus.kind === 'done' ? 'done' : `${focus.exId}:${focus.setId}:${focus.kind}`;
   const countingKey = counting ? `${counting.exId}:${counting.setId}:countdown` : '';
+
+  // 手表镜像（ADR-0001）：焦点组状态广播到 watchOS 伴侣单组屏。
+  // 断连/无原生桥时静默 no-op，不阻塞训练主流程。
+  useEffect(() => {
+    if (focus.kind === 'done') return;
+    const ex = exercises.find((e) => e.id === focus.exId);
+    if (!ex) return;
+    const set: any = ex.sets.find((s: any) => s.id === focus.setId);
+    const completedCount = ex.sets.filter(isSetDone).length;
+    void broadcastCurrentSet({
+      exerciseName: ex.name,
+      exerciseType: ex.type,
+      setIndex: Math.max(0, focus.setNo - 1),
+      totalSets: ex.sets.length,
+      completedCount,
+      isUnilateral: ex.unilateral === true,
+      weight: typeof set?.weight === 'number' ? set.weight : undefined,
+      reps: typeof set?.reps === 'number' ? set.reps : undefined,
+      durationSec: typeof set?.targetDuration === 'number' ? set.targetDuration : ex.metadata?.targetDurationSec,
+      distanceM: typeof set?.targetDistance === 'number' ? set.targetDistance : ex.metadata?.targetDistanceMeters,
+      status: isSetDone(set) ? 'COMPLETED' : 'PLANNED',
+      isResting: focus.kind === 'rest',
+      restEndTime: focus.kind === 'rest' ? focus.end : undefined,
+    });
+  }, [focusKey, exercises]);
   useEffect(() => {
     if (counting && countingKey !== focusKey && focus.kind !== 'countdown') setCounting(null);
   }, [focusKey, countingKey, counting, focus.kind]);
+
+  // 手表 → 手机事件消费（ADR-0001 遥控回传）：
+  // - set_completed：手表上点的「完成本组」→ 推进手机训练状态机
+  // - rest_action end/extend：手表休息双按钮 → 手机休息倒计时同步
+  // - hr_batch：训后心率批量样本 → POST 后端 heart_rate_samples
+  // 幂等：只接受当前焦点组的事件，积压补发不会误触发其他组。
+  useEffect(() => {
+    if (!isWatchBridge) return;
+    const off = onWatchEvent((event: WatchEvent) => {
+      switch (event.kind) {
+        case 'set_completed': {
+          // 手机在休息态 = 这是对下一组的确认 → 结束休息
+          if (focus.kind === 'rest') { onEndRest(focus.exId, focus.setId); break; }
+          if (focus.kind !== 'confirm' && focus.kind !== 'countdown') break;
+          const ex = exercises[event.exercise_index ?? -1];
+          const set: any = ex?.sets[event.set_index ?? -1];
+          if (!ex || !set || ex.id !== focus.exId || set.id !== focus.setId) break; // 焦点校验
+          onCompleteSet(ex.id, set.id);
+          break;
+        }
+        case 'rest_action':
+          if (focus.kind !== 'rest') break; // 幂等：非休息态忽略
+          if (event.action === 'end') onEndRest(focus.exId, focus.setId);
+          if (event.action === 'extend') onExtendRest(focus.exId, focus.setId, event.seconds ?? 10);
+          break;
+        case 'hr_batch': {
+          const sessionId = (exercises[0] as any)?.sessionId ?? (exercises[0] as any)?.session_id;
+          if (!sessionId || !event.samples?.length) break;
+          void syncHeartRateSamples(sessionId, event.samples).then((r) => {
+            if (!r.ok) console.warn('[watch] hr_batch sync failed:', r.error);
+          });
+          break;
+        }
+      }
+    });
+    return off;
+    // focusKey 变化重新订阅：闭包内 focus/exercises 保持最新
+  }, [focusKey, exercises, onCompleteSet, onEndRest, onExtendRest]);
 
   // 组倒计时到点 → 自动写完成
   const countRemaining = counting ? Math.max(0, counting.target - Math.floor((now - counting.startedAt) / 1000)) : null;
@@ -493,7 +557,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               </div>
             )}
             {!outdoorStats.lastHr && outdoorStats.distance === 0 && (
-              <span className="text-[13px] text-white/40">GPS / 心率数据未接入，完成组后显示记录</span>
+              <span className="text-[13px] text-white/40">连接 Apple Watch 自动记录心率，完成组后显示</span>
             )}
           </div>
         )}

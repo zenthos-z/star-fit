@@ -1,0 +1,35 @@
+name: StarfitWatch
+options:
+  bundleIdPrefix: io.starfit
+  deploymentTarget:
+    watchOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "5.10"
+    DEVELOPMENT_TEAM: ""
+    CODE_SIGN_STYLE: Automatic
+targets:
+  StarfitWatch:
+    type: application
+    platform: watchOS
+    sources:
+      - StarfitWatch
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: io.starfit.app.watchkitapp
+        INFOPLIST_FILE: StarfitWatch/Info.plist
+        GENERATE_INFOPLIST_FILE: NO
+        TARGETED_DEVICE_FAMILY: "4"
+        WATCHOS_DEPLOYMENT_TARGET: "26.0"
+        ENABLE_PREVIEWS: YES
+        CODE_SIGNING_ALLOWED: "NO"   # 模拟器构建（本机无签名 team）；真机需改
+        CODE_SIGNING_REQUIRED: "NO"
+        CODE_SIGN_IDENTITY: ""
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        LD_RUNPATH_SEARCH_PATHS: "$(inherited) @executable_path/Frameworks"
+    entitlements:
+      path: StarfitWatch/StarfitWatch.entitlements
+      properties:
+        com.apple.developer.healthkit: true
+        com.apple.developer.healthkit.access: []

@@ -9,7 +9,7 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (7)
+ * ## Tool set (9)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, description}].
  *                                 The library is small enough to fit in context, so the agent
@@ -77,6 +77,7 @@ import { z } from "zod";
 import {
   BaseRepository,
   createUserRepository,
+  createHeartRateRepository,
 } from "../../db/postgresql/repository/index.js";
 import { getPostgresClient } from "../../db/postgresql/index.js";
 import { mergeHistorySources } from "./historyMerger.js";
@@ -403,6 +404,45 @@ const getExerciseDetailSchema = z
   })
   .describe(
     "Fetch the full record of one exercise (attributes, tutorials, content_html). Read-only.",
+  );
+
+const getSessionHrCurveSchema = z
+  .object({
+    session_id: z
+      .string()
+      .uuid()
+      .describe(
+        "Session uuid (fit://session/{sid}/...). Must belong to the calling user.",
+      ),
+  })
+  .describe(
+    "Read the heart-rate curve of one workout session: 5s-resolution samples + avg/max/min stats. " +
+      "Read-only, scoped to the calling user. Use AFTER a workout to interpret pacing, " +
+      "intensity zones, or recovery — do NOT ask the user to type HR values.",
+  );
+
+const getHrTrendSchema = z
+  .object({
+    days: z
+      .number()
+      .int()
+      .positive()
+      .max(365)
+      .optional()
+      .describe("Look-back window in days (default 30)."),
+    min_samples: z
+      .number()
+      .int()
+      .positive()
+      .optional()
+      .describe(
+        "Minimum samples per session to include (noise guard, default 10).",
+      ),
+  })
+  .describe(
+    "Cross-session heart-rate trend: per-session avg/max/min + a coarse direction " +
+      "(rising/stable/falling/insufficient). Read-only, scoped to the calling user. " +
+      "Use for weekly/monthly load and recovery discussion.",
   );
 
 const exerciseEntrySchema = z
@@ -784,6 +824,75 @@ export function buildMcpToolsWith(
     },
   });
 
+  const getSessionHrCurve = new DynamicStructuredTool({
+    name: "get_session_hr_curve",
+    description:
+      "Read the heart-rate curve of one workout session (5s samples + avg/max/min). " +
+      "Read-only, scoped to the calling user. Interpret pacing / intensity zones / recovery " +
+      "from the returned curve — never ask the user to type HR values.",
+    schema: getSessionHrCurveSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const hrRepo = createHeartRateRepository(client);
+      const curve = await hrRepo.getSessionCurve(userId, input.session_id);
+      if (!curve) {
+        return JSON.stringify({
+          found: false,
+          message:
+            "Session not found or not owned by the calling user. The session id must match one of the user's sessions.",
+        });
+      }
+      return JSON.stringify({ found: true, curve });
+    },
+  });
+
+  const getHrTrend = new DynamicStructuredTool({
+    name: "get_hr_trend",
+    description:
+      "Cross-session heart-rate trend: per-session avg/max/min over the last N days + coarse " +
+      "direction (rising/stable/falling/insufficient). Read-only, scoped to the calling user. " +
+      "Use for weekly/monthly load and recovery discussion.",
+    schema: getHrTrendSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const hrRepo = createHeartRateRepository(client);
+      const days = input.days ?? 30;
+      const minSamples = input.min_samples ?? 10;
+      const rows = await hrRepo.getTrend(userId, days, minSamples);
+      const avgs = rows.map((r) => r.avg_bpm);
+      let trend: "rising" | "stable" | "falling" | "insufficient" =
+        "insufficient";
+      if (rows.length >= 3) {
+        // Coarse least-squares slope over per-session avg bpm vs. time index.
+        const n = rows.length;
+        const xs = avgs.map((_, i) => i);
+        const meanX = xs.reduce((a, b) => a + b, 0) / n;
+        const meanY = avgs.reduce((a, b) => a + b, 0) / n;
+        let num = 0;
+        let den = 0;
+        for (let i = 0; i < n; i++) {
+          num += (xs[i] - meanX) * (avgs[i] - meanY);
+          den += (xs[i] - meanX) * (xs[i] - meanX);
+        }
+        const slope = den === 0 ? 0 : num / den;
+        const threshold = 0.5; // bpm per session — below this it's noise
+        trend =
+          slope > threshold
+            ? "rising"
+            : slope < -threshold
+              ? "falling"
+              : "stable";
+      }
+      return JSON.stringify({ user_id: userId, sessions: rows, trend });
+    },
+  });
+
   const createExercise = new DynamicStructuredTool({
     name: "create_exercise",
     description:
@@ -897,6 +1006,8 @@ export function buildMcpToolsWith(
     loadHistory,
     listExercises,
     getExerciseDetail,
+    getSessionHrCurve,
+    getHrTrend,
     createExercise,
     writeSession,
     writeMemory,
@@ -906,7 +1017,7 @@ export function buildMcpToolsWith(
 
 /**
  * Production entry point (P006: userId resolved per-request via LangGraph ALS;
- * client = singleton). Returns the seven domain tools.
+ * client = singleton). Returns the nine domain tools.
  */
 export function buildMcpTools(): DynamicStructuredTool[] {
   return buildMcpToolsWith(getPostgresClient(), undefined);

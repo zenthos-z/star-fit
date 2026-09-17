@@ -1,10 +1,17 @@
 import type { FastifyInstance } from "fastify";
-import { postImage, postClassifyExercise } from "../controllers/agentController.js";
+import {
+  postImage,
+  postClassifyExercise,
+} from "../controllers/agentController.js";
 import { postChat } from "../controllers/chatController.js";
 import { postUpload, getMedia } from "../controllers/mediaController.js";
 import { getHistorySummary } from "../controllers/historyController.js";
 import { resolveContext } from "../controllers/adminController.js";
-import { postSession, getRecentSessions } from "../controllers/sessionController.js";
+import {
+  postSession,
+  getRecentSessions,
+  postHRSamples,
+} from "../controllers/sessionController.js";
 import { postSuggestions } from "../controllers/suggestionController.js";
 
 export default async function agentRoutes(app: FastifyInstance) {
@@ -26,6 +33,8 @@ export default async function agentRoutes(app: FastifyInstance) {
   // Frontend persists session data to DB first, then calls Agent for analysis.
   app.post("/sessions", postSession);
   app.get("/sessions/recent", getRecentSessions);
+  // 心率样本批量入库（ADR-0001，手表训后批量同步通路）
+  app.post("/sessions/:sessionId/hr-samples", postHRSamples);
 
   // 动作建议值（混合模式：公式基准 + 可选 Agent 有界调整；Agent 故障降级 formula）
   app.post("/suggestions", postSuggestions);
