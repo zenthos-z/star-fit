@@ -32,6 +32,7 @@ load_history({
 ```
 
 **返回内容**：
+
 - `history_summary.sessions[]` - 最近的训练记录，最新的在数组末尾
 - `profile_dynamic` - 负荷锚点、活动限制、恢复状态
 - `profile_static` - 用户基本信息、偏好
@@ -60,6 +61,7 @@ load_history({
 根据分析结果调用 `update_profile`：
 
 **情况 A：检测到新的 PR**
+
 ```
 update_profile({
   load_anchors: {
@@ -71,6 +73,7 @@ update_profile({
 ```
 
 **情况 B：用户报告疲劳或恢复问题（从 survey 反馈）**
+
 ```
 update_profile({
   recovery_state: {
@@ -83,6 +86,7 @@ update_profile({
 ```
 
 **情况 C：发现新的活动限制（从 survey 或训练表现推断）**
+
 ```
 update_profile({
   active_limitations: [
@@ -100,12 +104,12 @@ update_profile({
 
 根据 Step 2 的分析结果决定问题：
 
-| 检测到的异常 | 推荐问题 | 优先级 |
-|------------|---------|--------|
-| 重量下调 >10% | 该动作是否有不适？具体部位？ | 高 |
-| 训练时长 >90min | 疲劳程度（RPE 1-10） | 中 |
-| 本周训练 >4次 | 恢复状态如何？ | 中 |
-| 无明显异常 | 疲劳程度（RPE 1-10）- 可选 | 低 |
+| 检测到的异常    | 推荐问题                     | 优先级 |
+| --------------- | ---------------------------- | ------ |
+| 重量下调 >10%   | 该动作是否有不适？具体部位？ | 高     |
+| 训练时长 >90min | 疲劳程度（RPE 1-10）         | 中     |
+| 本周训练 >4次   | 恢复状态如何？               | 中     |
+| 无明显异常      | 疲劳程度（RPE 1-10）- 可选   | 低     |
 
 **示例 survey_card 生成**：
 
@@ -132,6 +136,18 @@ update_profile({
           { "label": "一般", "value": "average" },
           { "label": "较差", "value": "poor" }
         ]
+      },
+      {
+        "id": "discomfort_areas",
+        "question": "本次训练哪些部位感到不适？（可多选）",
+        "required": false,
+        "inputType": "checkbox",
+        "options": [
+          { "label": "肩部", "value": "shoulder" },
+          { "label": "腰部", "value": "lower_back" },
+          { "label": "膝盖", "value": "knee" },
+          { "label": "手腕", "value": "wrist" }
+        ]
       }
     ]
   }
@@ -155,7 +171,7 @@ update_profile({
         options?: [           // 选项（有则显示按钮）
           { label: string, value: string }
         ],
-        inputType?: "text" | "number",  // 输入类型（无 options 时）
+        inputType?: "text" | "number" | "checkbox",  // checkbox=多选题（有 options 时用，用户可选多项）
         placeholder?: string  // 输入框占位符
       }
     ]
@@ -196,6 +212,7 @@ load_history({
 ```
 
 获取用户当前的：
+
 - `profile_dynamic`（recovery_state, active_limitations, load_anchors）
 - `profile_static`（用户基本信息）
 
@@ -203,12 +220,12 @@ load_history({
 
 从 `intent_context.data.responses` 中提取答案，分析：
 
-| 答案字段 | 分析规则 | 建议动作 |
-|---------|---------|---------|
-| `fatigue_level` | 值 >= 7 表示高疲劳 | 更新 `recovery_state.total_score` 降低 10-20% |
-| `sleep_quality` | 值为 'poor' | 调用 `write_memory` 记录睡眠问题，影响恢复评估 |
+| 答案字段              | 分析规则           | 建议动作                                       |
+| --------------------- | ------------------ | ---------------------------------------------- |
+| `fatigue_level`       | 值 >= 7 表示高疲劳 | 更新 `recovery_state.total_score` 降低 10-20%  |
+| `sleep_quality`       | 值为 'poor'        | 调用 `write_memory` 记录睡眠问题，影响恢复评估 |
 | `discomfort` / `pain` | 存在则表示受伤风险 | 添加到 `active_limitations`，设置 7 天自动过期 |
-| `additional_notes` | 提取关键词判断意图 | 如有疼痛描述，记录到 `active_limitations` |
+| `additional_notes`    | 提取关键词判断意图 | 如有疼痛描述，记录到 `active_limitations`      |
 
 ### Step 3: 调用 update_profile 更新画像
 

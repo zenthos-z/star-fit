@@ -418,9 +418,81 @@ export const useAICoach = (
 
         // [FIX] 根据是否有训练数据判断场景
         // - 有训练数据：workout_complete（训练后问卷）→ Agent 调用 load_history + update_profile
-        // - 无训练数据：plan（初始问卷）→ Agent 调用 update_profile + 生成计划
+        // - 无训练数据：plan（初始问卷）→ Agent 生成计划
         const hasWorkoutData = workoutDataRef.current?.exercises?.length > 0;
         const scenario = hasWorkoutData ? "workout_complete" : "plan";
+
+        // ★静态画像确定性写入（2026-09-17 问卷回传丢失修复）：
+        // update_profile 工具只覆盖动态字段（load_anchors/limitations/recovery/psychological），
+        // 静态字段（目标/经验/器械/周频次）在 Agent 工具侧无写入通道——纯靠 Agent 转述必然丢。
+        // 契约红线：数据写入走 Service，不依赖 AI。前端把可识别字段直接写 profile_static，
+        // 失败静默（Agent 消息里仍带原文，可由 write_memory 兜底记忆）。
+        if (!hasWorkoutData) {
+          try {
+            const responses = (uploadData?.responses ?? uploadData) as Record<string, unknown>;
+            const pick = (...keys: string[]) => {
+              for (const k of keys) {
+                const v = responses[k];
+                if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
+              }
+              return undefined;
+            };
+            // ★按 shared/contracts 嵌套格式写（PUT /profile/static 的平铺白名单只认
+            // age/weight/height/neuro_type 等，goal/experience/equipment 会被静默丢弃——实锤踩过）
+            const staticPatch: Record<string, unknown> = { preferences: {}, basic_info: {} };
+            const prefs = staticPatch.preferences as Record<string, unknown>;
+            const basic = staticPatch.basic_info as Record<string, unknown>;
+
+            const goal = pick("goal", "training_goal", "目标");
+            if (goal) {
+              const map: Record<string, string> = {
+                增肌: "muscle_gain", 肌肥大: "muscle_gain",
+                减脂: "fat_loss", 减肥: "fat_loss", 燃脂: "fat_loss",
+                力量: "strength", 增力: "strength",
+                健康: "health", 一般健康: "health",
+                综合体能: "general_fitness", 体能: "general_fitness"
+              };
+              prefs.goal = map[goal] ?? "general_fitness";
+            }
+            const equip = pick("equipment", "available_equipment", "器械", "器械条件");
+            if (equip) prefs.equipment = equip.split(/[、,，/ ]+/).filter(Boolean);
+            const exp = pick("experience", "training_experience", "经验", "训练经验");
+            if (exp) {
+              // 文本经验映射为训练年龄（月）：新手=3 / 中级=12 / 高级=36，数字直接用
+              const n = parseFloat(exp);
+              basic.training_age = isNaN(n)
+                ? (/高级/.test(exp) ? 36 : /中|一年|1年/.test(exp) ? 12 : 3)
+                : n;
+            }
+            const weekly = pick("weekly_frequency", "frequency", "days_per_week", "周频次", "每周次数");
+            if (weekly) {
+              const n = parseInt(weekly);
+              if (!isNaN(n)) (staticPatch as Record<string, unknown>).weekly_frequency_days = n;
+            }
+            const injuries = pick("injuries", "injury", "limitations", "伤病");
+            if (injuries && injuries !== "无" && injuries !== "没有" && injuries !== "无伤病") {
+              (staticPatch as Record<string, unknown>).raw_injuries = injuries; // 原文留给 Agent 读
+            }
+            for (const k of Object.keys(staticPatch)) {
+              if (!staticPatch[k] || (typeof staticPatch[k] === "object" && Object.keys(staticPatch[k] as object).length === 0)) {
+                delete staticPatch[k];
+              }
+            }
+            if (Object.keys(staticPatch).length > 0) {
+              // fire-and-forget：不阻塞 Agent 对话流；401/网络失败由 catch 吞掉
+              fetch(`${API_BASE}/admin/users/${encodeURIComponent(getUserId())}/profile/static`, {
+                method: "PUT",
+                headers: getHeaders(),
+                body: JSON.stringify(staticPatch)
+              }).then(r => {
+                console.log('[useAICoach] Survey static profile sync:', r.ok ? "ok" : `HTTP ${r.status}`);
+              }).catch(() => {});
+            }
+          } catch (e) {
+            console.warn('[useAICoach] static profile patch build failed:', e);
+          }
+        }
+
 
         // 关键：message 必须明确要求 Agent 调用 MCP 工具，否则 Agent 只生成文字回复
         const message = hasWorkoutData
@@ -436,11 +508,26 @@ export const useAICoach = (
 
 调查答案：
 ${JSON.stringify(uploadData, null, 2)}`
-          : "用户已完成初始问卷，请保存画像并生成训练计划。";
+          : `用户已完成初始问卷（答案同时已写入画像静态字段）。请：
+1. 调用 load_history 读取用户画像，结合下方问卷答案理解用户
+2. 按 plan 前置条件生成训练计划，输出 plan_card
+3. 如问卷中提及伤病/疼痛，调用 update_profile 登记到 active_limitations
+
+问卷答案原文：
+${JSON.stringify(uploadData, null, 2)}`;
 
         console.log('[useAICoach] Survey upload scenario:', scenario, '(hasWorkoutData:', hasWorkoutData, ')');
 
-        const result = await consumeAgentStream(agentClient.chat({
+        // [FIX 2026-09-17] 改流式增量渲染：原 consumeAgentStream 全量缓冲会丢弃
+        // thinking/token 事件 → 提交后空白气泡干等 40s+ 才一次性弹出回复。
+        // 与普通聊天分支（handleChatSubmit 主路径）对齐：token 逐字进正文、
+        // thinking 进折叠思考区、uiHint 暂存到流结束才挂载渲染。
+        let accumulated = '';
+        let thinkingAccumulated = '';
+        let card: UiHintCard | undefined;
+        let streamError: { code: string; message: string } | undefined;
+
+        for await (const ev of agentClient.chat({
           userId: getUserId(),
           message,
           scenario,
@@ -451,12 +538,28 @@ ${JSON.stringify(uploadData, null, 2)}`
               workoutData: workoutDataRef.current
             }
           }
-        }));
+        })) {
+          if (ev.type === 'token' && ev.text) {
+            accumulated += ev.text;
+            setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, text: accumulated } : m)));
+          } else if (ev.type === 'thinking' && ev.text) {
+            const isBlockNarration = ev.text.includes('\n');
+            thinkingAccumulated = isBlockNarration
+              ? (thinkingAccumulated ? `${thinkingAccumulated}\n\n${ev.text}` : ev.text)
+              : thinkingAccumulated + ev.text;
+            setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, thinkingText: thinkingAccumulated } : m)));
+          } else if (ev.type === 'uiHint' && ev.card) {
+            card = ev.card; // 暂存，流结束后才渲染
+          } else if (ev.type === 'error' && ev.error && !streamError) {
+            streamError = { code: ev.error.code, message: ev.error.message };
+          }
+        }
 
-        console.log('[useAICoach] Survey upload response card:', result.card);
+        console.log('[useAICoach] Survey upload response card:', card);
 
+        // 本轮流结束：定型 thinking 气泡为最终消息（此刻才挂卡片）
         // uiHint 合成：从 SSE card 产出可渲染卡片对象
-        let uiHint = synthesizeUiHint(result.card);
+        let uiHint = synthesizeUiHint(card);
 
         // [FIX] Defensive check: ensure backend didn't erroneously return plan_card
         if (uiHint?.type === 'plan_card') {
@@ -464,15 +567,17 @@ ${JSON.stringify(uploadData, null, 2)}`
           uiHint = undefined;  // Clear erroneous uiHint
         }
 
-        setChatHistory(prev => {
-          const filtered = prev.filter(m => !m.isThinking);
-          return [...filtered, {
-            role: 'ai',
-            text: result.error ? "上传失败，请重试。" : (result.text || "感谢您的反馈。"),
-            uiHint,
-            explanation: undefined
-          }];
-        });
+        setChatHistory(prev => prev.map(m => (m.isThinking ? {
+          role: 'ai',
+          text: streamError
+            ? `上传失败，请重试。[${streamError.code}: ${streamError.message}]`
+            : (accumulated || "感谢您的反馈。"),
+          thinkingText: thinkingAccumulated || undefined,
+          uiHint,
+          explanation: undefined,
+          isThinking: false,
+          progressItems: [],
+        } : m)));
 
         // [FIX] Reset loading state immediately after successful response
         setIsLoading(false);

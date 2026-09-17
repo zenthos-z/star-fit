@@ -38,8 +38,8 @@ interface SurveyCardProps {
 /** 问卷提交记录：固化已提交状态，随 thread 持久化 */
 export interface SurveySubmitRecord {
   submittedAt: number;  // epoch ms
-  /** 已提交的回答摘要（questionId → 选项 label 或文本输入），用于只读回显 */
-  answers: Record<string, string>;
+  /** 已提交的回答摘要（questionId → 选项 label/文本输入；多选题为 string[]），用于只读回显 */
+  answers: Record<string, string | string[]>;
 }
 
 /**

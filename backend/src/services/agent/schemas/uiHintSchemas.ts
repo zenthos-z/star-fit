@@ -77,7 +77,10 @@ export const SurveyQuestionSchema = z.object({
   required: z.boolean().default(false),
   placeholder: z.string().optional(),
   options: z.array(SurveyQuestionOptionSchema).optional(),
-  inputType: z.enum(["text", "number"]).optional(),
+  // 2026-09-17: "checkbox" = 多选题（前端 SurveyCard 按此渲染多选交互，
+  // 提交值为 string[]）。此前 enum 只有 text/number，checkbox 会被校验
+  // 回路打回 → Agent 被迫降级单选 → 多选功能实际不可用。
+  inputType: z.enum(["text", "number", "checkbox"]).optional(),
 });
 
 export type SurveyQuestion = z.infer<typeof SurveyQuestionSchema>;

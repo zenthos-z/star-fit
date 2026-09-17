@@ -1,10 +1,42 @@
 import UIKit
 import Capacitor
 
+// iOS 27 起对未采用 UISceneLifecycle 的 App 在 scene 创建时抛 EXC_BREAKPOINT（2026-09-17 真机闪退实锤：
+// 崩溃符号 ___UIApplicationEvaluateRuntimeIssueForNoSceneLifecycleAdoption）。
+// 修复 = 补全 Scene 生命周期：SceneDelegate（承载 CAPBridgeViewController）+ Info.plist scene manifest。
+class SceneDelegate: UIResponder, UIWindowSceneDelegate {
+    var window: UIWindow?
+
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options connectionOptions: UIScene.ConnectionOptions) {
+        guard let windowScene = scene as? UIWindowScene else { return }
+        let window = UIWindow(windowScene: windowScene)
+        window.rootViewController = CAPBridgeViewController()
+        self.window = window
+        window.makeKeyAndVisible()
+        // Capacitor 桥接 URL/Universal Link 回调经 SceneDelegateProxy 转发
+        SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+    }
+
+    func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        SceneDelegateProxy.shared.scene(scene, continue: userActivity)
+    }
+}
+
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate {
 
     var window: UIWindow?
+
+    // iOS 13+ scene 生命周期：把新 scene 交给 SceneDelegate（Info.plist manifest 声明）
+    func application(_ application: UIApplication, configurationForConnecting connectingSceneSession: UISceneSession, options: UIScene.ConnectionOptions) -> UISceneConfiguration {
+        let config = UISceneConfiguration(name: nil, sessionRole: connectingSceneSession.role)
+        config.delegateClass = SceneDelegate.self
+        return config
+    }
 
     func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
         // Override point for customization after application launch.
