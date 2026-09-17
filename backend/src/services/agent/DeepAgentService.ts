@@ -493,6 +493,11 @@ export class DeepAgentService implements AgentService {
       let finalText: string | undefined;
       let buffered = ""; // current model step's narration, pending classification
       let leakedThinking = ""; // reasoning stripped from terminal messages
+      // ★字段级思考链（reasoning_content）：thinking 开启时的协议级推理流，
+      // 与 buffered（可能成为正文的 prose）物理隔离。何时产出：流结束时统一
+      // yield 为 thinking 事件（前端折叠区实时渲染由 thinking 增量事件驱动，
+      // 这里聚合一次性下发与旧行为一致）。
+      let liveThinking = "";
 
       for await (const raw of stream) {
         // Unwrap the [mode, data] tuple (defensive: also accept untagged).
@@ -514,6 +519,15 @@ export class DeepAgentService implements AgentService {
           const delta = extractText(data);
           if (delta) {
             buffered += delta;
+          }
+          // ★字段级思考链（2026-09-16）：thinking 开启时 DeepSeek 把推理放在
+          // reasoning_content（ChatDeepSeek 透传到 additional_kwargs），协议级
+          // 与正文分离——直接进 liveThinking，永远不混入 buffered（正文）。
+          // 这取代了靠文本启发式猜测的旧思路；splitLeakedReasoning 退为
+          // 「thinking 关闭时的兜底」。
+          const rc = extractReasoningContent(data);
+          if (rc) {
+            liveThinking = liveThinking ? `${liveThinking}${rc}` : rc;
           }
           continue;
         }
@@ -586,6 +600,12 @@ export class DeepAgentService implements AgentService {
         yield { type: "thinking", text: leakedThinking };
       }
 
+      // ★字段级思考链（reasoning_content）：协议级推理，权威来源。聚合后
+      // 与其他 thinking 汇合下发——thinking 开启时这是主力通道。
+      if (liveThinking) {
+        yield { type: "thinking", text: liveThinking };
+      }
+
       if (finalText) {
         yield { type: "token", text: finalText };
       }
@@ -643,6 +663,25 @@ function extractText(chunk: unknown): string | undefined {
 }
 
 /**
+ * Pull `reasoning_content` out of a `streamMode: 'messages'` chunk.
+ *
+ * thinking 开启时 DeepSeek 把推理放在响应的 reasoning_content 字段
+ * （协议级与 content 分离）；ChatDeepSeek 透传到 AIMessageChunk 的
+ * additional_kwargs.reasoning_content。Chunk 形态是 [chunk, metadata] 元组，
+ * 与 extractText 同构。无该字段（thinking 关闭 / 非 reasoning 模型）返回
+ * undefined。
+ */
+function extractReasoningContent(chunk: unknown): string | undefined {
+  if (!Array.isArray(chunk)) {
+    return undefined;
+  }
+  const message = chunk[0] as
+    { additional_kwargs?: { reasoning_content?: unknown } } | undefined;
+  const rc = message?.additional_kwargs?.reasoning_content;
+  return typeof rc === "string" && rc.length > 0 ? rc : undefined;
+}
+
+/**
  * Split a terminal (tool-free) AI message into [reasoning, answer].
  *
  * deepseek-v4-flash with thinking disabled sometimes writes multi-paragraph
@@ -670,6 +709,15 @@ export function splitLeakedReasoning(text: string): {
     return cjk + letters === 0 ? 0 : cjk / (cjk + letters);
   };
 
+  // 中文自言自语检测（2026-09-15 实锤泄露：deepseek-v4-flash 也会写中文推理进正文，
+  // 而旧启发式只切英文前缀）。特征：第一人称元认知动词（我需要/我应该/让我看看/我先查看/
+  // 接下来我…）或对用户的第三人称转述（用户想/用户一直…）——这些是对着草稿纸自说自话，
+  // 不是对用户说话（对用户说话用"你"，且以结论/建议句式开头）。
+  const looksLikeZhDeliberation = (s: string): boolean =>
+    /(我(需要|应该|想(先|看看|查看)|先|来|得|打算|准备)|让我(看看|查看|想|先)|接下来我|用户(想|要|一直|反复|这是)|他(上周|之前|的历史))/.test(
+      s,
+    );
+
   // Find the first block where CJK clearly dominates — the answer's start.
   // A fenced code block (```json card) is ALWAYS answer regardless of its
   // letter ratios: JSON syntax is Latin-heavy and the fence must reach the
@@ -677,10 +725,15 @@ export function splitLeakedReasoning(text: string): {
   // into `thinking` would silently drop the card.
   let answerStart = -1;
   for (let i = 0; i < blocks.length; i++) {
-    if (blocks[i].includes("```") || cjkRatio(blocks[i]) >= 0.5) {
+    if (blocks[i].includes("```")) {
       answerStart = i;
       break;
     }
+    if (cjkRatio(blocks[i]) < 0.5) continue; // Latin-dominant → deliberation
+    // CJK-dominant block: answer unless it reads like zh self-talk.
+    if (looksLikeZhDeliberation(blocks[i])) continue;
+    answerStart = i;
+    break;
   }
 
   if (answerStart <= 0) {

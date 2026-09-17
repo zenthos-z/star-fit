@@ -34,6 +34,11 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
   const [isLongPressTriggered, setIsLongPressTriggered] = useState(false);
   const isLongPressTriggeredRef = useRef(false); // Mutable ref for immediate access in event handlers
   const controls = useAnimation();
+  const outerRef = useRef<HTMLDivElement>(null);
+  // 内缩量：动作按钮层比卡片表面小一圈，白卡盖住圆角边缘，防透色
+  const ACTION_INSET = 3;
+  // 动作层圆角 = 卡片实际圆角 - 内缩量（运行时读取，适配不同调用方的圆角规格）
+  const [actionRadius, setActionRadius] = useState(0);
   
   const startX = useRef(0);
   const startY = useRef(0);
@@ -42,16 +47,26 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
   const pressTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const hasMoved = useRef(false);
   const pressStartPos = useRef<{ x: number; y: number } | null>(null); // Track position during press delay
+  // 横滑意图锁：判定本次触摸是横向滑动还是纵向滚动，判定后本次触摸内不再改变
+  const swipeAxisRef = useRef<'x' | 'y' | null>(null);
+  const swipeBaseRef = useRef(0); // 意图确认时的横向位移基准，防止卡片跳变
   
   const leftMaxOffset = leftActions.length * 80;
   const rightMaxOffset = rightActions.length > 0 ? 80 : 0; 
   const MIN_SWIPE_DISTANCE = 40;
+  const SWIPE_AXIS_THRESHOLD = 18;   // 横滑意图确认所需最小横向位移(px)
+  const SWIPE_AXIS_RATIO = 1.6;      // 横向位移需达到纵向的倍数才判为横滑
   const LONG_PRESS_DELAY = 500;
   const PRESS_DELAY = 150; // Delay before showing press effect - only triggers for taps, not swipes
   const PRESS_MOVE_THRESHOLD = 8; // Max movement allowed during press delay to consider it a tap
 
   const containerRef = useRef<HTMLDivElement>(null);
   const stateRef = useRef({ isLongPressTriggered, isSwiping, offset });
+
+  // 卡片完全闭合时不绘制动作按钮层：红/蓝底色不进渲染树绘制，
+  // 既消除静止时圆角边缘透出的淡色圈，也消除快速滚动时圆角裁剪
+  // 偶发失效导致的红蓝闪现（contain:paint + 合成层 + 圆角遮罩的已知抖动源）。
+  const showActions = Math.abs(offset) > 0.5;
   
   // Keep stateRef in sync
   useEffect(() => {
@@ -60,11 +75,20 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
     isLongPressTriggeredRef.current = isLongPressTriggered;
   }, [isLongPressTriggered, isSwiping, offset]);
 
+  // 运行时读取卡片实际圆角（调用方可能是 rounded-[40px] 或 rounded-2xl 等）
+  useEffect(() => {
+    const el = outerRef.current;
+    if (!el) return;
+    const r = parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0;
+    setActionRadius(Math.max(0, r - ACTION_INSET));
+  }, []);
+
   const handleTouchStart = (e: React.TouchEvent) => {
     startX.current = e.touches[0].clientX;
     startY.current = e.touches[0].clientY;
     setIsSwiping(true);
     hasMoved.current = false;
+    swipeAxisRef.current = null; // 每次触摸重新判定滑动方向
     setIsLongPressTriggered(false);
     isLongPressTriggeredRef.current = false;
 
@@ -150,6 +174,33 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
       const deltaX = touchX - startX.current;
       const deltaY = touchY - startY.current;
 
+      // ── 横滑意图锁 ──────────────────────────────────────────────
+      // 用户以纵向滚动为主，横滑菜单必须"明确横向意图"才触发：
+      // 横向位移 ≥ SWIPE_AXIS_THRESHOLD 且 ≥ 纵向的 SWIPE_AXIS_RATIO 倍，
+      // 才锁定为横滑；一旦先判为纵向，本次触摸内不再响应横滑。
+      if (swipeAxisRef.current === null) {
+        const absX = Math.abs(deltaX);
+        const absY = Math.abs(deltaY);
+        if (absX >= SWIPE_AXIS_THRESHOLD && absX >= absY * SWIPE_AXIS_RATIO) {
+          swipeAxisRef.current = 'x';
+          // 以当前点为新基准，避免判定前的位移让卡片瞬间跳开
+          startX.current = touchX;
+          currentOffset.current = offset;
+        } else if (absY >= SWIPE_AXIS_THRESHOLD) {
+          swipeAxisRef.current = 'y';
+          return; // 纵向滚动，交给页面
+        } else {
+          return; // 位移还太小，继续观察
+        }
+      } else if (swipeAxisRef.current === 'y') {
+        return; // 已判定为纵向滚动，本次触摸内横滑菜单不再响应
+      }
+
+      // Only prevent default if we are swiping horizontally to avoid vertical scroll interference
+      if (e.cancelable) {
+          e.preventDefault();
+      }
+
       if (Math.abs(deltaX) > PRESS_MOVE_THRESHOLD || Math.abs(deltaY) > PRESS_MOVE_THRESHOLD) {
         hasMoved.current = true;
         // Immediately cancel press effect if moved beyond threshold
@@ -162,13 +213,6 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
             clearTimeout(pressTimeoutRef.current);
             pressTimeoutRef.current = null;
         }
-      }
-
-      if (Math.abs(deltaY) > Math.abs(deltaX)) return;
-
-      // Only prevent default if we are swiping horizontally to avoid vertical scroll interference
-      if (Math.abs(deltaX) > 10 && e.cancelable) {
-          e.preventDefault();
       }
 
       let newOffset = currentOffset.current + deltaX;
@@ -248,6 +292,7 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
 
   return (
     <motion.div
+      ref={outerRef}
       animate={{
         scale: isPressing ? 0.96 : 1,
         boxShadow: isPressing
@@ -259,10 +304,18 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
       className={`relative select-none rounded-[40px] ${className}`}
       style={{ contain: 'paint' }}
     >
-       {/* Left Actions (Delete) */}
-       <div 
-         className="absolute top-0 left-0 bottom-0 z-0"
-         style={{ width: leftMaxOffset }}
+       {/* Left Actions (Delete) —— 内缩一圈，白卡表面盖住圆角边缘，防透色。
+           圆角只保留外侧（左圆右直）：滑出层是卡片本体的延伸，内侧直角与卡片内容自然衔接（用户拍板 2026-09-15） */}
+       <div
+         className="absolute z-0 overflow-hidden"
+         style={{
+           width: leftMaxOffset,
+           top: ACTION_INSET,
+           bottom: ACTION_INSET,
+           left: ACTION_INSET,
+           borderRadius: `${actionRadius}px 0 0 ${actionRadius}px`,
+           visibility: showActions ? 'visible' : 'hidden'
+         }}
        >
          {leftActions.map((action, idx) => (
            <button
@@ -281,10 +334,17 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
          ))}
        </div>
 
-       {/* Right Actions (Tutorial & Settings - Stacked Vertically) */}
-       <div 
-         className="absolute top-0 right-0 bottom-0 z-0 flex flex-col"
-         style={{ width: rightMaxOffset }}
+        {/* Right Actions (Tutorial & Settings - Stacked Vertically) —— 内缩一圈，同上（右圆左直） */}
+       <div
+         className="absolute z-0 flex flex-col overflow-hidden"
+         style={{
+           width: rightMaxOffset,
+           top: ACTION_INSET,
+           bottom: ACTION_INSET,
+           right: ACTION_INSET,
+           borderRadius: `0 ${actionRadius}px ${actionRadius}px 0`,
+           visibility: showActions ? 'visible' : 'hidden'
+         }}
        >
          {rightActions.map((action, idx) => (
            <button

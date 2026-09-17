@@ -145,12 +145,15 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
     }
     // 明确往下拖过阈值 → 进入锁定屏；轻点交给 click 走暂停逻辑
     if (dy > LOCK_DRAG_THRESHOLD && onLockScreen) {
+      // 只有真正拖拽过阈值才记录时间戳：防止拖拽后的合成 click 被当成暂停
+      // （2026-09-15 回归修复：之前无条件记录导致普通轻点暂停被 500ms 窗口吞掉，点击无效）
+      lastTouchEnd.current = Date.now();
       haptic('medium');
       onLockScreen();
     }
   };
 
-  // 合成 click 防护：拖拽后 500ms 内的 click 不当暂停
+  // 合成 click 防护：仅在"下滑锁定手势"后生效，500ms 内的合成 click 不当暂停
   const guardClick = (fn: () => void) => {
     if (Date.now() - lastTouchEnd.current < 500) return;
     fn();
