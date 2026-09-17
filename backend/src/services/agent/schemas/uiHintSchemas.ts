@@ -132,7 +132,7 @@ export const ExercisePlanSchema = z
     distance: z.number().min(0).optional(),
   })
   .superRefine((data, ctx) => {
-    const { exercise_type, reps, weight, duration, distance } = data;
+    const { exercise_type, reps, weight, duration, distance, name } = data;
 
     // assisted: weight is assistance in kg, stored NEGATIVE per GOLD assisted.md
     // (e.g. -20 = machine offsets 20kg of bodyweight). This sign convention is
