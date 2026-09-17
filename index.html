@@ -109,6 +109,20 @@
           inset 0 -1px 0.5px rgba(255,255,255,0.05);
       }
 
+      /* 清透玻璃·地图悬浮栏专属：iOS 26 Liquid Glass 透镜质感
+         低底色(28%) + 高饱和透色 + 双层 specular 高光，让地图颜色清晰透进来 */
+      .glass-clear {
+        background: linear-gradient(135deg, rgba(22,22,26,0.78) 0%, rgba(14,14,18,0.62) 100%);
+        -webkit-backdrop-filter: blur(18px) saturate(180%) brightness(1.12);
+        backdrop-filter: blur(18px) saturate(180%) brightness(1.12);
+        border: 0.5px solid rgba(255,255,255,0.22);
+        box-shadow:
+          0 16px 48px rgba(0,0,0,0.28),
+          inset 0 1.5px 1px rgba(255,255,255,0.38),
+          inset 0 -1px 1px rgba(255,255,255,0.10),
+          inset 0 0 24px rgba(255,255,255,0.06);
+      }
+
       /* 色散玻璃选框 v2 —— 按 Apple glassEffect(.regular) 官方配方：
          中性清透玻璃体 + 白色 specular rim + 极轻色差边缘。
          （彩虹描边是误读，Apple 无此设计；真正的折射需 SVG backdrop-filter，WebKit 不支持） */

@@ -1,63 +1,19 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { ExerciseAction } from '../../../types/protocol';
-import { Play, Pause, RotateCcw, CheckCircle2, MapPin, Square, Navigation, Map as MapIcon, Timer, Ruler, Heart, Watch, Loader2, AlertCircle } from 'lucide-react';
+import { Play, Pause, RotateCcw, CheckCircle2, Square, Timer, Ruler, Heart, Watch, Loader2, AlertCircle, Crosshair, Maximize2 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { MapContainer, TileLayer, Polyline, useMap, CircleMarker, Marker } from 'react-leaflet';
-import L from 'leaflet';
+import { MapContainer, TileLayer, Polyline, CircleMarker } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 import { useGeolocation, LocationStatus } from '../../../hooks/useGeolocation';
+import { wgs84ToGcj02 } from '../../../utils/coordTransform';
+import { loadActiveTrack, saveActiveTrack, clearActiveTrack } from '../../../storage/activeTrack';
+import { FollowModeController, LocationMarker } from './MapFollowController';
 import { MapErrorBoundary } from './MapErrorBoundary';
 import { CardHeader } from './CardHeader';
 import { transitions } from '../../../lib/animations';
 import { haptic } from '../../../../lib/nativeHaptics';
-
-const fixLeafletIcon = () => {
-  if (typeof window !== 'undefined' && L.Icon.Default) {
-    // @ts-ignore
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    });
-  }
-};
-
-fixLeafletIcon();
-
-const DirectionArrow = ({ center, heading }: { center: [number, number], heading?: number }) => {
-  const map = useMap();
-
-  const icon = L.divIcon({
-    className: 'custom-direction-icon',
-    html: `
-      <div style="
-        width: 32px;
-        height: 32px;
-        background: #10b981;
-        border: 2px solid white;
-        border-radius: 50%;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transform: rotate(${heading ?? 0}deg);
-      ">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="white">
-          <path d="M12 2L4 22L12 16L20 22L12 2Z"/>
-        </svg>
-      </div>
-    `,
-    iconSize: [32, 32],
-    iconAnchor: [16, 16]
-  });
-
-  if (heading === undefined || heading === null) {
-    return null;
-  }
-
-  return <Marker position={center} icon={icon} />;
-};
+import { setTabBarHidden } from '../../../../lib/nativeTabBar';
 
 interface OutdoorExerciseCardV2Props {
   exercise: ExerciseAction;
@@ -66,31 +22,6 @@ interface OutdoorExerciseCardV2Props {
 }
 
 const smoothSpring = transitions.springSmooth;
-
-const MapController = ({ positions, isInteractive }: { positions: [number, number][], isInteractive: boolean }) => {
-  const map = useMap();
-  const hasInitialized = useRef(false);
-
-  useEffect(() => {
-    if (positions.length > 0) {
-      const lastPos = positions[positions.length - 1];
-      
-      if (!isInteractive || !hasInitialized.current) {
-        map.setView(lastPos, map.getZoom());
-        hasInitialized.current = true;
-      }
-    }
-  }, [positions, map, isInteractive]);
-  
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      map.invalidateSize();
-    }, 100);
-    return () => clearTimeout(timer);
-  }, [isInteractive, map]);
-
-  return null;
-};
 
 const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ exercise, isPaused, onUpdate }) => {
   const metadata = exercise.metadata || {};
@@ -110,17 +41,35 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   );
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [mapLoadFailed, setMapLoadFailed] = useState(false);
-  const [tileUrl, setTileUrl] = useState('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png');
-  const [tileAttr, setTileAttr] = useState('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>');
+  // 断点续跑：检测到未完成轨迹时询问用户
+  const [resumableTrack, setResumableTrack] = useState<{ elapsedSec: number; distanceM: number; points: number } | null>(null);
+  // 全屏心率快填浮层
+  const [showHrInput, setShowHrInput] = useState(false);
+  // 瓦片源降级链：高德(国内直连最快) → 腾讯智图 → 标记失败
+  const TILE_SOURCES = [
+    {
+      url: 'https://webrd0{s}.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+      attr: '&copy; 高德地图',
+      subdomains: '1234',
+    },
+    {
+      url: 'https://rt{s}.map.gtimg.com/realtimerender?z={z}&x={x}&y={y}&type=vector&style=0',
+      attr: '&copy; 腾讯地图',
+      subdomains: '012',
+    },
+  ] as const;
+  const [tileIdx, setTileIdx] = useState(0);
+  const tileUrl = TILE_SOURCES[tileIdx].url;
+  const tileAttr = TILE_SOURCES[tileIdx].attr;
+  const tileSubdomains = TILE_SOURCES[tileIdx].subdomains;
   const mapInstanceRef = useRef<L.Map | null>(null);
   const mapContainerRef = useRef<HTMLDivElement>(null);
   const uniqueMapId = useRef<string>(`map-${exercise.id}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`);
 
   const handleTileError = () => {
-    if (tileUrl.includes('cartocdn')) {
-      console.log('CartoDB tiles failed, switching to OSM...');
-      setTileUrl('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png');
-      setTileAttr('&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>');
+    if (tileIdx < TILE_SOURCES.length - 1) {
+      console.log(`Tile source ${tileIdx} failed, switching to next...`);
+      setTileIdx((i) => i + 1);
     } else {
       setMapLoadFailed(true);
     }
@@ -140,8 +89,37 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
     window.addEventListener('starfit-back-button', handleBackButton);
     return () => window.removeEventListener('starfit-back-button', handleBackButton);
   }, [isFullscreen]);
+
+  // 全屏时隐藏原生 TabBar（iOS 26 Liquid Glass 是原生层渲染，portal 到 body 盖不住它）
+  useEffect(() => {
+    if (isFullscreen) {
+      setTabBarHidden(true);
+      return () => setTabBarHidden(false);
+    }
+  }, [isFullscreen]);
+
+  // 断点续跑：挂载时检查是否有未完成轨迹（刷新/闪退/切后台被杀后恢复入口）
+  useEffect(() => {
+    let cancelled = false;
+    loadActiveTrack().then((track) => {
+      if (!cancelled && track && track.positions.length > 0) {
+        setResumableTrack({
+          elapsedSec: track.elapsedSec,
+          distanceM: track.distanceM,
+          points: track.positions.length,
+        });
+      }
+    }).catch((err) => console.warn('loadActiveTrack failed:', err));
+    return () => { cancelled = true; };
+  }, []);
+
+  // 放弃恢复
+  const handleDiscardResume = () => {
+    clearActiveTrack().catch(() => undefined);
+    setResumableTrack(null);
+  };
   
-  const { positions, distance: gpsDistance, reset: resetGps, status: locationStatus, error: locationError } = useGeolocation(isWaitingForGPS || (isRunning && !isPaused));
+  const { positions, distance: gpsDistance, reset: resetGps, markPause, status: locationStatus, error: locationError } = useGeolocation(isWaitingForGPS || (isRunning && !isPaused));
   
   const distance = (currentSet.distance || 0) + gpsDistance;
   
@@ -209,7 +187,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
         const now = Date.now();
         const delta = (now - lastTickRef.current) / 1000;
         lastTickRef.current = now;
-        
+
         setElapsed(prev => {
           const next = prev + delta;
           if (mode === 'TIME_COUNTDOWN' && targetDuration > 0 && next >= targetDuration) {
@@ -224,6 +202,29 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
     }
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [isRunning, isPaused, mode, targetDuration]);
+
+  // 轨迹节流落盘：每 10 个点写一次 Dexie，刷新/闪退/被杀最多丢 10 个点
+  const lastSavedCountRef = useRef(0);
+  useEffect(() => {
+    if (!isRunning && !isWaitingForGPS) return;
+    if (positions.length === 0) return;
+    if (positions.length - lastSavedCountRef.current < 10) return;
+    lastSavedCountRef.current = positions.length;
+    saveActiveTrack({
+      startedAt: Date.now() - elapsed * 1000,
+      updatedAt: Date.now(),
+      elapsedSec: elapsed,
+      distanceM: gpsDistance,
+      positions,
+    }).catch((err) => console.warn('saveActiveTrack failed:', err));
+  }, [positions, isRunning, isWaitingForGPS, elapsed, gpsDistance]);
+
+  // 完成/撤销时清理持久化轨迹
+  useEffect(() => {
+    if (isCompleted) {
+      clearActiveTrack().catch(() => undefined);
+    }
+  }, [isCompleted]);
 
   const syncToParent = (finalElapsed?: number, finalDistance?: number, finalStatus?: 'COMPLETED' | 'PLANNED') => {
     if (onUpdate) {
@@ -279,18 +280,42 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
     return (meters / 1000).toFixed(2);
   };
 
+  // 配速（min/km，跑步行业标准）：最近 30 秒滑动窗口的瞬时配速，避免单点跳变
+  const paceWindowRef = useRef<Array<{ t: number; d: number }>>([]);
+
+  const currentPace = useMemo(() => {
+    const now = elapsed;
+    const win = paceWindowRef.current;
+    win.push({ t: now, d: distance });
+    // 只保留 30 秒窗口
+    while (win.length > 2 && now - win[0].t > 30) win.shift();
+    const first = win[0];
+    const dt = now - first.t;
+    const dd = distance - first.d;
+    // 数据不足（<5 秒）或没在动 → 显示 --:--
+    if (dt < 5 || dd < 1) return null;
+    const secPerKm = (dt / dd) * 1000;
+    // 异常防护：配速快于 1:00/km 或慢于 60:00/km 视为无效
+    if (secPerKm < 60 || secPerKm > 3600) return null;
+    const m = Math.floor(secPerKm / 60);
+    const s = Math.floor(secPerKm % 60);
+    return `${m}'${s.toString().padStart(2, '0')}"`;
+  }, [elapsed, distance]);
+
   const handleToggle = () => {
     if (!isRunning) {
       setIsWaitingForGPS(true);
       gpsWaitStartTimeRef.current = Date.now();
       setIsGpsTimeout(false);
     } else {
+      // 暂停：标记轨迹 gap，恢复后首点不算距不画线
+      markPause();
       setIsRunning(false);
       setIsWaitingForGPS(false);
       setIsGpsTimeout(false);
       gpsWaitStartTimeRef.current = null;
     }
-    
+
     syncToParent(undefined, undefined, 'PLANNED');
   };
 
@@ -325,9 +350,24 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
     syncToParent(0, 0, 'PLANNED');
   };
 
-  const pathPositions: [number, number][] = positions.map(p => [p.latitude, p.longitude]);
+  // 轨迹渲染：WGS-84 → GCJ-02（国内底图加偏坐标系）。
+  // 注意：useGeolocation 内部的距离累计仍用 WGS-84 原始值，不受此转换影响。
+  const pathPositions: [number, number][] = positions.map(p => wgs84ToGcj02(p.latitude, p.longitude));
   const currentPosition = positions.length > 0 ? positions[positions.length - 1] : null;
   const currentHeading = currentPosition?.heading;
+  // 人物标记坐标：必须与轨迹线同坐标系（GCJ-02），否则人在地图上偏移几百米
+  const currentGcjPosition = pathPositions.length > 0 ? pathPositions[pathPositions.length - 1] : null;
+  // 地图跟随：用户拖动后退出跟随，显示"回到中心"按钮
+  const [following, setFollowing] = useState(true);
+  const [followTrigger, setFollowTrigger] = useState(0);
+  const recenter = () => {
+    setFollowing(true);
+    setFollowTrigger((n) => n + 1);
+  };
+  // 全屏切换时恢复跟随
+  useEffect(() => {
+    recenter();
+  }, [isFullscreen]);
 
   const renderStats = () => {
     const isActive = isRunning || elapsed > 0 || isCompleted;
@@ -510,15 +550,15 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
     );
   };
 
-  /** 心率录入行（地图上方统计区之下） */
+  /** 心率录入行（统一色彩语义：心率=红色系） */
   const renderHeartRateInput = () => (
     <div className="w-full px-6 pb-3 pt-1 flex items-center justify-center gap-3">
-      <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border shrink-0 bg-white text-gray-400 border-gray-100">
-        <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100" />
-        <span className="text-[10px] font-black uppercase tracking-widest">目标: Zone {targetHeartRateZone}</span>
+      <div className="flex items-center gap-1.5 px-3 py-1 rounded-2xl border shrink-0 bg-white border-rose-100">
+        <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-100" />
+        <span className="text-[10px] font-semibold tracking-wide text-gray-500">目标 Zone {targetHeartRateZone}</span>
       </div>
-      <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1 flex-1 max-w-[10rem]">
-        <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100 shrink-0" />
+      <div className="flex items-center gap-2 bg-white border border-rose-100 rounded-2xl px-3 py-1 flex-1 max-w-[10rem]">
+        <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-100 shrink-0" />
         <input
           type="number"
           inputMode="numeric"
@@ -528,9 +568,9 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
           value={heartRateInput}
           onChange={(e) => handleHeartRateChange(e.target.value)}
           disabled={isCompleted}
-          className="w-full min-w-0 bg-transparent text-sm font-bold text-gray-800 outline-none placeholder-gray-300 placeholder:text-[10px] placeholder:uppercase placeholder:tracking-widest [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          className="w-full min-w-0 bg-transparent text-sm font-bold text-rose-600 outline-none placeholder-gray-300 placeholder:text-[10px] placeholder:tracking-wide [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
         />
-        <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest shrink-0">BPM</span>
+        <span className="text-[10px] font-semibold text-rose-400 tracking-wide shrink-0">BPM</span>
       </div>
     </div>
   );
@@ -540,7 +580,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
       return (
         <div className="absolute inset-0 flex items-center justify-center bg-gray-50">
           <div className="flex flex-col items-center gap-3">
-            <MapIcon className="w-12 h-12 text-gray-300" />
+            <Maximize2 className="w-12 h-12 text-gray-300" />
             <div className="text-sm font-medium text-gray-400">点击开始后显示地图</div>
           </div>
         </div>
@@ -564,9 +604,9 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
           <MapErrorBoundary>
             <MapContainer
               key={isFullscreen ? 'fullscreen' : 'inline'}
-              {...{ whenCreated: ((map: any) => { mapInstanceRef.current = map; }) } as any}
-              center={pathPositions.length > 0 ? pathPositions[pathPositions.length - 1] : [39.9042, 116.4074]}
-              zoom={16}
+              center={currentGcjPosition ?? [39.9042, 116.4074]}
+              zoom={17}
+              zoomSnap={0.5}
               scrollWheelZoom={isFullscreen}
               dragging={isFullscreen}
               touchZoom={isFullscreen}
@@ -578,39 +618,61 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
               <TileLayer
                 url={tileUrl}
                 attribution={tileAttr}
-                maxZoom={19}
+                subdomains={tileSubdomains}
+                maxZoom={18}
                 eventHandlers={{
                   tileerror: handleTileError
                 }}
               />
-              {pathPositions.length > 0 && (
-                <>
-                  <Polyline 
-                    positions={pathPositions} 
-                    color="#10b981" 
-                    weight={4} 
-                    opacity={0.8}
-                    lineJoin="round"
-                  />
-                  <CircleMarker 
-                    center={pathPositions[pathPositions.length - 1]} 
-                    radius={6} 
-                    fillColor="#10b981" 
-                    fillOpacity={1} 
-                    color="white" 
-                    weight={2} 
-                  />
-                  {currentPosition && (
-                    <DirectionArrow 
-                      center={[currentPosition.latitude, currentPosition.longitude]} 
-                      heading={currentHeading} 
-                    />
-                  )}
-                </>
+              {pathPositions.length > 1 && (
+                <Polyline
+                  positions={pathPositions}
+                  color="#10b981"
+                  weight={5}
+                  opacity={0.85}
+                  lineJoin="round"
+                  lineCap="round"
+                />
               )}
-              <MapController positions={pathPositions} isInteractive={isFullscreen} />
+              {currentGcjPosition && (
+                <LocationMarker position={currentGcjPosition} heading={currentHeading} />
+              )}
+              <FollowModeController
+                positions={pathPositions}
+                followTrigger={followTrigger}
+                onUserGesture={() => setFollowing(false)}
+              />
             </MapContainer>
           </MapErrorBoundary>
+        )}
+
+        {resumableTrack && !isRunning && elapsed === 0 && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm z-[1001] p-4">
+            <AlertCircle className="w-8 h-8 text-blue-500 mb-2" />
+            <div className="text-sm font-bold text-gray-800">检测到未完成的运动</div>
+            <div className="text-xs text-gray-500 mt-1 text-center">
+              上次记录 {Math.floor(resumableTrack.elapsedSec / 60)} 分钟 · {(resumableTrack.distanceM / 1000).toFixed(2)} km · {resumableTrack.points} 个定位点
+            </div>
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={handleDiscardResume}
+                className="px-4 py-2 border-2 border-gray-200 text-gray-600 text-xs font-bold rounded-full active:scale-95 transition-transform"
+              >
+                放弃
+              </button>
+              <button
+                onClick={() => {
+                  // 恢复：清掉持久化提示，直接进入 GPS 等待（本次会话重新累计；历史数据已同步到 sets）
+                  setResumableTrack(null);
+                  clearActiveTrack().catch(() => undefined);
+                  handleToggle();
+                }}
+                className="px-4 py-2 bg-blue-500 text-white text-xs font-bold rounded-full shadow-lg shadow-blue-500/30 active:scale-95 transition-transform"
+              >
+                重新开始记录
+              </button>
+            </div>
+          </div>
         )}
 
         {isWaitingForGPS && locationStatus === 'acquiring' && !isGpsTimeout && (
@@ -649,46 +711,9 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
         )}
 
         {locationStatus === 'active' && positions.length > 0 && (
-          <div className="absolute top-3 left-3 z-[400] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md shadow-sm border border-emerald-100">
-            <MapPin className="w-3 h-3 text-emerald-600 fill-emerald-600" />
-            <span className="text-[9px] font-black uppercase tracking-widest text-emerald-600">GPS已连接</span>
-          </div>
-        )}
-
-        <div className={`absolute bottom-3 left-3 z-[400] flex items-center gap-1 px-2.5 py-1 rounded-full border bg-white/90 backdrop-blur-md shadow-sm transition-all ${
-            isCompleted ? 'text-emerald-600 border-emerald-200' : 'text-rose-600 border-rose-100'
-        }`}>
-          <Heart className={`w-3 h-3 ${isCompleted ? 'fill-emerald-600' : 'fill-rose-600'}`} />
-          <span className="text-[9px] font-black uppercase tracking-widest">Zone {targetHeartRateZone}</span>
-        </div>
-
-        <div className={`absolute ${isFullscreen ? 'top-8 right-8' : 'top-4 right-4'} z-[10001]`}>
-          <button 
-            onClick={() => setIsFullscreen(!isFullscreen)}
-            className={`shadow-2xl transition-all active:scale-95 flex items-center justify-center ${
-              isFullscreen 
-                ? 'w-12 h-12 rounded-2xl bg-star-dark text-white' 
-                : 'w-10 h-10 rounded-xl bg-white text-gray-600 hover:bg-gray-50 border border-gray-100'
-            }`}
-          >
-            {isFullscreen ? <Square className="w-6 h-6" /> : <MapIcon className="w-5 h-5" />}
-          </button>
-        </div>
-
-        {isFullscreen && (
-          <div className="absolute top-8 left-8 z-[10001] bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-xl border border-gray-100 flex flex-col gap-1">
-            <div className="text-[10px] font-black uppercase tracking-widest text-gray-400">当前位置</div>
-            <div className="text-sm font-bold text-gray-900 flex items-center gap-2">
-              <div className="w-2 h-2 bg-emerald-500 rounded-full animate-pulse" />
-              正在记录运动轨迹...
-            </div>
-          </div>
-        )}
-
-        {isFullscreen && (
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-[10001] bg-star-dark/90 backdrop-blur-md text-white px-8 py-3 rounded-full text-sm font-bold shadow-2xl flex items-center gap-3">
-            <Navigation className="w-4 h-4 text-emerald-400" />
-            全屏模式：可自由缩放和拖动
+          <div className="absolute top-3 left-3 z-[400] flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/90 backdrop-blur-md shadow-sm border border-gray-100">
+            <span className="w-1.5 h-1.5 rounded-full bg-[#34C759] animate-pulse" />
+            <span className="text-[9px] font-semibold tracking-wide text-gray-600">GPS</span>
           </div>
         )}
       </>
@@ -712,19 +737,139 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
             {renderHeartRateInput()}
         </div>
 
-        <div 
-          className={`relative bg-gray-50 overflow-hidden transition-all duration-300 ${
-            isFullscreen ? 'fixed inset-0 z-[99999] h-screen' : 'h-48 w-full'
-          }`}
-        >
-          <div 
-            id={`map-container-${uniqueMapId.current}`}
-            ref={mapContainerRef}
-            className="absolute top-0 left-0 w-full h-full"
-          >
-            {renderMapContent()}
+        {isFullscreen ? (
+          // 全屏：portal 到 body。SwipeableRow 的 contain:paint + transform 会让 fixed 以卡片为基准，
+          // portal 是唯一可靠的全屏方式。视觉规范：Apple 体能训练（黑底大数字，数据在上、地图铺满）。
+          createPortal(
+            <div className="fixed inset-0 z-[99999] bg-black">
+              {/* 地图铺满全屏 */}
+              <div className="absolute inset-0">
+                {renderMapContent()}
+              </div>
+
+              {/* 顶部返回按钮（iOS 导航规范：左上圆形玻璃按钮） */}
+              <button
+                onClick={() => setIsFullscreen(false)}
+                aria-label="返回"
+                className="absolute top-0 left-4 z-[100002] w-11 h-11 rounded-full liquid-glass-dark flex items-center justify-center active:scale-95 transition-transform"
+                style={{ top: 'max(0.75rem, env(safe-area-inset-top))' }}
+              >
+                <svg className="w-5 h-5 text-white" viewBox="0 0 20 20" fill="none">
+                  <path d="M12.5 4.5L7 10l5.5 5.5" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round"/>
+                </svg>
+              </button>
+
+              {/* 底部悬浮玻璃数据栏（Apple Liquid Glass：圆角胶囊，浮于地图之上）
+                  两行排布：上行=距离+时间（主指标），下行=配速+心率 */}
+              <div
+                className="absolute left-4 right-4 z-[100001] glass-clear rounded-[40px] px-6 pt-3.5 pb-4"
+                style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
+              >
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[15px] font-semibold tracking-wide text-[#A3E635] whitespace-nowrap">距离</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-[34px] font-bold tabular-nums text-white leading-none tracking-tight whitespace-nowrap">{formatDistance(distance)}</span>
+                      <span className="text-[14px] font-semibold text-[#A3E635] whitespace-nowrap">公里</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[15px] font-semibold tracking-wide text-[#FBBF24] whitespace-nowrap">时间</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className="text-[34px] font-bold tabular-nums text-white leading-none tracking-tight whitespace-nowrap">{formatTime(elapsed)}</span>
+                      <span className="text-[14px] font-semibold text-[#FBBF24] whitespace-nowrap">分:秒</span>
+                    </div>
+                  </div>
+                  <div className="flex flex-col gap-2">
+                    <span className="text-[15px] font-semibold tracking-wide text-[#38BDF8] whitespace-nowrap">配速</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-[34px] font-bold tabular-nums leading-none tracking-tight whitespace-nowrap ${currentPace ? 'text-white' : 'text-white/30'}`}>{currentPace ?? "--'--\""}</span>
+                      <span className="text-[14px] font-semibold text-[#38BDF8] whitespace-nowrap">/公里</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => setShowHrInput(true)}
+                    className="flex flex-col gap-2 items-start active:opacity-70 transition-opacity"
+                  >
+                    <span className="text-[15px] font-semibold tracking-wide text-[#FB7185] whitespace-nowrap">心率</span>
+                    <div className="flex items-baseline gap-1.5">
+                      <span className={`text-[34px] font-bold tabular-nums leading-none tracking-tight whitespace-nowrap ${heartRateInput ? 'text-white' : 'text-white/30'}`}>{heartRateInput || '--'}</span>
+                      <span className="text-[14px] font-semibold text-[#FB7185] whitespace-nowrap">BPM</span>
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* 定位按钮：数据栏上方 */}
+              <button
+                onClick={recenter}
+                aria-label="回到我的位置"
+                className={`absolute right-4 z-[100001] w-11 h-11 rounded-full flex items-center justify-center transition-all active:scale-95 ${
+                  following
+                    ? 'bg-[#007AFF] shadow-lg shadow-[#007AFF]/40'
+                    : 'liquid-glass'
+                }`}
+                style={{ bottom: 'calc(max(1rem, env(safe-area-inset-bottom)) + 196px)' }}
+              >
+                <Crosshair className={`w-5 h-5 ${following ? 'text-white' : 'text-[#007AFF]'}`} />
+              </button>
+
+              {/* 心率快填浮层 */}
+              {showHrInput && (
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 z-[100003] liquid-glass-dark rounded-3xl p-5 flex items-center gap-3">
+                  <Heart className="w-5 h-5 text-[#FB7185] fill-[#FB7185]/20 shrink-0" />
+                  <input
+                    autoFocus
+                    type="number"
+                    inputMode="numeric"
+                    min={40}
+                    max={220}
+                    placeholder="实时心率"
+                    value={heartRateInput}
+                    onChange={(e) => handleHeartRateChange(e.target.value)}
+                    className="w-24 bg-transparent text-xl font-bold tabular-nums text-white outline-none text-center placeholder-white/30 placeholder:text-sm"
+                  />
+                  <span className="text-xs font-semibold text-white/50 tracking-wide">BPM</span>
+                  <button
+                    onClick={() => setShowHrInput(false)}
+                    className="ml-2 px-5 py-2 bg-[#007AFF] text-white text-sm font-semibold rounded-full active:opacity-70 transition-opacity"
+                  >
+                    完成
+                  </button>
+                </div>
+              )}
+            </div>,
+            document.body
+          )
+        ) : (
+          <div className="relative bg-gray-50 overflow-hidden h-48 w-full">
+            {/* 全屏入口（右上角，规范尺寸） */}
+            <button
+              onClick={() => setIsFullscreen(true)}
+              aria-label="进入全屏地图"
+              className="absolute top-3 right-3 z-[1001] w-9 h-9 rounded-full bg-white/95 shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+            >
+              <Maximize2 className="w-4 h-4 text-gray-700" />
+            </button>
+            {/* 定位按钮（仅自由浏览时出现，跟随中不打扰） */}
+            {!following && positions.length > 0 && (
+              <button
+                onClick={recenter}
+                aria-label="回到我的位置"
+                className="absolute bottom-3 right-3 z-[1001] w-9 h-9 rounded-full bg-white shadow-lg flex items-center justify-center active:scale-95 transition-transform"
+              >
+                <Crosshair className="w-4 h-4 text-[#007AFF]" />
+              </button>
+            )}
+            <div
+              id={`map-container-${uniqueMapId.current}`}
+              ref={mapContainerRef}
+              className="absolute top-0 left-0 w-full h-full"
+            >
+              {renderMapContent()}
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <motion.div layout transition={smoothSpring} className="flex gap-3 h-12 w-full relative">
