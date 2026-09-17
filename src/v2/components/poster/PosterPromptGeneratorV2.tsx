@@ -282,7 +282,7 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
             type="text"
             value={posterNickname}
             onChange={(e) => handleNicknameChange(e.target.value)}
-            placeholder="输入昵称（留空则用默认值）"
+            placeholder="自定义海报署名（如：ZENTHOS 瞻）"
             className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-3 py-2.5 text-[13px] font-medium text-gray-900 placeholder:text-gray-300 outline-none focus:border-blue-400 focus:bg-white transition-all"
           />
         </div>

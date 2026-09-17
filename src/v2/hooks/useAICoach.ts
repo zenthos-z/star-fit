@@ -311,12 +311,23 @@ export const useAICoach = (
     scrollToBottomRef.current = scrollToBottom;
   }, [scrollToBottom]);
 
-  // [FIX] Save messages when chat history changes (fixed dependency)
+  // [PERF 2026-09-17] 历史对话卡顿根治：
+  // 旧实现每次 chatHistory 变化（含流式打字机逐 token 的 setState！）都全量 JSON 序列化
+  // 整个 chatHistory（可能含 imageDataUrl base64 大图，数百 KB~数 MB）写 storage，
+  // 并同步 updateThreadMeta（再全量写 thread list）→ 主线程被序列化占满 → 返回按钮/滑动卡顿。
+  // 修复：800ms debounce——流式期间高频 setState 只在停顿后落一次盘（图片仍随消息持久化，
+  // 但频率从每 token 一次降到每停顿一次，序列化成本可忽略）。
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    if (currentThreadId && chatHistory.length > 0) {
+    if (!currentThreadId || chatHistory.length === 0) return;
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
       saveChatMessages(currentThreadId, chatHistory);
       updateThreadMetaRef.current(currentThreadId, chatHistory);
-    }
+    }, 800);
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
   }, [chatHistory, currentThreadId]);
 
   // [SCROLL_FIX] Scroll when overlay opens (wait for animation to complete)

@@ -127,7 +127,7 @@ FUNCTION Execute_Final_Layout(Data):
 
     // [2. PRIMARY FOCUS: Visual Anchor (Identity)]
     SET Branding_Anchor:
-        Text_Content   = "${data.nickname} 瞻"
+        Text_Content   = "${data.nickname}"
         Font_Weight    = "Extreme Bold Sans-serif / Swiss Typeface"
         Position       = "Upper quadrant or Left-aligned Vertical, dominating the visual axis"
         Styling        = "Mix of solid black fill and thin outline stroke; partially overlapped by a Deep Cobalt Blue (#0047AB) circle"

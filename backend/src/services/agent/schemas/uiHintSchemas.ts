@@ -148,6 +148,24 @@ export const ExercisePlanSchema = z
       });
     }
 
+    // 2026-09-17 user rule: a plan card must NEVER show weight 0 for loaded
+    // movements. Zero means "not planned" — the agent must run the PRE-test
+    // flow (instruction card) first per DeepAgentService system prompt. The
+    // validation loop rejects a 0-weight card and feeds this error back, so
+    // the agent corrects course instead of silently shipping an empty plan.
+    if (
+      (exercise_type === "resistance" ||
+        exercise_type === "unilateral" ||
+        exercise_type === "heavy_weight") &&
+      weight === 0
+    ) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${name}: 负重动作的 weight 不能为 0——请先走 PRE 预备组自测流程（出 instruction 卡引导用户自测基础重量），或使用用户给出的具体重量。`,
+        path: ["weight"],
+      });
+    }
+
     // isometric: duration > 0 required, reps should be 1
     if (exercise_type === "isometric") {
       if (!duration || duration <= 0) {
