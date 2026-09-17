@@ -36,13 +36,27 @@
   },
   "typesVersions": {
     "*": {
-      "contracts": ["dist/contracts/index.d.ts"],
-      "contracts/*": ["dist/contracts/*.d.ts"],
-      "contracts/database": ["dist/contracts/database/index.d.ts"],
-      "contracts/database/*": ["dist/contracts/database/*.d.ts"],
-      "contracts/mapping": ["dist/contracts/mapping/index.d.ts"],
-      "contracts/mapping/*": ["dist/contracts/mapping/*.d.ts"],
-      "contracts/validation": ["dist/contracts/validation.d.ts"]
+      "contracts": [
+        "dist/contracts/index.d.ts"
+      ],
+      "contracts/*": [
+        "dist/contracts/*.d.ts"
+      ],
+      "contracts/database": [
+        "dist/contracts/database/index.d.ts"
+      ],
+      "contracts/database/*": [
+        "dist/contracts/database/*.d.ts"
+      ],
+      "contracts/mapping": [
+        "dist/contracts/mapping/index.d.ts"
+      ],
+      "contracts/mapping/*": [
+        "dist/contracts/mapping/*.d.ts"
+      ],
+      "contracts/validation": [
+        "dist/contracts/validation.d.ts"
+      ]
     }
   },
   "scripts": {
@@ -54,5 +68,8 @@
   "devDependencies": {
     "rimraf": "^6.0.1",
     "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "@langchain/deepseek": "^1.1.13"
   }
 }
