@@ -1,6 +1,7 @@
 import Foundation
 import Capacitor
 import UIKit
+import Photos
 
 /**
  * LiquidGlassPlugin — 系统组件版导航（苹果官方 UI 效果和交互规范）。
@@ -30,6 +31,7 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "clearMenuItems", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "showGlassPanel", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "hideGlassPanel", returnType: CAPPluginReturnNone),
+        CAPPluginMethod(name: "saveImage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "setLens", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "setLabel", returnType: CAPPluginReturnNone),
         CAPPluginMethod(name: "hideLens", returnType: CAPPluginReturnNone)
@@ -214,6 +216,59 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
     @objc func setLens(_ call: CAPPluginCall) { call.resolve() }
     @objc func setLabel(_ call: CAPPluginCall) { call.resolve() }
     @objc func hideLens(_ call: CAPPluginCall) { call.resolve() }
+
+    // MARK: - 保存图片到系统相册（训练战报「保存海报」）
+    // dataUrl: PNG data URL（可带透明通道——UI 侧导出圆角镂空图，四角透明原样保留）
+    @objc func saveImage(_ call: CAPPluginCall) {
+        guard let dataUrl = call.getString("dataUrl") else {
+            call.reject("dataUrl required"); return
+        }
+        // data URL → Data（避免依赖 fragile 的 Data(contentsOf:)，纯内存解码）
+        guard let commaIdx = dataUrl.firstIndex(of: ",") else {
+            call.reject("malformed dataUrl"); return
+        }
+        let metaPart = String(dataUrl[dataUrl.startIndex..<commaIdx])
+        let b64 = String(dataUrl[dataUrl.index(after: commaIdx)...])
+        guard metaPart.contains("image/png"), let data = Data(base64Encoded: b64) else {
+            call.reject("unsupported or invalid image data"); return
+        }
+        guard let image = UIImage(data: data) else {
+            call.reject("image decode failed"); return
+        }
+
+        let status = PHPhotoLibrary.authorizationStatus(for: .addOnly)
+        let requestSave: () -> Void = { [weak self] in
+            PHPhotoLibrary.shared().performChanges {
+                PHAssetChangeRequest.creationRequestForAsset(from: image)
+            } completionHandler: { success, error in
+                DispatchQueue.main.async {
+                    if success {
+                        call.resolve()
+                    } else {
+                        call.reject(error?.localizedDescription ?? "save failed")
+                    }
+                }
+                _ = self // 插件生命周期由桥管理，无需强引用
+            }
+        }
+
+        switch status {
+        case .authorized, .limited:
+            requestSave()
+        case .notDetermined:
+            PHPhotoLibrary.requestAuthorization(for: .addOnly) { newStatus in
+                DispatchQueue.main.async {
+                    if newStatus == .authorized || newStatus == .limited {
+                        requestSave()
+                    } else {
+                        call.reject("photo library permission denied")
+                    }
+                }
+            }
+        default:
+            call.reject("photo library permission denied")
+        }
+    }
 
     /// HIG 触感反馈：light/medium/heavy/rigid + success/warning/error 通知
     @objc func haptic(_ call: CAPPluginCall) {

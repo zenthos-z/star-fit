@@ -9,6 +9,7 @@ import { convertSessionToWorkoutSession } from '../../utils/typeBridge';
 import { calculateExerciseVolume } from '../../lib/settlementSummary';
 import { buttonPress, tapScale, staggerContainer, staggerItem, transitions } from '../../lib/animations';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
+import { saveImageToPhotos } from '../../../lib/nativeMedia';
 
 interface SettlementV2Props {
   session: Session;
@@ -65,18 +66,23 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
     if (!cardRef.current) return;
     try {
       setIsSaving(true);
+      // 不设 backgroundColor：卡片圆角四角保持透明（镂空 PNG），与界面所见一致
       const dataUrl = await toPng(cardRef.current, {
         cacheBust: true,
-        backgroundColor: '#ffffff',
         pixelRatio: 2
       });
-      const link = document.createElement('a');
-      link.download = `${trainingSlug}_${dateSlug}_${timeSlug}.png`;
-      link.href = dataUrl;
-      link.click();
+      // iOS 优先走原生相册保存；Web/Android（无原生桥）降级浏览器下载
+      const saved = await saveImageToPhotos(dataUrl);
+      if (!saved) {
+        const link = document.createElement('a');
+        link.download = `${trainingSlug}_${dateSlug}_${timeSlug}.png`;
+        link.href = dataUrl;
+        link.click();
+      }
     } catch (e: any) {
       console.error('Save image failed:', e);
-      alert('保存图片失败，请重试或使用截屏保存。');
+      const msg = String(e?.message || e || '');
+      alert(msg.includes('permission') ? '未获得相册权限，请在系统设置中允许访问。' : '保存图片失败，请重试或使用截屏保存。');
     } finally {
       setIsSaving(false);
     }
@@ -88,36 +94,50 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
       animate={{ opacity: 1, scale: 1, y: 0 }}
       exit={{ opacity: 0, scale: 0.95, y: 20 }}
       transition={transitions.spring}
-      className="fixed inset-0 bg-star-gray z-[100] overflow-y-auto overflow-x-hidden"
-      style={{ WebkitOverflowScrolling: 'touch' }}
+      className="fixed inset-0 bg-star-gray z-[100] overflow-hidden"
     >
+      {/* Header Navigation —— 固定在滚动层之上（iOS sheet 规范）：滚动内容时返回键/标题常驻 */}
       <motion.div
-        variants={staggerContainer}
-        initial="initial"
-        animate="animate"
-        className="min-h-full flex flex-col items-center px-4 pt-8 pb-60"
+        className="absolute top-0 left-0 right-0 z-20 w-full max-w-md mx-auto flex items-center gap-3 px-2 pt-2 pb-3 bg-gradient-to-b from-star-gray via-star-gray/95 to-transparent"
         style={{
           paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)',
           paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))',
           paddingRight: 'max(16px, env(safe-area-inset-right, 0px))'
         }}
       >
+        <button
+          onClick={onClose}
+          aria-label="返回"
+          className="flex-shrink-0 w-11 h-11 rounded-full bg-white shadow-sm text-star-dark flex items-center justify-center border border-gray-100 active:bg-gray-100 active:scale-95 transition-all"
+        >
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+        <div>
+          <h1 className="text-lg font-black text-gray-900 tracking-tighter leading-none">训练战报</h1>
+        </div>
+      </motion.div>
 
-        {/* Header Navigation —— iOS 规范：返回/关闭按钮在左侧 */}
-        <motion.div variants={staggerItem} className="w-full max-w-md flex items-center gap-3 mb-8 px-2">
-          <button
-            onClick={onClose}
-            aria-label="返回"
-            className="flex-shrink-0 w-11 h-11 rounded-full bg-white shadow-sm text-star-dark flex items-center justify-center border border-gray-100 active:bg-gray-100 active:scale-95 transition-all"
-          >
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M15 19l-7-7 7-7" />
-            </svg>
-          </button>
-          <div>
-            <h1 className="text-lg font-black text-gray-900 tracking-tighter leading-none">训练战报</h1>
-          </div>
-        </motion.div>
+      {/* 滚动内容层：Header 之下、悬浮按钮之上 */}
+      <motion.div
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+        className="absolute inset-0 overflow-y-auto overflow-x-hidden z-10"
+        style={{ WebkitOverflowScrolling: 'touch' }}
+      >
+      <motion.div
+        variants={staggerContainer}
+        initial="initial"
+        animate="animate"
+        className="min-h-full flex flex-col items-center px-4 pt-8 pb-60"
+        style={{
+          paddingTop: 'calc(env(safe-area-inset-top, 0px) + 64px)',
+          paddingLeft: 'max(16px, env(safe-area-inset-left, 0px))',
+          paddingRight: 'max(16px, env(safe-area-inset-right, 0px))'
+        }}
+      >
 
         {/* Main Summary Bubble (Card) */}
         <motion.div
@@ -274,6 +294,7 @@ const SettlementV2: React.FC<SettlementV2Props> = ({ session, onClose, onReuse }
             </div>
           </div>
         </motion.div>
+      </motion.div>
       </motion.div>
 
       {/* Floating Action Buttons */}

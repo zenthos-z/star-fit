@@ -53,7 +53,7 @@ services:
       start_period: 15s
     restart: unless-stopped
 
-  # 一次性数据库迁移：建表 + 增量迁移（000..009），跑完即退出。
+  # 一次性数据库迁移：从 000 基线直接建最新结构（单文件），跑完即退出。
   # 首次部署或 schema 变更后手动执行：
   #   docker compose -f deploy/docker-compose.prod.yml --profile tools run --rm migrate
   migrate:
@@ -70,7 +70,7 @@ services:
     working_dir: /app
     # MigrationRunner 以「仓库根 + backend/src/...」定位迁移目录，故工作目录必须是 /app。
     # 000_baseline.sql 幂等建全量基线 schema（14 表 + 枚举/索引/触发器/物化视图，
-    # 含 fitness_level / pgb_json_merge 等迁移 003 的历史断裂依赖），001..009 为增量迁移。
+    # 历史增量迁移（001..012）已于 2026-09-17 压缩进基线；今后 schema 变更从 001 起增量追加。
     command:
       - sh
       - -c

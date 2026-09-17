@@ -789,6 +789,27 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         className="absolute inset-x-0 flex flex-col items-center"
         style={{ top: '17%' }}
       >
+        {/* 解锁提示（stage 1 随入场阶梯出现）：★置于胶囊上方（2026-09-17 用户拍板修改：
+            滑动方向指示应在手势方向一侧）。绝对定位挂在容器顶边之上，不挤动胶囊位置；
+            top 17%（≈148px）减去提示块高度后仍低于状态栏安全区，无遮挡 */}
+        <motion.div
+          {...LOCK_MOTION.enter(1)}
+          className="absolute left-1/2 flex flex-col items-center gap-0.5"
+          style={{ bottom: 'calc(100% + 10px)', transform: 'translateX(-50%)' }}
+        >
+          <motion.svg
+            animate={{ y: [2, -3, 2] }}
+            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+            className="w-4 h-4 text-white/40"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+            strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+          </motion.svg>
+          <span className="text-[12px] font-medium text-white/40">上滑解锁</span>
+        </motion.div>
         <motion.div
           animate={{ y: dragY, scale: capsulePressed && dragY === 0 ? LOCK_MOTION.pressScale : 1 }}
           transition={LOCK_MOTION.spring}
@@ -865,37 +886,20 @@ export const LockScreen: React.FC<LockScreenProps> = ({
             )}
           </AnimatePresence>
         </motion.div>
-        {/* 解锁提示（stage 1 随入场阶梯出现）：置于胶囊下方流式位置——
-            2026-09-17 用户拍板：放上方会顶进状态栏，与灵动岛/时间打架 */}
-        <motion.div
-          {...LOCK_MOTION.enter(1)}
-          className="flex flex-col items-center gap-0.5 mt-3"
-        >
-          <motion.svg
-            animate={{ y: [2, -3, 2] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-4 h-4 text-white/40"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            strokeWidth={2.5}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-          </motion.svg>
-          <span className="text-[12px] font-medium text-white/40">上滑解锁</span>
-        </motion.div>
       </div>
 
-      {/* 【中间】信息视窗（stage 1）：★固定圆角玻璃窗（340×300，2026-09-17 用户拍板）——
+      {/* 【中间】信息视窗（stage 1）：★固定圆角玻璃窗（340×272，2026-09-17 用户拍板+重叠修正：
+          300→272、top 46%→43%——iPhone 11 896pt 屏上 300 高窗底(≈562)与按钮区顶(=554)静止态即重叠 8px，
+          休息态双钮时副按钮撞进窗内（用户实锤）。272 高信息内容(≈246)仍放得下，与胶囊/按钮均留 13px+ 间隙）——
           所有状态（运动/休息/倒计时/全部完成）共用同一视窗排版，内容在窗内居中、
           超出裁剪（overflow hidden），状态切换 = 交叉溶解（AnimatePresence popLayout） */}
       <motion.div
         className="absolute inset-x-0 flex justify-center"
-        style={{ top: '46%', transform: 'translateY(-50%)' }}
+        style={{ top: '43%', transform: 'translateY(-50%)' }}
       >
         <div
           className="rounded-[28px] border border-white/10 bg-white/[0.06] overflow-hidden"
-          style={{ width: 340, height: 300, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+          style={{ width: 340, height: 272, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.div

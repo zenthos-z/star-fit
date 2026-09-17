@@ -84,6 +84,8 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
     assert.deepEqual(names, [
       "create_exercise",
       "get_exercise_detail",
+      "get_hr_trend",
+      "get_session_hr_curve",
       "list_exercises",
       "load_history",
       "update_profile",

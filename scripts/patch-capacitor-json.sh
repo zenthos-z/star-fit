@@ -12,6 +12,7 @@ lst = d.get('packageClassList', [])
 for name in ('LiquidGlassPlugin', 'LiveActivityPlugin', 'SpeechRecognitionPlugin', 'WatchConnectivityPlugin'):
     if name not in lst:
         lst.append(name)
+# saveImage 方法挂在 LiquidGlassPlugin 上，无需新增类；此注释仅提示 saveImage 依赖本插件的注册
 d['packageClassList'] = lst
 json.dump(d, open(p, 'w'), indent='\t', ensure_ascii=False)
 print('packageClassList:', d['packageClassList'])
