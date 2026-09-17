@@ -1115,27 +1115,20 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 </svg>
               </button>
             )}
-            <button
-              type="submit"
-              disabled={isBusy || !chatMessage.trim()}
-              className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 ${
-                chatMessage.trim() && !isBusy
-                  ? 'bg-[#0A84FF] text-white shadow-sm'
-                  : 'bg-gray-200 text-gray-400'
-              }`}
-              aria-label={chatMessage.trim() ? '发送' : '语音输入'}
-            >
-              {chatMessage.trim() && !isBusy ? (
+            {/* 发送按钮：仅有文字时出现（空输入时由灰色麦克风接管，
+                不再渲染发送键的麦克风 fallback——否则默认进来两个麦克风图标，2026-09-17） */}
+            {chatMessage.trim() && (
+              <button
+                type="submit"
+                disabled={isBusy}
+                className="w-8 h-8 rounded-full flex items-center justify-center shrink-0 mb-0.5 transition-all active:scale-90 bg-[#0A84FF] text-white shadow-sm"
+                aria-label="发送"
+              >
                 <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M3.478 2.405a.75.75 0 00-.926.94l2.432 7.905H13.5a.75.75 0 010 1.5H4.984l-2.432 7.905a.75.75 0 00.926.94 60.519 60.519 0 0018.445-8.986.75.75 0 000-1.218A60.517 60.517 0 003.478 2.405z" />
                 </svg>
-              ) : (
-                <svg className="w-[18px] h-[18px]" fill="currentColor" viewBox="0 0 24 24">
-                  <path d="M8.25 4.5a3.75 3.75 0 117.5 0v8.25a3.75 3.75 0 11-7.5 0V4.5z" />
-                  <path d="M6 12v.75a6 6 0 0012 0V12m-6 9v-3.75" stroke="currentColor" strokeWidth={1.8} fill="none" strokeLinecap="round" />
-                </svg>
-              )}
-            </button>
+              </button>
+            )}
             </div>
             </form>
           </div>
