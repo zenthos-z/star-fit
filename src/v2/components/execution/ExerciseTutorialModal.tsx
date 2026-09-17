@@ -465,10 +465,10 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
         }}
         className="fixed inset-x-0 bottom-0 z-[80] bg-white rounded-t-[40px] shadow-[0_-8px_40px_rgba(0,0,0,0.18)] flex flex-col overflow-hidden h-[88vh] sm:h-[80vh] sm:max-w-lg sm:mx-auto sm:rounded-t-[40px]"
       >
-        {/* Header — 拖拽把手区：左关闭 / 中标题 / 右占位 */}
+        {/* Header — 拖拽把手区：左关闭 / 中标题 / 右占位
+            ★底部弹窗不需要避让灵动岛（safe-top），那是全屏页的规矩——之前误用导致标题上方 59px 异常空白 */}
         <div
           className="flex-shrink-0 flex items-center gap-3 px-4 pt-3 pb-2 touch-none"
-          style={{ paddingTop: 'calc(var(--safe-top) + 12px)' }}
           onPointerDown={(e) => dragControls.start(e)}
         >
           <button

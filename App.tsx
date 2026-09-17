@@ -923,11 +923,21 @@ const App: React.FC = () => {
               const newSet = { ...s, ...updates };
 
               // 当完成一个组时，设置该组的休息结束时间
+              // ★休息两类场景：
+              //   ① 组间休息——力量类非最后一组，完成后塞默认 60s
+              //   ② 动作间休息——力量类最后一组完成后也塞休息（切换到下一个动作前
+              //      给换动作/换器械的喘息窗口；2026-09-16 用户反馈：砍掉后动作间
+              //      零休息直切下一个动作界面）
+              //   有氧/户外是持续运动，完成后不存在休息（户外跑假休息 bug 的根修保持）
               if (updates.completed === true && !s.completed) {
-                const now = Date.now();
-                const DEFAULT_REST_TIME = 60; // 默认60秒
-                const restSecs = DEFAULT_REST_TIME;
-                newSet.restEndTime = now + restSecs * 1000;
+                const STRENGTH_TYPES = ['resistance', 'bodyweight', 'assisted', 'unilateral', 'weight_only', 'reps_only', 'isometric'];
+                const isStrength = STRENGTH_TYPES.includes(ex.type) || ex.type === null || ex.type === undefined;
+                if (isStrength) {
+                  const now = Date.now();
+                  const DEFAULT_REST_TIME = 60; // 默认60秒
+                  const restSecs = DEFAULT_REST_TIME;
+                  newSet.restEndTime = now + restSecs * 1000;
+                }
               }
               // 当取消完成时，清除休息时间
               else if (updates.completed === false) {
@@ -957,6 +967,14 @@ const App: React.FC = () => {
 
   const handleLockEndRest = (exId: string, setId: string) => {
     handleUpdateSet(exId, setId, { restEndTime: undefined });
+  };
+
+  // 锁定屏休息延长：把该组 restEndTime 往后平移 extraSec 秒
+  const handleLockExtendRest = (exId: string, setId: string, extraSec: number) => {
+    const ex = session.exercises.find(e => e.id === exId);
+    const target = ex?.sets.find(s => s.id === setId);
+    const cur = target?.restEndTime ?? Date.now();
+    handleUpdateSet(exId, setId, { restEndTime: cur + extraSec * 1000 });
   };
 
   const handleUpdateExerciseSettings = (exId: string, updates: Partial<Exercise> | Partial<ExerciseAction>) => {
@@ -1413,6 +1431,7 @@ const App: React.FC = () => {
             onCompleteSet={handleLockCompleteSet}
             onFinishCountdown={handleLockFinishCountdown}
             onEndRest={handleLockEndRest}
+            onExtendRest={handleLockExtendRest}
           />
         )}
       </AnimatePresence>
