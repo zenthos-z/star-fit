@@ -493,11 +493,6 @@ export class DeepAgentService implements AgentService {
       let finalText: string | undefined;
       let buffered = ""; // current model step's narration, pending classification
       let leakedThinking = ""; // reasoning stripped from terminal messages
-      // ★字段级思考链（reasoning_content）：thinking 开启时的协议级推理流，
-      // 与 buffered（可能成为正文的 prose）物理隔离。何时产出：流结束时统一
-      // yield 为 thinking 事件（前端折叠区实时渲染由 thinking 增量事件驱动，
-      // 这里聚合一次性下发与旧行为一致）。
-      let liveThinking = "";
 
       for await (const raw of stream) {
         // Unwrap the [mode, data] tuple (defensive: also accept untagged).
@@ -522,12 +517,14 @@ export class DeepAgentService implements AgentService {
           }
           // ★字段级思考链（2026-09-16）：thinking 开启时 DeepSeek 把推理放在
           // reasoning_content（ChatDeepSeek 透传到 additional_kwargs），协议级
-          // 与正文分离——直接进 liveThinking，永远不混入 buffered（正文）。
-          // 这取代了靠文本启发式猜测的旧思路；splitLeakedReasoning 退为
-          // 「thinking 关闭时的兜底」。
+          // 与正文分离——每个 delta 到达即 yield 为 thinking 事件（实时流式，
+          // 前端折叠区逐字渲染）。这取代了靠文本启发式猜测的旧思路；
+          // splitLeakedReasoning 退为「thinking 关闭时的兜底」。
+          // （2026-09-17 修订：原实现聚合到流结束一次性 yield，思考链不流式——
+          //  改为逐 delta 直通，并删除流尾的聚合下发避免重复。）
           const rc = extractReasoningContent(data);
           if (rc) {
-            liveThinking = liveThinking ? `${liveThinking}${rc}` : rc;
+            yield { type: "thinking", text: rc };
           }
           continue;
         }
@@ -600,11 +597,7 @@ export class DeepAgentService implements AgentService {
         yield { type: "thinking", text: leakedThinking };
       }
 
-      // ★字段级思考链（reasoning_content）：协议级推理，权威来源。聚合后
-      // 与其他 thinking 汇合下发——thinking 开启时这是主力通道。
-      if (liveThinking) {
-        yield { type: "thinking", text: liveThinking };
-      }
+      // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。）
 
       if (finalText) {
         yield { type: "token", text: finalText };

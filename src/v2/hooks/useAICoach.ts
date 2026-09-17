@@ -657,8 +657,15 @@ ${JSON.stringify(uploadData, null, 2)}`
           // 逐字追加：只更新 thinking 气泡的 text；uiHint 保持 undefined（不渲染卡片）
           setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, text: accumulated } : m)));
         } else if (ev.type === 'thinking' && ev.text) {
-          // 被质量门打回轮次的自我修订文本 → 折叠思考区，不进正文
-          thinkingAccumulated += (thinkingAccumulated ? '\n\n' : '') + ev.text;
+          // 被质量门打回轮次的自我修订文本 → 折叠思考区，不进正文。
+          // 后端 thinking 有两类：①reasoning_content 逐 delta 小片段（直接拼接，
+          // 加空行会把一句推理切成 n 段）；②叙事文本整段（如工具调用前的 narration，
+          // 自带段落分隔，用空行拼接区分来源）。
+          // 判据：片段内含换行 → 视为整段叙事；否则按 delta 无缝续接。
+          const isBlockNarration = ev.text.includes('\n');
+          thinkingAccumulated = isBlockNarration
+            ? (thinkingAccumulated ? `${thinkingAccumulated}\n\n${ev.text}` : ev.text)
+            : thinkingAccumulated + ev.text;
           setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, thinkingText: thinkingAccumulated } : m)));
         } else if (ev.type === 'uiHint' && ev.card) {
           card = ev.card; // 暂存，流结束后才渲染
