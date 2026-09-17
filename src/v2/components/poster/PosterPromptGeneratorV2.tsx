@@ -82,6 +82,7 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
       return '';
     }
   });
+  const [nicknameError, setNicknameError] = useState(false);
   const handleNicknameChange = (v: string) => {
     setPosterNickname(v);
     try {
@@ -92,6 +93,12 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
   };
 
   const generatePrompt = useCallback(() => {
+    // 署名完全自定义（用户个人标志不得硬编码在模板里）。留空时拦截并提示，不编造占位署名。
+    if (!posterNickname.trim()) {
+      setNicknameError(true);
+      return;
+    }
+    setNicknameError(false);
     let context: TemplateContext;
     let config: any;
 
@@ -282,9 +289,12 @@ export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = (
             type="text"
             value={posterNickname}
             onChange={(e) => handleNicknameChange(e.target.value)}
-            placeholder="自定义海报署名（如：ZENTHOS 瞻）"
-            className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-3 py-2.5 text-[13px] font-medium text-gray-900 placeholder:text-gray-300 outline-none focus:border-blue-400 focus:bg-white transition-all"
+            placeholder="自定义海报署名（如：力量小站）"
+            className={`w-full bg-gray-50 border rounded-2xl px-3 py-2.5 text-[13px] font-medium text-gray-900 placeholder:text-gray-300 outline-none transition-all ${nicknameError ? 'border-red-300 bg-red-50' : 'border-gray-100 focus:border-blue-400 focus:bg-white'}`}
           />
+          {nicknameError && (
+            <p className="mt-1.5 text-xs text-red-500">请先填写海报署名，生成时将作为海报上的标识文字</p>
+          )}
         </div>
 
         {/* 氛围参数：仅 acid 系风格需要，其余风格不渲染（免空卡片占位） */}
