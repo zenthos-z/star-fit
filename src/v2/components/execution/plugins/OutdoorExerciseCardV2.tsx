@@ -762,39 +762,39 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
               {/* 底部悬浮玻璃数据栏（Apple Liquid Glass：圆角胶囊，浮于地图之上）
                   两行排布：上行=距离+时间（主指标），下行=配速+心率 */}
               <div
-                className="absolute left-4 right-4 z-[100001] glass-clear rounded-[28px] px-7 pt-4 pb-5"
+                className="absolute left-4 right-4 z-[100001] glass-clear rounded-[40px] px-6 pt-3.5 pb-4"
                 style={{ bottom: 'max(1rem, env(safe-area-inset-bottom))' }}
               >
-                <div className="grid grid-cols-2 gap-x-8 gap-y-5">
+                <div className="grid grid-cols-2 gap-x-6 gap-y-3">
                   <div className="flex flex-col gap-2">
-                    <span className="text-[15px] font-semibold tracking-wide text-[#A3E635]">距离</span>
+                    <span className="text-[15px] font-semibold tracking-wide text-[#A3E635] whitespace-nowrap">距离</span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-[44px] font-bold tabular-nums text-white leading-none tracking-tight">{formatDistance(distance)}</span>
-                      <span className="text-[16px] font-semibold text-[#A3E635]">公里</span>
+                      <span className="text-[34px] font-bold tabular-nums text-white leading-none tracking-tight whitespace-nowrap">{formatDistance(distance)}</span>
+                      <span className="text-[14px] font-semibold text-[#A3E635] whitespace-nowrap">公里</span>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <span className="text-[15px] font-semibold tracking-wide text-[#FBBF24]">时间</span>
+                    <span className="text-[15px] font-semibold tracking-wide text-[#FBBF24] whitespace-nowrap">时间</span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className="text-[44px] font-bold tabular-nums text-white leading-none tracking-tight">{formatTime(elapsed)}</span>
-                      <span className="text-[16px] font-semibold text-[#FBBF24]">分:秒</span>
+                      <span className="text-[34px] font-bold tabular-nums text-white leading-none tracking-tight whitespace-nowrap">{formatTime(elapsed)}</span>
+                      <span className="text-[14px] font-semibold text-[#FBBF24] whitespace-nowrap">分:秒</span>
                     </div>
                   </div>
                   <div className="flex flex-col gap-2">
-                    <span className="text-[15px] font-semibold tracking-wide text-[#38BDF8]">配速</span>
+                    <span className="text-[15px] font-semibold tracking-wide text-[#38BDF8] whitespace-nowrap">配速</span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className={`text-[44px] font-bold tabular-nums leading-none tracking-tight ${currentPace ? 'text-white' : 'text-white/30'}`}>{currentPace ?? "--'--\""}</span>
-                      <span className="text-[16px] font-semibold text-[#38BDF8]">/公里</span>
+                      <span className={`text-[34px] font-bold tabular-nums leading-none tracking-tight whitespace-nowrap ${currentPace ? 'text-white' : 'text-white/30'}`}>{currentPace ?? "--'--\""}</span>
+                      <span className="text-[14px] font-semibold text-[#38BDF8] whitespace-nowrap">/公里</span>
                     </div>
                   </div>
                   <button
                     onClick={() => setShowHrInput(true)}
                     className="flex flex-col gap-2 items-start active:opacity-70 transition-opacity"
                   >
-                    <span className="text-[15px] font-semibold tracking-wide text-[#FB7185]">心率</span>
+                    <span className="text-[15px] font-semibold tracking-wide text-[#FB7185] whitespace-nowrap">心率</span>
                     <div className="flex items-baseline gap-1.5">
-                      <span className={`text-[44px] font-bold tabular-nums leading-none tracking-tight ${heartRateInput ? 'text-white' : 'text-white/30'}`}>{heartRateInput || '--'}</span>
-                      <span className="text-[16px] font-semibold text-[#FB7185]">BPM</span>
+                      <span className={`text-[34px] font-bold tabular-nums leading-none tracking-tight whitespace-nowrap ${heartRateInput ? 'text-white' : 'text-white/30'}`}>{heartRateInput || '--'}</span>
+                      <span className="text-[14px] font-semibold text-[#FB7185] whitespace-nowrap">BPM</span>
                     </div>
                   </button>
                 </div>
@@ -809,7 +809,7 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
                     ? 'bg-[#007AFF] shadow-lg shadow-[#007AFF]/40'
                     : 'liquid-glass'
                 }`}
-                style={{ bottom: 'calc(max(1rem, env(safe-area-inset-bottom)) + 210px)' }}
+                style={{ bottom: 'calc(max(1rem, env(safe-area-inset-bottom)) + 168px)' }}
               >
                 <Crosshair className={`w-5 h-5 ${following ? 'text-white' : 'text-[#007AFF]'}`} />
               </button>
