@@ -164,6 +164,23 @@ export function assertUserScope(
  *
  * Throws if no userId can be resolved — tools must NEVER guess or default.
  */
+// userId 必须是合法 UUID（users.id 为 uuid 列）。2026-09-17 实锤：非 UUID 字符串
+// （如测试脚本传入 "survey-test-0917"）会直插 SQL 触发 `invalid input syntax for type
+// uuid` 的 PostgresClient 裸崩。在此入口统一校验，非法值抛结构化错误 → Agent 工具层
+// 可捕获并告知用户，而不是数据库层崩栈。
+const MCP_USER_ID_UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+function assertValidUserId(userId: string): string {
+  if (!MCP_USER_ID_UUID_RE.test(userId)) {
+    throw new Error(
+      `mcpTools: userId "${userId}" is not a valid UUID (users.id is uuid-typed). ` +
+        `Check the caller that sets configurable.userId.`,
+    );
+  }
+  return userId;
+}
+
 export function getUserIdFromContext(
   opts: {
     explicitConfig?: unknown;
@@ -182,12 +199,12 @@ export function getUserIdFromContext(
     alsUserId = undefined;
   }
   if (alsUserId) {
-    return alsUserId;
+    return assertValidUserId(alsUserId);
   }
 
   // 2. Test-injected principal.
   if (opts.injectedUserId) {
-    return opts.injectedUserId;
+    return assertValidUserId(opts.injectedUserId);
   }
 
   // 3. DynamicStructuredTool func config argument (RunnableConfig).
@@ -201,7 +218,7 @@ export function getUserIdFromContext(
     (cfg as { config?: { configurable?: { userId?: string } } } | undefined)
       ?.config?.configurable?.userId;
   if (fromExplicit) {
-    return fromExplicit;
+    return assertValidUserId(fromExplicit);
   }
 
   throw new Error(
