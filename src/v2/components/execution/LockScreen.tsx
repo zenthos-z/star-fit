@@ -6,6 +6,8 @@ import { setTabBarHidden } from '../../../lib/nativeTabBar';
 import { HoldToConfirm, HOLD_MS } from './HoldToConfirm';
 import { LOCK_MOTION } from './lockMotion';
 import { broadcastCurrentSet, isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from '../../services/watchConnectivity';
+import { useLoadAnchors } from '../../hooks/useLoadAnchors';
+import { getUserId } from '@/services';
 import type { Exercise, ExerciseType } from '../../../../types';
 
 /**
@@ -220,6 +222,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 }) => {
   const [now, setNow] = useState(Date.now());
   const [counting, setCounting] = useState<{ exId: string; setId: string; startedAt: number; target: number } | null>(null);
+  // C3（2026-09-17 用户反馈）：力量训练信息卡缺推荐配重——计划 weight=0（用户自选）时
+  // 从 load_anchors 锚点推算建议重量（est_1rm × 0.7 ≈ 8-12 次组的工作重量；无 est_1rm 用
+  // Epley 公式由 best_weight/best_reps 估 1RM）。锚点也缺则不显示，不编数字。
+  const { getAnchor } = useLoadAnchors(getUserId());
 
   // 全局 500ms 心跳：驱动总计时显示、休息倒计时、组倒计时
   useEffect(() => {
@@ -516,6 +522,22 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     // 力量/自重：重量 × 次数（assisted 负重量按辅助语义显示）
     if (typeof set.weight === 'number' && set.weight !== 0) {
       parts.push({ value: String(Math.abs(set.weight)), unit: set.weight < 0 ? 'kg 辅助' : 'kg' });
+    } else if (set.weight === 0 || set.weight === undefined) {
+      // 计划未定重量（0 = 用户自选）：从锚点推算建议工作重量（1RM × 0.7）
+      const strengthTypes = ['resistance', 'heavy_weight', 'unilateral', 'isometric'];
+      if (strengthTypes.includes(currentEx.type) || currentEx.metadata?.exercise_type) {
+        const anchor = getAnchor(currentEx.id);
+        const est1rm =
+          typeof anchor?.est_1rm === 'number' && anchor.est_1rm > 0
+            ? anchor.est_1rm
+            : typeof anchor?.best_weight === 'number' && anchor.best_weight > 0
+            ? anchor.best_weight * (1 + (anchor.best_reps ?? 5) / 30) // Epley: w*(1+r/30)
+            : 0;
+        const suggested = est1rm > 0 ? Math.round((est1rm * 0.7) / 2.5) * 2.5 : 0; // 按 2.5kg 取整
+        if (suggested > 0) {
+          parts.push({ value: `建议 ~${suggested}`, unit: 'kg' });
+        }
+      }
     }
     if (typeof set.reps === 'number' && set.reps > 0) {
       parts.push({ value: String(set.reps), unit: '次' });
@@ -530,7 +552,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       parts.push({ value: (dist / 1000).toFixed(dist % 1000 === 0 ? 0 : 2), unit: 'km' });
     }
     return parts.length ? parts : null;
-  }, [focus, currentEx]);
+  }, [focus, currentEx, getAnchor]);
 
   // ---- 按钮区（下方）：全部长按制 + 环形进度 + 震动 ----
   const renderButtons = () => {
@@ -553,20 +575,19 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     }
 
     if (focus.kind === 'rest') {
-      // ★副按钮在上、主按钮压底：容器底对齐，主按钮「结束休息」底边与 confirm 单钮态
-      // 几何恒定（拇指肌肉记忆），副按钮 +10 秒向上生长——否则主按钮进休息态上移 80px
-      // 撞进信息区（2026-09-17 用户实锤反馈）
+      // 2026-09-17 用户反馈：+10 秒压在「结束休息」上方会占用信息栏高度并导致文字重叠，
+      // 改为主按钮「结束休息」在上、副按钮「+10 秒」垫底（2026-09-17 二次反馈后定稿）
       return (
         <div className="flex flex-col gap-4">
-          <HoldToConfirm
-            variant="secondary"
-            label="+10 秒"
-            onConfirm={() => onExtendRest(focus.exId, focus.setId, 10)}
-          />
           <HoldToConfirm
             variant="primary"
             label="结束休息"
             onConfirm={() => onEndRest(focus.exId, focus.setId)}
+          />
+          <HoldToConfirm
+            variant="secondary"
+            label="+10 秒"
+            onConfirm={() => onExtendRest(focus.exId, focus.setId, 10)}
           />
         </div>
       );
@@ -783,33 +804,32 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         }}
       />
 
+      {/* 解锁提示（stage 1）：2026-09-17 用户反馈「上滑解锁提示没在页面中间居中」——
+          从胶囊上方（top 17% 容器挂件）移到屏幕垂直居中的独立层，水平垂直双居中 */}
+      <motion.div
+        {...LOCK_MOTION.enter(1)}
+        className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col items-center gap-0.5 pointer-events-none"
+      >
+        <motion.svg
+          animate={{ y: [2, -3, 2] }}
+          transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+          className="w-4 h-4 text-white/40"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+          strokeWidth={2.5}
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
+        </motion.svg>
+        <span className="text-[12px] font-medium text-white/40">上滑解锁</span>
+      </motion.div>
+
       {/* 【上方】时间胶囊（stage 0）：入场 morph（从小胶囊原位放大滑到锁定位）+ 跟手拖拽 + 统一弹簧。
           定位层 / 拖拽层 / motion 层分离（motion 会覆写 transform） */}
       <div
         className="absolute inset-x-0 flex flex-col items-center"
         style={{ top: '17%' }}
       >
-        {/* 解锁提示（stage 1 随入场阶梯出现）：★置于胶囊上方（2026-09-17 用户拍板修改：
-            滑动方向指示应在手势方向一侧）。绝对定位挂在容器顶边之上，不挤动胶囊位置；
-            top 17%（≈148px）减去提示块高度后仍低于状态栏安全区，无遮挡 */}
-        <motion.div
-          {...LOCK_MOTION.enter(1)}
-          className="absolute left-1/2 flex flex-col items-center gap-0.5"
-          style={{ bottom: 'calc(100% + 10px)', transform: 'translateX(-50%)' }}
-        >
-          <motion.svg
-            animate={{ y: [2, -3, 2] }}
-            transition={{ duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
-            className="w-4 h-4 text-white/40"
-            fill="none"
-            stroke="currentColor"
-            viewBox="0 0 24 24"
-            strokeWidth={2.5}
-          >
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 15l7-7 7 7" />
-          </motion.svg>
-          <span className="text-[12px] font-medium text-white/40">上滑解锁</span>
-        </motion.div>
         <motion.div
           animate={{ y: dragY, scale: capsulePressed && dragY === 0 ? LOCK_MOTION.pressScale : 1 }}
           transition={LOCK_MOTION.spring}
