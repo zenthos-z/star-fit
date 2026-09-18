@@ -26,9 +26,14 @@ describe('calculateExerciseVolume', () => {
     expect(calculateExerciseVolume(ex)).toBe(60 * 10 + 60 * 8);
   });
 
-  it('自重动作无配重：容量 = (体重75+0)×次数（2026-09-16 口径统一，含体重）', () => {
-    const ex = mkEx('bodyweight', [mkSet({ reps: 20, completed: true })]);
+  it('自重动作无配重（有体重画像）：容量 = (体重+0)×次数（真实负荷含自重）', () => {
+    const ex = mkEx('bodyweight', [mkSet({ reps: 20, completed: true })], 75);
     expect(calculateExerciseVolume(ex)).toBe(75 * 20);
+  });
+
+  it('自重动作无体重画像：容量 0（新用户体重未知，不虚增——2026-09-18 口径）', () => {
+    const ex = mkEx('bodyweight', [mkSet({ reps: 20, completed: true })]);
+    expect(calculateExerciseVolume(ex)).toBe(0);
   });
 
   it('自重动作带配重：容量 = (体重+配重)×次数', () => {
@@ -46,9 +51,9 @@ describe('calculateExerciseVolume', () => {
     expect(calculateExerciseVolume(ex)).toBe(80 * 30);
   });
 
-  it('等长动作无配重且无 referenceBodyweight：兜底 75kg', () => {
+  it('等长动作无配重且无 referenceBodyweight：容量 0（不虚增，2026-09-18 口径）', () => {
     const ex = mkEx('isometric', [mkSet({ duration: 30, completed: true })]);
-    expect(calculateExerciseVolume(ex)).toBe(75 * 30);
+    expect(calculateExerciseVolume(ex)).toBe(0);
   });
 
   it('cardio/outdoor 不计容量', () => {

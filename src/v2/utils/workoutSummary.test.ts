@@ -99,7 +99,7 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     expect(stats.totalCardioDurationSec).toBe(3600);
   });
 
-  it('isometric（等长）：时长统计 + 体重近似容量（维持既有口径）', () => {
+  it('isometric（等长）：时长统计 + 体重近似容量（无体重时不虚增）', () => {
     const ex = mkEx({
       name: '平板支撑',
       type: 'isometric',
@@ -110,14 +110,25 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     expect(entry.weight).toBeUndefined(); // 0 重量不写入
 
     const stats = buildWorkoutStats([ex]);
-    // 容量 = (默认75kg体重) × 秒
-    expect(stats.totalVolume).toBe(75 * 105);
+    // referenceBodyweight 缺失（新用户未设置体重）→ 容量 0，不凭空捏造 75kg
+    expect(stats.totalVolume).toBe(0);
   });
 
-  it('bodyweight（自重）：次数统计；容量 = (体重+配重)×次数（2026-09-16 口径统一）', () => {
+  it('isometric 带体重画像：容量 = referenceBodyweight × 秒', () => {
+    const ex = mkEx({
+      name: '平板支撑',
+      type: 'isometric',
+      referenceBodyweight: 75,
+      sets: [mkSet({ duration: 60, weight: 0 }), mkSet({ duration: 45, weight: 0 })],
+    });
+    expect(buildWorkoutStats([ex]).totalVolume).toBe(75 * 105);
+  });
+
+  it('bodyweight（自重）：次数统计；容量 = (体重+配重)×次数（2026-09-18 真实配重口径）', () => {
     const ex = mkEx({
       name: '俯卧撑',
       type: 'bodyweight',
+      referenceBodyweight: 75,
       sets: [mkSet({ weight: 0, reps: 20 }), mkSet({ weight: 0, reps: 15 })],
     });
     const entry = formatExerciseEntry(ex);
@@ -125,9 +136,18 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     expect(entry.weight).toBeUndefined();
 
     const stats = buildWorkoutStats([ex]);
-    // 容量 = (默认体重75 + 配重0) × 次数，与 History/结算页口径一致
+    // 容量 = (体重75 + 配重0) × 次数
     expect(stats.totalVolume).toBe(75 * 35);
     expect(stats.setsCount).toBe(2);
+  });
+
+  it('bodyweight 无体重画像：容量 0（不虚增，修复新用户「配重0却有容量」）', () => {
+    const ex = mkEx({
+      name: '卷腹',
+      type: 'bodyweight',
+      sets: [mkSet({ weight: 0, reps: 15 }), mkSet({ weight: 0, reps: 15 })],
+    });
+    expect(buildWorkoutStats([ex]).totalVolume).toBe(0);
   });
 
   it('bodyweight 自重+追加配重：容量 = (体重+配重)×次数', () => {
@@ -274,12 +294,21 @@ describe('workoutSummary 逐类别卡片数据输出', () => {
     const stats = buildWorkoutStats([
       mkEx({ type: 'resistance', sets: [mkSet({ weight: 60, reps: 10 })] }),
       mkEx({ type: 'cardio', sets: [mkSet({ duration: 1800, distance: 4000, heartRate: 145 })] }),
-      mkEx({ type: 'isometric', sets: [mkSet({ duration: 60 })] }),
+      mkEx({ type: 'isometric', referenceBodyweight: 75, sets: [mkSet({ duration: 60 })] }),
     ]);
-    expect(stats.totalVolume).toBe(600 + 75 * 60); // 抗阻 + 等长近似
+    expect(stats.totalVolume).toBe(600 + 75 * 60); // 抗阻 + 等长（有体重画像）近似
     expect(stats.totalCardioDurationSec).toBe(1800); // 等长不计入有氧时长
     expect(stats.totalDistanceM).toBe(4000);
     expect(stats.avgHr).toBe(145);
     expect(stats.setsCount).toBe(3);
+  });
+
+  it('混合会话无体重画像：等长/自重不产生容量（不凭空捏造 75kg）', () => {
+    const stats = buildWorkoutStats([
+      mkEx({ type: 'resistance', sets: [mkSet({ weight: 60, reps: 10 })] }),
+      mkEx({ type: 'isometric', sets: [mkSet({ duration: 60 })] }),
+      mkEx({ type: 'bodyweight', sets: [mkSet({ weight: 0, reps: 15 })] }),
+    ]);
+    expect(stats.totalVolume).toBe(600); // 只有抗阻贡献容量
   });
 });

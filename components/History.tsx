@@ -30,6 +30,7 @@ import {
 import { isNativeTabBar, setTabBarHidden } from '../src/lib/nativeTabBar';
 import { List } from 'react-window';
 import { setVolume } from '../src/v2/utils/workoutSummary';
+// （DEFAULT_BODYWEIGHT 已不再使用：容量统一走 setVolume，自重兜底逻辑在其内部）
 
 // 容量口径统一（2026-09-16）：单组容量共用 workoutSummary.setVolume
 // （bodyweight 含体重、assisted 真实负荷、unilateral ×2、isometric 体重兜底），

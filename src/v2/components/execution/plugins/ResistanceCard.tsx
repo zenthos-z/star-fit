@@ -56,12 +56,16 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
   const [editingValues, setEditingValues] = useState<Record<string, string>>({});
 
   // assisted 动作：weight 为负值辅助重量（-20 = 机器辅助 20kg，实际负荷 = 体重−20）。
-  // 展示层取绝对值 + 「辅助」标签；存储仍为负值（统计/锚点全链路负值契约，不动）。
+  // 展示语义（2026-09-18 用户拍板）：辅助重量直接以负数展示（自重 −20），配重标签写「自重-辅助kg」，
+  // 存储/统计仍为负值（负值契约贯穿统计与锚点，不动）。
+  // bodyweight 动作：weight 为追加配重（通常 0），标签写「自重+配重kg」明确容量含自重。
   const isAssisted = (exercise as unknown as { metadata?: { libraryType?: string } }).metadata?.libraryType === 'assisted';
+  const isBodyweight = (exercise as unknown as { metadata?: { libraryType?: string } }).metadata?.libraryType === 'bodyweight';
   const displayWeight = (w: number | undefined): string => {
     if (w === undefined || w === null) return '';
-    return isAssisted ? String(Math.abs(w)) : String(w);
+    return isAssisted ? String(-Math.abs(w)) : String(w);
   };
+  const weightLabel = isAssisted ? '自重-辅助kg' : (isBodyweight ? '自重+配重kg' : 'kg');
 
   // 倒计时更新 - 每秒刷新以更新所有组的倒计时显示
   useEffect(() => {
@@ -301,7 +305,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
                         setEditingValues(prev => { const next = { ...prev }; delete next[key]; return next; });
                         return;
                       }
-                      // assisted：用户输入的是「辅助量」（正数语义），存储为负值。
+                      // assisted：展示为负数（自重-辅助），用户输入正数按辅助量存储为负值；
                       // 用户显式输入负数（带 - 号）尊重原值，不二次取负。
                       if (isAssisted && finalValue > 0) {
                         finalValue = -finalValue;
@@ -313,7 +317,7 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
                     className={`w-full text-center font-black leading-tight py-1 bg-transparent border-b-2 border-transparent focus:border-blue-400 outline-none disabled:cursor-not-allowed transition-all tabular-nums text-gray-800 ${numSizeClass(editingValues[`weight-${set.index}`] ?? set.weight)}`}
                   />
                 </div>
-                <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">{isAssisted ? '辅助 kg' : 'kg'}</span>
+                <span className="text-[10px] text-gray-400 font-black uppercase tracking-widest mt-1">{weightLabel}</span>
               </div>
 
               {/* Reps */}

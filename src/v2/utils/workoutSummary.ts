@@ -61,20 +61,23 @@ const isCardioLike = (ex: Exercise): boolean =>
 const isDurationBased = (ex: Exercise): boolean => isCardioLike(ex) || ex.type === 'isometric';
 
 /**
- * 单组容量（统一口径，与 src/v2/lib/settlementSummary.ts / components/History.tsx 一致）：
+ * 单组容量（统一口径，与 src/v2/lib/settlementSummary.ts / components/History.tsx 一致）。
+ * 2026-09-18 用户拍板「真实配重」语义：容量 = 真实负荷 × 次数。
  * - resistance/weight_only/reps_only: weight × reps
- * - bodyweight: (referenceBodyweight + weight) × reps（自重训练容量含体重，追加配重另加）
- * - assisted: max(0, referenceBodyweight − |weight|) × reps（weight 为负助力；
- *   容量只算真实负荷，保证 totalVolume ≥ 0，后端 StatsSchema min(0) 不再 400）
+ * - bodyweight: (referenceBodyweight + weight) × reps（真实负荷=自重+追加配重；
+ *   referenceBodyweight 缺失时不虚增——兜底 0，等用户画像补体重后自然修正）
+ * - assisted: max(0, referenceBodyweight − |weight|) × reps（真实配重=自重−辅助重量；
+ *   weight 为负助力，容量只算真实负荷，保证 totalVolume ≥ 0）
  * - unilateral: weight × reps × 2（左右各一遍，与 History/设置页口径一致）
- * - isometric: (weight>0 ? weight : referenceBodyweight 兜底) × duration
+ * - isometric: (weight>0 ? weight : referenceBodyweight 兜底0) × duration（维持近似容量口径）
  * - cardio/outdoor: 0（时长/距离另计）
  */
 export const setVolume = (ex: Exercise, s: ExerciseSet): number => {
   const reps = s.reps || 0;
   const weight = s.weight || 0;
   const duration = s.duration || 0;
-  const bodyweight = ex.referenceBodyweight || 75;
+  // 自重基准：优先用户画像体重；未设置时不凭空捏造 75kg（新用户自重未知，虚增容量即 bug）
+  const bodyweight = ex.referenceBodyweight || 0;
 
   switch (ex.type) {
     case 'resistance':
