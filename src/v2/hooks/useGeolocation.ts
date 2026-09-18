@@ -7,6 +7,8 @@ export interface Position {
   timestamp: number;
   accuracy?: number;
   heading?: number;
+  /** Doppler 速度 m/s（position.coords.speed，OS 提供；低速/静止判定最准；缺省=不可用） */
+  speed?: number;
   isGapAfter?: boolean;
   gapDuration?: number;
   confidence?: 'high' | 'medium' | 'low';
@@ -29,6 +31,14 @@ export const DEFAULT_CONFIG: GeolocationConfig = {
   maxSpeed: 20,
   gapThreshold: 10000,
 };
+
+/**
+ * 离群点剔除：与上一接受点的隐含速度超过该值（m/s）直接丢弃该点。
+ * 取 8 m/s ≈ 28.8 km/h：高于任何跑步配速（短跑冲刺也 <10.5 m/s 但持续不了
+ * 一个采样窗），低速 GPS 抖动的单点跳变 40m/3s=13m/s 会被这里拦截。
+ * 注意独立于 maxSpeed（maxSpeed 语义=用户可达运动速度上限，此值=物理合理性上限）。
+ */
+export const OUTLIER_SPEED_MPS = 8;
 
 export interface GeolocationReturn {
   positions: Position[];
@@ -119,6 +129,12 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
     }
 
     const speed = distance / (timeDiff / 1000);
+
+    // 离群剔除：隐含速度超物理合理上限（GPS 静态跳变/隧道口鬼点），先于 maxSpeed 拦截
+    if (speed > OUTLIER_SPEED_MPS) {
+      return false;
+    }
+
     if (speed > config.maxSpeed) {
       return false;
     }
@@ -194,12 +210,18 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
 
     watchId.current = navigator.geolocation.watchPosition(
       (position) => {
+        // Doppler 速度（m/s）：OS 依据多普勒频移给出，低速/静止判定远比位置差分准；
+        // null/undefined/负值=不可用，静走滤波速度估计兜底
+        const dopplerSpeed = position.coords.speed != null && position.coords.speed >= 0
+          ? position.coords.speed
+          : undefined;
         const newPos: Position = {
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
           timestamp: position.timestamp,
           accuracy: position.coords.accuracy,
           heading: position.coords.heading ?? undefined,
+          speed: dopplerSpeed,
           confidence: calculateConfidence({
             latitude: position.coords.latitude,
             longitude: position.coords.longitude,
@@ -227,10 +249,11 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
           }
 
           if (shouldAcceptPosition(lastPos, newPos, isGap)) {
-            // 第 2 层：卡尔曼平滑（gap 点不参与滤波，保持跳变）
+            // 第 2 层：卡尔曼平滑（gap 点不参与滤波，保持跳变）；
+            // Doppler 速度直传平滑器做静止判定/脱离（ZUPT 零速约束）
             const [fLat, fLon] = isGap
               ? [newPos.latitude, newPos.longitude]
-              : smootherRef.current.filter(newPos.latitude, newPos.longitude, newPos.timestamp, newPos.accuracy ?? 50);
+              : smootherRef.current.filter(newPos.latitude, newPos.longitude, newPos.timestamp, newPos.accuracy ?? 50, newPos.speed);
             const smoothedPos: Position = {
               ...newPos,
               latitude: fLat,
@@ -240,7 +263,10 @@ export const useGeolocation = (active: boolean, initialConfig?: Partial<Geolocat
             };
 
             const distance = calculateDistance(lastPos, smoothedPos);
-            if (!isGap) {
+            // 静止门控：平滑器处于静止态时位置被冻结，此距离恒 ≈0，此处为兜底；
+            // Doppler 明确报告静止（<0.2 m/s）时距离一律不累计，双保险防漂移虚增
+            const dopplerStill = newPos.speed != null && newPos.speed < 0.2;
+            if (!isGap && !dopplerStill) {
               setDistance((prevDist) => prevDist + distance);
             }
 

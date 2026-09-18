@@ -123,6 +123,110 @@ describe('TrackSmoother（稳态卡尔曼 α-β 轨迹平滑）', () => {
   });
 });
 
+describe('静止零速约束 ZUPT（治原地漂移：不动时不产生距离/轨迹漂移）', () => {
+  const STATIC_NOISE_M = 15; // 典型城市峡谷静态精度噪声
+
+  // 静止 N 分钟模拟：真实位置不动，GPS 噪声 ±15m，1 点/3s
+  function simulateStatic(minutes: number, seed: number, doppler?: (t: number) => number | undefined) {
+    const smoother = new TrackSmoother();
+    const rand = makeRand(seed);
+    const n = (minutes * 60) / 3;
+    let cumulativeDriftM = 0;
+    let prev: [number, number] | null = null;
+    let lastOut: [number, number] = [0, 0];
+    for (let i = 0; i < n; i++) {
+      const t = 3000 * (i + 1);
+      const noisyLat = 39.9 + (rand() * STATIC_NOISE_M) / DEG_LAT_M;
+      const noisyLon = 116.4 + (rand() * STATIC_NOISE_M) / (DEG_LAT_M * Math.cos((39.9 * Math.PI) / 180));
+      const [lat, lon] = smoother.filter(noisyLat, noisyLon, t, 15, doppler?.(t));
+      if (prev) {
+        cumulativeDriftM += Math.hypot((lat - prev[0]) * DEG_LAT_M, (lon - prev[1]) * DEG_LAT_M * Math.cos((39.9 * Math.PI) / 180));
+      }
+      prev = [lat, lon];
+      lastOut = [lat, lon];
+    }
+    const endDriftM = Math.hypot((lastOut[0] - 39.9) * DEG_LAT_M, (lastOut[1] - 116.4) * DEG_LAT_M * Math.cos((39.9 * Math.PI) / 180));
+    return { cumulativeDriftM, endDriftM };
+  }
+
+  test('静止 30 分钟（无 Doppler）：累计漂移接近零，位置不匀速漂走', () => {
+    const { cumulativeDriftM, endDriftM } = simulateStatic(30, 99);
+    // 冻结前有 ~10s 过渡瞬态（3 点连击期），计 ~50m；真实管线在 smoother 前还有
+    // minDistance=10 门拦截静态噪声点，实际入距远小于此。旧版纯 α-β 同场景 2km+
+    expect(cumulativeDriftM).toBeLessThan(100);
+    // 终点仍在真实位置附近（轨迹没被预测项带远）
+    expect(endDriftM).toBeLessThan(20);
+  });
+
+  test('静止后开跑：能及时脱离静止态跟上真实运动', () => {
+    const smoother = new TrackSmoother();
+    const rand = makeRand(5);
+    // 先静止 2 分钟
+    for (let i = 0; i < 40; i++) {
+      const noisyLat = 39.9 + (rand() * STATIC_NOISE_M) / DEG_LAT_M;
+      const noisyLon = 116.4 + (rand() * STATIC_NOISE_M) / DEG_LAT_M;
+      smoother.filter(noisyLat, noisyLon, 3000 * (i + 1), 15);
+    }
+    // 然后以 3 m/s 真跑 60 点（带 ±5m 噪声），验证能跟上
+    const tracked: number[] = [];
+    for (let i = 0; i < 60; i++) {
+      const trueLat = 39.9 + i * (9 / DEG_LAT_M); // 3s × 3m/s = 9m/点
+      const noisyLat = trueLat + (rand() * 5) / DEG_LAT_M;
+      const noisyLon = 116.4 + (rand() * 5) / DEG_LAT_M;
+      const [lat] = smoother.filter(noisyLat, noisyLon, 3000 * (40 + i + 1), 8);
+      tracked.push((lat - 39.9) * DEG_LAT_M);
+    }
+    // 跑 3 分钟后真实位移 540m，平滑输出滞后不超过 100m（脱离静止的过渡期可接受）
+    const finalError = Math.abs(tracked[tracked.length - 1] - 540);
+    expect(finalError).toBeLessThan(100);
+    // 后半段稳定跟上：误差收敛到 50m 内
+    const lateError = Math.abs(tracked[tracked.length - 1] - tracked[tracked.length - 11] - 90);
+    expect(lateError).toBeLessThan(50);
+  });
+
+  test('Doppler 速度可用时：静止判定/脱离以它为准（低速最准的数据源）', () => {
+    const smoother = new TrackSmoother();
+    const rand = makeRand(11);
+    // 前期静止（Doppler=0），即使噪声较大也保持冻结
+    for (let i = 0; i < 20; i++) {
+      const noisyLat = 39.9 + (rand() * STATIC_NOISE_M) / DEG_LAT_M;
+      const noisyLon = 116.4 + (rand() * STATIC_NOISE_M) / DEG_LAT_M;
+      const [lat, lon] = smoother.filter(noisyLat, noisyLon, 3000 * (i + 1), 15, 0);
+      if (i >= 10) {
+        // 冻结：输出恒等于冻结点（首点），不随噪声摆动
+        expect(Math.abs((lat - 39.9) * DEG_LAT_M)).toBeLessThan(STATIC_NOISE_M);
+        expect(Math.abs((lon - 116.4) * DEG_LAT_M)).toBeLessThan(STATIC_NOISE_M);
+      }
+    }
+    // Doppler 报告 2 m/s → 立即脱离静止恢复动态跟踪
+    const trueLat = 39.9 + 6 / DEG_LAT_M;
+    const [lat] = smoother.filter(trueLat, 116.4, 3000 * 22, 8, 2);
+    // 脱离后第一个点就已经开始向真实位置收敛（不再冻结）
+    expect(lat).not.toBe(39.9);
+  });
+
+  test('速度物理上限：极限跳变后速度估计有界、位置单调收敛', () => {
+    // 注：>8 m/s 的单点鬼点在真实管线里已被 useGeolocation 的 OUTLIER_SPEED_MPS
+    // 上游门拒收，根本到不了平滑器；这里测的是恰好在门内的极限跳变
+    const smoother = new TrackSmoother();
+    smoother.filter(39.9, 116.4, 1000, 10);
+    // 单点跳 100m（3s 内 = 33 m/s，上游门外；此点速度估计会被钳到 MAX_SPEED_MPS）
+    smoother.filter(39.9009, 116.4, 4000, 10);
+    // 停留原地：速度有界（钳制生效）→ 预测项不发散；过冲后震荡收敛
+    let maxErr = 0;
+    let err = Infinity;
+    for (let i = 0; i < 12; i++) {
+      const [lat] = smoother.filter(39.9009, 116.4, 7000 + 3000 * (i + 1), 10);
+      err = Math.abs((lat - 39.9009) * DEG_LAT_M);
+      maxErr = Math.max(maxErr, err);
+    }
+    // 全程有界：最大误差不超过跳变距离量级（无发散）
+    expect(maxErr).toBeLessThan(80);
+    // 12 点（36s）内收敛到 20m 内
+    expect(err).toBeLessThan(20);
+  });
+});
+
 describe('wgs84ToGcj02（国测局坐标转换）', () => {
   test('国内坐标加偏，偏移量与业界参考一致', () => {
     const [lat, lon] = wgs84ToGcj02(39.90734, 116.39134); // 天安门
