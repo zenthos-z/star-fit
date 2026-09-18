@@ -67,6 +67,33 @@ export async function isWatchReachable(): Promise<boolean> {
   return res?.reachable === true;
 }
 
+/** 手表连接完整状态（设置页「Apple Watch」卡数据源） */
+export interface WatchStatus {
+  supported: boolean;
+  activated: boolean;
+  paired: boolean;
+  appInstalled: boolean;
+  reachable: boolean;
+}
+
+export async function getWatchStatus(): Promise<WatchStatus | null> {
+  const res = (await callPlugin('getWatchStatus')) as Partial<WatchStatus> | null;
+  if (!res || typeof res.supported !== 'boolean') return null;
+  return {
+    supported: res.supported === true,
+    activated: res.activated === true,
+    paired: res.paired === true,
+    appInstalled: res.appInstalled === true,
+    reachable: res.reachable === true,
+  };
+}
+
+/** 主动重连：重新激活 WCSession（手表刚解锁/进入设置页时可触发） */
+export async function reconnectWatch(): Promise<boolean> {
+  const res = (await callPlugin('reconnect')) as { ok?: boolean } | null;
+  return res?.ok === true;
+}
+
 /**
  * 订阅手表事件。返回取消函数。
  * 双通道：原生 notifyListeners（addListener）+ evaluateJavaScript 直调 CustomEvent

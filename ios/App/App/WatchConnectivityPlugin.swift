@@ -21,6 +21,8 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "broadcastSetState", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isWatchReachable", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "getWatchStatus", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "reconnect", returnType: CAPPluginReturnPromise),
     ]
 
     private let queue = DispatchQueue.main
@@ -56,6 +58,36 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// JS 主动查询手表完整状态（设置页「Apple Watch」卡数据源）
+    @objc func getWatchStatus(_ call: CAPPluginCall) {
+        queue.async {
+            guard WCSession.isSupported() else {
+                call.resolve(["supported": false, "activated": false, "paired": false,
+                              "appInstalled": false, "reachable": false]); return
+            }
+            let s = WCSession.default
+            call.resolve([
+                "supported": true,
+                "activated": s.activationState == .activated,
+                "paired": s.isPaired,
+                "appInstalled": s.isWatchAppInstalled,
+                "reachable": s.isReachable,
+            ])
+        }
+    }
+
+    /// JS 主动重连：重新激活 WCSession（手表刚解锁/回到 App 时可手动触发）
+    @objc func reconnect(_ call: CAPPluginCall) {
+        queue.async {
+            guard WCSession.isSupported() else { call.resolve(["ok": false, "supported": false]); return }
+            let s = WCSession.default
+            if s.activationState != .activated {
+                s.activate()
+            }
+            call.resolve(["ok": true, "supported": true])
+        }
+    }
+
     /// 手表 → JS 事件转发（桥事件），失败时 evaluateJavaScript 直调兜底
     private func forwardWatchEvent(_ payload: [String: Any]) {
         let json: String
@@ -77,12 +109,24 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
 // MARK: - WCSessionDelegate
 
 extension WatchConnectivityPlugin: WCSessionDelegate {
-    public func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {}
+    public func session(_ session: WCSession, activationDidCompleteWith activationState: WCSessionActivationState, error: Error?) {
+        // 激活完成即向 JS 推一次状态（设置页卡片/训练页可据此刷新，无需轮询）
+        if activationState == .activated {
+            forwardWatchEvent(["kind": "watch_status", "reachable": session.isReachable,
+                               "paired": session.isPaired, "appInstalled": session.isWatchAppInstalled])
+        }
+    }
 
     public func sessionDidBecomeInactive(_ session: WCSession) {}
 
     public func sessionDidDeactivate(_ session: WCSession) {
         WCSession.default.activate()
+    }
+
+    /// 可达性变化（手表抬腕解锁/离开范围）→ 主动推事件，替代轮询
+    public func sessionWatchReachabilityDidChange(_ session: WCSession) {
+        forwardWatchEvent(["kind": "watch_status", "reachable": session.isReachable,
+                           "paired": session.isPaired, "appInstalled": session.isWatchAppInstalled])
     }
 
     public func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {

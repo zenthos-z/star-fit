@@ -13,6 +13,8 @@ interface ExerciseCardV2Props {
   pauseStartTime?: number;
   loadAnchors?: LoadAnchors;
   onLongPress?: (exerciseId: string) => void;
+  /** 长按进入顺序调整模式的时长 ms；比默认更严防误触（用户反馈 2026-09-18） */
+  longPressDelayMs?: number;
   onDragStatusChange?: (status: 'start' | 'move' | 'end', x: number, y: number) => void;
 }
 
@@ -30,6 +32,7 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
   pauseStartTime,
   loadAnchors,
   onLongPress,
+  longPressDelayMs = 900,
   onDragStatusChange
 }) => {
 
@@ -125,6 +128,7 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
         className="mb-4 rounded-[40px] shadow-sm border border-gray-100 bg-white"
         actionWidth={80}
         onLongPress={() => onLongPress?.(exercise.id)}
+        longPressDelayMs={longPressDelayMs}
         onDragStatusChange={onDragStatusChange}
         leftActions={[
             {

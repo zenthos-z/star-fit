@@ -23,6 +23,7 @@ import {
   getSpeechPartial,
 } from '../../../lib/speechInput';
 import { BubbleGallery, GALLERY_MESSAGES } from './BubbleGallery';
+import { useBackendHealth } from '../../services/connectivity';
 
 interface MessageProgressIndicatorProps {
   items: ProgressItem[];
@@ -322,6 +323,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   // 一屏看全所有气泡/卡片样式（不影响正常聊天链路）
   const isGalleryMode = typeof window !== 'undefined' &&
     /([?&#])bubbleGallery/.test(window.location.search + window.location.hash);
+  // 后端连接感知（fix/backend-connectivity-watch）：头部状态灯实时反映 /healthz 探测
+  const backendHealth = useBackendHealth();
   const [showContent, setShowContent] = useState(true);
   // 消息图片全屏查看器：{ dataUrl 本地预览, mediaId 服务器引用 }
   const [viewingImage, setViewingImage] = useState<{ dataUrl?: string; mediaId?: string } | null>(null);
@@ -681,8 +684,15 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
         </button>
         <div className="text-center">
           <div className="text-[17px] font-semibold text-gray-900 leading-tight">AI 教练</div>
-          <div className="text-[11px] text-gray-400">
-            {isBusy ? '正在输入…' : 'Agent 系统已就绪'}
+          <div className="text-[11px] text-gray-400 flex items-center justify-center gap-1.5">
+            {/* 后端连接状态灯（fix/backend-connectivity-watch）：绿=在线 红=离线 灰=检测中 */}
+            <span
+              aria-label={`后端${backendHealth.checking ? '检测中' : backendHealth.ok ? '已连接' : '未连接'}`}
+              className={`inline-block w-1.5 h-1.5 rounded-full ${
+                backendHealth.checking ? 'bg-gray-300' : backendHealth.ok ? 'bg-green-500' : 'bg-red-500'
+              }`}
+            />
+            {isBusy ? '正在输入…' : backendHealth.checking ? '检测连接…' : backendHealth.ok ? 'Agent 系统已就绪' : `后端未连接${backendHealth.error ? `（${backendHealth.error}）` : ''}`}
           </div>
         </div>
         {/* 右上角：历史对话（"新建对话"已移入历史对话面板右上角） */}

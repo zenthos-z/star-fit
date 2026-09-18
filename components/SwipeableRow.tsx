@@ -16,6 +16,8 @@ interface SwipeableRowProps {
   className?: string;
   actionWidth?: number;
   onLongPress?: () => void;
+  /** 长按触发时长 ms；默认 700（与 HoldToConfirm.HOLD_MS 防误触基线一致）。破坏性入口建议更长 */
+  longPressDelayMs?: number;
   onDragStatusChange?: (status: 'start' | 'move' | 'end', x: number, y: number) => void;
 }
 
@@ -26,6 +28,7 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
   className = "", 
   actionWidth = 80,
   onLongPress,
+  longPressDelayMs,
   onDragStatusChange
 }) => {
   const [offset, setOffset] = useState(0);
@@ -56,7 +59,8 @@ const SwipeableRow: React.FC<SwipeableRowProps> = ({
   const MIN_SWIPE_DISTANCE = 40;
   const SWIPE_AXIS_THRESHOLD = 18;   // 横滑意图确认所需最小横向位移(px)
   const SWIPE_AXIS_RATIO = 1.6;      // 横向位移需达到纵向的倍数才判为横滑
-  const LONG_PRESS_DELAY = 500;
+  const DEFAULT_LONG_PRESS_DELAY = 700; // 防误触基线（= HoldToConfirm.HOLD_MS；旧值 500ms 误触率高，用户拍板 2026-09-18）
+  const LONG_PRESS_DELAY = longPressDelayMs ?? DEFAULT_LONG_PRESS_DELAY;
   const PRESS_DELAY = 150; // Delay before showing press effect - only triggers for taps, not swipes
   const PRESS_MOVE_THRESHOLD = 8; // Max movement allowed during press delay to consider it a tap
 

@@ -32,7 +32,9 @@ export const API_BASE = (() => {
   log('Env Info', { protocol, hostname, isCapacitor, isLocalAccess, envUrl });
 
   // 2. Fixed Fallback for Mobile (Should match backend port 43111)
-  const MOBILE_DEFAULT = 'http://192.168.31.100:43111/api';
+  // 2026-09-18：默认走公网穿透（frps 8.138.169.218:19902 → Mac 43111），
+  // 局域网直连更快但 IP 会漂移；用户登录页填写的 server_url 覆盖此值。
+  const MOBILE_DEFAULT = 'http://8.138.169.218:19902/api';
 
   // If we are on a mobile device or Capacitor (which serves from localhost), 
   // and we don't have a valid remote URL, use the fixed IP fallback.

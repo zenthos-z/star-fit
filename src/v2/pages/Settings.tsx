@@ -16,6 +16,7 @@ import { BasicInfoForm } from '../components/profile/BasicInfoForm';
 import { LoadAnchorsForm } from '../components/profile/LoadAnchorsForm';
 import { AgentConfigCard } from '../components/settings/AgentConfigCard';
 import { EnvironmentCard } from '../components/settings/EnvironmentCard';
+import { WatchStatusCard, BackendConnectionRow } from '../components/settings/WatchStatusCard';
 import { LimitationListCard } from '../components/settings/LimitationListCard';
 import { staggerContainer, staggerItem } from '../lib/animations';
 import { SuggestionService, type SuggestionSyncStatus } from '../../services/suggestionService';
@@ -228,6 +229,14 @@ export function SettingsPage({ userId, sessions = [], onImport, onClose }: Setti
 
           {/* ========== 块 2：Agent 与运行环境 ========== */}
           <SectionHeader title="Agent 与运行环境" />
+
+          <motion.div variants={staggerItem}>
+            <BackendConnectionRow />
+          </motion.div>
+
+          <motion.div variants={staggerItem}>
+            <WatchStatusCard />
+          </motion.div>
 
           <motion.div variants={staggerItem}>
             <AgentConfigCard />

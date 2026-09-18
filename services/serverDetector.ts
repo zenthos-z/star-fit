@@ -188,11 +188,16 @@ async function getCandidates(): Promise<ServerCandidate[]> {
     }
   }
 
-  // Priority 5: Mobile fixed IP (for Capacitor)
+  // Priority 5: Mobile fixed fallback (for Capacitor)
+  // 2026-09-18：公网穿透优先（稳定不随局域网漂移），旧局域网 IP 降为兜底候选
   if (isCapacitor || !isLocalAccess) {
-    const mobileUrl = 'http://192.168.31.100:43111/api';
+    const mobileUrl = 'http://8.138.169.218:19902/api';
     if (!candidates.find(c => c.url === mobileUrl)) {
-      candidates.push({ url: mobileUrl, source: 'mobile', priority: 60 });
+      candidates.push({ url: mobileUrl, source: 'mobile', priority: 65 });
+    }
+    const lanUrl = 'http://192.168.31.100:43111/api';
+    if (!candidates.find(c => c.url === lanUrl)) {
+      candidates.push({ url: lanUrl, source: 'mobile', priority: 60 });
     }
   }
 

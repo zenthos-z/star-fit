@@ -152,6 +152,7 @@ if (ACCESS_TOKEN) {
     const url = request.url.split("?")[0];
     if (
       url === "/health" ||
+      url === "/healthz" ||
       request.method === "OPTIONS" ||
       url.startsWith("/uploads/")
     ) {
@@ -224,6 +225,17 @@ const start = async () => {
     // LAN discovery health probe — 客户端扫描用。区分于 404（其他服务的随机响应），
     // 带 app 标识让前端确认发现的是 Starfit 而非碰巧占用 43111 的别的服务。
     server.get("/health", async (req, reply) => {
+      return {
+        ok: true,
+        app: "starfit",
+        version: "2.0.0",
+        ts: Date.now(),
+      };
+    });
+
+    // /healthz 别名：前端 checkServiceHealth 历史上探测 /healthz（nginx 曾把
+    // /healthz 代理到 /api/ping，带鉴权时必 401）。根级直出免令牌，双通道一致。
+    server.get("/healthz", async (req, reply) => {
       return {
         ok: true,
         app: "starfit",
@@ -560,12 +572,10 @@ const start = async () => {
           })();
           const expectedPrefix = `${userId}:`;
           if (!threadId.startsWith(expectedPrefix)) {
-            return reply
-              .status(403)
-              .send({
-                error: "Thread does not belong to this user",
-                traceId: req.id,
-              });
+            return reply.status(403).send({
+              error: "Thread does not belong to this user",
+              traceId: req.id,
+            });
           }
           const db = getPostgresClient();
           // 三张 checkpoint 表都按 thread_id 级联清（无外键，手动三连）
