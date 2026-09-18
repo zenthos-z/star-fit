@@ -20,6 +20,7 @@
     "lint": "eslint .",
     "lint:fix": "eslint . --fix",
     "prepare": "husky",
+    "sync:ios": "npx cap sync ios && bash scripts/patch-capacitor-json.sh",
     "port-manager": "node .claude/skills/port-manager/port-manager-server.mjs",
     "pm": "node .claude/skills/port-manager/port-manager-server.mjs",
     "test": "vitest",
