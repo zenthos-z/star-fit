@@ -61,7 +61,8 @@ export default withMermaid(
               text: '架构设计',
               items: [
                 { text: '数据流', link: '/architecture/data-flow' },
-                { text: '三态数据流', link: '/architecture/three-state-data-flow' }
+                { text: '三态数据流', link: '/architecture/three-state-data-flow' },
+                { text: '后端连接感知与手表嵌入', link: '/architecture/backend-connectivity-and-watch-embed' }
               ]
             }
           ],
