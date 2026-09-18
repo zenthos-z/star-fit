@@ -54,6 +54,7 @@ import {
   migrateLegacyLoginData
 } from './storage';
 import type { PlanConsumeRecord } from './src/v2/components/execution/cards/PlanCard';
+import { isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from './src/v2/services/watchConnectivity';
 
 interface ChatMessage {
     role: 'user' | 'ai';
@@ -140,6 +141,29 @@ const App: React.FC = () => {
 
   // 锁定训练屏（2026-09-15）：训练中把计时胶囊往下滑进入
   const [isLockScreenOpen, setIsLockScreenOpen] = useState(false);
+
+  // 手表 hr_batch 全局订阅（2026-09-18 修复）：原实现只挂在 LockScreen 内，
+  // 锁屏未开时手表发来的心率批量包全部丢失。上提到 App 层后，训练中无论锁屏
+  // 与否都会把样本 POST 到后端 heart_rate_samples（session.id 变化自动重订阅）。
+  // LockScreen 内的 hr_batch 分支保留但实际不触发——两端各自消费会重复上传，
+  // 需要单一消费点，这里用「App 层消费 + LockScreen 分支仅作兜底注释」处理。
+  const hrSyncSessionIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    hrSyncSessionIdRef.current = session.id;
+  }, [session.id]);
+  useEffect(() => {
+    if (!isWatchBridge) return;
+    const off = onWatchEvent((event: WatchEvent) => {
+      if (event.kind !== 'hr_batch') return;
+      const sid = hrSyncSessionIdRef.current;
+      if (!sid || !event.samples?.length) return;
+      void syncHeartRateSamples(sid, event.samples).then((r) => {
+        if (r.ok) console.log('[watch] hr_batch synced:', r.inserted, 'samples');
+        else console.warn('[watch] hr_batch sync failed:', r.error);
+      });
+    });
+    return off;
+  }, []);
 
   // Initialize Sync Service
   useEffect(() => {
@@ -959,8 +983,9 @@ const App: React.FC = () => {
   };
 
   // --- 锁定训练屏回调（2026-09-15）：大按钮语义与卡内逻辑共用 handleUpdateSet 通道 ---
-  const handleLockCompleteSet = (exId: string, setId: string) => {
-    handleUpdateSet(exId, setId, { completed: true });
+  const handleLockCompleteSet = (exId: string, setId: string, opts?: { avgHr?: number }) => {
+    // 手表端平均心率随组完成写入（ADR-0001：heartRate 仅由手表链路写入）
+    handleUpdateSet(exId, setId, { completed: true, ...(opts?.avgHr ? { heartRate: opts.avgHr } : {}) });
   };
 
   const handleLockFinishCountdown = (exId: string, setId: string, durationSec: number) => {
@@ -1429,6 +1454,7 @@ const App: React.FC = () => {
             startTime={session.startTime}
             pausedDuration={session.pausedDuration}
             exercises={session.exercises}
+            sessionId={session.id}
             onExit={() => setIsLockScreenOpen(false)}
             onCompleteSet={handleLockCompleteSet}
             onFinishCountdown={handleLockFinishCountdown}

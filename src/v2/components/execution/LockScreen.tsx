@@ -5,7 +5,7 @@ import { haptic } from '../../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
 import { HoldToConfirm, HOLD_MS } from './HoldToConfirm';
 import { LOCK_MOTION } from './lockMotion';
-import { broadcastCurrentSet, isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from '../../services/watchConnectivity';
+import { broadcastCurrentSet, isWatchBridge, onWatchEvent, type WatchEvent } from '../../services/watchConnectivity';
 import { useLoadAnchors } from '../../hooks/useLoadAnchors';
 import { getUserId } from '@/services';
 import type { Exercise, ExerciseType } from '../../../../types';
@@ -152,8 +152,10 @@ interface LockScreenProps {
   startTime: number;
   pausedDuration: number;
   exercises: Exercise[];
+  /** 当前训练会话 id（后端 heart_rate_samples 归属锚点）；缺省时 hr_batch 上传跳过 */
+  sessionId?: string;
   onExit: () => void;
-  onCompleteSet: (exId: string, setId: string) => void;
+  onCompleteSet: (exId: string, setId: string, opts?: { avgHr?: number }) => void;
   onFinishCountdown: (exId: string, setId: string, durationSec: number) => void;
   onEndRest: (exId: string, setId: string) => void;
   onExtendRest: (exId: string, setId: string, extraSec: number) => void;
@@ -211,6 +213,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   startTime,
   pausedDuration,
   exercises,
+  sessionId,
   onExit,
   onCompleteSet,
   onFinishCountdown,
@@ -333,13 +336,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     const off = onWatchEvent((event: WatchEvent) => {
       switch (event.kind) {
         case 'set_completed': {
+          // 手表端本组平均心率（ADR-0001：heartRate 仅由手表写入）
+          const watchAvgHr = typeof event.avg_hr === 'number' ? event.avg_hr : undefined;
           // 手机在休息态 = 这是对下一组的确认 → 结束休息
           if (focus.kind === 'rest') { onEndRest(focus.exId, focus.setId); break; }
           if (focus.kind !== 'confirm' && focus.kind !== 'countdown') break;
           const ex = exercises[event.exercise_index ?? -1];
           const set: any = ex?.sets[event.set_index ?? -1];
           if (!ex || !set || ex.id !== focus.exId || set.id !== focus.setId) break; // 焦点校验
-          onCompleteSet(ex.id, set.id);
+          onCompleteSet(ex.id, set.id, { avgHr: watchAvgHr });
           break;
         }
         case 'rest_action':
@@ -347,19 +352,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           if (event.action === 'end') onEndRest(focus.exId, focus.setId);
           if (event.action === 'extend') onExtendRest(focus.exId, focus.setId, event.seconds ?? 10);
           break;
-        case 'hr_batch': {
-          const sessionId = (exercises[0] as any)?.sessionId ?? (exercises[0] as any)?.session_id;
-          if (!sessionId || !event.samples?.length) break;
-          void syncHeartRateSamples(sessionId, event.samples).then((r) => {
-            if (!r.ok) console.warn('[watch] hr_batch sync failed:', r.error);
-          });
+        case 'hr_batch':
+          // hr_batch 已上提到 App.tsx 全局订阅（锁屏未开也要收心率）；
+          // 此处必须 no-op，否则与 App 层双消费 → 样本重复上传。
           break;
-        }
       }
     });
     return off;
-    // focusKey 变化重新订阅：闭包内 focus/exercises 保持最新
-  }, [focusKey, exercises, onCompleteSet, onEndRest, onExtendRest]);
+    // focusKey 变化重新订阅：闭包内 focus/exercises/sessionId 保持最新
+  }, [focusKey, exercises, sessionId, onCompleteSet, onEndRest, onExtendRest]);
 
   // 组倒计时到点 → 自动写完成
   const countRemaining = counting ? Math.max(0, counting.target - Math.floor((now - counting.startedAt) / 1000)) : null;
