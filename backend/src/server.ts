@@ -89,6 +89,7 @@ import {
 } from "./controllers/userProfileController.js";
 import { generateTextUnified } from "./services/llm.js";
 import { getPostgresClient } from "./db/postgresql/client/postgres-client.js";
+import { getUserId } from "./utils/requestUtils.js";
 import {
   uploadVideo,
   getVideoInfo,
@@ -541,6 +542,46 @@ const start = async () => {
           return reply
             .status(ok ? 200 : 404)
             .send({ success: ok, traceId: req.id });
+        });
+
+        // [治理 2026-09-18] 对话线程删除 → 后端 Agent checkpoint 同步清理。
+        // 旧实现只清前端本地 + 释放图片，agent_runtime.checkpoints 永久堆积。
+        // 归属校验：thread_id 必须以 `${userId}:` 前缀开头（前端 threadId 传
+        // `${userId}:${clientThreadId}` 复合键），防跨用户删别人 checkpoint。
+        api.delete("/agent/thread/:threadId", async (req, reply) => {
+          const rawThreadId = (req.params as any)?.threadId as string;
+          const userId = getUserId(req);
+          const threadId = (() => {
+            try {
+              return decodeURIComponent(rawThreadId);
+            } catch {
+              return rawThreadId;
+            }
+          })();
+          const expectedPrefix = `${userId}:`;
+          if (!threadId.startsWith(expectedPrefix)) {
+            return reply
+              .status(403)
+              .send({
+                error: "Thread does not belong to this user",
+                traceId: req.id,
+              });
+          }
+          const db = getPostgresClient();
+          // 三张 checkpoint 表都按 thread_id 级联清（无外键，手动三连）
+          await db.query(
+            `DELETE FROM agent_runtime.checkpoints WHERE thread_id = $threadId`,
+            { threadId },
+          );
+          await db.query(
+            `DELETE FROM agent_runtime.checkpoint_writes WHERE thread_id = $threadId`,
+            { threadId },
+          );
+          await db.query(
+            `DELETE FROM agent_runtime.checkpoint_blobs WHERE thread_id = $threadId`,
+            { threadId },
+          );
+          return reply.status(200).send({ success: true, traceId: req.id });
         });
 
         // Dashboard Routes (New)

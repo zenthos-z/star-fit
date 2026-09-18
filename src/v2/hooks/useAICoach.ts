@@ -80,6 +80,17 @@ const formatThreadTitle = (firstMessage: string): string => {
 };
 
 /**
+ * [治理 2026-09-18] 通知后端清理该线程的 Agent checkpoint（fire-and-forget）。
+ * 后端按 `${userId}:${threadId}` 复合键校验归属并三表连删。
+ */
+const notifyBackendThreadDeleted = (threadId: string): void => {
+  fetch(`${API_BASE}/agent/thread/${encodeURIComponent(`${getUserId()}:${threadId}`)}`, {
+    method: 'DELETE',
+    headers: getHeaders(),
+  }).catch(() => { /* 清理失败无碍：定期清理兜底 */ });
+};
+
+/**
  * 向服务器发送媒体释放信号（fire-and-forget）：线程被删除/挤出时，
  * 其消息里引用的图片立即从服务器图床释放，不等 N 天未引用的定期清理。
  */
@@ -158,6 +169,7 @@ export const useAICoach = (
         if (msgs?.length) reclaimMediaIds(msgs);
       } catch { /* 读取失败也照删线程 */ }
       deleteChatThread(thread.id);
+      notifyBackendThreadDeleted(thread.id);
     });
 
     // Return remaining threads sorted by updatedAt (newest first)
@@ -551,6 +563,8 @@ ${JSON.stringify(uploadData, null, 2)}`;
           userId: getUserId(),
           message,
           scenario,
+          // [治理 2026-09-18] threadId 必传：上下文按对话窗口隔离
+          threadId: currentThreadId,
           metadata: {
             intent_context: {
               type: 'survey_upload',
@@ -778,6 +792,8 @@ ${JSON.stringify(uploadData, null, 2)}`;
         userId: getUserId(),
         message: userMsg,
         scenario,
+        // [治理 2026-09-18] threadId 必传：上下文按对话窗口隔离
+        threadId: currentThreadId,
         metadata: sendAttachment ? { intent_context: sendAttachment } : undefined,
       })) {
         if (ev.type === 'token' && ev.text) {
@@ -994,6 +1010,7 @@ ${JSON.stringify(uploadData, null, 2)}`;
             userId: getUserId(),
             message: "请总结我刚刚的训练表现。",
             scenario: "chat",
+            threadId: currentThreadId,
             metadata: { intent_context: attachment }
           }));
 
@@ -1048,6 +1065,7 @@ ${JSON.stringify(uploadData, null, 2)}`;
         userId: getUserId(),
         message: `训练已结束，session ${attachment.sessionId} 已持久化到数据库。请分析本次训练表现。`,
         scenario: 'workout_complete',
+        threadId: currentThreadId,
         metadata: {
           intent_context: {
             type: 'workout_complete',

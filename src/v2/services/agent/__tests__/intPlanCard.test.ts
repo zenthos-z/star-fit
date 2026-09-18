@@ -63,7 +63,7 @@ describe("INT B5: frontend renders plan_card over the frozen seam", () => {
 
     // useAICoach's exact consumption shape.
     const result = await consumeAgentStream(
-      client.chat({ userId: fixedUser(), message: "帮我做增肌计划", scenario: "plan" }),
+      client.chat({ userId: fixedUser(), message: "帮我做增肌计划", scenario: "plan", threadId: "thread_test_1" }),
     );
 
     // The card survived the round-trip with its type + exercise array.

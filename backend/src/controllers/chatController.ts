@@ -24,7 +24,9 @@ const ChatSchema = z.object({
   scenario: z
     .enum(["chat", "plan", "workout_complete", "update_profile"])
     .optional(),
-  threadId: z.string().optional(),
+  // [治理 2026-09-18] threadId 必传：对话上下文按 thread 隔离的基础。不再容忍
+  // 无 thread 请求静默落 userId 共享大池（跨窗口上下文泄漏的根因）。
+  threadId: z.string().min(1),
   metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
@@ -73,7 +75,8 @@ export function composeCardValidatingService(raw: AgentService): AgentService {
 /** Production resolver: the composed real DeepAgentService (imported lazily). */
 const defaultResolver: AgentServiceResolver = async () => {
   if (cachedDefault === null) {
-    const { deepAgentService } = await import("../services/agent/DeepAgentService.js");
+    const { deepAgentService } =
+      await import("../services/agent/DeepAgentService.js");
     cachedDefault = composeCardValidatingService(deepAgentService);
   }
   return cachedDefault;
@@ -85,7 +88,9 @@ let resolveAgentService: AgentServiceResolver = defaultResolver;
  * Override the AgentService resolver (tests inject a probe/fake agent). Pass
  * `null` to restore the real DeepAgentService resolver.
  */
-export function setAgentServiceResolver(resolver: AgentServiceResolver | null): void {
+export function setAgentServiceResolver(
+  resolver: AgentServiceResolver | null,
+): void {
   resolveAgentService = resolver ?? defaultResolver;
 }
 
@@ -100,10 +105,16 @@ export function setAgentServiceResolver(resolver: AgentServiceResolver | null): 
  * with `raw.end()`). This handler only assembles the {@link ChatRequest}, pulls
  * the `AsyncIterable<AgentEvent>` from the seam, and hands both to the transport.
  */
-export async function postChat(req: FastifyRequest, reply: FastifyReply): Promise<void> {
+export async function postChat(
+  req: FastifyRequest,
+  reply: FastifyReply,
+): Promise<void> {
   // Emergency stop circuit breaker: checked FIRST, before any parsing or agent
   // work. Set via POST /api/admin/emergency-stop { active: true|false }.
-  const emergencyStopFlag = await ConfigRepo.getConfig("system", "EMERGENCY_STOP").catch(() => null);
+  const emergencyStopFlag = await ConfigRepo.getConfig(
+    "system",
+    "EMERGENCY_STOP",
+  ).catch(() => null);
   if (emergencyStopFlag === true || emergencyStopFlag === "true") {
     reply.status(503).send({ error: "EMERGENCY_STOP_ACTIVE" });
     return;
@@ -123,8 +134,9 @@ export async function postChat(req: FastifyRequest, reply: FastifyReply): Promis
   const chatRequest: ChatRequest = {
     userId,
     message,
+    // [治理 2026-09-18] threadId 契约必传，schema 已校验非空
+    threadId,
     ...(scenario !== undefined ? { scenario } : {}),
-    ...(threadId !== undefined ? { threadId } : {}),
     ...(metadata !== undefined ? { metadata } : {}),
   };
 

@@ -15,11 +15,11 @@
  * Runner: node:test via tsx.
  */
 
-import { describe, it } from 'node:test';
-import assert from 'node:assert/strict';
-import type { AgentEvent, ChatRequest } from 'shared/contracts';
-import type { AgentService } from '../AgentService.js';
-import { chatWithValidationLoop } from '../uiHintValidationLoop.js';
+import { describe, it } from "node:test";
+import assert from "node:assert/strict";
+import type { AgentEvent, ChatRequest } from "shared/contracts";
+import type { AgentService } from "../AgentService.js";
+import { chatWithValidationLoop } from "../uiHintValidationLoop.js";
 
 // ---------------------------------------------------------------------------
 // Probe: a scripted AgentService
@@ -52,25 +52,35 @@ class ScriptedAgent implements AgentService {
 // ---------------------------------------------------------------------------
 
 const baseReq: ChatRequest = {
-  userId: '11111111-1111-1111-1111-111111111111',
-  message: 'Build my plan.',
+  userId: "11111111-1111-1111-1111-111111111111",
+  message: "Build my plan.",
+  threadId: "thread_test_1",
 };
 
 /** A valid plan card (passes the M5b validator). */
 const VALID_PLAN: unknown = {
-  type: 'plan_card',
-  data: [{ exerciseId: 'sq', name: 'Squat', exercise_type: 'resistance', sets: 3, reps: 8, weight: 80 }],
+  type: "plan_card",
+  data: [
+    {
+      exerciseId: "sq",
+      name: "Squat",
+      exercise_type: "resistance",
+      sets: 3,
+      reps: 8,
+      weight: 80,
+    },
+  ],
 };
 
 /** An invalid plan card (missing required fields). */
 const INVALID_PLAN: unknown = {
-  type: 'plan_card',
-  data: [{ exerciseId: 'sq', name: 'Squat' }],
+  type: "plan_card",
+  data: [{ exerciseId: "sq", name: "Squat" }],
 };
 
 /** Build a uiHint AgentEvent carrying `card`. Cast through the seam boundary. */
 function uiHint(card: unknown): AgentEvent {
-  return { type: 'uiHint', card: card as never } as AgentEvent;
+  return { type: "uiHint", card: card as never } as AgentEvent;
 }
 
 /** Drain an async iterable into an array. */
@@ -86,11 +96,11 @@ async function drain(it: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
 // B4 / AC4 — retry until valid
 // ---------------------------------------------------------------------------
 
-describe('chatWithValidationLoop — B4 retry loop', () => {
-  it('retries after an invalid card and yields the later valid card (L005 real retry)', async () => {
+describe("chatWithValidationLoop — B4 retry loop", () => {
+  it("retries after an invalid card and yields the later valid card (L005 real retry)", async () => {
     const agent = new ScriptedAgent([
       [uiHint(INVALID_PLAN)], // attempt 0: invalid
-      [uiHint(VALID_PLAN), { type: 'done' }], // attempt 1: valid + done
+      [uiHint(VALID_PLAN), { type: "done" }], // attempt 1: valid + done
     ]);
 
     const events = await drain(
@@ -98,23 +108,34 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     );
 
     // L005: the loop REALLY re-invoked chat (2 calls), not a silent skip.
-    assert.equal(agent.calls.length, 2, 'chat must be called twice (initial + 1 retry)');
+    assert.equal(
+      agent.calls.length,
+      2,
+      "chat must be called twice (initial + 1 retry)",
+    );
 
     // Exactly one uiHint forwarded, and it is the valid one.
-    const uiHints = events.filter((e) => e.type === 'uiHint');
-    assert.equal(uiHints.length, 1, 'only the valid card is forwarded');
+    const uiHints = events.filter((e) => e.type === "uiHint");
+    assert.equal(uiHints.length, 1, "only the valid card is forwarded");
     assert.deepEqual(uiHints[0].card, VALID_PLAN);
 
     // The invalid card was suppressed (not in the output).
     assert.equal(
-      events.some((e) => e.type === 'uiHint' && e.card === INVALID_PLAN),
+      events.some((e) => e.type === "uiHint" && e.card === INVALID_PLAN),
       false,
-      'invalid card must not be forwarded',
+      "invalid card must not be forwarded",
     );
 
     // The stream terminated cleanly (done forwarded from the successful attempt).
-    assert.ok(events.some((e) => e.type === 'done'), 'done from the valid attempt is forwarded');
-    assert.equal(events.some((e) => e.type === 'error'), false, 'no error when retry succeeds');
+    assert.ok(
+      events.some((e) => e.type === "done"),
+      "done from the valid attempt is forwarded",
+    );
+    assert.equal(
+      events.some((e) => e.type === "error"),
+      false,
+      "no error when retry succeeds",
+    );
 
     // L005: feedback carried the real structured-error shape to the 2nd call.
     const feedbackReq = agent.calls[1];
@@ -122,11 +143,11 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     assert.match(feedbackReq.message, /plan_card/i); // references the rejected type
     assert.ok(
       feedbackReq.metadata && feedbackBackHasErrors(feedbackReq),
-      'metadata must carry structured uiHintValidationFeedback errors',
+      "metadata must carry structured uiHintValidationFeedback errors",
     );
   });
 
-  it('yields a VALIDATION_ERROR after maxRetries is exhausted', async () => {
+  it("yields a VALIDATION_ERROR after maxRetries is exhausted", async () => {
     const agent = new ScriptedAgent([
       [uiHint(INVALID_PLAN)], // always invalid (single script replays)
     ]);
@@ -136,23 +157,37 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     );
 
     // 1 initial + 1 retry = 2 total attempts before giving up.
-    assert.equal(agent.calls.length, 2, 'must exhaust initial + maxRetries attempts');
+    assert.equal(
+      agent.calls.length,
+      2,
+      "must exhaust initial + maxRetries attempts",
+    );
 
-    const errEvent = events.find((e) => e.type === 'error');
-    assert.ok(errEvent, 'an error event must be yielded when retries are exhausted');
-    assert.equal(errEvent.error?.code, 'VALIDATION_ERROR');
-    assert.match(errEvent.error?.message ?? '', /validation/i);
+    const errEvent = events.find((e) => e.type === "error");
+    assert.ok(
+      errEvent,
+      "an error event must be yielded when retries are exhausted",
+    );
+    assert.equal(errEvent.error?.code, "VALIDATION_ERROR");
+    assert.match(errEvent.error?.message ?? "", /validation/i);
 
     // No uiHint forwarded (the card never validated).
-    assert.equal(events.some((e) => e.type === 'uiHint'), false);
+    assert.equal(
+      events.some((e) => e.type === "uiHint"),
+      false,
+    );
   });
 
-  it('emits rejected-round prose as thinking, never as answer tokens', async () => {
+  it("emits rejected-round prose as thinking, never as answer tokens", async () => {
     const agent = new ScriptedAgent([
       // attempt 0: prose around the bad card — must NOT leak as answer text
-      [{ type: 'token', text: '让我重新算一下…' }, uiHint(INVALID_PLAN)],
+      [{ type: "token", text: "让我重新算一下…" }, uiHint(INVALID_PLAN)],
       // attempt 1: clean answer + valid card
-      [{ type: 'token', text: '最终分析：' }, uiHint(VALID_PLAN), { type: 'done' }],
+      [
+        { type: "token", text: "最终分析：" },
+        uiHint(VALID_PLAN),
+        { type: "done" },
+      ],
     ]);
 
     const events = await drain(
@@ -160,41 +195,54 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     );
 
     assert.equal(agent.calls.length, 2);
-    const thinkings = events.filter((e) => e.type === 'thinking');
-    assert.equal(thinkings.length, 1, 'rejected prose surfaces once as thinking');
-    assert.equal(thinkings[0].text, '让我重新算一下…');
+    const thinkings = events.filter((e) => e.type === "thinking");
+    assert.equal(
+      thinkings.length,
+      1,
+      "rejected prose surfaces once as thinking",
+    );
+    assert.equal(thinkings[0].text, "让我重新算一下…");
 
     // Answer tokens contain ONLY the final attempt's prose.
-    const tokens = events.filter((e) => e.type === 'token');
+    const tokens = events.filter((e) => e.type === "token");
     assert.equal(tokens.length, 1);
-    assert.equal(tokens[0].text, '最终分析：');
+    assert.equal(tokens[0].text, "最终分析：");
     assert.equal(
-      events.some((e) => e.type === 'token' && e.text?.includes('让我重新算')),
+      events.some((e) => e.type === "token" && e.text?.includes("让我重新算")),
       false,
-      'rejected-round prose must never appear as answer text',
+      "rejected-round prose must never appear as answer text",
     );
   });
 
-  it('passes a valid card through on the first attempt with no retry', async () => {
-    const agent = new ScriptedAgent([
-      [uiHint(VALID_PLAN), { type: 'done' }],
-    ]);
+  it("passes a valid card through on the first attempt with no retry", async () => {
+    const agent = new ScriptedAgent([[uiHint(VALID_PLAN), { type: "done" }]]);
 
     const events = await drain(
       chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
     );
 
-    assert.equal(agent.calls.length, 1, 'no retry when the first card is valid');
-    const uiHints = events.filter((e) => e.type === 'uiHint');
+    assert.equal(
+      agent.calls.length,
+      1,
+      "no retry when the first card is valid",
+    );
+    const uiHints = events.filter((e) => e.type === "uiHint");
     assert.equal(uiHints.length, 1);
     assert.deepEqual(uiHints[0].card, VALID_PLAN);
-    assert.ok(events.some((e) => e.type === 'done'));
-    assert.equal(events.some((e) => e.type === 'error'), false);
+    assert.ok(events.some((e) => e.type === "done"));
+    assert.equal(
+      events.some((e) => e.type === "error"),
+      false,
+    );
   });
 
-  it('passes token / done / error through when no uiHint card is present (tokens coalesced per attempt)', async () => {
+  it("passes token / done / error through when no uiHint card is present (tokens coalesced per attempt)", async () => {
     const agent = new ScriptedAgent([
-      [{ type: 'token', text: 'Hello' }, { type: 'token', text: ' world' }, { type: 'done' }],
+      [
+        { type: "token", text: "Hello" },
+        { type: "token", text: " world" },
+        { type: "done" },
+      ],
     ]);
 
     const events = await drain(
@@ -204,25 +252,29 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
     assert.equal(agent.calls.length, 1);
     assert.deepEqual(
       events.map((e) => e.type),
-      ['token', 'done'],
+      ["token", "done"],
     );
     // Tokens are buffered per attempt and flushed on the terminal event, so
     // prose written around a rejected card can never leak to the user.
-    assert.equal(events[0].text, 'Hello world');
+    assert.equal(events[0].text, "Hello world");
   });
 
-  it('passes an upstream error event through (does not retry on error)', async () => {
+  it("passes an upstream error event through (does not retry on error)", async () => {
     const agent = new ScriptedAgent([
-      [{ type: 'error', error: { code: 'MODEL_ERROR', message: 'boom' } }],
+      [{ type: "error", error: { code: "MODEL_ERROR", message: "boom" } }],
     ]);
 
     const events = await drain(
       chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
     );
 
-    assert.equal(agent.calls.length, 1, 'error events are forwarded, not retried');
-    assert.equal(events[0].type, 'error');
-    assert.equal(events[0].error?.code, 'MODEL_ERROR');
+    assert.equal(
+      agent.calls.length,
+      1,
+      "error events are forwarded, not retried",
+    );
+    assert.equal(events[0].type, "error");
+    assert.equal(events[0].error?.code, "MODEL_ERROR");
   });
 });
 
@@ -230,7 +282,6 @@ describe('chatWithValidationLoop — B4 retry loop', () => {
 function feedbackBackHasErrors(req: ChatRequest): boolean {
   const meta = req.metadata as Record<string, unknown> | undefined;
   const fb = meta?.uiHintValidationFeedback as
-    | { errors?: Array<{ code?: string; message?: string }> }
-    | undefined;
+    { errors?: Array<{ code?: string; message?: string }> } | undefined;
   return Array.isArray(fb?.errors) && (fb?.errors?.length ?? 0) > 0;
 }

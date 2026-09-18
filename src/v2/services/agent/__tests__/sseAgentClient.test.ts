@@ -48,11 +48,11 @@ const noHeaders = () => ({ 'Content-Type': 'application/json' });
 const fixedUser = () => '11111111-1111-1111-1111-111111111111';
 
 /** Collect every AgentEvent yielded by a chat() call. */
-async function drain(req: { message: string; scenario?: 'chat' | 'plan' }, chunks: string[], responseInit?: { ok?: boolean; status?: number }) {
+async function drain(req: { message: string; threadId?: string; scenario?: 'chat' | 'plan' }, chunks: string[], responseInit?: { ok?: boolean; status?: number }) {
   const fetchImpl = vi.fn(async () => sseResponse(chunks, responseInit)) as unknown as typeof fetch;
   const client = createSseAgentClient({ fetchImpl, url: '/api/chat', getHeaders: noHeaders, getUserId: fixedUser });
   const out: AgentEvent[] = [];
-  for await (const ev of client.chat({ userId: fixedUser(), message: req.message, scenario: req.scenario })) {
+  for await (const ev of client.chat({ userId: fixedUser(), message: req.message, threadId: req.threadId ?? 'thread_test_1', scenario: req.scenario })) {
     out.push(ev);
   }
   return { out, fetchImpl };
@@ -170,7 +170,7 @@ describe('createSseAgentClient (B3 — SSE fixture → AgentEvent)', () => {
       getUserId: fixedUser,
     });
     const out: AgentEvent[] = [];
-    for await (const ev of client.chat({ userId: fixedUser(), message: 'x' })) out.push(ev);
+    for await (const ev of client.chat({ userId: fixedUser(), message: 'x', threadId: 'thread_test_1' })) out.push(ev);
     expect(out).toEqual([
       { type: 'error', error: { code: 'UPSTREAM_TIMEOUT', message: 'network down' } },
     ]);

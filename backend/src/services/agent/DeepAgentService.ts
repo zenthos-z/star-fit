@@ -424,7 +424,11 @@ export class DeepAgentService implements AgentService {
    * calling user via the LangGraph AsyncLocalStorage context.
    */
   async *chat(req: ChatRequest): AsyncIterable<AgentEvent> {
-    const threadId = req.threadId ?? req.userId;
+    // [治理 2026-09-18] threadId 必传（契约层已 required）。旧 fallback 到 userId
+    // 会让该用户所有对话共享一个隐形大 thread（跨窗口上下文泄漏根因），彻底移除。
+    // checkpoint 键加 userId 命名空间前缀：跨用户即使拿到对方 clientThreadId 也
+    // 无法读写其上下文（全局用户隔离）；清理端点按同一前缀校验归属。
+    const threadId = `${req.userId}:${req.threadId}`;
 
     // 提取照片附件（metadata.intent_context type='image'，mediaId 已上传图床）。
     // 带图 → 多模态 content 直接进视觉模型（doubao-seed-2.1-turbo），零转写无损。

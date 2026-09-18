@@ -1103,7 +1103,12 @@ export const ChatRequestSchema = z.object({
   message: z.string(),
   scenario: AgentScenarioSchema.optional(),
   metadata: ChatMetadataSchema.optional(),
-  threadId: z.string().optional(),
+  /**
+   * [治理 2026-09-18] threadId 必传：对话上下文按 thread 隔离的唯一键。
+   * 旧契约 optional + 服务端 `?? userId` fallback 使该用户所有对话共享一个
+   * 隐形大 thread（跨窗口上下文泄漏根因），已废弃——不兼容旧客户端。
+   */
+  threadId: z.string().min(1),
 });
 export type ChatRequest = z.infer<typeof ChatRequestSchema>;
 
