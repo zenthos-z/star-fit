@@ -1184,6 +1184,15 @@ const ReasoningTrace: React.FC<{ trace?: string }> = ({ trace }) => {
 const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text, streaming }) => {
   const [manuallyToggled, setManuallyToggled] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
+
+  // 思考窗口限高 4 行（用户拍板 2026-09-18）：流式时固定在小窗内滚动、始终展示最新 4 行，
+  // 不随思考增长撑满屏幕；手动展开后不自动滚（尊重用户阅读位置）。
+  useEffect(() => {
+    if (streaming && !manuallyToggled && bodyRef.current) {
+      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    }
+  }, [text, streaming, manuallyToggled]);
 
   if (!text) return null;
 
@@ -1219,7 +1228,7 @@ const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text,
         transition={{ duration: 0.2, ease: 'easeOut' }}
         className="overflow-hidden"
       >
-        <div className="mt-2 px-4 py-3 bg-gray-50/50 border-l-2 border-gray-200 rounded-r-lg text-xs leading-relaxed text-gray-500 whitespace-pre-wrap">
+        <div ref={bodyRef} className="mt-2 px-4 py-3 bg-gray-50/50 border-l-2 border-gray-200 rounded-r-lg text-xs leading-relaxed text-gray-500 whitespace-pre-wrap max-h-[7.5rem] overflow-y-auto">
           {text}
         </div>
       </motion.div>
