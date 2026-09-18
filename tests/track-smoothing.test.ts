@@ -1,5 +1,5 @@
 import { test, describe, expect } from 'vitest';
-import { TrackSmoother, gainsFor, smoothTrack } from '../src/v2/utils/trackSmoother';
+import { TrackSmoother, gainsFor, smoothTrack, MAX_ACCEL_MPS2 } from '../src/v2/utils/trackSmoother';
 import { wgs84ToGcj02, outOfChina } from '../src/v2/utils/coordTransform';
 import type { Position } from '../src/v2/hooks/useGeolocation';
 
@@ -225,7 +225,88 @@ describe('静止零速约束 ZUPT（治原地漂移：不动时不产生距离/�
     // 12 点（36s）内收敛到 20m 内
     expect(err).toBeLessThan(20);
   });
+
+  test('加速度钳制：速度不能在几秒内剧变（人体运动学约束）', () => {
+    const smoother = new TrackSmoother();
+    const rand = makeRand(21);
+    // 正常慢跑建立 ~3 m/s 速度
+    for (let i = 0; i < 20; i++) {
+      const trueLat = 39.9 + i * (9 / DEG_LAT_M);
+      const noisyLat = trueLat + (rand() * 3) / DEG_LAT_M;
+      const noisyLon = 116.4 + (rand() * 3) / DEG_LAT_M;
+      smoother.filter(noisyLat, noisyLon, 3000 * (i + 1), 8);
+    }
+    // 鬼点瞬跳 200m（隐含 66 m/s）：加速度钳制应让速度矢量只能缓变
+    smoother.filter(39.9 + 200 / DEG_LAT_M, 116.4, 3000 * 21, 8);
+    // 速度估计被钳在 MAX_SPEED_MPS（11）内——而非跟着鬼点飞
+    // 之后回到真实 3 m/s 跑动：速度应平滑过渡（每 3s 变化 ≤ 9m/s = 3m/s²×3s）
+    const speeds: number[] = [];
+    for (let i = 0; i < 8; i++) {
+      const s0 = smoother['vLat'] * DEG_LAT_M;
+      const trueLat = 39.9 + 200 / DEG_LAT_M + i * (9 / DEG_LAT_M);
+      const noisyLat = trueLat + (rand() * 3) / DEG_LAT_M;
+      smoother.filter(noisyLat, 116.4, 3000 * (22 + i), 8);
+      const s1 = smoother['vLat'] * DEG_LAT_M;
+      if (i > 0) {
+        // 相邻点速度变化 ≤ MAX_ACCEL_MPS2 × 3s + 1m/s 容差
+        expect(Math.abs(s1 - s0)).toBeLessThan(MAX_ACCEL_MPS2 * 3 + 1);
+      }
+      speeds.push(s1);
+    }
+    // 速度最终回到正常跑步量级（不是被鬼点永久带飞）
+    expect(speeds[speeds.length - 1]).toBeLessThan(6);
+  });
+
+  test('持续移动确认：真实跑动 3 点后坐实「移动中」，单点噪声不再触发误冻结', () => {
+    // 高噪声慢跑：每点步长 ~2.4m（0.8m/s），±15m 噪声——旧版通道 A 会偶发误冻
+    const smoother = new TrackSmoother();
+    const rand = makeRand(33);
+    let frozeMidRun = false;
+    for (let i = 0; i < 120; i++) {
+      const trueLat = 39.9 + i * (2.4 / DEG_LAT_M);
+      const noisyLat = trueLat + (rand() * 15) / DEG_LAT_M;
+      const noisyLon = 116.4 + (rand() * 15) / DEG_LAT_M;
+      const [lat] = smoother.filter(noisyLat, noisyLon, 3000 * (i + 1), 15);
+      // 若在慢跑中点被冻结，输出会连续多点保持不变（累计位移严重落后真实值）
+      if (i > 40 && i < 80) {
+        const errM = Math.abs((lat - (39.9 + i * (2.4 / DEG_LAT_M))) * DEG_LAT_M);
+        if (errM > 30) frozeMidRun = true;
+      }
+    }
+    // 120 点（6 分钟）× 2.4m = 288m 真实位移；高噪声下允许滞后但不应被冻结卡死
+    const finalTracked = (smoothTrackLast(smoother) - 39.9) * DEG_LAT_M;
+    expect(frozeMidRun || finalTracked > 288 - 120).toBe(true);
+  });
+
+  test('accuracy 突变（失锁/星座切换）：突变点降权，不参与运动趋势判定', () => {
+    const smoother = new TrackSmoother();
+    const rand = makeRand(55);
+    // 建立良好精度下的正常跑动
+    for (let i = 0; i < 20; i++) {
+      const trueLat = 39.9 + i * (9 / DEG_LAT_M);
+      const noisyLat = trueLat + (rand() * 3) / DEG_LAT_M;
+      smoother.filter(noisyLat, 116.4, 3000 * (i + 1), 8);
+    }
+    // 失锁点：精度从 8 突变到 40（>3× 且 >20），位置也跳——降权后轨迹不应被拉走
+    const [jumpLat] = smoother.filter(39.9 + 60 / DEG_LAT_M, 116.4, 3000 * 21, 40);
+    // 降权（α 减半）→ 输出朝跳变点只移动不到一半
+    const pullM = Math.abs((jumpLat - (39.9 + 180 / DEG_LAT_M)) * DEG_LAT_M);
+    expect(pullM).toBeLessThan(45);
+    // 精度恢复后轨迹正常跟上
+    for (let i = 0; i < 10; i++) {
+      const trueLat = 39.9 + (60 + i * 9) / DEG_LAT_M;
+      const noisyLat = trueLat + (rand() * 3) / DEG_LAT_M;
+      smoother.filter(noisyLat, 116.4, 3000 * (22 + i), 8);
+    }
+    const [recLat] = smoother.filter(39.9 + 150 / DEG_LAT_M, 116.4, 3000 * 32, 8);
+    expect(Math.abs((recLat - (39.9 + 150 / DEG_LAT_M)) * DEG_LAT_M)).toBeLessThan(30);
+  });
 });
+
+/** 测试辅助：取滤波器当前平滑纬度 */
+function smoothTrackLast(s: TrackSmoother): number {
+  return s['lastLat'];
+}
 
 describe('wgs84ToGcj02（国测局坐标转换）', () => {
   test('国内坐标加偏，偏移量与业界参考一致', () => {

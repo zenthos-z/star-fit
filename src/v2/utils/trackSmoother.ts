@@ -1,5 +1,5 @@
 /**
- * GPS 轨迹平滑器（2D 稳态卡尔曼 α-β + 静止零速约束 ZUPT）
+ * GPS 轨迹平滑器（2D 稳态卡尔曼 α-β + 静止零速约束 ZUPT + 运动趋势连续性约束）
  *
  * 为什么自写而不用 kalman-filter npm 包：
  * - 包的 dynamic.covariance / init 在 constant-speed 模型下行为不可控（参数变化无效果），
@@ -31,6 +31,20 @@
  *     连续 3 点距冻结点 > max(40, 3R) 米（跑步 ~5 步即触发，快速脱离）。
  *     阈值滞后设计：静止高斯噪声跑出 40m+ 的概率 ~e^-3.5，三连击概率趋零，
  *     不会在原地反复解冻-冻结制造虚距。
+ *
+ * ★ 运动趋势连续性（人体运动学约束）——速度不可能几秒内剧变：
+ *   - 加速度钳制：人类极限加速度 ≈ 3 m/s²（博尔特起跑也只 ~1.5；GPS 抖动
+ *     在 3s 步长下常隐含 5~10 m/s² 假加速度）。速度矢量每点向新速度的修正
+ *     被限制在 MAX_ACCEL_MPS2 × dt 内，鬼点跳变只能「拉方向」不能「瞬移速度」。
+ *   - 持续移动确认（sustained movement）：提速是过程不是事件——观测速度连续
+ *     SUSTAIN_POINTS 点 ≥ SUSTAIN_MPS 才把「移动中」状态坐实（用于抬高置信、
+ *     放宽进入静止的判定）；这与 ZUPT 的连击进入互补：一个防假动，一个防假停。
+ *   - accuracy 突变检测（多星座质量信号）：accuracy 环比上一接受点突然恶化
+ *     （> ACCURACY_JUMP_FACTOR 倍）= 失锁/切换卫星事件（进隧道、出隧道、
+ *     高楼峡谷反射）。此点降权（增益再乘 0.5）且不参与静止判定——
+ *     手机 GNSS 芯片内部已是多卫星联合解算，WebView 拿到的 accuracy 就是
+ *     星座几何质量（HDOP）的输出端；iOS 不开放原始伪距，accuracy 是唯一
+ *     可用的「多星质量」信号，突变=星座质量塌方。
  *   另：速度估计钳制在 MAX_SPEED_MPS（≈百米世界纪录），单点离群无法把速度抬飞。
  */
 import type { Position } from '../hooks/useGeolocation';
@@ -45,6 +59,15 @@ export const EXIT_STATIC_MPS = 0.6;
 export const MAX_SPEED_MPS = 11;
 /** 静止模式速度学习率（比动态 β 小一个量级，防噪声把估计抬出静止态） */
 const STATIC_BETA = 0.05;
+
+/** 人体加速度上限（m/s²）：人类极限 ~3（博尔特起跑 ~1.5），防速度矢量剧变 */
+export const MAX_ACCEL_MPS2 = 3;
+/** 持续移动确认点数：连续 N 点观测速度 ≥ SUSTAIN_MPS 才坐实「移动中」 */
+export const SUSTAIN_POINTS = 3;
+/** 持续移动速度门槛（m/s）：明显高于噪声漂移速率 */
+export const SUSTAIN_MPS = 0.8;
+/** accuracy 突变倍数：环比恶化超过此倍数视为失锁/星座切换事件（降权） */
+export const ACCURACY_JUMP_FACTOR = 3;
 
 // 通道 A：创新门限连击
 /** 连续 N 点贴近平滑位置 → 静止 */
@@ -86,6 +109,10 @@ export class TrackSmoother {
   private staticStreak = 0;
   private exitStreak = 0;
   private windowStaticStreak = 0;
+  /** 持续移动确认：连续达标点数 */
+  private sustainStreak = 0;
+  /** 上一次的 accuracy（失锁突变检测用） */
+  private lastAccuracy: number | null = null;
   private rawBuf: RawSample[] = [];
 
   /**
@@ -94,6 +121,13 @@ export class TrackSmoother {
    */
   filter(lat: number, lon: number, timestamp: number, accuracy: number, speedMps?: number): [number, number] {
     this.pushRaw(timestamp, lat, lon);
+
+    // ★ 多星座质量信号：accuracy 突然恶化 = 失锁/切换卫星事件 → 此点降权
+    // （增益减半，更信任运动模型），且不作为任何状态判定的依据
+    const accuracyJump = this.lastAccuracy != null
+      && accuracy > this.lastAccuracy * ACCURACY_JUMP_FACTOR
+      && accuracy > 20;
+    this.lastAccuracy = accuracy;
 
     if (!this.initialized) {
       // 首点直接采用；速度未知置 0（第二点残差自然建立速度）
@@ -114,6 +148,21 @@ export class TrackSmoother {
         const k = MAX_SPEED_MPS / s;
         this.vLat *= k;
         this.vLon *= k;
+      }
+    };
+    // ★ 加速度钳制：速度矢量的修正量限制在人体加速能力内（方向可变，模长缓变）
+    const clampAccel = (nvLat: number, nvLon: number): void => {
+      const curS = speedOf(this.vLat, this.vLon);
+      const newS = speedOf(nvLat, nvLon);
+      const maxDelta = MAX_ACCEL_MPS2 * dt;
+      if (Math.abs(newS - curS) > maxDelta) {
+        const target = curS + Math.sign(newS - curS) * maxDelta;
+        const k = target / newS;
+        this.vLat = nvLat * k;
+        this.vLon = nvLon * k;
+      } else {
+        this.vLat = nvLat;
+        this.vLon = nvLon;
       }
     };
 
@@ -148,8 +197,10 @@ export class TrackSmoother {
       return [this.lastLat, this.lastLon];
     }
 
-    // 动态模式：正常 α-β
-    const [alpha, beta] = gainsFor(accuracy);
+    // 动态模式：正常 α-β（accuracy 突变点降权）
+    const [baseAlpha, baseBeta] = gainsFor(accuracy);
+    const alpha = accuracyJump ? baseAlpha * 0.5 : baseAlpha;
+    const beta = accuracyJump ? baseBeta * 0.5 : baseBeta;
 
     const predLat = this.lastLat + this.vLat * dt;
     const predLon = this.lastLon + this.vLon * dt;
@@ -158,18 +209,28 @@ export class TrackSmoother {
 
     this.lastLat = predLat + alpha * rLat;
     this.lastLon = predLon + alpha * rLon;
-    this.vLat = this.vLat + (beta / dt) * rLat;
-    this.vLon = this.vLon + (beta / dt) * rLon;
+    clampAccel(this.vLat + (beta / dt) * rLat, this.vLon + (beta / dt) * rLon);
     clampSpeed();
     this.lastTimestamp = timestamp;
 
-    // 静止进入判定
+    // ★ 持续移动确认：连续多点观测速度达标才坐实「移动中」
+    // （观测速度=本点与上点距离/时间，未平滑、最即时；提速是过程不是事件）
+    if (!accuracyJump) {
+      const obsSpeed = this.lastObsSpeedMps(mPerDegLon, dt);
+      if (obsSpeed != null && obsSpeed >= SUSTAIN_MPS) {
+        this.sustainStreak++;
+      } else if (obsSpeed == null || obsSpeed < SUSTAIN_MPS * 0.6) {
+        this.sustainStreak = 0;
+      }
+    }
+
+    // 静止进入判定（持续移动坐实时抑制进入，防跑动中被误冻结）
     if (speedMps != null) {
-      // Doppler 低速下最准，单点即可判定
-      if (speedMps < ENTER_STATIC_MPS) {
+      // Doppler 低速下最准，单点即可判定；但持续移动坐实时相信趋势
+      if (speedMps < ENTER_STATIC_MPS && this.sustainStreak < SUSTAIN_POINTS) {
         this.enterStatic();
       }
-    } else if (!windowMoving) {
+    } else if (!windowMoving && this.sustainStreak < SUSTAIN_POINTS) {
       // 通道 A：创新门限连击（贴近平滑位置）
       const dist = Math.hypot(rLat * DEG_LAT_M, rLon * mPerDegLon);
       if (dist < streakRadius(accuracy)) {
@@ -208,6 +269,8 @@ export class TrackSmoother {
     this.staticStreak = 0;
     this.exitStreak = 0;
     this.windowStaticStreak = 0;
+    this.sustainStreak = 0;
+    this.lastAccuracy = null;
     this.rawBuf = [];
   }
 
@@ -216,6 +279,7 @@ export class TrackSmoother {
     this.staticStreak = 0;
     this.exitStreak = 0;
     this.windowStaticStreak = 0;
+    this.sustainStreak = 0;
     this.vLat = 0;
     this.vLon = 0;
   }
@@ -225,6 +289,7 @@ export class TrackSmoother {
     this.staticStreak = 0;
     this.exitStreak = 0;
     this.windowStaticStreak = 0;
+    this.sustainStreak = 0;
     // 速度清零重新建立，防带着冻结前的陈旧速度跳变
     this.vLat = 0;
     this.vLon = 0;
@@ -236,6 +301,17 @@ export class TrackSmoother {
     while (this.rawBuf.length > 2 && this.rawBuf[0].t < t - SPEED_WINDOW_MS - 5000) {
       this.rawBuf.shift();
     }
+  }
+
+  /** 本点与前一原始观测的隐含速度（m/s，未平滑、最即时）；首点后才有值 */
+  private lastObsSpeedMps(mPerDegLon: number, dtS: number): number | null {
+    const n = this.rawBuf.length;
+    if (n < 2 || dtS <= 0) return null;
+    const a = this.rawBuf[n - 2];
+    const b = this.rawBuf[n - 1];
+    const dLat = (b.lat - a.lat) * DEG_LAT_M;
+    const dLon = (b.lon - a.lon) * mPerDegLon;
+    return Math.hypot(dLat, dLon) / dtS;
   }
 
   /** 窗口速度（m/s）：窗口首/尾各 1/3 样本均值位移÷均值时间差；不足最短时长返回 null */
