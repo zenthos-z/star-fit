@@ -14,6 +14,8 @@ import { CardHeader } from './CardHeader';
 import { transitions } from '../../../lib/animations';
 import { haptic } from '../../../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../../../lib/nativeTabBar';
+import { useSyncExternalStore } from 'react';
+import { watchHeartRateStore } from '../../../services/watchHeartRateStore';
 
 interface OutdoorExerciseCardV2Props {
   exercise: ExerciseAction;
@@ -30,6 +32,8 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
   
   const currentSet = exercise.sets[0] || { index: 0, status: 'PLANNED', duration: 0, distance: 0 };
   
+  // 手表实时心率三态（liveBpm 15s 新鲜 / 已记录N样本 / 占位）
+  const hr = useSyncExternalStore(watchHeartRateStore.subscribe, watchHeartRateStore.getSnapshot);
   const [isRunning, setIsRunning] = useState(false);
   const [isWaitingForGPS, setIsWaitingForGPS] = useState(false);
   const [isGpsTimeout, setIsGpsTimeout] = useState(false);
@@ -533,7 +537,13 @@ const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ ex
       </div>
       <div className="flex items-center gap-2 bg-white border border-rose-100 rounded-2xl px-3 py-1 flex-1 justify-center">
         <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-100 shrink-0" />
-        <span className="text-[10px] font-semibold tracking-wide text-gray-400 truncate">连接手表自动记录</span>
+        <span className={`text-[10px] font-semibold tracking-wide truncate ${hr.liveBpm ? 'text-rose-500' : 'text-gray-400'}`}>
+          {hr.liveBpm
+            ? `${hr.liveBpm} BPM`
+            : hr.sampleCount > 0
+              ? `手表已记录 ${hr.sampleCount} 样本`
+              : '连接手表自动记录'}
+        </span>
       </div>
     </div>
   );

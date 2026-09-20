@@ -49,6 +49,10 @@ struct HeartRateView: View {
             zoneMeta               // 区间名 + 范围
             Spacer(minLength: 0)
             avgLine                // 组均值（附属）
+            // 心率空白诊断（发布前移除）：授权/引擎状态一行小字
+            Text("心率: \(model.hrEngine.diagSession) · 授权: \(model.hrEngine.diagAuth)")
+                .font(.system(size: 9, weight: .semibold, design: .monospaced))
+                .foregroundStyle(.secondary.opacity(0.6))
         }
         .padding(.horizontal, 12)
         .padding(.vertical, 8)

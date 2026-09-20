@@ -10,6 +10,7 @@ enum AppPhase: Equatable {
     case idle          // 未开始 / 等待手机计划
     case activeSet     // 执行当前组
     case resting       // 组间休息
+    case workoutDone   // 全部动作完成（恭喜页；DONE 镜像进入）
 }
 
 final class WatchSessionModel: ObservableObject {
@@ -31,6 +32,8 @@ final class WatchSessionModel: ObservableObject {
     init() {
         hrEngine.onLiveSample = { [weak self] bpm in
             DispatchQueue.main.async { self?.liveBPM = bpm }
+            // 实时心率直推手机（hr_live）：断连即弃不积压（陈旧心率补发无意义）
+            ConnectivityManager.shared.sendMessage(["kind": "hr_live", "bpm": bpm])
         }
         hrEngine.onSetComplete = { [weak self] avg in
             DispatchQueue.main.async {
@@ -69,24 +72,85 @@ final class WatchSessionModel: ObservableObject {
 
     // MARK: - 手机镜像
 
+    /// 恭喜页「完成」按钮：回到 idle（等待下一个计划）
+    func acknowledgeDone() {
+        phase = .idle
+        setState = WatchSetState()
+    }
+
+    /// 同步按钮：手表主动请求手机立即重推当前状态（sendMessage 实时通道，
+    /// 手机端 useWatchMirror 收到 request_sync 后重播，双通道齐发）。
+    func requestSyncFromPhone() {
+        playHaptic(.click)
+        ConnectivityManager.shared.requestSync()
+    }
+
     private func applyPhoneContext(_ dict: [String: Any]) {
-        guard let data = dict["set_state"] as? [String: Any] else { return }
-        if let json = try? JSONSerialization.data(withJSONObject: data),
-           let decoded = try? JSONDecoder().decode(WatchSetState.self, from: json) {
+        guard let data = dict["set_state"] as? [String: Any] else {
+            NSLog("[WSM] applyPhoneContext: no set_state key, keys=%@", dict.keys.map { String($0) }.joined(separator: ","))
+            return
+        }
+        if let json = try? JSONSerialization.data(withJSONObject: data) {
+            guard let decoded = try? JSONDecoder().decode(WatchSetState.self, from: json) else {
+                NSLog("[WSM] applyPhoneContext: DECODE FAILED, raw=%@", String(data: json, encoding: .utf8) ?? "?")
+                return
+            }
+            NSLog("[WSM] applyPhoneContext: status=%@ sessionPhase=%@ totalSets=%d phase=%@", decoded.status, decoded.sessionPhase, decoded.totalSets, "\(phase)")
+            // ── 会话层状态机（2026-09-20 根修 status 语义混用）：
+            // set.status 只描述组；手表 phase 完全由 sessionPhase 驱动。
+            let isFirstRealState = phase == .idle
             setState = decoded
             isConnected = true
-            // 休息状态与手机对齐
-            if decoded.isResting {
-                enterRest()
-            } else if phase == .resting {
-                endRest()
-            }
-            if decoded.status == "COMPLETED" {
-                phase = .idle
-            } else if phase == .idle && decoded.totalSets > 0 {
-                phase = .activeSet
+            switch decoded.sessionPhase {
+            case "DONE":
+                // 全部动作完成 → 恭喜页（幂等：重复 DONE 镜像不重复收尾）
+                if phase != .workoutDone { finishWorkout() }
+                setState.displayStartMs = decoded.displayStartMs ?? setState.displayStartMs
+                return
+            case "READY":
+                // 计划已导入未开练：预告态，不开采集
+                if phase != .idle { phase = .idle; restTimer?.invalidate() }
+                setState.status = "READY"
+                return
+            case "REST":
+                if phase == .idle || phase == .workoutDone {
+                    phase = .activeSet
+                    if isFirstRealState { hrEngine.startSession() }
+                }
+                enterRestFromPhone(decoded)
+            case "PAUSED":
+                // 暂停：保持当前屏（计时由 displayStartMs 平移冻结），不切态
+                if (phase == .idle || phase == .workoutDone) && decoded.totalSets > 0 {
+                    phase = .activeSet
+                    if isFirstRealState { hrEngine.startSession() }
+                }
+            default: // ACTIVE
+                if phase == .resting {
+                    // 手机结束休息（手表端 endRest 会给手机发消息，这里防双触发）
+                    restTimer?.invalidate()
+                    phase = .activeSet
+                    setState.isResting = false
+                    setState.restEndTime = nil
+                } else if (phase == .idle || phase == .workoutDone) && decoded.totalSets > 0 {
+                    phase = .activeSet
+                    // 首个真实镜像 → 启动真实心率采集（2026-09-19 修复）
+                    if isFirstRealState { hrEngine.startSession() }
+                }
             }
         }
+    }
+
+    /// 手机驱动的休息（区别于本地 enterRest：不发消息回手机，防回环）
+    private func enterRestFromPhone(_ decoded: WatchSetState) {
+        guard phase == .activeSet || phase == .resting || phase == .workoutDone else { return }
+        let wasResting = phase == .resting
+        phase = .resting
+        setState.isResting = true
+        setState.restEndTime = decoded.restEndTime
+        if !wasResting {
+            playHaptic(.retry)
+        }
+        scheduleRestCountdown()
     }
 
     // MARK: - 执行流（本地演示态 + 遥控上报）
@@ -114,6 +178,7 @@ final class WatchSessionModel: ObservableObject {
         var payload: [String: Any] = [
             "kind": "set_completed",
             "exercise_index": setState.exerciseIndex,
+            "exercise_name": setState.exerciseName,
             "set_index": setState.setIndex,
             "completed_at": ISO8601DateFormatter().string(from: Date()),
         ]
@@ -122,10 +187,15 @@ final class WatchSessionModel: ObservableObject {
         }
         sendToPhone(payload)
 
-        // 本地推进
+        // 本地推进（2026-09-20 修复「最后一组闪回等待界面」）：
+        // 本地不再裁决训练结束——手机才是会话真源，完成最后一组后
+        // 手机必然广播下一个 sessionPhase（REST=动作间休息 / DONE=全部结束）。
+        // 本地提前 finishWorkout 会把 phase 打回 idle，手机 REST 镜像
+        // 稍后到达才又拉回休息 → 用户看到「等待训练计划」闪屏。
         setState.completedCount += 1
         if setState.completedCount >= setState.totalSets {
-            finishWorkout()
+            // 全组完成：本地只置完成态，停在当前屏等手机镜像（通常 <1s）
+            setState.status = "COMPLETED"
             return
         }
         // 自动进入休息
@@ -174,10 +244,12 @@ final class WatchSessionModel: ObservableObject {
 
     func finishWorkout() {
         restTimer?.invalidate()
-        phase = .idle
+        phase = .workoutDone
         setState.status = "COMPLETED"
         playHaptic(.notification) // 训练完成
-        // 训后批量同步完整心率样本
+        // 训后批量同步完整心率样本。
+        // 2026-09-19 修复：手机中途结束训练也要发 hr_batch（原仅本地跑完全部组才发，
+        // 手机端提前结束 → 表上样本永不入库）。终态镜像到达 → finishWorkout → 此处补发。
         let samples = hrEngine.exportSamples()
         if !samples.isEmpty {
             sendToPhone(["kind": "hr_batch", "samples": samples.map { $0.payload }])

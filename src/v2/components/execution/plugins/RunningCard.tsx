@@ -5,6 +5,8 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { transitions } from '../../../lib/animations';
 import { CardHeader } from './CardHeader';
 import { haptic } from '../../../../lib/nativeHaptics';
+import { useSyncExternalStore } from 'react';
+import { watchHeartRateStore } from '../../../services/watchHeartRateStore';
 
 interface RunningCardProps {
   exercise: ExerciseAction;
@@ -59,6 +61,8 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
   const targetDistance = metadata.targetDistanceMeters ? Number(metadata.targetDistanceMeters) : 0;
   const targetHeartRateZone = metadata.targetHeartRateZone || '2'; 
 
+  // 手表实时心率三态（liveBpm 15s 新鲜 / 已记录N样本 / 占位文案）
+  const hr = useSyncExternalStore(watchHeartRateStore.subscribe, watchHeartRateStore.getSnapshot);
   const currentSet = exercise.sets[0] || { index: 0, status: 'PLANNED', duration: 0, distance: 0 };
 
   const [isRunning, setIsRunning] = useState(false);
@@ -222,7 +226,13 @@ export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, on
             </div>
             <div className="flex items-center gap-2 bg-white border border-gray-100 rounded-2xl px-3 py-1 flex-1 justify-center">
               <Heart className="w-3.5 h-3.5 text-rose-400 fill-rose-100 shrink-0" />
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest truncate">连接手表自动记录</span>
+              <span className={`text-[10px] font-bold uppercase tracking-widest truncate ${hr.liveBpm ? 'text-rose-500' : 'text-gray-400'}`}>
+                {hr.liveBpm
+                  ? `${hr.liveBpm} BPM`
+                  : hr.sampleCount > 0
+                    ? `手表已记录 ${hr.sampleCount} 样本`
+                    : '连接手表自动记录'}
+              </span>
             </div>
           </div>
       </div>

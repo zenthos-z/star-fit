@@ -18,6 +18,10 @@ struct WatchSetState: Codable, Equatable {
     var status: String = "PLANNED" // PLANNED | COMPLETED
     var isResting: Bool = false
     var restEndTime: Int64? = nil  // epoch ms，休息结束时刻
+    /// 会话层状态（2026-09-20 修复 status 语义混用）：READY/ACTIVE/REST/PAUSED/DONE
+    var sessionPhase: String = "READY"
+    /// 计时虚拟起点（epoch ms）：elapsed = now − displayStartMs；暂停中手机会持续平移它
+    var displayStartMs: Int64? = nil
 
     /// 动作类型徽标（与手机端 types.ts ExerciseType 9 类对齐）
     var typeBadge: String {
@@ -95,5 +99,52 @@ struct WatchSetState: Codable, Equatable {
 
     var progressDots: [Bool] {
         (0..<max(totalSets, 1)).map { $0 < completedCount }
+    }
+
+    // MARK: - 容错解码（2026-09-19 真机实锤修复）
+    // 自动合成的 Codable 对非 Optional 字段要求键必须存在；手机 JS 端的镜像
+    // payload 不含 sessionId / exerciseIndex → decode 静默抛错 → try? 吞掉 →
+    // 手表永远收不到计划。手写 init(from:)：缺失键用默认值，类型不匹配逐字段容错。
+    enum CodingKeys: String, CodingKey {
+        case sessionId, exerciseIndex, exerciseName, exerciseType, isUnilateral
+        case setIndex, totalSets, completedCount, weight, reps, durationSec
+        case distanceM, status, isResting, restEndTime, sessionPhase, displayStartMs
+    }
+
+    init() {}
+
+    init(exerciseIndex: Int, exerciseName: String, exerciseType: String,
+         setIndex: Int, totalSets: Int, completedCount: Int,
+         weight: Double?, reps: Int?, status: String) {
+        self.exerciseIndex = exerciseIndex
+        self.exerciseName = exerciseName
+        self.exerciseType = exerciseType
+        self.setIndex = setIndex
+        self.totalSets = totalSets
+        self.completedCount = completedCount
+        self.weight = weight
+        self.reps = reps
+        self.status = status
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        sessionId = (try? c.decode(String.self, forKey: .sessionId)) ?? ""
+        exerciseIndex = (try? c.decode(Int.self, forKey: .exerciseIndex)) ?? 0
+        exerciseName = (try? c.decode(String.self, forKey: .exerciseName)) ?? ""
+        exerciseType = (try? c.decode(String.self, forKey: .exerciseType)) ?? "resistance"
+        isUnilateral = (try? c.decode(Bool.self, forKey: .isUnilateral)) ?? false
+        setIndex = (try? c.decode(Int.self, forKey: .setIndex)) ?? 0
+        totalSets = (try? c.decode(Int.self, forKey: .totalSets)) ?? 0
+        completedCount = (try? c.decode(Int.self, forKey: .completedCount)) ?? 0
+        weight = try? c.decode(Double.self, forKey: .weight)
+        reps = try? c.decode(Int.self, forKey: .reps)
+        durationSec = try? c.decode(Int.self, forKey: .durationSec)
+        distanceM = try? c.decode(Double.self, forKey: .distanceM)
+        status = (try? c.decode(String.self, forKey: .status)) ?? "PLANNED"
+        isResting = (try? c.decode(Bool.self, forKey: .isResting)) ?? false
+        restEndTime = try? c.decode(Int64.self, forKey: .restEndTime)
+        sessionPhase = (try? c.decode(String.self, forKey: .sessionPhase)) ?? "READY"
+        displayStartMs = try? c.decode(Int64.self, forKey: .displayStartMs)
     }
 }

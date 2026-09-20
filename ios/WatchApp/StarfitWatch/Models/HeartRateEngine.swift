@@ -7,6 +7,11 @@ import HealthKit
 /// 断连/模拟器无传感器时支持演示心率（demoHeartRate），仅本地演示用。
 final class HeartRateEngine: NSObject, ObservableObject {
     @Published var liveBPM: Int? = nil
+    /// 引擎诊断（UI 展示）：授权/会话/模式，排查心率空白
+    @Published var diagAuth: String = "未请求"
+    @Published var diagSession: String = "未启动"
+    /// 是否演示模式（真机出现=权限/传感器问题）
+    @Published private(set) var isDemoMode = false
 
     var onLiveSample: ((Int) -> Void)?
     var onSetComplete: ((Int) -> Void)?
@@ -24,21 +29,83 @@ final class HeartRateEngine: NSObject, ObservableObject {
     private var demoMode = false
     private var demoTimer: Timer?
 
+    /// 兜底轮询（2026-09-20 真机实锤：授权 OK + 会话 running 但
+    /// didCollectDataOf 不回调 → liveBPM 永远 nil）。直接以锚点查询
+    /// HealthKit 最近心率样本，2s 一次；builder 回调正常时轮询结果一致（幂等）。
+    private var anchorQueryTimer: Timer?
+    private var lastAnchoredBpm: Double?
+
+    private func startAnchorPolling() {
+        anchorQueryTimer?.invalidate()
+        anchorQueryTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            self?.pollLatestHeartRate()
+        }
+    }
+
+    private func stopAnchorPolling() {
+        anchorQueryTimer?.invalidate()
+        anchorQueryTimer = nil
+    }
+
+    private func pollLatestHeartRate() {
+        guard !demoMode else { return }
+        guard let hrType = HKQuantityType.quantityType(forIdentifier: .heartRate) else { return }
+        let sort = NSSortDescriptor(key: HKSampleSortIdentifierEndDate, ascending: false)
+        let q = HKSampleQuery(sampleType: hrType, predicate: nil, limit: 1, sortDescriptors: [sort]) { [weak self] _, samples, _ in
+            guard let self = self,
+                  let sample = samples?.first as? HKQuantitySample,
+                  // 只认 10 秒内的新鲜样本（陈旧心率不入流）
+                  Date().timeIntervalSince(sample.endDate) < 10 else { return }
+            let bpm = sample.quantity.doubleValue(for: HKUnit.count().unitDivided(by: .minute()))
+            guard bpm != self.lastAnchoredBpm else { return }
+            self.lastAnchoredBpm = bpm
+            DispatchQueue.main.async {
+                NSLog("[HRE] anchor poll bpm=%.0f", bpm)
+                self.diagSession = "锚点轮询中"
+            }
+            self.ingest(bpm: bpm, at: sample.endDate)
+        }
+        healthStore.execute(q)
+    }
+
     // MARK: - 授权
 
     func requestAuthorization() {
-        guard HKHealthStore.isHealthDataAvailable() else { return }
+        guard HKHealthStore.isHealthDataAvailable() else {
+            NSLog("[HRE] requestAuthorization: HealthData NOT available (模拟器/受限)")
+            return
+        }
         let types: Set<HKQuantityType> = [
             HKQuantityType.quantityType(forIdentifier: .heartRate)!,
             HKQuantityType.quantityType(forIdentifier: .activeEnergyBurned)!,
             HKQuantityType.quantityType(forIdentifier: .distanceWalkingRunning)!,
         ]
-        healthStore.requestAuthorization(toShare: [], read: types) { _, _ in }
+        healthStore.requestAuthorization(toShare: [], read: types) { [weak self] ok, error in
+            NSLog("[HRE] requestAuthorization ok=%@ err=%@", ok ? "yes" : "no", error?.localizedDescription ?? "nil")
+            DispatchQueue.main.async {
+                self?.diagAuth = ok ? "已授权" : "被拒/失败"
+            }
+            // 回读真实授权状态：被拒过系统不弹窗，必须引导去设置
+            guard let hrType = HKObjectType.quantityType(forIdentifier: .heartRate) else { return }
+            self?.healthStore.getRequestStatusForAuthorization(toShare: [], read: [hrType]) { status, _ in
+                DispatchQueue.main.async {
+                    if status == .shouldRequest {
+                        self?.diagAuth = "未授权(需设置里开)"
+                        NSLog("[HRE] heartRate auth: shouldRequest → 用户从未授权")
+                    }
+                }
+            }
+        }
     }
 
     // MARK: - 会话控制
 
     func startSession(demoHeartRate: Bool = false) {
+        NSLog("[HRE] startSession demo=%@", demoHeartRate ? "yes" : "no")
+        DispatchQueue.main.async {
+            self.isDemoMode = demoHeartRate
+            self.diagSession = demoHeartRate ? "演示模式" : "真实采集中"
+        }
         samples.removeAll()
         currentSetSamples.removeAll()
         bucketStart = nil
@@ -62,15 +129,26 @@ final class HeartRateEngine: NSObject, ObservableObject {
             session?.delegate = self
             builder?.delegate = self
             session?.startActivity(with: Date())
-            builder?.beginCollection(withStart: Date()) { _, _ in }
+            builder?.beginCollection(withStart: Date()) { ok, err in
+                NSLog("[HRE] beginCollection ok=%@ err=%@", ok ? "yes" : "no", err?.localizedDescription ?? "nil")
+            }
+            // 兜底：builder 不吐样本时锚点轮询保活（幂等，双路同值）
+            startAnchorPolling()
         } catch {
             // 无权限/模拟器受限：回落演示心率（保证 UI 可验证）
+            NSLog("[HRE] HKWorkoutSession FAILED: %@ → demo fallback", error.localizedDescription)
             demoMode = true
+            DispatchQueue.main.async {
+                self.isDemoMode = true
+                self.diagSession = "回落演示(会话失败)"
+            }
             startDemoHeartRate()
         }
     }
 
     func endSession() {
+        stopAnchorPolling()
+        lastAnchoredBpm = nil
         session?.end()
         builder?.endCollection(withEnd: Date()) { _, _ in }
         session = nil

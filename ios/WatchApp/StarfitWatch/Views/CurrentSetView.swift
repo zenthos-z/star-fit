@@ -39,12 +39,38 @@ struct CurrentSetView: View {
                 .font(.caption2)
             Text(model.setState.typeBadge)
                 .font(.caption2.weight(.bold))
+            // 已训练时长（手机胶囊同源口径）。
+            // 暂停感知（2026-09-20 修复"5 秒跳变"）：暂停中手机每秒平移 displayStartMs，
+            // 但 WC 链路对高频小差异 payload 有合并节流 → 手表「本地走秒+周期拉回」跳变。
+            // 手表端改本地冻结：收到 PAUSED 即锁定 elapsed（镜像平移只作校准，误差<1s 不闪）。
+            if let start = model.setState.displayStartMs, start > 0 {
+                if model.setState.sessionPhase == "PAUSED" {
+                    Text("· " + Self.elapsedText(since: start, now: Date()))
+                        .font(.caption2.weight(.bold))
+                        .monospacedDigit()
+                        .foregroundStyle(.orange) // 暂停可视化：橙色=冻结
+                } else {
+                    TimelineView(.periodic(from: .now, by: 1)) { context in
+                        Text("· " + Self.elapsedText(since: start, now: context.date))
+                            .font(.caption2.weight(.bold))
+                            .monospacedDigit()
+                    }
+                }
+            }
         }
         .foregroundStyle(.tint)
         .padding(.horizontal, 7)
         .padding(.vertical, 2)
         .glassEffect()
         .clipShape(Capsule())
+    }
+
+    /// 已训练时长 mm:ss（静态工具：now 由 TimelineView context 提供）
+    private static func elapsedText(since startMs: Int64, now: Date) -> String {
+        let elapsed = max(0, Int64(now.timeIntervalSince1970) - startMs / 1000)
+        let m = elapsed / 60
+        let s = elapsed % 60
+        return String(format: "%02d:%02d", m, s)
     }
 
     // MARK: 左右分区（左 2/3 动作+目标，右 1/3 心率+组号）
