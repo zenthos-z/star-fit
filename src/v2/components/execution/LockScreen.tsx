@@ -5,7 +5,7 @@ import { haptic } from '../../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
 import { HoldToConfirm, HOLD_MS } from './HoldToConfirm';
 import { LOCK_MOTION } from './lockMotion';
-import { broadcastCurrentSet, isWatchBridge, onWatchEvent, type WatchEvent } from '../../services/watchConnectivity';
+import { isWatchBridge, onWatchEvent, type WatchEvent } from '../../services/watchConnectivity';
 import { useLoadAnchors } from '../../hooks/useLoadAnchors';
 import { getUserId } from '@/services';
 import type { Exercise, ExerciseType } from '../../../../types';
@@ -298,69 +298,15 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const focusKey = focus.kind === 'done' ? 'done' : `${focus.exId}:${focus.setId}:${focus.kind}`;
   const countingKey = counting ? `${counting.exId}:${counting.setId}:countdown` : '';
 
-  // 手表镜像（ADR-0001）：焦点组状态广播到 watchOS 伴侣单组屏。
-  // 断连/无原生桥时静默 no-op，不阻塞训练主流程。
-  useEffect(() => {
-    if (focus.kind === 'done') return;
-    const ex = exercises.find((e) => e.id === focus.exId);
-    if (!ex) return;
-    const set: any = ex.sets.find((s: any) => s.id === focus.setId);
-    const completedCount = ex.sets.filter(isSetDone).length;
-    void broadcastCurrentSet({
-      exerciseName: ex.name,
-      exerciseType: ex.type,
-      setIndex: Math.max(0, focus.setNo - 1),
-      totalSets: ex.sets.length,
-      completedCount,
-      isUnilateral: ex.unilateral === true,
-      weight: typeof set?.weight === 'number' ? set.weight : undefined,
-      reps: typeof set?.reps === 'number' ? set.reps : undefined,
-      durationSec: typeof set?.targetDuration === 'number' ? set.targetDuration : ex.metadata?.targetDurationSec,
-      distanceM: typeof set?.targetDistance === 'number' ? set.targetDistance : ex.metadata?.targetDistanceMeters,
-      status: isSetDone(set) ? 'COMPLETED' : 'PLANNED',
-      isResting: focus.kind === 'rest',
-      restEndTime: focus.kind === 'rest' ? focus.end : undefined,
-    });
-  }, [focusKey, exercises]);
+  // 手表镜像（ADR-0001）：已上提 App 层 useWatchMirror（2026-09-19 修复：
+  // 原挂 LockScreen 内，不进锁定屏就不广播，手表永远演示态）。此处不再本地广播。
   useEffect(() => {
     if (counting && countingKey !== focusKey && focus.kind !== 'countdown') setCounting(null);
   }, [focusKey, countingKey, counting, focus.kind]);
 
-  // 手表 → 手机事件消费（ADR-0001 遥控回传）：
-  // - set_completed：手表上点的「完成本组」→ 推进手机训练状态机
-  // - rest_action end/extend：手表休息双按钮 → 手机休息倒计时同步
-  // - hr_batch：训后心率批量样本 → POST 后端 heart_rate_samples
-  // 幂等：只接受当前焦点组的事件，积压补发不会误触发其他组。
-  useEffect(() => {
-    if (!isWatchBridge) return;
-    const off = onWatchEvent((event: WatchEvent) => {
-      switch (event.kind) {
-        case 'set_completed': {
-          // 手表端本组平均心率（ADR-0001：heartRate 仅由手表写入）
-          const watchAvgHr = typeof event.avg_hr === 'number' ? event.avg_hr : undefined;
-          // 手机在休息态 = 这是对下一组的确认 → 结束休息
-          if (focus.kind === 'rest') { onEndRest(focus.exId, focus.setId); break; }
-          if (focus.kind !== 'confirm' && focus.kind !== 'countdown') break;
-          const ex = exercises[event.exercise_index ?? -1];
-          const set: any = ex?.sets[event.set_index ?? -1];
-          if (!ex || !set || ex.id !== focus.exId || set.id !== focus.setId) break; // 焦点校验
-          onCompleteSet(ex.id, set.id, { avgHr: watchAvgHr });
-          break;
-        }
-        case 'rest_action':
-          if (focus.kind !== 'rest') break; // 幂等：非休息态忽略
-          if (event.action === 'end') onEndRest(focus.exId, focus.setId);
-          if (event.action === 'extend') onExtendRest(focus.exId, focus.setId, event.seconds ?? 10);
-          break;
-        case 'hr_batch':
-          // hr_batch 已上提到 App.tsx 全局订阅（锁屏未开也要收心率）；
-          // 此处必须 no-op，否则与 App 层双消费 → 样本重复上传。
-          break;
-      }
-    });
-    return off;
-    // focusKey 变化重新订阅：闭包内 focus/exercises/sessionId 保持最新
-  }, [focusKey, exercises, sessionId, onCompleteSet, onEndRest, onExtendRest]);
+  // 手表 → 手机事件消费（set_completed / rest_action）已上提到 App 层
+  // useWatchRemoteControl（2026-09-20 用户实锤：锁屏不开 → 手表完成组手机无反应，
+  // 原消费点在条件挂载的 LockScreen 内）。hr_batch 一直在 App 层全局订阅。
 
   // 组倒计时到点 → 自动写完成
   const countRemaining = counting ? Math.max(0, counting.target - Math.floor((now - counting.startedAt) / 1000)) : null;

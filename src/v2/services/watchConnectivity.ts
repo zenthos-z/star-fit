@@ -20,6 +20,8 @@ export const isWatchBridge = Capacitor.getPlatform() === 'ios';
 export interface WatchSetMirror {
   exerciseName: string;
   exerciseType: string;
+  /** 动作在 session.exercises 中的下标（遥控回传焦点校验用，缺口C） */
+  exerciseIndex?: number;
   /** 单侧训练标志（与 type 正交：负重也能单侧，如单臂哑铃卧推）→ 手表目标显示「每侧」 */
   isUnilateral?: boolean;
   setIndex: number;
@@ -32,11 +34,23 @@ export interface WatchSetMirror {
   status: string;
   isResting: boolean;
   restEndTime?: number;
+  /**
+   * 会话层状态（2026-09-20 修复 status 语义混用）：
+   * set 的 status 只描述组；手表 phase 由 sessionPhase 驱动。
+   * READY=已导计划未开练 ACTIVE=训练中 REST=休息中 PAUSED=暂停 DONE=全部结束
+   */
+  sessionPhase?: 'READY' | 'ACTIVE' | 'REST' | 'PAUSED' | 'DONE';
+  /**
+   * 计时虚拟起点（epoch ms）= startTime + 已扣暂停 +（暂停中的实时补偿）。
+   * 手表 elapsed = now − displayStartMs；PAUSED 时手表冻结增量。
+   * 手机端改训练时间（TimeEditor）→ startTime 变化 → 本值随之重播。
+   */
+  displayStartMs?: number;
 }
 
 /** 手表 → 手机事件 */
 export interface WatchEvent {
-  kind: 'set_completed' | 'rest_action' | 'hr_batch';
+  kind: 'set_completed' | 'rest_action' | 'hr_batch' | 'request_sync' | 'watch_status' | 'hr_live';
   exercise_index?: number;
   set_index?: number;
   avg_hr?: number;
@@ -44,6 +58,8 @@ export interface WatchEvent {
   seconds?: number;
   samples?: Array<{ bpm: number; recorded_at: string; exercise_index?: number; set_index?: number }>;
   completed_at?: string;
+  /** hr_live 实时心率 */
+  bpm?: number;
 }
 
 async function callPlugin(method: string, args: Record<string, unknown> = {}): Promise<unknown> {

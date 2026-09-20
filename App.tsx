@@ -55,6 +55,9 @@ import {
 } from './storage';
 import type { PlanConsumeRecord } from './src/v2/components/execution/cards/PlanCard';
 import { isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from './src/v2/services/watchConnectivity';
+import { watchHeartRateStore } from './src/v2/services/watchHeartRateStore';
+import { useWatchMirror } from './src/v2/hooks/useWatchMirror';
+import { useWatchRemoteControl } from './src/v2/hooks/useWatchRemoteControl';
 
 interface ChatMessage {
     role: 'user' | 'ai';
@@ -154,9 +157,15 @@ const App: React.FC = () => {
   useEffect(() => {
     if (!isWatchBridge) return;
     const off = onWatchEvent((event: WatchEvent) => {
+      // 实时心率 → store（卡片三态展示的数据源，2026-09-20 补齐）
+      if (event.kind === 'hr_live' && typeof event.bpm === 'number') {
+        watchHeartRateStore.ingestLive(event.bpm);
+        return;
+      }
       if (event.kind !== 'hr_batch') return;
       const sid = hrSyncSessionIdRef.current;
       if (!sid || !event.samples?.length) return;
+      watchHeartRateStore.ingestBatch(event.samples.length);
       void syncHeartRateSamples(sid, event.samples).then((r) => {
         if (r.ok) console.log('[watch] hr_batch synced:', r.inserted, 'samples');
         else console.warn('[watch] hr_batch sync failed:', r.error);
@@ -983,6 +992,11 @@ const App: React.FC = () => {
   };
 
   // --- 锁定训练屏回调（2026-09-15）：大按钮语义与卡内逻辑共用 handleUpdateSet 通道 ---
+
+  // 手表镜像（2026-09-19 修复）：广播挂 App 层跟 session 状态机走——
+  // 「开始运动」界面的训练卡片状态全程同步到手表，不再依赖锁定屏挂载。
+  useWatchMirror(session); // session 含 startTime/pausedDuration/pauseStartTime（镜像计时契约）
+
   const handleLockCompleteSet = (exId: string, setId: string, opts?: { avgHr?: number }) => {
     // 手表端平均心率随组完成写入（ADR-0001：heartRate 仅由手表链路写入）
     handleUpdateSet(exId, setId, { completed: true, ...(opts?.avgHr ? { heartRate: opts.avgHr } : {}) });
@@ -1003,6 +1017,14 @@ const App: React.FC = () => {
     const cur = target?.restEndTime ?? Date.now();
     handleUpdateSet(exId, setId, { restEndTime: cur + extraSec * 1000 });
   };
+
+  // 手表遥控上行（2026-09-20 上提 App 层）：手表「完成本组/休息按钮」→ 手机状态机。
+  // 原 LockScreen 内消费在锁屏关闭时不存在 → 手表完成组手机无反应（用户实锤）。
+  useWatchRemoteControl(session, {
+    onCompleteSet: handleLockCompleteSet,
+    onEndRest: handleLockEndRest,
+    onExtendRest: handleLockExtendRest,
+  });
 
   const handleUpdateExerciseSettings = (exId: string, updates: Partial<Exercise> | Partial<ExerciseAction>) => {
     setSession(prev => {
