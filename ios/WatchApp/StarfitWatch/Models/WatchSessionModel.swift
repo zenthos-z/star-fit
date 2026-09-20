@@ -146,7 +146,12 @@ final class WatchSessionModel: ObservableObject {
         let wasResting = phase == .resting
         phase = .resting
         setState.isResting = true
-        setState.restEndTime = decoded.restEndTime
+        // P2：优先用剩余秒数按本地时钟换算终点（免两端时钟漂移）
+        if let remain = decoded.restRemainSec, remain > 0 {
+            setState.restEndTime = Int64((Date().timeIntervalSince1970 + Double(remain)) * 1000)
+        } else {
+            setState.restEndTime = decoded.restEndTime
+        }
         if !wasResting {
             playHaptic(.retry)
         }

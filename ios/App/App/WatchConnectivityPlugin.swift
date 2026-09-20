@@ -24,6 +24,7 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "isWatchReachable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getWatchStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reconnect", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "drainWatchEvents", returnType: CAPPluginReturnPromise),
     ]
 
     private let queue = DispatchQueue.main
@@ -120,6 +121,9 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     /// 手表 → 手机事件转发（桥事件），失败时 evaluateJavaScript 直调兜底
+    /// 2026-09-20 P1：推模式补拉模式——转发前先入环形缓冲，
+    /// JS 侧每 2s drainWatchEvents 主动拉取兜底（上行链路真机不可靠根修，
+    /// 与 request_sync 原生直答同思路：JS→native 调用方向已被证明可靠）。
     private func forwardWatchEvent(_ payload: [String: Any]) {
         let json: String
         if let d = try? JSONSerialization.data(withJSONObject: payload),
@@ -128,6 +132,11 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
         } else {
             return
         }
+
+        // 入环形缓冲（容量 64：hr_live 5s 一条 ≈ 5 分钟窗口，足够补拉）
+        eventBuffer.append(json)
+        if eventBuffer.count > 64 { eventBuffer.removeFirst(eventBuffer.count - 64) }
+
         notifyListeners("watchEvent", data: payload)
         // 兜底直调：`window.dispatchEvent(new CustomEvent('starfit:watch-event', {detail: ...}))`
         let js = "window.dispatchEvent(new CustomEvent('starfit:watch-event',{detail:\(json)}));"
@@ -136,9 +145,18 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
+    /// JS 主动拉取缓冲事件（读即清；重复消费由 JS 侧 onWatchEvent 幂等处理）
+    @objc func drainWatchEvents(_ call: CAPPluginCall) {
+        let events = eventBuffer
+        eventBuffer.removeAll()
+        call.resolve(["events": events])
+    }
+
     // MARK: - 状态快照（原生层缓存，供 request_sync 直答；JS 每次广播时刷新）
 
     private var lastSetState: [String: Any]?
+    /// 上行事件环形缓冲（drainWatchEvents 拉取兜底的数据源）
+    private var eventBuffer: [String] = []
 
     /// JS 广播时同步缓存一份到原生层（request_sync replyHandler 直答数据源）
     private func cacheSetState(_ state: [String: Any]) {

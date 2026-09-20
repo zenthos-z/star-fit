@@ -18,6 +18,7 @@ struct WatchSetState: Codable, Equatable {
     var status: String = "PLANNED" // PLANNED | COMPLETED
     var isResting: Bool = false
     var restEndTime: Int64? = nil  // epoch ms，休息结束时刻
+    var restRemainSec: Int? = nil  // 休息剩余秒数（优先：本地时钟换算终点，免两端漂移）
     /// 会话层状态（2026-09-20 修复 status 语义混用）：READY/ACTIVE/REST/PAUSED/DONE
     var sessionPhase: String = "READY"
     /// 计时虚拟起点（epoch ms）：elapsed = now − displayStartMs；暂停中手机会持续平移它
@@ -108,7 +109,7 @@ struct WatchSetState: Codable, Equatable {
     enum CodingKeys: String, CodingKey {
         case sessionId, exerciseIndex, exerciseName, exerciseType, isUnilateral
         case setIndex, totalSets, completedCount, weight, reps, durationSec
-        case distanceM, status, isResting, restEndTime, sessionPhase, displayStartMs
+        case distanceM, status, isResting, restEndTime, restRemainSec, sessionPhase, displayStartMs
     }
 
     init() {}
@@ -144,6 +145,7 @@ struct WatchSetState: Codable, Equatable {
         status = (try? c.decode(String.self, forKey: .status)) ?? "PLANNED"
         isResting = (try? c.decode(Bool.self, forKey: .isResting)) ?? false
         restEndTime = try? c.decode(Int64.self, forKey: .restEndTime)
+        restRemainSec = try? c.decode(Int.self, forKey: .restRemainSec)
         sessionPhase = (try? c.decode(String.self, forKey: .sessionPhase)) ?? "READY"
         displayStartMs = try? c.decode(Int64.self, forKey: .displayStartMs)
     }

@@ -211,6 +211,8 @@ function mirrorTick(session: WatchMirrorSession, focus: Focus): void {
     status: isSetDone(set) ? 'COMPLETED' : 'PLANNED',
     isResting: focus.kind === 'rest',
     restEndTime: focus.kind === 'rest' ? (focus as any).end : undefined,
+    // P2：剩余秒数优先（手表按本地时钟换算终点，免两端时钟漂移）
+    restRemainSec: focus.kind === 'rest' ? Math.max(0, Math.ceil(((focus as any).end - Date.now()) / 1000)) : undefined,
     sessionPhase,
     displayStartMs,
   });

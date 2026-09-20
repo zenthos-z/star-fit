@@ -34,6 +34,8 @@ export interface WatchSetMirror {
   status: string;
   isResting: boolean;
   restEndTime?: number;
+  /** 休息剩余秒数（优先于 restEndTime：手表按本地时钟换算，免两端漂移） */
+  restRemainSec?: number;
   /**
    * 会话层状态（2026-09-20 修复 status 语义混用）：
    * set 的 status 只描述组；手表 phase 由 sessionPhase 驱动。
@@ -104,6 +106,18 @@ export async function getWatchStatus(): Promise<WatchStatus | null> {
   };
 }
 
+/** 拉取原生层缓冲的上行事件（读即清；推模式丢失的兜底通道，2s 轮询） */
+export async function drainWatchEvents(): Promise<WatchEvent[]> {
+  const res = (await callPlugin('drainWatchEvents')) as { events?: string[] } | null;
+  if (!res?.events) return [];
+  const out: WatchEvent[] = [];
+  for (const raw of res.events) {
+    const parsed = parseJSONSafe(raw, 'drainWatchEvents') as WatchEvent | null;
+    if (parsed?.kind) out.push(parsed);
+  }
+  return out;
+}
+
 /** 主动重连：重新激活 WCSession（手表刚解锁/进入设置页时可触发） */
 export async function reconnectWatch(): Promise<boolean> {
   const res = (await callPlugin('reconnect')) as { ok?: boolean } | null;
@@ -125,6 +139,13 @@ export function onWatchEvent(cb: (event: WatchEvent) => void): () => void {
   };
   window.addEventListener('starfit:watch-event', listener);
 
+  // P1 兜底：每 2s 主动拉取原生缓冲（推模式在真机转发链上已证明不可靠；
+  // 拉取到的可能与推送重复，消费端须幂等——hr_batch 去重、set_completed 以手机状态机为准）
+  const poll = setInterval(() => {
+    if (disposed) return;
+    void drainWatchEvents().then((events) => events.forEach(cb));
+  }, 2000);
+
   // 原生通道（iOS 桥）
   void callPlugin('addListener', { eventName: 'watchEvent' }).then((res) => {
     const anyRes = res as { handle?: unknown } | null;
@@ -137,6 +158,7 @@ export function onWatchEvent(cb: (event: WatchEvent) => void): () => void {
 
   return () => {
     disposed = true;
+    clearInterval(poll);
     window.removeEventListener('starfit:watch-event', listener);
   };
 }

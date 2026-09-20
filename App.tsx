@@ -153,7 +153,11 @@ const App: React.FC = () => {
   const hrSyncSessionIdRef = useRef<string | null>(null);
   useEffect(() => {
     hrSyncSessionIdRef.current = session.id;
+    seenHrTsRef.current.clear();
   }, [session.id]);
+  // P1 幂等：推送(直调)与拉取(2s drain)可能双投递同一条 hr_batch，
+  // 按样本时间戳去重——同一 session 内时间戳唯一
+  const seenHrTsRef = useRef<Set<number>>(new Set());
   useEffect(() => {
     if (!isWatchBridge) return;
     const off = onWatchEvent((event: WatchEvent) => {
@@ -165,8 +169,15 @@ const App: React.FC = () => {
       if (event.kind !== 'hr_batch') return;
       const sid = hrSyncSessionIdRef.current;
       if (!sid || !event.samples?.length) return;
-      watchHeartRateStore.ingestBatch(event.samples.length);
-      void syncHeartRateSamples(sid, event.samples).then((r) => {
+      const fresh = event.samples.filter((sp: any) => {
+        const ts = typeof sp?.ts === 'number' ? sp.ts : 0;
+        if (!ts || seenHrTsRef.current.has(ts)) return false;
+        seenHrTsRef.current.add(ts);
+        return true;
+      });
+      if (!fresh.length) return; // 重复投递，已处理
+      watchHeartRateStore.ingestBatch(fresh.length);
+      void syncHeartRateSamples(sid, fresh).then((r) => {
         if (r.ok) console.log('[watch] hr_batch synced:', r.inserted, 'samples');
         else console.warn('[watch] hr_batch sync failed:', r.error);
       });
