@@ -24,6 +24,7 @@
 		C0DE00000000000000000B01 /* WorkoutActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000A01 /* WorkoutActivity.swift */; };
 		C0DE00000000000000000B02 /* StarfitWidgetBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000A02 /* StarfitWidgetBundle.swift */; };
 		C0DE00000000000000000B03 /* StarfitWidget.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000C04 /* StarfitWidget.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		EA0000000000000000000008 /* StarfitWatch.app in Embed Watch Content */ = {isa = PBXBuildFile; fileRef = EA0000000000000000000002 /* StarfitWatch.app */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 		C0DE00000000000000000B04 /* WorkoutActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000A01 /* WorkoutActivity.swift */; };
 		C6FFEEEACE4E46B29307312B /* (null) in Sources */ = {isa = PBXBuildFile; };
 		FC5A7EE5BDA149BA89619B93 /* (null) in Sources */ = {isa = PBXBuildFile; };
@@ -37,6 +38,20 @@
 			remoteGlobalIDString = C0DE00000000000000000C05;
 			remoteInfo = StarfitWidget;
 		};
+		EA0000000000000000000001 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EA0000000000000000000003 /* StarfitWatch.xcodeproj */;
+			proxyType = 2;
+			remoteGlobalIDString = B6CE709D69516D085F5F7275;
+			remoteInfo = StarfitWatch;
+		};
+		EA0000000000000000000005 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = EA0000000000000000000003 /* StarfitWatch.xcodeproj */;
+			proxyType = 1;
+			remoteGlobalIDString = B6CE709D69516D085F5F7275;
+			remoteInfo = StarfitWatch;
+		};
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -49,6 +64,17 @@
 				C0DE00000000000000000B03 /* StarfitWidget.appex in Embed Foundation Extensions */,
 			);
 			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		EA0000000000000000000004 /* Embed Watch Content */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "$(CONTENTS_FOLDER_PATH)/Watch";
+			dstSubfolderSpec = 16;
+			files = (
+				EA0000000000000000000008 /* StarfitWatch.app in Embed Watch Content */,
+			);
+			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXCopyFilesBuildPhase section */
@@ -74,6 +100,8 @@
 		C0DE00000000000000000A02 /* StarfitWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarfitWidgetBundle.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000A03 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C0DE00000000000000000C04 /* StarfitWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StarfitWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		EA0000000000000000000002 /* StarfitWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = StarfitWatch.app; path = "$(BUILD_DIR)/$(CONFIGURATION)-watchos/StarfitWatch.app"; sourceTree = "<group>"; };
+		EA0000000000000000000003 /* StarfitWatch.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = StarfitWatch.xcodeproj; path = ../WatchApp/StarfitWatch.xcodeproj; sourceTree = SOURCE_ROOT; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -94,6 +122,7 @@
 				958DCC722DB07C7200EA8C5F /* debug.xcconfig */,
 				504EC3061FED79650016851F /* App */,
 				C0DE00000000000000000C01 /* Widget */,
+				EA0000000000000000000006 /* WatchApp */,
 				504EC3051FED79650016851F /* Products */,
 			);
 			sourceTree = "<group>";
@@ -138,6 +167,23 @@
 			path = Widget;
 			sourceTree = "<group>";
 		};
+		EA0000000000000000000006 /* WatchApp */ = {
+			isa = PBXGroup;
+			children = (
+				EA0000000000000000000003 /* StarfitWatch.xcodeproj */,
+				EA0000000000000000000000 /* Products */,
+			);
+			name = WatchApp;
+			sourceTree = "<group>";
+		};
+		EA0000000000000000000000 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				EA0000000000000000000002 /* StarfitWatch.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -149,11 +195,13 @@
 				504EC3011FED79650016851F /* Frameworks */,
 				504EC3021FED79650016851F /* Resources */,
 				C0DE00000000000000000C0B /* Embed Foundation Extensions */,
+				EA0000000000000000000004 /* Embed Watch Content */,
 			);
 			buildRules = (
 			);
 			dependencies = (
 				C0DE00000000000000000C0A /* PBXTargetDependency */,
+				EA0000000000000000000007 /* PBXTargetDependency */,
 			);
 			name = App;
 			packageProductDependencies = (
@@ -197,6 +245,10 @@
 						CreatedOnToolsVersion = 26.6;
 						ProvisioningStyle = Automatic;
 					};
+					B6CE709D69516D085F5F7275 = {
+						DevelopmentTeam = DDB99LS5NK;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = 504EC2FF1FED79650016851F /* Build configuration list for PBXProject "App" */;
@@ -214,6 +266,12 @@
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
+			projectReferences = (
+				{
+					ProductGroup = EA0000000000000000000000 /* Products */;
+					ProjectRef = EA0000000000000000000003 /* StarfitWatch.xcodeproj */;
+				},
+			);
 			projectRoot = "";
 			targets = (
 				504EC3031FED79650016851F /* App */,
@@ -279,6 +337,11 @@
 			isa = PBXTargetDependency;
 			target = C0DE00000000000000000C05 /* StarfitWidget */;
 			targetProxy = C0DE00000000000000000C09 /* PBXContainerItemProxy */;
+		};
+		EA0000000000000000000007 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			name = StarfitWatch;
+			targetProxy = EA0000000000000000000005 /* PBXContainerItemProxy */;
 		};
 /* End PBXTargetDependency section */
 

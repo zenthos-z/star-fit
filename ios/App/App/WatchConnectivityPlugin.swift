@@ -20,6 +20,7 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
     public let jsName = "WatchConnectivityPlugin"
     public let pluginMethods: [CAPPluginMethod] = [
         CAPPluginMethod(name: "broadcastSetState", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "sendStateMessage", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "isWatchReachable", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "getWatchStatus", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "reconnect", returnType: CAPPluginReturnPromise),
@@ -35,19 +36,49 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
         session.activate()
     }
 
-    /// JS → 手表：镜像当前组状态（applicationContext，最省电，重连自动补发）
+    /// JS → 手表：镜像当前组状态。双通道（2026-09-19 真机实锤 applicationContext
+    /// 在部分真机链路上不送达）：applicationContext（缓存快照，手表后开可补收）
+    /// + sendMessage（可达即推，实时通道）。手表端两条 delegate 都收，幂等处理。
     @objc func broadcastSetState(_ call: CAPPluginCall) {
+        guard let state = call.getObject("state") else {
+            call.reject("state required"); return
+        }
+        cacheSetState(state)
+        queue.async {
+            guard WCSession.isSupported() else { call.resolve(["ok": false]); return }
+            let payload = ["set_state": state]
+            // 1) applicationContext：最新快照，重连/手表后开补发
+            do {
+                try WCSession.default.updateApplicationContext(payload)
+            } catch {
+                // 快照失败不阻塞实时通道，仅记录
+                NSLog("[WC] updateApplicationContext failed: \(error.localizedDescription)")
+            }
+            // 2) sendMessage：可达即推（真机可达通道可靠，连接状态即靠它）
+            if WCSession.default.isReachable {
+                WCSession.default.sendMessage(payload, replyHandler: nil) { error in
+                    NSLog("[WC] sendMessage fallback error: \(error.localizedDescription)")
+                }
+            }
+            call.resolve(["ok": true])
+        }
+    }
+
+    /// JS → 手表：仅 sendMessage 直推（同步按钮触发时用，要求手表立即响应）
+    @objc func sendStateMessage(_ call: CAPPluginCall) {
         guard let state = call.getObject("state") else {
             call.reject("state required"); return
         }
         queue.async {
             guard WCSession.isSupported() else { call.resolve(["ok": false]); return }
-            do {
-                try WCSession.default.updateApplicationContext(["set_state": state])
-                call.resolve(["ok": true])
-            } catch {
-                call.reject("updateApplicationContext failed: \(error.localizedDescription)")
+            let payload = ["set_state": state]
+            let reachable = WCSession.default.isReachable
+            if reachable {
+                WCSession.default.sendMessage(payload, replyHandler: nil) { error in
+                    NSLog("[WC] sendStateMessage error: \(error.localizedDescription)")
+                }
             }
+            call.resolve(["ok": true, "reachable": reachable])
         }
     }
 
@@ -88,7 +119,7 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
         }
     }
 
-    /// 手表 → JS 事件转发（桥事件），失败时 evaluateJavaScript 直调兜底
+    /// 手表 → 手机事件转发（桥事件），失败时 evaluateJavaScript 直调兜底
     private func forwardWatchEvent(_ payload: [String: Any]) {
         let json: String
         if let d = try? JSONSerialization.data(withJSONObject: payload),
@@ -103,6 +134,15 @@ public class WatchConnectivityPlugin: CAPPlugin, CAPBridgedPlugin {
         DispatchQueue.main.async {
             self.bridge?.webView?.evaluateJavaScript(js) { _, _ in }
         }
+    }
+
+    // MARK: - 状态快照（原生层缓存，供 request_sync 直答；JS 每次广播时刷新）
+
+    private var lastSetState: [String: Any]?
+
+    /// JS 广播时同步缓存一份到原生层（request_sync replyHandler 直答数据源）
+    private func cacheSetState(_ state: [String: Any]) {
+        lastSetState = state
     }
 }
 
@@ -130,7 +170,24 @@ extension WatchConnectivityPlugin: WCSessionDelegate {
     }
 
     public func session(_ session: WCSession, didReceiveMessage message: [String: Any]) {
+        // 无应答版本：统一转给带 replyHandler 的重载处理
+        self.session(session, didReceiveMessage: message, replyHandler: { _ in })
+    }
+
+    /// 手表 sendMessage 带 replyHandler 时 WCSession 走此回调（带应答通道）
+    public func session(_ session: WCSession, didReceiveMessage message: [String: Any], replyHandler: @escaping ([String: Any]) -> Void) {
+        if (message["kind"] as? String) == "request_sync" {
+            NSLog("[WC] request_sync (reply) received, cached=%@", lastSetState != nil ? "yes" : "nil")
+            if let state = lastSetState {
+                replyHandler(["set_state": state])
+            } else {
+                replyHandler([:])
+                forwardWatchEvent(["kind": "request_sync"])
+            }
+            return
+        }
         forwardWatchEvent(message)
+        replyHandler([:])
     }
 
     public func session(_ session: WCSession, didReceiveUserInfo userInfo: [String: Any] = [:]) {
