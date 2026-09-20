@@ -38,6 +38,9 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
     private var isRunning = false
     private var partialText = ""
 
+    /// 最近一次识别错误（getPartialResult 轮询可见——notifyListeners 真机不可靠）
+    private var lastError: String?
+
     private func makeRecognizer(_ locale: String?) -> SFSpeechRecognizer? {
         if let locale = locale, !locale.isEmpty {
             return SFSpeechRecognizer(locale: Locale(identifier: locale))
@@ -105,12 +108,19 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
         }
         recognitionRequest = request
 
-        // 录音会话：AI 教练场景不需要扬声器播放，只录音
+        // 录音会话：AI 教练场景不需要扬声器播放，只录音。
+        // 2026-09-20 修复 code=1110 No speech detected：.measurement 模式绕过
+        // 系统语音处理链（AGC/回声消除全关），系统大版本更新后增益策略变化，
+        // 语音进不了识别阈值 → 判定无语音。改 .default（保留语音处理）+
+        // 允许蓝牙耳机麦克风路由（HFP），实测口径以 [SRS] 日志为准。
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .measurement, options: [.duckOthers])
+            try session.setCategory(.record, mode: .default, options: [.duckOthers, .allowBluetooth])
             try session.setActive(true, options: .notifyOthersOnDeactivation)
+            NSLog("[SRS] audio session ok mode=default sampleRate=%.0f ch=%d",
+                  session.sampleRate, session.inputNumberOfChannels)
         } catch {
+            NSLog("[SRS] audio session FAILED: %@", error.localizedDescription)
             call.reject("audio session error: \(error.localizedDescription)")
             return
         }
@@ -135,6 +145,7 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
             if let result = result {
                 isFinal = result.isFinal
                 let text = result.bestTranscription.formattedString
+                NSLog("[SRS] result isFinal=%d text=%@", isFinal, text)
                 if isFinal {
                     self.partialText = text
                     self.notifyListeners("onFinalResult", data: ["text": text])
@@ -145,6 +156,10 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
                 }
             }
             if let error = error, !isFinal {
+                NSLog("[SRS] recognitionTask ERROR domain=%@ code=%ld msg=%@",
+                      (error as NSError).domain, (error as NSError).code, error.localizedDescription)
+                // 错误必须走轮询通道可见（notifyListeners 真机不可靠，档案实锤）
+                self.lastError = "\((error as NSError).domain) code=\((error as NSError).code): \(error.localizedDescription)"
                 self.notifyListeners("onError", data: ["message": error.localizedDescription])
                 self.stopEngine()
             }
@@ -156,7 +171,12 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
     }
 
     @objc func getPartialResult(_ call: CAPPluginCall) {
-        call.resolve(["text": partialText, "running": isRunning])
+        var payload: [String: Any] = ["text": partialText, "running": isRunning]
+        if let err = lastError {
+            payload["error"] = err
+            lastError = nil // 读即清
+        }
+        call.resolve(payload)
     }
 
     @objc func stop(_ call: CAPPluginCall) {

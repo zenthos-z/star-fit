@@ -72,8 +72,8 @@ export async function cancelSpeechInput(): Promise<void> {
   await call('cancel');
 }
 
-/** 轮询取中间结果：{ text, running } */
-export async function getSpeechPartial(): Promise<{ text: string; running: boolean }> {
-  const r = (await call('getPartialResult')) as { text?: string; running?: boolean } | null;
-  return { text: r?.text || '', running: r?.running === true };
+/** 轮询取中间结果：{ text, running, error? }（error 读即清，来自原生识别回调） */
+export async function getSpeechPartial(): Promise<{ text: string; running: boolean; error?: string }> {
+  const r = (await call('getPartialResult')) as { text?: string; running?: boolean; error?: string } | null;
+  return { text: r?.text || '', running: r?.running === true, error: r?.error };
 }

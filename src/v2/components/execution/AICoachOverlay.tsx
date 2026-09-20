@@ -354,6 +354,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   const [chatHistoryWithProgress, setChatHistoryWithProgress] = useState<ChatMessage[]>(chatHistory);
   // 语音输入（iOS 原生 SFSpeechRecognizer）：true=录音中，中间结果轮询回填输入框
   const [isListening, setIsListening] = useState(false);
+  // 语音识别错误诊断（轮询通道透出，发布前移除）
+  const [speechDiag, setSpeechDiag] = useState<string | null>(null);
   const speechPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // ── 附件面板（材质升级：iOS 26 走原生 SwiftUI .glassEffect 面板）──
@@ -623,13 +625,18 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
     }
     haptic('light');
     userEditedRef.current = false;
+    setSpeechDiag(null);
     setIsListening(true);
     // 轮询中间结果回填。用户一旦手动编辑（删除/修改）即停写保护：
     // 识别继续在后台跑（最终结果弃用），但不再覆盖用户改过的文本
     speechPollRef.current = setInterval(async () => {
       if (userEditedRef.current) return; // 用户编辑过 → 不回填
-      const { text } = await getSpeechPartial();
+      const { text, error } = await getSpeechPartial();
       if (text) setChatMessage(text);
+      if (error) {
+        console.warn('[speechInput] recognizer error:', error);
+        setSpeechDiag(error);
+      }
     }, 350);
   };
 
@@ -1082,7 +1089,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
               onKeyDown={handleKeyDown}
               placeholder={
                 isListening
-                  ? "正在聆听…"
+                  ? speechDiag ? `识别异常: ${speechDiag}` : "正在聆听…"
                   : isAnalyzing
                     ? "正在分析本次训练…"
                     : isPlanMode
