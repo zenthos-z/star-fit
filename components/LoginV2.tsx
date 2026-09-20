@@ -419,6 +419,11 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       // 保存凭据（token 存 localStorage，getHeaders 自动携带）
       setAccessToken(accessToken.trim() || null);
       await saveLoginCredentials(finalUserId, serverUrl);
+      // 登录名（用户手输的 ID / 后端 displayName）单独留存：诊断页展示用，
+      // 区别于内部 UUID。自动登录走 UUID 时此处不执行，由诊断页画像 API 兜底。
+      try {
+        localStorage.setItem('starfit_login_username', data.displayName || uid);
+      } catch { /* 忽略隐私模式 */ }
       await addServerToHistory(serverUrl, healthCheck.latency);
 
       onLogin(finalUserId, serverUrl);

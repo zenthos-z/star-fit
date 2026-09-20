@@ -122,6 +122,89 @@ export function WatchStatusCard(): JSX.Element | null {
 }
 
 /**
+ * 诊断面板变体（运动记录 → ··· → 诊断 sheet 内，深色底）。
+ * 数据逻辑与设置页 WatchStatusCard 完全一致（同一数据源/刷新通道），
+ * 仅渲染适配深色诊断 sheet。非 iOS 环境不渲染（同策略）。
+ */
+export function WatchDiagnosticsCard(): JSX.Element | null {
+  const [status, setStatus] = useState<WatchStatus | null>(null);
+  const [checking, setChecking] = useState(false);
+
+  const refresh = useCallback(async (opts?: { reconnect?: boolean }) => {
+    setChecking(true);
+    try {
+      if (opts?.reconnect) await reconnectWatch();
+      if (opts?.reconnect) await new Promise((r) => setTimeout(r, 800));
+      const s = await getWatchStatus();
+      if (s) setStatus(s);
+    } finally {
+      setChecking(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isWatchBridge) return;
+    void refresh();
+    const off = onWatchEvent((event) => {
+      if ((event as { kind?: string }).kind === 'watch_status') {
+        void refresh();
+      }
+    });
+    // 热刷新（2026-09-20 用户实锤）：watch_status 只在可达性变化时触发，
+    // 训练同步正常进行时可达性不变 → 事件不来 → 卡片不更新。
+    // 挂载期间 5s 轮询 + 收到任何手表事件（set_state 镜像回执等）即刷新。
+    const poll = setInterval(() => void refresh(), 5000);
+    return () => {
+      off();
+      clearInterval(poll);
+    };
+  }, [refresh]);
+
+  if (!isWatchBridge) return null;
+
+  const overallOk = status?.paired && status?.appInstalled && status?.reachable;
+
+  return (
+    <div className="bg-black/30 border border-gray-800 p-2 rounded mb-3">
+      <div className="flex items-center justify-between mb-2">
+        <div className="text-[10px] text-gray-400 font-bold tracking-wide">APPLE WATCH</div>
+        <button
+          onClick={() => void refresh({ reconnect: true })}
+          disabled={checking}
+          className="text-[10px] font-bold text-star-primary active:opacity-60 disabled:opacity-40"
+        >
+          {checking ? '检测中…' : '刷新状态'}
+        </button>
+      </div>
+      <div className={`font-mono text-xs font-bold mb-2 ${
+        !status ? 'text-gray-400' : overallOk ? 'text-green-400' : 'text-amber-400'
+      }`}>
+        {!status
+          ? '检测中…'
+          : overallOk
+            ? '已连接'
+            : status.paired
+              ? status.appInstalled
+                ? '手表未连接（点亮手表屏幕试试）'
+                : '手表上未安装 Starfit'
+              : '未检测到配对的 Apple Watch'}
+      </div>
+      <div className="space-y-1">
+        {STATUS_ROWS.map((row) => {
+          const s = stateText(status, row);
+          return (
+            <div key={row.key} className="flex items-center justify-between font-mono text-[10px]">
+              <span className="text-gray-500">{row.label}</span>
+              <span className={s.ok ? 'text-green-400' : 'text-gray-500'}>{s.text}</span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+/**
  * 后端连接行（设置页测试入口，fix/backend-connectivity-watch）。
  * 显示 API 地址 + 实时连接状态 + 「测试后端」按钮（主动探测 /healthz）。
  * 独立导出：WatchStatusCard 在非 iOS 环境隐藏，但后端测试任何平台都要可用，

@@ -22,7 +22,10 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       'import.meta.env.VITE_API_BASE_URL': JSON.stringify(env.VITE_API_BASE_URL || 'http://localhost:43111/api'),
-      'import.meta.env.VITE_WS_URL': JSON.stringify(env.VITE_WS_URL || '')
+      'import.meta.env.VITE_WS_URL': JSON.stringify(env.VITE_WS_URL || ''),
+      // 调试版本指纹：诊断页/手表对照用（构建时刻 + 包版本）
+      'import.meta.env.VITE_BUILD_TS': JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')),
+      'import.meta.env.VITE_PKG_VERSION': JSON.stringify(process.env.npm_package_version || '2.0.0'),
     },
     resolve: {
       alias: {

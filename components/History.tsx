@@ -30,6 +30,7 @@ import {
 import { isNativeTabBar, setTabBarHidden } from '../src/lib/nativeTabBar';
 import { List } from 'react-window';
 import { setVolume } from '../src/v2/utils/workoutSummary';
+import { WatchDiagnosticsCard } from '../src/v2/components/settings/WatchStatusCard';
 // （DEFAULT_BODYWEIGHT 已不再使用：容量统一走 setVolume，自重兜底逻辑在其内部）
 
 // 容量口径统一（2026-09-16）：单组容量共用 workoutSummary.setVolume
@@ -252,6 +253,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
   const [netLogs, setNetLogs] = useState<string[]>([]);
   const [deviceId, setDeviceId] = useState('');
   const [userId, setUserId] = useState('');
+  const [loginName, setLoginName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const { logout } = useLoginStatus();
 
@@ -294,6 +296,28 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
     const currentUserId = localStorage.getItem('starfit_user_id');
     if (currentUserId) {
       setUserId(currentUserId);
+    }
+    // 登录名解析（2026-09-20）：优先 localStorage（登录时写入）；自动登录（UUID 直连）
+    // 没写过 → 查 /admin/users 按 UUID 匹配 display_name，结果回写缓存。
+    const cachedName = localStorage.getItem('starfit_login_username');
+    if (cachedName) {
+      setLoginName(cachedName);
+    } else if (currentUserId) {
+      (async () => {
+        try {
+          const res = await fetch(`${API_BASE}/admin/users`, { headers: getHeaders() });
+          if (!res.ok) return;
+          const users = await res.json();
+          const match = Array.isArray(users)
+            ? users.find((u: any) => u.user_id === currentUserId || u.id === currentUserId)
+            : null;
+          const name = match?.display_name || match?.username;
+          if (name) {
+            localStorage.setItem('starfit_login_username', String(name));
+            setLoginName(String(name));
+          }
+        } catch { /* 后端不可达时保持空，显示占位提示 */ }
+      })();
     }
   }, []);
 
@@ -359,9 +383,18 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
     const log = (msg: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
 
     try {
-        log(`GET Ping to: ${API_BASE.replace('/api', '')}/api/ping`);
+        // 2026-09-20 修复：原实现裸 fetch 不带鉴权头，后端开启鉴权时 /api/ping 必 401，
+        // 表现为"测试 ping 不正常"。统一走 getHeaders（与其他 API 一致），
+        // 并先探根级 /healthz（免令牌通道）定位是网络问题还是鉴权问题。
+        log(`GET /healthz (no-auth probe): ${API_BASE.replace('/api', '')}/healthz`);
+        const hzStart = Date.now();
+        const resHz = await fetch(`${API_BASE.replace('/api', '')}/healthz`, { mode: 'cors' });
+        const hzMs = Date.now() - hzStart;
+        log(resHz.ok ? `/healthz OK (${hzMs}ms)` : `/healthz Failed: ${resHz.status}`);
+
+        log(`GET /api/ping (authed): ${API_BASE}/ping`);
         const start = Date.now();
-        const resGet = await fetch(`${API_BASE.replace('/api', '')}/api/ping`, { mode: 'cors' });
+        const resGet = await fetch(`${API_BASE}/ping`, { mode: 'cors', headers: getHeaders({}, false) });
         const end = Date.now();
 
         if (resGet.ok) {
@@ -377,7 +410,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
         const resPost = await fetch(`${API_BASE}/sync/push`, {
             method: 'POST',
             mode: 'cors',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { ...getHeaders(), 'Content-Type': 'application/json' },
             body: JSON.stringify({ deviceId: 'ping-test', sessions: [] })
         });
         const postEnd = Date.now();
@@ -549,6 +582,9 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
                     </button>
                 </div>
 
+                {/* 0. Apple Watch 连接状态（实时，WCSession 真源；非 iOS 不渲染） */}
+                <WatchDiagnosticsCard />
+
                 {/* 1. Environment Info */}
                 <div className="bg-black/30 p-2 rounded mb-3 space-y-1">
                     <div className="text-[10px] text-gray-400">API_BASE (Current)</div>
@@ -648,10 +684,27 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
                         </div>
                     )}
 
+                    {/* Version Fingerprint（调试用：确认手机端是不是新包） */}
+                    <div className="bg-black/30 p-2 rounded mb-3 flex items-center justify-between">
+                        <div>
+                            <div className="text-[10px] text-gray-400">App Version</div>
+                            <div className="font-mono text-xs text-cyan-300">
+                                v{import.meta.env.VITE_PKG_VERSION ?? '?'} · build {import.meta.env.VITE_BUILD_TS ?? '?'}
+                            </div>
+                        </div>
+                    </div>
+
                     {/* User ID Display */}
                     <div className="text-[10px] text-gray-500 mt-2 flex items-center gap-2">
                         <span>UserID:</span>
                         <code className="bg-black/50 px-1 rounded select-all text-yellow-300 font-mono">{userId || 'Not logged in'}</code>
+                    </div>
+
+                    <div className="text-[10px] text-gray-500 flex items-center gap-2">
+                        <span>登录名:</span>
+                        <code className="bg-black/50 px-1 rounded select-all text-green-300 font-mono">
+                            {loginName || '（解析中…后端不可达则空）'}
+                        </code>
                     </div>
 
                     <div className="text-[10px] text-gray-500 flex items-center gap-2">
