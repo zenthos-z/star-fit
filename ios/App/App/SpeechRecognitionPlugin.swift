@@ -115,20 +115,59 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
         // 允许蓝牙耳机麦克风路由（HFP），实测口径以 [SRS] 日志为准。
         do {
             let session = AVAudioSession.sharedInstance()
-            try session.setCategory(.record, mode: .default, options: [.duckOthers, .allowBluetooth])
+            // 2026-09-20 二轮（tap RMS=0 实锤：缓冲在流但纯零 = 输入路由没给音频）：
+            // ① 类目改 .playAndRecord + defaultToSpeaker（Apple WWDC 语音示例同款，
+            //    单纯 .record 在部分系统版本上 input 路由不激活）
+            // ② 输入锁定内置麦克风（防路由到不供流的远端设备，如手表/未激活的BT麦）
+            // ③ 引擎 reset（防同进程二次 start 的零数据残态）
+            try session.setCategory(.playAndRecord, mode: .default,
+                                    options: [.duckOthers, .defaultToSpeaker])
+            for input in session.availableInputs ?? [] {
+                NSLog("[SRS] available input: %@ type=%@", input.portName, String(describing: input.portType.rawValue))
+            }
+            if let builtin = (session.availableInputs ?? []).first(where: { $0.portType == .builtInMic }) {
+                try session.setPreferredInput(builtin)
+                NSLog("[SRS] preferred input locked: builtInMic")
+            }
             try session.setActive(true, options: .notifyOthersOnDeactivation)
-            NSLog("[SRS] audio session ok mode=default sampleRate=%.0f ch=%d",
-                  session.sampleRate, session.inputNumberOfChannels)
+            let route = session.currentRoute
+            NSLog("[SRS] audio session ok inputs=%@ sampleRate=%.0f",
+                  route.inputs.map { "\($0.portName)(\($0.portType.rawValue))" }, session.sampleRate)
         } catch {
             NSLog("[SRS] audio session FAILED: %@", error.localizedDescription)
             call.reject("audio session error: \(error.localizedDescription)")
             return
         }
+        audioEngine.reset()
 
         let inputNode = audioEngine.inputNode
-        let recordingFormat = inputNode.outputFormat(forBus: 0)
+        // 2026-09-20 1110 排障：tap 格式改用 inputFormat（部分系统版本 outputFormat
+        // 在 record 类目下返回 0 通道格式 → append 的是零帧静默 buffer → 1110）
+        let recordingFormat = inputNode.inputFormat(forBus: 0)
+        NSLog("[SRS] tap format: %@ ch=%d rate=%.0f",
+              String(describing: recordingFormat.commonFormat), recordingFormat.channelCount, recordingFormat.sampleRate)
+        // 音频电平诊断：累计 RMS，每 ~1s 打一次——区分「麦没进数据(RMS≈0)」
+        // 与「数据健康但识别器不认」两种病灶
+        var tapFrames: Int = 0
+        var tapEnergy: Float = 0
         inputNode.installTap(onBus: 0, bufferSize: 1024, format: recordingFormat) { [weak self] buffer, _ in
             self?.recognitionRequest?.append(buffer)
+            let n = Int(buffer.frameLength)
+            if n > 0 {
+                let d = buffer.floatChannelData![0]
+                var sum: Float = 0
+                var i = 0
+                while i < n { sum += d[i] * d[i]; i += 16 } // 抽样降CPU
+                tapFrames += n
+                tapEnergy += sum * 16
+            }
+            if tapFrames >= 48000 { // ~1s @48k
+                let rms = (tapEnergy / Float(tapFrames)).squareRoot()
+                NSLog("[SRS] level frames=%d rms=%.6f %@", tapFrames, rms,
+                      rms < 0.0001 ? "<<<< SILENT (mic data not arriving)" : "(healthy)")
+                tapFrames = 0
+                tapEnergy = 0
+            }
         }
 
         do {
