@@ -67,9 +67,23 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
         }
 
         group.enter()
-        AVAudioSession.sharedInstance().requestRecordPermission { granted in
-            micStatus = granted ? "granted" : "denied"
+        // 2026-09-20 三轮：真机 RMS=0 实锤「权限granted但音频为零」= TCC 实际拒绝
+        // 而旧 requestRecordPermission 回调的是缓存值。改用 AVAudioApplication
+        // 读真实 TCC 状态 + 埋点对照。
+        if #available(iOS 17.0, *) {
+            let real = AVAudioApplication.shared.recordPermission
+            NSLog("[SRS] AVAudioApplication recordPermission = %@", String(describing: real))
+            switch real {
+            case .granted: micStatus = "granted"
+            case .denied: micStatus = "denied"
+            default: micStatus = "notDetermined"
+            }
             group.leave()
+        } else {
+            AVAudioSession.sharedInstance().requestRecordPermission { granted in
+                micStatus = granted ? "granted" : "denied"
+                group.leave()
+            }
         }
 
         group.notify(queue: .main) {
@@ -113,6 +127,11 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
         // 系统语音处理链（AGC/回声消除全关），系统大版本更新后增益策略变化，
         // 语音进不了识别阈值 → 判定无语音。改 .default（保留语音处理）+
         // 允许蓝牙耳机麦克风路由（HFP），实测口径以 [SRS] 日志为准。
+        // 三轮：进录音前显式读真实 TCC（与 requestSpeechPermissions 交叉验证）
+        if #available(iOS 17.0, *) {
+            NSLog("[SRS] pre-start recordPermission = %@", String(describing: AVAudioApplication.shared.recordPermission))
+        }
+
         do {
             let session = AVAudioSession.sharedInstance()
             // 2026-09-20 二轮（tap RMS=0 实锤：缓冲在流但纯零 = 输入路由没给音频）：
@@ -170,6 +189,13 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
             }
         }
 
+        // 2026-09-20 四轮（权限grnt+路由正确+仍全零 → AVAudioEngine 渲染链陷阱）：
+        // 只 installTap 而无任何节点连接时，inputNode 不会形成活跃 render path，
+        // 部分 iOS 版本上 tap 恒吐零帧（Apple dev forums 确认的行为变化）。
+        // 修法：input → mainMixer → output 连成完整链（音量为 0，不产生外放）。
+        let mainMixer = audioEngine.mainMixerNode
+        mainMixer.outputVolume = 0
+        audioEngine.connect(inputNode, to: mainMixer, format: recordingFormat)
         do {
             audioEngine.prepare()
             try audioEngine.start()
