@@ -37,6 +37,9 @@ import {
   extractSessionFacts,
 } from "./workoutQualityGate.js";
 import type { WorkoutSessionFacts } from "./workoutQualityGate.js";
+// batch4-4: 最新 session 真值改走 SessionRepo（原 qualityFactsResolver 动态
+// import + 直连 SQL 已收编，消除 Agent 层第二条数据缝）。
+import { SessionRepo } from "../sessionRepo.js";
 
 // ---------------------------------------------------------------------------
 // Configuration
@@ -82,9 +85,11 @@ export async function* chatWithValidationLoop(
   let sessionFacts: WorkoutSessionFacts | null = null;
   if (req.scenario === "workout_complete") {
     try {
-      const { getLatestSessionFacts } =
-        await import("./qualityFactsResolver.js");
-      sessionFacts = await getLatestSessionFacts(req.userId);
+      const latestRaw = await SessionRepo.getLatestSessionRaw(req.userId);
+      if (latestRaw != null) {
+        // extractSessionFacts 读 history 形状 { sessions: [...] }，取最后一条为最新。
+        sessionFacts = extractSessionFacts({ sessions: [latestRaw] });
+      }
     } catch {
       sessionFacts = null;
     }
