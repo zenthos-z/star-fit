@@ -759,44 +759,6 @@ export function splitLeakedReasoning(text: string): {
 }
 
 /**
- * Pull the user-facing answer out of a COMPLETED agent turn's messages: the
- * LAST AI message that carries NO tool_calls (the react loop's terminal
- * answer). Every earlier AI message carries tool_calls (intermediate narration
- * — "let me check your history…" — plus its accompanying prose) and is dropped
- * on purpose so the UI only ever sees the final result. Returns `''` when no
- * tool-free AI message exists (e.g. the turn ended on a tool call).
- *
- * Messages come back from `agent.invoke(...)` as deserialized langchain
- * instances (`AIMessage` etc.), so `_getType()` and the parsed `.tool_calls`
- * are available; the `role==='assistant'` / `additional_kwargs.tool_calls`
- * fallbacks keep this robust for plain-object shapes too.
- */
-function finalAnswerText(messages: unknown[]): string {
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i] as {
-      _getType?: () => string;
-      role?: string;
-      tool_calls?: unknown[];
-      additional_kwargs?: { tool_calls?: unknown[] };
-      content?: unknown;
-    } | null;
-    if (!m) continue;
-    const isAi =
-      typeof m._getType === "function"
-        ? m._getType() === "ai"
-        : m.role === "assistant";
-    if (!isAi) continue;
-    const hasTools =
-      (Array.isArray(m.tool_calls) && m.tool_calls.length > 0) ||
-      (Array.isArray(m.additional_kwargs?.tool_calls) &&
-        m.additional_kwargs!.tool_calls!.length > 0);
-    if (hasTools) continue;
-    return extractText([m, {}]) ?? "";
-  }
-  return "";
-}
-
-/**
  * 从请求 metadata.intent_context 提取照片附件（type='image' 且有 mediaId）。
  * 兼容单对象与数组两种形态。
  */

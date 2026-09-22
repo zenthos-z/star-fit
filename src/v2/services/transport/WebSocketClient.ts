@@ -109,10 +109,6 @@ export class WebSocketClient {
 
     console.log(`[WS] Received: ${messageType}`, payload);
 
-    if (payload?.uiHint) {
-      this.dispatchUIHint(payload.uiHint);
-    }
-
     const typeHandlers = this.handlers.get(messageType);
     console.log(`[WS] Handlers for ${messageType}:`, typeHandlers?.length || 0);
     if (typeHandlers) {
@@ -143,19 +139,6 @@ export class WebSocketClient {
     const { SyncService } = await import('@/services/syncService');
     await SyncService.pull();
     window.dispatchEvent(new CustomEvent('config-updated'));
-  }
-
-  private dispatchUIHint(uiHint: any) {
-    // 1. Direct dispatch to window for legacy components
-    window.dispatchEvent(new CustomEvent('starfit-ui-hint', { detail: uiHint }));
-
-    // 2. Specialized dispatch for non-blocking coach insights
-    if (uiHint.type === 'coach.insight') {
-      const typeHandlers = this.handlers.get('coach.insight');
-      if (typeHandlers) {
-        typeHandlers.forEach(handler => handler(uiHint));
-      }
-    }
   }
 
   public subscribe(type: string, handler: (payload: any) => void) {

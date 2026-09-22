@@ -457,29 +457,6 @@ export type ArchitectOutput = z.infer<typeof ArchitectOutputSchema>;
 // ============================================================================
 
 /**
- * Validates if a value is a valid UIHint
- */
-export function isValidUIHint(value: unknown): value is UIHint {
-  const result = UIHintSchema.safeParse(value);
-  return result.success;
-}
-
-/**
- * Safely parses a UIHint with detailed error logging
- */
-export function parseUIHint(value: unknown): {
-  success: boolean;
-  data?: UIHint;
-  error?: z.ZodError;
-} {
-  const result = UIHintSchema.safeParse(value);
-  if (result.success) {
-    return { success: true, data: result.data };
-  }
-  return { success: false, error: result.error };
-}
-
-/**
  * Gets a fallback UIHint for a given type
  * Used when validation fails or LLM returns invalid format
  */

@@ -21,7 +21,7 @@ import { customAlphabet } from 'nanoid';
  * Total: 64 characters = 6 bits per character
  * 14 characters = 84 bits of entropy (more than UUID's 122 bits but with shorter length)
  */
-export const generateExerciseId = customAlphabet(
+const generateExerciseId = customAlphabet(
   '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ_abcdefghijklmnopqrstuvwxyz-',
   14
 );
