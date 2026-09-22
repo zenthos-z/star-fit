@@ -161,7 +161,7 @@ export const ExercisePlanSchema = z
     ) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
-        message: `${name}: 负重动作的 weight 不能为 0——请先走 PRE 预备组自测流程（出 instruction 卡引导用户自测基础重量），或使用用户给出的具体重量。`,
+        message: `${name}: 负重动作的 weight 不能为 0——beginner/自选用户直接给空杆(20kg)或最小配重(2.5-5kg)起步；有经验用户先出 instruction 卡引导 PRE 自测拿具体重量，或使用用户给出的重量。`,
         path: ["weight"],
       });
     }
