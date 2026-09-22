@@ -11,6 +11,7 @@
 module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
+  setupFiles: ['<rootDir>/tests/setup-env.ts'],
   rootDir: '.',
   moduleNameMapper: {
     // 源码直接 import shared/dist/*（postgres-client.ts / user.repository.ts 等），
@@ -32,9 +33,10 @@ module.exports = {
     ],
   },
   // uuid v11+ 是 ESM-only（无 CJS 构建），被 videoProcessingService 链引入；
+  // nanoid v5+ 同样 ESM-only，被 utils/nanoid.ts 引入。
   // 白名单放行让 ts-jest(allowJs) 把它编译成 CJS，jest 才能加载。
   transformIgnorePatterns: [
-    'node_modules/(?!(uuid)/)',
+    'node_modules/(?!(uuid|nanoid)/)',
   ],
   testMatch: [
     '**/tests/unit/**/*.test.ts',

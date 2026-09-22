@@ -49,7 +49,7 @@ describe("UserProfileService.validateProfile", () => {
         modifiedBy: "user",
         basic_info: "not-an-object" as never,
       } as never),
-    ).toThrow("basic_info must be an object");
+    ).toThrow("basic_info validation failed");
   });
 
   it("throws on non-array active_limitations", () => {
@@ -59,7 +59,7 @@ describe("UserProfileService.validateProfile", () => {
         modifiedBy: "user",
         active_limitations: { part: "腰部" } as never,
       } as never),
-    ).toThrow("active_limitations must be an array");
+    ).toThrow("active_limitations validation failed");
   });
 
   it("throws on non-object load_anchors", () => {
@@ -69,22 +69,39 @@ describe("UserProfileService.validateProfile", () => {
         modifiedBy: "user",
         load_anchors: 42 as never,
       } as never),
-    ).toThrow("load_anchors must be an object");
+    ).toThrow("load_anchors validation failed");
   });
 
-  it("passes through recovery_state regardless of shape (dynamic state)", () => {
-    const validated = UserProfileService.validateProfile({
+  it("validates recovery_state against RecoveryStateSchema (total_score required)", () => {
+    // 缺 total_score → 抛错
+    expect(() =>
+      UserProfileService.validateProfile({
+        userId: UUID,
+        modifiedBy: "user",
+        recovery_state: { raw: { anything: true } } as never,
+      } as never),
+    ).toThrow("recovery_state validation failed");
+    // 合法 recovery_state → 通过
+    const ok = UserProfileService.validateProfile({
       userId: UUID,
       modifiedBy: "user",
-      recovery_state: { total_score: 80, raw: { anything: true } },
+      recovery_state: {
+        total_score: 80,
+        cns_fusing: false,
+        last_assessed: "2026-09-22T00:00:00.000Z",
+      },
     } as never);
-    expect(validated.recovery_state).toEqual({ total_score: 80, raw: { anything: true } });
+    expect(ok.recovery_state).toMatchObject({ total_score: 80 });
   });
 });
 
 describe("shared/contracts BasicInfoSchema（契约层清洗：归一 + 枚举拦截）", () => {
   it("coerces numeric strings for body_fat (form 输入归一)", () => {
-    const parsed = BasicInfoSchema.parse({ age: "30", weight: "76", body_fat: "22.5" });
+    const parsed = BasicInfoSchema.parse({
+      age: "30",
+      weight: "76",
+      body_fat: "22.5",
+    });
     expect(parsed.body_fat).toBe(22.5);
     expect(parsed.age).toBe(30);
   });
