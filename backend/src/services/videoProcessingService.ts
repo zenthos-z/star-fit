@@ -15,7 +15,8 @@ import fs from 'fs/promises';
 import { existsSync } from 'fs';
 import { EventEmitter } from 'events';
 import { v4 as uuidv4 } from 'uuid';
-import { WebSocketProgressBroadcaster } from './websocketProgressService.js';
+// batch4-3: WebSocketProgressBroadcaster 现为 ChannelBroadcaster 的任务维度实例（key=taskId）
+import { WebSocketProgressBroadcaster } from './channelBroadcaster.js';
 import { VideoAssetSchema, VideoAsset } from '../schemas/videoSchema.js';
 
 const execAsync = promisify(exec);
@@ -138,7 +139,7 @@ export const VideoProcessingService = {
     const stageProgress = 50 + Math.floor((qualityIndex / totalQualities) * 40);
 
     if (taskId) {
-      WebSocketProgressBroadcaster.broadcast(taskId, {
+      WebSocketProgressBroadcaster.broadcastProgressEvent(taskId, {
         type: 'fit.video.progress',
         data: {
           stage: 'compressing',
@@ -186,7 +187,7 @@ export const VideoProcessingService = {
           if (progress - lastProgress > 5) { // 每 5% 更新一次
             lastProgress = progress;
             if (taskId) {
-              WebSocketProgressBroadcaster.broadcast(taskId, {
+              WebSocketProgressBroadcaster.broadcastProgressEvent(taskId, {
                 type: 'fit.video.progress',
                 data: {
                   stage: 'compressing',
@@ -234,7 +235,7 @@ export const VideoProcessingService = {
 
     // 广播进度：开始处理
     if (taskId) {
-      WebSocketProgressBroadcaster.broadcast(taskId, {
+      WebSocketProgressBroadcaster.broadcastProgressEvent(taskId, {
         type: 'fit.video.progress',
         data: {
           stage: 'extracting_metadata',
@@ -265,7 +266,7 @@ export const VideoProcessingService = {
 
       if (generatePoster) {
         if (taskId) {
-          WebSocketProgressBroadcaster.broadcast(taskId, {
+          WebSocketProgressBroadcaster.broadcastProgressEvent(taskId, {
             type: 'fit.video.progress',
             data: {
               stage: 'generating_poster',
@@ -334,7 +335,7 @@ export const VideoProcessingService = {
     } catch (error) {
       // 广播错误事件
       if (taskId) {
-        WebSocketProgressBroadcaster.broadcast(taskId, {
+        WebSocketProgressBroadcaster.broadcastProgressEvent(taskId, {
           type: 'fit.video.error',
           data: {
             taskId,

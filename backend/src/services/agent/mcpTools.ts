@@ -308,6 +308,26 @@ export class UserScopedWriteRepository extends BaseRepository {
       ? (pd as Record<string, unknown>)
       : null;
   }
+
+  /**
+   * Recent `sessions.raw_json` rows for `load_history` (batch4-4: the tool
+   * body previously ran this SQL via the raw DbClient — the only remaining
+   * direct-query seam. Goes through BaseRepository like every other read).
+   * Newest first; JSONB arrives pre-parsed, legacy string values pass through
+   * unchanged (mergeHistorySources/trimSessions tolerate both shapes).
+   */
+  async getRecentSessionRaws(
+    userId: string,
+    limit: number,
+  ): Promise<Array<{ raw_json: unknown }>> {
+    return this.queryMany<{ raw_json: unknown }>(
+      `SELECT raw_json FROM sessions
+        WHERE user_id = $userId
+        ORDER BY start_time DESC
+        LIMIT $limit`,
+      { userId, limit },
+    );
+  }
 }
 
 /**
@@ -760,13 +780,11 @@ export function buildMcpToolsWith(
         .catch(() => null);
       let liveRows: Array<{ raw_json: unknown }> = [];
       try {
-        liveRows = await client.queryMany(
-          `SELECT raw_json FROM sessions
-            WHERE user_id = $userId
-            ORDER BY start_time DESC
-            LIMIT $limit`,
-          { userId, limit: limit * 3 },
-        );
+        // batch4-4: 直连 client.queryMany 改走 Repository 方法（消除工具体内的
+        // 最后一条原生 SQL 数据缝）。
+        liveRows = await new UserScopedWriteRepository(
+          client,
+        ).getRecentSessionRaws(userId, limit * 3);
       } catch {
         liveRows = [];
       }

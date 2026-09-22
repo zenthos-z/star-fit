@@ -31,7 +31,8 @@ import { SessionRepo } from "../services/sessionRepo.js";
 import { MediaRepo } from "../services/mediaRepo.js";
 import { getUserId } from "../utils/requestUtils.js";
 import { getNowISO } from "../utils/timestamp.js";
-import { wsService } from "../services/wsService.js";
+// batch4-3: wsService 现为 ChannelBroadcaster 的用户维度实例（key=userId）
+import { wsService } from "../services/channelBroadcaster.js";
 import { PromptEngineCore } from "../services/promptEngineCore.js";
 import { parseJSONSafe } from "../types/validation.js";
 import { ValidationError } from "../utils/errorHandler.js";
@@ -48,7 +49,6 @@ import {
   getImageGenApiKey,
   testImageGenConnection as testImageGenConnectionService,
 } from "../services/modelConfigService.js";
-import { AdminConfigService } from "../services/AdminConfigService.js";
 import {
   ExportMarkdownQuerySchema,
   ExportMarkdownResponseSchema,
@@ -347,7 +347,10 @@ export const updateConfig = async (
   const userId = getUserId(req);
   try {
     await ConfigRepo.setConfig(userId, key, value);
-    await wsService.broadcastToUser(userId, "config_updated", { key });
+    await wsService.broadcast(
+      userId,
+      { type: "config_updated", data: { key } },
+    );
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -856,10 +859,13 @@ export const updateExercise = async (
     // Exercises are global, but we can notify the user who updated it or all users
     // For now, broadcast to 'global' or similar if needed, or just specific user
     const userId = getUserId(req);
-    await wsService.broadcastToUser(userId, "knowledge_updated", {
+    await wsService.broadcast(
+      userId,
+      { type: "knowledge_updated", data: {
       type: "exercise",
       id: ex.id,
-    });
+    } },
+    );
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -874,10 +880,13 @@ export const deleteExercise = async (
   try {
     await KnowledgeRepo.deleteExercise(id);
     const userId = getUserId(req);
-    await wsService.broadcastToUser(userId, "knowledge_updated", {
+    await wsService.broadcast(
+      userId,
+      { type: "knowledge_updated", data: {
       type: "exercise_deleted",
       id,
-    });
+    } },
+    );
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -902,10 +911,13 @@ export const updateGuidance = async (
   const doc = req.body as any;
   try {
     await KnowledgeRepo.upsertGuidance(userId, doc);
-    await wsService.broadcastToUser(userId, "knowledge_updated", {
+    await wsService.broadcast(
+      userId,
+      { type: "knowledge_updated", data: {
       type: "guidance",
       key: doc.key,
-    });
+    } },
+    );
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -923,10 +935,13 @@ export const updatePromptStyle = async (
   };
   try {
     await ConfigRepo.setStyleParam(userId, styleKey, parameters);
-    await wsService.broadcastToUser(userId, "config_updated", {
+    await wsService.broadcast(
+      userId,
+      { type: "config_updated", data: {
       type: "prompt_style",
       styleKey,
-    });
+    } },
+    );
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -1713,6 +1728,52 @@ export const testImageGenConnection = async (
 // ============================================================================
 
 /**
+ * 读取 pinned_users 配置（原 AdminConfigService.getPinnedUsers 语义，batch4-1 收编）。
+ * 防御性解析：JSONB 正常返回数组；历史脏数据（字符串/非数组）容错返回 []。
+ */
+const getAdminPinnedUsers = async (): Promise<string[]> => {
+  try {
+    const pinned = await ConfigRepo.getConfig("admin", "pinned_users");
+    if (!pinned) return [];
+
+    // Handle case where value came back as a string (shouldn't happen with JSONB, but be safe)
+    if (typeof pinned === "string") {
+      try {
+        const parsed = JSON.parse(pinned);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter(
+          (id: unknown) => typeof id === "string" && id.length > 0,
+        );
+      } catch {
+        console.warn("[AdminConfig] Failed to parse pinned_users as JSON");
+        return [];
+      }
+    }
+
+    if (Array.isArray(pinned)) {
+      const validIds = pinned.filter(
+        (id: unknown) => typeof id === "string" && id.length > 0,
+      );
+      if (validIds.length !== pinned.length) {
+        console.warn(
+          "[AdminConfig] Some invalid user IDs filtered from pinned_users config",
+        );
+      }
+      return validIds;
+    } else {
+      console.warn(
+        "[AdminConfig] Pinned users config is not an array, got:",
+        typeof pinned,
+      );
+      return [];
+    }
+  } catch (e) {
+    console.error("[AdminConfig] Failed to parse pinned_users config:", e);
+    return [];
+  }
+};
+
+/**
  * GET /api/admin/configs/:key
  * Get a specific admin configuration value
  */
@@ -1727,7 +1788,7 @@ export const getAdminConfig = async (
   }
 
   try {
-    const config = await AdminConfigService.getConfig(key);
+    const config = await ConfigRepo.getConfigRow("admin", key);
 
     if (!config) {
       return reply.status(404).send({ error: "Config not found" });
@@ -1763,10 +1824,13 @@ export const setAdminConfig = async (
   }
 
   try {
-    await AdminConfigService.setConfig(key, value);
+    await ConfigRepo.setConfig("admin", key, value);
 
     // Broadcast config update to admin clients
-    await wsService.broadcastToUser("admin", "config_updated", { key });
+    await wsService.broadcast(
+      "admin",
+      { type: "config_updated", data: { key } },
+    );
 
     return reply.send({ success: true, key, value });
   } catch (e: any) {
@@ -1784,7 +1848,7 @@ export const getAllAdminConfigs = async (
   reply: FastifyReply,
 ) => {
   try {
-    const configs = await AdminConfigService.getAllConfigs();
+    const configs = await ConfigRepo.getAllConfigs("admin");
     return reply.send(configs);
   } catch (e: any) {
     console.error("[AdminConfig] Get all configs error:", e);
@@ -1801,7 +1865,7 @@ export const getPinnedUsers = async (
   reply: FastifyReply,
 ) => {
   try {
-    const pinned = await AdminConfigService.getPinnedUsers();
+    const pinned = await getAdminPinnedUsers();
     return reply.send({ pinned_users: pinned });
   } catch (e: any) {
     console.error("[AdminConfig] Get pinned users error:", e);
@@ -1824,12 +1888,15 @@ export const setPinnedUsers = async (
   }
 
   try {
-    await AdminConfigService.setPinnedUsers(userIds);
+    await ConfigRepo.setConfig("admin", "pinned_users", userIds);
 
     // Broadcast update to admin clients (use pinned_users for consistency)
-    await wsService.broadcastToUser("admin", "pinned_users_updated", {
+    await wsService.broadcast(
+      "admin",
+      { type: "pinned_users_updated", data: {
       pinned_users: userIds,
-    });
+    } },
+    );
 
     return reply.send({ success: true, pinned_users: userIds });
   } catch (e: any) {
@@ -1853,18 +1920,36 @@ export const togglePinnedUser = async (
   }
 
   try {
-    const isPinned = await AdminConfigService.togglePinnedUser(userId);
-    const pinned = await AdminConfigService.getPinnedUsers();
+    const pinned = await getAdminPinnedUsers();
+    const isPinned = pinned.includes(userId);
+    let isPinnedAfter: boolean;
+
+    if (isPinned) {
+      await ConfigRepo.setConfig(
+        "admin",
+        "pinned_users",
+        pinned.filter((id) => id !== userId),
+      );
+      isPinnedAfter = false;
+    } else {
+      await ConfigRepo.setConfig("admin", "pinned_users", [...pinned, userId]);
+      isPinnedAfter = true;
+    }
+
+    const pinnedAfter = await getAdminPinnedUsers();
 
     // Broadcast update to admin clients (use pinned_users for consistency)
-    await wsService.broadcastToUser("admin", "pinned_users_updated", {
-      pinned_users: pinned,
-    });
+    await wsService.broadcast(
+      "admin",
+      { type: "pinned_users_updated", data: {
+      pinned_users: pinnedAfter,
+    } },
+    );
 
     return reply.send({
       success: true,
-      is_pinned: isPinned,
-      pinned_users: pinned,
+      is_pinned: isPinnedAfter,
+      pinned_users: pinnedAfter,
     });
   } catch (e: any) {
     console.error("[AdminConfig] Toggle pinned user error:", e);
@@ -1900,7 +1985,12 @@ export const batchDeleteUsers = async (
         deletedCount++;
 
         // Remove from pinned users if present
-        await AdminConfigService.removePinnedUser(userId);
+        const pinned = await getAdminPinnedUsers();
+        await ConfigRepo.setConfig(
+          "admin",
+          "pinned_users",
+          pinned.filter((id) => id !== userId),
+        );
 
         console.log(`[AdminAPI] Successfully deleted user: ${userId}`);
       } catch (e: any) {
@@ -1910,10 +2000,13 @@ export const batchDeleteUsers = async (
     }
 
     // Broadcast update to admin clients
-    await wsService.broadcastToUser("admin", "users_deleted", {
+    await wsService.broadcast(
+      "admin",
+      { type: "users_deleted", data: {
       userIds,
       deletedCount,
-    });
+    } },
+    );
 
     return reply.send({
       success: true,
@@ -2232,10 +2325,13 @@ export const updateUserProfileStatic = async (
       console.log("[AdminAPI] UserProfileService.updateProfile completed!");
 
       // Broadcast update to user if online
-      await wsService.broadcastToUser(userId, "profile_updated", {
+      await wsService.broadcast(
+      userId,
+      { type: "profile_updated", data: {
         type: "static",
         updates: updates,
-      });
+      } },
+    );
 
       return reply.send({ success: true, message: "Profile static updated" });
     }
@@ -2270,10 +2366,13 @@ export const updateUserProfileStatic = async (
     });
 
     // Broadcast update to user if online
-    await wsService.broadcastToUser(userId, "profile_updated", {
+    await wsService.broadcast(
+      userId,
+      { type: "profile_updated", data: {
       type: "static",
       updates: { ...basicInfoUpdates, ...psychologicalUpdates },
-    });
+    } },
+    );
 
     return reply.send({ success: true, message: "Profile static updated" });
   } catch (e: any) {
@@ -2317,9 +2416,12 @@ export const updateUserProfileDynamic = async (
       });
 
       // Broadcast to user
-      await wsService.broadcastToUser(userId, "load_anchors_updated", {
+      await wsService.broadcast(
+      userId,
+      { type: "load_anchors_updated", data: {
         load_anchors,
-      });
+      } },
+    );
     }
 
     // Persist dynamic state (active_limitations / recovery_state) into profile_dynamic JSONB
@@ -2333,10 +2435,13 @@ export const updateUserProfileDynamic = async (
       });
 
       if (active_limitations) {
-        await wsService.broadcastToUser(userId, "profile_dynamic_updated", {
+        await wsService.broadcast(
+      userId,
+      { type: "profile_dynamic_updated", data: {
           userId,
           updates: { active_limitations },
-        });
+        } },
+    );
       }
     }
 
@@ -2406,10 +2511,13 @@ export const updateUserLoadAnchor = async (
     });
 
     // Broadcast to user
-    await wsService.broadcastToUser(userId, "load_anchor_updated", {
+    await wsService.broadcast(
+      userId,
+      { type: "load_anchor_updated", data: {
       exerciseId,
       anchor: updatedAnchors[exerciseId],
-    });
+    } },
+    );
 
     return reply.send({
       success: true,
@@ -2476,9 +2584,12 @@ export const addUserLimitation = async (
     );
 
     // Broadcast to user
-    await wsService.broadcastToUser(userId, "limitation_added", {
+    await wsService.broadcast(
+      userId,
+      { type: "limitation_added", data: {
       limitation: newLimitation,
-    });
+    } },
+    );
 
     return reply.send({
       success: true,
@@ -2536,7 +2647,10 @@ export const removeUserLimitation = async (
     }
 
     // Broadcast to user
-    await wsService.broadcastToUser(userId, "limitation_removed", { part });
+    await wsService.broadcast(
+      userId,
+      { type: "limitation_removed", data: { part } },
+    );
 
     return reply.send({
       success: true,
@@ -2601,9 +2715,12 @@ export const updateUserDisplayName = async (
     );
 
     // Broadcast to user
-    await wsService.broadcastToUser(userId, "display_name_updated", {
+    await wsService.broadcast(
+      userId,
+      { type: "display_name_updated", data: {
       displayName,
-    });
+    } },
+    );
 
     return reply.send({
       success: true,

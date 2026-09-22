@@ -13,7 +13,8 @@ import {
   pullSync,
   getConfig,
 } from "./controllers/syncController.js";
-import { wsService } from "./services/wsService.js";
+// batch4-3: wsService 现为 ChannelBroadcaster 的用户维度实例（key=userId）
+import { wsService } from "./services/channelBroadcaster.js";
 import { startMediaCleanup, deleteObject } from "./services/mediaStorage.js";
 import {
   uploadMedia,
@@ -109,7 +110,8 @@ import {
   cancelImport,
   getImportList,
 } from "./controllers/exerciseLibraryIOController.js";
-import { WebSocketProgressBroadcaster } from "./services/websocketProgressService.js";
+// batch4-3: WebSocketProgressBroadcaster 现为 ChannelBroadcaster 的任务维度实例（key=taskId）
+import { WebSocketProgressBroadcaster } from "./services/channelBroadcaster.js";
 import { MissingUserIdError } from "./utils/requestUtils.js";
 
 const ACCESS_LOG = path.join(process.cwd(), "access.log");
@@ -332,7 +334,7 @@ const start = async () => {
             );
             socket.deviceId = deviceId;
 
-            wsService.registerClient(userId, socket);
+            wsService.subscribe(userId, socket);
 
             socket.on("message", async (message: any) => {
               try {
@@ -508,11 +510,13 @@ const start = async () => {
                         }),
                       );
                     } catch {}
-                    wsService.broadcastToUser(
+                    wsService.broadcast(
                       userId,
-                      "tutor.tutorial_result",
-                      tutorialPayload,
-                      socket.deviceId,
+                      {
+                        type: "tutor.tutorial_result",
+                        data: tutorialPayload,
+                      },
+                      { excludeDeviceId: socket.deviceId },
                     );
                     break;
                   }
@@ -526,7 +530,7 @@ const start = async () => {
 
             socket.on("close", () => {
               console.log(`[WS] Connection closed for user: ${userId}`);
-              wsService.unregisterClient(userId, socket);
+              wsService.unsubscribe(userId, socket);
             });
 
             socket.on("error", (err: any) => {

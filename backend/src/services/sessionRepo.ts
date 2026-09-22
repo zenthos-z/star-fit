@@ -560,4 +560,27 @@ export const SessionRepo = {
 
     return { success: true };
   },
+
+  /**
+   * 读取用户最新一条 session 的 raw_json（batch4-4 收编：原 mcpTools
+   * load_history 直连 SQL 与 qualityFactsResolver 同源查询，统一走本方法）。
+   * 无 session 返回 null；JSONB 自动解析，历史字符串值容错 JSON.parse。
+   * 失败向上抛，由调用方决定降级策略（如质量检测跳过）。
+   */
+  getLatestSessionRaw: async (userId: string): Promise<unknown | null> => {
+    const client = SessionRepo.getClient();
+    const rows = await client.queryMany<{ raw_json: any }>(
+      `SELECT raw_json FROM sessions
+        WHERE user_id = $userId
+        ORDER BY start_time DESC
+        LIMIT 1`,
+      { userId },
+    );
+    if (rows.length === 0) return null;
+    const raw = rows[0].raw_json;
+    if (typeof raw === "string") {
+      return JSON.parse(raw);
+    }
+    return raw;
+  },
 };

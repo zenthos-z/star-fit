@@ -1,4 +1,3 @@
-import { getProviderForTask } from "./modelRouter.js";
 import { ProxyAgent } from "undici";
 import { ConfigRepo } from "./knowledgeRepo.js";
 // L004: provider set + DeepSeek resolution owned by modelConfigService (single source).
@@ -11,21 +10,14 @@ import {
   UnknownProviderError,
   MissingApiKeyError,
   getApiKey as resolveApiKey,
+  DEFAULT_GLM_MODEL,
+  DEFAULT_DEEPSEEK_FLASH,
 } from "./modelConfigService.js";
 import type { BaseChatModel } from "@langchain/core/language_models/chat_models";
 
 // Scenario identifies a usage context (maps to the existing task taxonomy).
 export type Scenario =
   "default" | "chat" | "plan" | "tutorial" | "image" | (string & {});
-
-// Default DeepSeek chat model (flash tier). Mirrors
-// modelConfigService.DEFAULT_DEEPSEEK_FLASH (single source of truth via ConfigRepo
-// key DEEPSEEK_MODEL_FLASH, L004). Used as a defensive default for the deepseek
-// branch when no override is configured.
-const DEEPSEEK_DEFAULT_MODEL = "deepseek-v4-flash-ga-260731";
-
-// Default GLM model (mirrors modelConfigService.DEFAULT_GLM_MODEL).
-const GLM_DEFAULT_MODEL = "glm-5.3-flash";
 
 // LLM 超时配置（统一管理）
 const LLM_TIMEOUT_CONFIG = {
@@ -161,7 +153,7 @@ export async function loadModel(
     // Z.ai GLM is OpenAI-compatible. No thinking kwargs (GLM-5.3-flash default
     // behaves fine for tool calls without extra request-body fields).
     return new ChatOpenAI({
-      model: resolved.model || GLM_DEFAULT_MODEL,
+      model: resolved.model || DEFAULT_GLM_MODEL,
       apiKey,
       configuration: { baseURL: resolved.baseURL },
       temperature: 1.0,
@@ -185,7 +177,7 @@ export async function loadModel(
     // ChatOpenAI 的 OpenAI SDK 序列化路径有关，而非 DeepSeek 服务端。
     const { ChatDeepSeek } = await import("@langchain/deepseek");
     return new ChatDeepSeek({
-      model: resolved.model || DEEPSEEK_DEFAULT_MODEL,
+      model: resolved.model || DEFAULT_DEEPSEEK_FLASH,
       apiKey,
       configuration: { baseURL: resolved.baseURL },
       temperature: 1.0,
@@ -261,7 +253,7 @@ export async function generateTextUnified(
   task: string = "chat",
   systemPrompt?: string,
 ): Promise<string> {
-  const { provider, model } = await getProviderForTask(task);
+  const { provider, model } = await resolveTaskConfig(task);
   const providerTrim = String(provider || "").trim();
   const modelTrim = String(model || "").trim();
   let endpoint = "";
@@ -358,7 +350,7 @@ export async function generateTextUnified(
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: ds.model || DEEPSEEK_DEFAULT_MODEL,
+            model: ds.model || DEFAULT_DEEPSEEK_FLASH,
             messages,
           }),
           dispatcher,
@@ -415,7 +407,7 @@ export async function generateTextUnified(
             "Content-Type": "application/json",
           },
           body: JSON.stringify({
-            model: glm.model || GLM_DEFAULT_MODEL,
+            model: glm.model || DEFAULT_GLM_MODEL,
             messages,
           }),
           dispatcher,
