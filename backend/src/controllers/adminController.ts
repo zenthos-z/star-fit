@@ -47,7 +47,6 @@ import {
   getImageGenApiKey,
   testImageGenConnection as testImageGenConnectionService,
 } from "../services/modelConfigService.js";
-import { AdminConfigService } from "../services/AdminConfigService.js";
 import {
   ExportMarkdownQuerySchema,
   ExportMarkdownResponseSchema,
@@ -1712,6 +1711,52 @@ export const testImageGenConnection = async (
 // ============================================================================
 
 /**
+ * 读取 pinned_users 配置（原 AdminConfigService.getPinnedUsers 语义，batch4-1 收编）。
+ * 防御性解析：JSONB 正常返回数组；历史脏数据（字符串/非数组）容错返回 []。
+ */
+const getAdminPinnedUsers = async (): Promise<string[]> => {
+  try {
+    const pinned = await ConfigRepo.getConfig("admin", "pinned_users");
+    if (!pinned) return [];
+
+    // Handle case where value came back as a string (shouldn't happen with JSONB, but be safe)
+    if (typeof pinned === "string") {
+      try {
+        const parsed = JSON.parse(pinned);
+        if (!Array.isArray(parsed)) return [];
+        return parsed.filter(
+          (id: unknown) => typeof id === "string" && id.length > 0,
+        );
+      } catch {
+        console.warn("[AdminConfig] Failed to parse pinned_users as JSON");
+        return [];
+      }
+    }
+
+    if (Array.isArray(pinned)) {
+      const validIds = pinned.filter(
+        (id: unknown) => typeof id === "string" && id.length > 0,
+      );
+      if (validIds.length !== pinned.length) {
+        console.warn(
+          "[AdminConfig] Some invalid user IDs filtered from pinned_users config",
+        );
+      }
+      return validIds;
+    } else {
+      console.warn(
+        "[AdminConfig] Pinned users config is not an array, got:",
+        typeof pinned,
+      );
+      return [];
+    }
+  } catch (e) {
+    console.error("[AdminConfig] Failed to parse pinned_users config:", e);
+    return [];
+  }
+};
+
+/**
  * GET /api/admin/configs/:key
  * Get a specific admin configuration value
  */
@@ -1726,7 +1771,7 @@ export const getAdminConfig = async (
   }
 
   try {
-    const config = await AdminConfigService.getConfig(key);
+    const config = await ConfigRepo.getConfigRow("admin", key);
 
     if (!config) {
       return reply.status(404).send({ error: "Config not found" });
@@ -1762,7 +1807,7 @@ export const setAdminConfig = async (
   }
 
   try {
-    await AdminConfigService.setConfig(key, value);
+    await ConfigRepo.setConfig("admin", key, value);
 
     // Broadcast config update to admin clients
     await wsService.broadcastToUser("admin", "config_updated", { key });
@@ -1783,7 +1828,7 @@ export const getAllAdminConfigs = async (
   reply: FastifyReply,
 ) => {
   try {
-    const configs = await AdminConfigService.getAllConfigs();
+    const configs = await ConfigRepo.getAllConfigs("admin");
     return reply.send(configs);
   } catch (e: any) {
     console.error("[AdminConfig] Get all configs error:", e);
@@ -1800,7 +1845,7 @@ export const getPinnedUsers = async (
   reply: FastifyReply,
 ) => {
   try {
-    const pinned = await AdminConfigService.getPinnedUsers();
+    const pinned = await getAdminPinnedUsers();
     return reply.send({ pinned_users: pinned });
   } catch (e: any) {
     console.error("[AdminConfig] Get pinned users error:", e);
@@ -1823,7 +1868,7 @@ export const setPinnedUsers = async (
   }
 
   try {
-    await AdminConfigService.setPinnedUsers(userIds);
+    await ConfigRepo.setConfig("admin", "pinned_users", userIds);
 
     // Broadcast update to admin clients (use pinned_users for consistency)
     await wsService.broadcastToUser("admin", "pinned_users_updated", {
@@ -1852,18 +1897,33 @@ export const togglePinnedUser = async (
   }
 
   try {
-    const isPinned = await AdminConfigService.togglePinnedUser(userId);
-    const pinned = await AdminConfigService.getPinnedUsers();
+    const pinned = await getAdminPinnedUsers();
+    const isPinned = pinned.includes(userId);
+    let isPinnedAfter: boolean;
+
+    if (isPinned) {
+      await ConfigRepo.setConfig(
+        "admin",
+        "pinned_users",
+        pinned.filter((id) => id !== userId),
+      );
+      isPinnedAfter = false;
+    } else {
+      await ConfigRepo.setConfig("admin", "pinned_users", [...pinned, userId]);
+      isPinnedAfter = true;
+    }
+
+    const pinnedAfter = await getAdminPinnedUsers();
 
     // Broadcast update to admin clients (use pinned_users for consistency)
     await wsService.broadcastToUser("admin", "pinned_users_updated", {
-      pinned_users: pinned,
+      pinned_users: pinnedAfter,
     });
 
     return reply.send({
       success: true,
-      is_pinned: isPinned,
-      pinned_users: pinned,
+      is_pinned: isPinnedAfter,
+      pinned_users: pinnedAfter,
     });
   } catch (e: any) {
     console.error("[AdminConfig] Toggle pinned user error:", e);
@@ -1899,7 +1959,12 @@ export const batchDeleteUsers = async (
         deletedCount++;
 
         // Remove from pinned users if present
-        await AdminConfigService.removePinnedUser(userId);
+        const pinned = await getAdminPinnedUsers();
+        await ConfigRepo.setConfig(
+          "admin",
+          "pinned_users",
+          pinned.filter((id) => id !== userId),
+        );
 
         console.log(`[AdminAPI] Successfully deleted user: ${userId}`);
       } catch (e: any) {

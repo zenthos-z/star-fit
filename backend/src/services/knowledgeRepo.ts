@@ -266,6 +266,33 @@ export const ConfigRepo = {
     return configs[key] || null;
   },
 
+  /**
+   * Get the full app_configs row for a user+key (includes user_id / updated_at).
+   * Original semantics of AdminConfigService.getConfig (merged into ConfigRepo in batch4-1).
+   * Deliberately bypasses the configs cache so updated_at stays fresh for row consumers.
+   */
+  getConfigRow: async (
+    userId: string,
+    key: string,
+  ): Promise<{
+    user_id: string;
+    key: string;
+    value_json: any;
+    updated_at: string;
+  } | null> => {
+    const client = ConfigRepo.getClient();
+    const row = await client.queryOne<{
+      user_id: string;
+      key: string;
+      value_json: any;
+      updated_at: string;
+    }>(
+      "SELECT * FROM app_configs WHERE user_id = $userId AND key = $key",
+      { userId, key },
+    );
+    return row || null;
+  },
+
   getAllConfigs: async (userId: string): Promise<Record<string, any>> => {
     const cacheKey = CacheService.keys.configs(userId);
     const cached = await CacheService.get(cacheKey);
