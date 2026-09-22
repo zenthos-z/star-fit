@@ -33,7 +33,6 @@ import {
   UnknownProviderError,
   MissingApiKeyError,
 } from "../../../src/services/modelConfigService.js";
-import { getProviderForTask } from "../../../src/services/modelRouter.js";
 import { loadModel } from "../../../src/services/llm.js";
 
 // ============================================================================
@@ -158,31 +157,28 @@ describe("M8 DeepSeek model config", () => {
   });
 
   // --- B5: single source of truth ---------------------------------------
-  describe("B5 single source of truth (modelConfigService vs modelRouter)", () => {
-    it("both paths resolve the same model id for a deepseek scenario", async () => {
+  // batch4-2 后 modelRouter 已并入 modelConfigService，"两条路径一致"退化为
+  // 单一真源的直接断言：resolveTaskConfig 即 provider/model 解析唯一入口。
+  describe("B5 single source of truth (resolveTaskConfig)", () => {
+    it("resolves the deepseek default model id for a deepseek scenario", async () => {
       process.env.AI_PROVIDER = "deepseek";
 
-      const viaConfigService = await resolveTaskConfig("default");
-      const viaRouter = await getProviderForTask("default");
+      const cfg = await resolveTaskConfig("default");
 
-      expect(viaConfigService.provider).toBe("deepseek");
-      expect(viaRouter.provider).toBe("deepseek");
-      expect(viaConfigService.model).toBe(viaRouter.model);
-      expect(viaConfigService.model).toBe("deepseek-v4-flash-ga-260731");
+      expect(cfg.provider).toBe("deepseek");
+      expect(cfg.model).toBe("deepseek-v4-flash-ga-260731");
     });
 
-    it("DB > env > default hierarchy: a DB value wins on both paths (L100)", async () => {
+    it("DB > env > default hierarchy: a DB value wins (L100)", async () => {
       process.env.AI_PROVIDER = "deepseek";
       (ConfigRepo.getConfig as jest.Mock).mockImplementation(
         async (_userId: string, key: string) =>
           key === "DEEPSEEK_MODEL_FLASH" ? "deepseek-db-override" : undefined
       );
 
-      const viaConfigService = await resolveTaskConfig("default");
-      const viaRouter = await getProviderForTask("default");
+      const cfg = await resolveTaskConfig("default");
 
-      expect(viaConfigService.model).toBe("deepseek-db-override");
-      expect(viaRouter.model).toBe("deepseek-db-override");
+      expect(cfg.model).toBe("deepseek-db-override");
     });
   });
 
