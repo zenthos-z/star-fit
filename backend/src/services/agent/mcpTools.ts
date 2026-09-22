@@ -51,13 +51,16 @@
  *   `ZodObject` crosses into `DynamicStructuredTool` without dragging deepagents'
  *   zod4 across the boundary.
  *
- * ## Why the write tools do not reuse UserRepository.update*
- * The existing `UserRepository.updateProfileDynamic` / `updateHistorySummary`
- * emit `jsonb_set(target, $updates::jsonb)` — a 2-argument call that Postgres
- * rejects at runtime (`function jsonb_set(jsonb, jsonb) does not exist`,
- * verified against the live DB). `repository/` is GOLD read-only for this card,
- * so the correct `||`-concat merge is implemented in the derived
- * `UserScopedWriteRepository` below. Reads still use `UserRepository` unchanged.
+ * ## Why the write tools use UserScopedWriteRepository (not UserRepository.write*)
+ * The GOLD `UserRepository` write methods (`updateProfileDynamic` /
+ * `updateHistorySummary` / `updateProfileStatic`) were removed in cleanup-batch2:
+ * they were dead code, and the first two emitted a 2-argument
+ * `jsonb_set(target, $updates::jsonb)` that Postgres rejects at runtime
+ * (`function jsonb_set(jsonb, jsonb) does not exist`, verified against the live
+ * DB). Write tools therefore implement the CORRECT `||`-concat shallow merge in
+ * the derived `UserScopedWriteRepository` below (B1: allowed derivation; HC-2:
+ * no schema change). Reads still use `UserRepository` unchanged. The B2/B3
+ * userId-scope guard (`assertUserScope`) is enforced on every real write path.
  *
  * ## userId resolution (per-request, ALS)
  * Production (`buildMcpTools()`) is built once at agent-assembly time with no
@@ -233,7 +236,7 @@ export function getUserIdFromContext(
 /**
  * Write path for the agent tools. Extends `BaseRepository` (B1) and implements a
  * CORRECT jsonb shallow-merge (`COALESCE(col,'{}') || $updates::jsonb`) that the
- * GOLD `UserRepository` write methods lack (see module header).
+ * removed GOLD `UserRepository` write methods had broken (see module header).
  */
 export class UserScopedWriteRepository extends BaseRepository {
   /** Shallow-merge `data` into the `history_summary` JSONB of user `userId`. */

@@ -17,15 +17,20 @@
 import { getPostgresClient } from "../db/postgresql/client/postgres-client.js";
 import type { PostgresClient } from "../db/postgresql/client/postgres-client.js";
 import { getNowISO } from "../utils/timestamp.js";
+import { ValidationError } from "../utils/errorHandler.js";
+import { z } from "zod";
 
 // Import data contracts from shared/types (bridge to shared)
 import {
+  BasicInfoSchema,
+  PreferencesSchema,
+  PhysiologicalSchema,
+  PsychologicalSchema,
+  ActiveLimitationSchema,
+  RecoveryStateSchema,
   LoadAnchorsSchema,
-  LoadAnchorSchema,
   type LoadAnchor,
   type LoadAnchors,
-  type LoadAnchorLegacy,
-  type LoadAnchorsLegacy,
   type BasicInfo,
   type Preferences,
   type Physiological,
@@ -88,6 +93,65 @@ export interface UserProfileUpdate {
 }
 
 // ============================================
+// 画像字段清洗 schema（Zod 白名单）
+// ============================================
+// 写入前统一 parse 清洗：未知键丢弃（zod 对象默认 strip），枚举/约束校验失败抛错
+// （项目红线：Zod 校验失败必须抛错，违规数据绝不静默入库）。全部派生自
+// shared/contracts 契约（经 ../types/contracts.js 再导出），不私造 schema。
+const BasicInfoCleanSchema = BasicInfoSchema;
+const PreferencesCleanSchema = PreferencesSchema;
+const PhysiologicalCleanSchema = PhysiologicalSchema;
+const PsychologicalCleanSchema = PsychologicalSchema;
+const LoadAnchorsCleanSchema = LoadAnchorsSchema;
+
+/**
+ * active_limitations 清洗：在共享 ActiveLimitationSchema 基础上把 expire_at /
+ * logged_at 放宽为普通字符串——admin 控制台新增限制时以空串占位（由前端/后续流程
+ * 填充，见 UserProfilePanel.handleLimitationAdd），强制 datetime 格式会打崩该在跑流。
+ * part / severity(1-10) 等其余约束仍严格校验。
+ */
+const ActiveLimitationCleanSchema = ActiveLimitationSchema.extend({
+  expire_at: z.string(),
+  logged_at: z.string(),
+});
+
+/** active_limitations 是数组：对每个元素做上述清洗 */
+const ActiveLimitationsCleanSchema = z.array(ActiveLimitationCleanSchema);
+
+const RecoveryStateCleanSchema = RecoveryStateSchema;
+
+/** 白名单清洗：校验失败抛 ValidationError（controller 层转 400），成功返回清洗后数据 */
+function cleanWith<T>(schema: z.ZodType<T>, value: unknown, field: string): T {
+  const result = schema.safeParse(value);
+  if (!result.success) {
+    const details = result.error.issues
+      .map((i) => `${i.path.join(".") || "root"}: ${i.message}`)
+      .join("; ");
+    throw new ValidationError(
+      `[UserProfileService] ${field} validation failed: ${details}`,
+      field,
+    );
+  }
+  return result.data;
+}
+
+/**
+ * body_fat / body_fat_percentage 归一为一个名字（以 shared/contracts BasicInfoSchema
+ * 的 body_fat 为准）：body_fat_percentage 有值时并入 body_fat，随后删除旧键，杜绝双键并存。
+ */
+function normalizeBasicInfo(input: unknown): unknown {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return input;
+  const obj: Record<string, unknown> = {
+    ...(input as Record<string, unknown>),
+  };
+  if (obj.body_fat_percentage !== undefined && obj.body_fat === undefined) {
+    obj.body_fat = obj.body_fat_percentage;
+  }
+  delete obj.body_fat_percentage;
+  return obj;
+}
+
+// ============================================
 // UserProfileService - PostgreSQL Implementation
 // ============================================
 
@@ -114,52 +178,13 @@ export const UserProfileService = {
   },
 
   /**
-   * 获取或创建用户画像
-   */
-  async getOrCreateProfile(userId: string): Promise<UserInsight> {
-    const existing = await this.getProfile(userId);
-    if (existing) {
-      return existing;
-    }
-
-    // 创建新画像
-    const client = this.getClient();
-
-    await client.query(
-      `INSERT INTO user_insights (user_id, updated_at, modified_by)
-       VALUES ($userId, $updatedAt, $modifiedBy)`,
-      {
-        userId,
-        updatedAt: getNowISO(),
-        modifiedBy: "system",
-      },
-    );
-
-    return {
-      id: userId,
-      user_id: userId,
-      created_at: getNowISO(),
-      updated_at: getNowISO(),
-      modified_by: "system",
-      basic_info: null,
-      preferences: null,
-      physiological: null,
-      load_anchors: null,
-      psychological: null,
-    };
-  },
-
-  /**
    * 更新用户画像（MAS 和 Admin 共用）
    */
   async updateProfile(update: UserProfileUpdate): Promise<void> {
     const client = this.getClient();
 
-    console.log("[UserProfileService] updateProfile called with:", update);
-
-    // 验证数据
+    // 验证数据（Zod 白名单清洗：未知键丢弃，枚举/约束失败抛错）
     const validated = this.validateProfile(update);
-    console.log("[UserProfileService] Validated data:", validated);
 
     // 使用事务进行更新
     await client.transaction(
@@ -191,10 +216,6 @@ export const UserProfileService = {
           // 使用 COALESCE 处理 NULL 值，然后合并
           setClauses.push(
             `profile_static = COALESCE(profile_static, '{}'::jsonb) || $staticUpdates::jsonb`,
-          );
-          console.log(
-            "[UserProfileService] Updating profile_static:",
-            values.staticUpdates,
           );
         }
 
@@ -229,15 +250,10 @@ export const UserProfileService = {
           setClauses.push(
             `profile_dynamic = COALESCE(profile_dynamic, '{}'::jsonb) || $dynamicUpdates::jsonb`,
           );
-          console.log(
-            "[UserProfileService] Updating profile_dynamic:",
-            values.dynamicUpdates,
-          );
         }
 
         if (setClauses.length === 1) {
-          // 只有 updated_at
-          console.log("[UserProfileService] No updates to apply");
+          // 只有 updated_at，无实际字段更新
           return;
         }
 
@@ -246,12 +262,6 @@ export const UserProfileService = {
         SET ${setClauses.join(", ")}
         WHERE id = $userId
       `;
-        console.log("[UserProfileService] SQL:", sql);
-        console.log("[UserProfileService] Values:", {
-          ...values,
-          staticUpdates: "...",
-          dynamicUpdates: "...",
-        });
 
         await tx.query(sql, values);
 
@@ -288,72 +298,68 @@ export const UserProfileService = {
   },
 
   /**
-   * 数据验证
+   * 数据验证（Zod 白名单清洗）
+   * - 未知键丢弃（zod 对象默认 strip）
+   * - 枚举/约束校验失败抛 ValidationError（controller 层转 400）
+   * - body_fat / body_fat_percentage 归一名（以 body_fat 为准）
    */
   validateProfile(update: UserProfileUpdate): Partial<UserProfileUpdate> {
     const validated: Partial<UserProfileUpdate> = {};
 
-    console.log("[UserProfileService] Validating update:", update);
-
-    // 验证 basic_info
     if (update.basic_info !== undefined) {
-      if (typeof update.basic_info !== "object") {
-        throw new Error("basic_info must be an object");
-      }
-      validated.basic_info = update.basic_info;
-      console.log(
-        "[UserProfileService] Validated basic_info:",
-        update.basic_info,
+      validated.basic_info = cleanWith(
+        BasicInfoCleanSchema,
+        normalizeBasicInfo(update.basic_info),
+        "basic_info",
       );
     }
 
-    // 验证 preferences
     if (update.preferences !== undefined) {
-      if (typeof update.preferences !== "object") {
-        throw new Error("preferences must be an object");
-      }
-      validated.preferences = update.preferences;
-      console.log(
-        "[UserProfileService] Validated preferences:",
+      validated.preferences = cleanWith(
+        PreferencesCleanSchema,
         update.preferences,
+        "preferences",
       );
     }
 
-    // 验证 physiological
     if (update.physiological !== undefined) {
-      if (typeof update.physiological !== "object") {
-        throw new Error("physiological must be an object");
-      }
-      validated.physiological = update.physiological;
+      validated.physiological = cleanWith(
+        PhysiologicalCleanSchema,
+        update.physiological,
+        "physiological",
+      );
     }
 
-    // 验证 load_anchors
     if (update.load_anchors !== undefined) {
-      if (typeof update.load_anchors !== "object") {
-        throw new Error("load_anchors must be an object");
-      }
-      validated.load_anchors = update.load_anchors;
+      validated.load_anchors = cleanWith(
+        LoadAnchorsCleanSchema,
+        update.load_anchors,
+        "load_anchors",
+      );
     }
 
-    // 验证 active_limitations
     if (update.active_limitations !== undefined) {
-      if (!Array.isArray(update.active_limitations)) {
-        throw new Error("active_limitations must be an array");
-      }
-      validated.active_limitations = update.active_limitations;
+      validated.active_limitations = cleanWith(
+        ActiveLimitationsCleanSchema,
+        update.active_limitations,
+        "active_limitations",
+      );
     }
 
-    // recovery_state 为可选的任意动态状态对象，直接透传
     if (update.recovery_state !== undefined) {
-      validated.recovery_state = update.recovery_state;
+      validated.recovery_state = cleanWith(
+        RecoveryStateCleanSchema,
+        update.recovery_state,
+        "recovery_state",
+      );
     }
 
-    // 验证 psychological
     if (update.psychological !== undefined) {
-      if (typeof update.psychological !== "object") {
-        throw new Error("psychological must be an object");
-      }
-      validated.psychological = update.psychological;
+      validated.psychological = cleanWith(
+        PsychologicalCleanSchema,
+        update.psychological,
+        "psychological",
+      );
     }
 
     return validated;
