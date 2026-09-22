@@ -2,7 +2,8 @@ import { FastifyRequest, FastifyReply } from 'fastify';
 import { SessionRepo } from '../services/sessionRepo.js';
 import { KnowledgeRepo, ConfigRepo } from '../services/knowledgeRepo.js';
 import { getUserId } from '../utils/requestUtils.js';
-import { wsService } from '../services/wsService.js';
+// batch4-3: wsService 现为 ChannelBroadcaster 的用户维度实例（key=userId）
+import { wsService } from '../services/channelBroadcaster.js';
 import { getNowISO } from '../utils/timestamp.js';
 import fs from 'fs';
 import path from 'path';
@@ -48,10 +49,17 @@ export const pushHistory = async (req: FastifyRequest, reply: FastifyReply) => {
     logToFile(`PUSH SUCCESS: upserted=${upsertResult.count}, deleted=${deleteCount}`);
     
     // Notify other devices of the same user that data has changed
-    await wsService.broadcastToUser(userId, 'sync_needed', { 
-      reason: 'push_completed',
-      sourceDeviceId: deviceId 
-    }, deviceId); // Pass deviceId to exclude source device
+    await wsService.broadcast(
+      userId,
+      {
+        type: 'sync_needed',
+        data: {
+          reason: 'push_completed',
+          sourceDeviceId: deviceId
+        }
+      },
+      { excludeDeviceId: deviceId } // Pass deviceId to exclude source device
+    );
 
     return reply.send({ 
       ...upsertResult, 

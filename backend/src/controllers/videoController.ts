@@ -19,7 +19,8 @@ import path from 'path';
 import { existsSync } from 'fs';
 import { VideoQueueService } from '../services/videoQueueService.js';
 import { VideoProcessingService } from '../services/videoProcessingService.js';
-import { WebSocketProgressBroadcaster } from '../services/websocketProgressService.js';
+// batch4-3: WebSocketProgressBroadcaster 现为 ChannelBroadcaster 的任务维度实例（key=taskId）
+import { WebSocketProgressBroadcaster } from '../services/channelBroadcaster.js';
 import { getPostgresClient as getDb } from '../db/index.js';
 import { getNowISO } from '../utils/timestamp.js';
 
@@ -366,7 +367,7 @@ export async function deleteVideoTask(
  * 广播视频处理完成事件
  */
 export function broadcastVideoCompleted(taskId: string, exerciseName: string, videoAsset: any): void {
-  WebSocketProgressBroadcaster.broadcast(taskId, {
+  WebSocketProgressBroadcaster.broadcastProgressEvent(taskId, {
     type: 'fit.video.completed',
     data: {
       taskId,
@@ -381,7 +382,7 @@ export function broadcastVideoCompleted(taskId: string, exerciseName: string, vi
  * 广播视频处理错误事件
  */
 export function broadcastVideoError(taskId: string, error: string, stage: string): void {
-  WebSocketProgressBroadcaster.broadcast(taskId, {
+  WebSocketProgressBroadcaster.broadcastProgressEvent(taskId, {
     type: 'fit.video.error',
     data: {
       taskId,
