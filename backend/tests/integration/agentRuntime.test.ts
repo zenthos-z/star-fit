@@ -136,13 +136,18 @@ describeOrSkip('M-RT: agent_runtime checkpointer (real PG)', () => {
     const graph = buildEchoGraph(checkpointer);
     await graph.invoke({ msg: 'isolate' }, { configurable: { thread_id: TEST_THREAD } });
 
-    // public.checkpoints may pre-exist from the legacy MAS graph; the rigorous
-    // zero-intrusion proof is that THIS thread's data is NOT in public.
-    const leaked = await verifyPool.query(
-      `SELECT count(*)::int AS n FROM public.checkpoints WHERE thread_id = $1`,
-      [TEST_THREAD],
+    // public.checkpoints 可能从未存在（全新库无 legacy MAS 表）——先查 to_regclass，
+    // 表不存在则「无泄漏无从谈起」（直接通过）；存在才做落库检查。
+    const legacyExists = await verifyPool.query(
+      `SELECT to_regclass('public.checkpoints') IS NOT NULL AS exists`,
     );
-    expect(leaked.rows[0].n).toBe(0);
+    if (legacyExists.rows[0].exists) {
+      const leaked = await verifyPool.query(
+        `SELECT count(*)::int AS n FROM public.checkpoints WHERE thread_id = $1`,
+        [TEST_THREAD],
+      );
+      expect(leaked.rows[0].n).toBe(0);
+    }
 
     // And the data IS in agent_runtime.
     const isolated = await verifyPool.query(

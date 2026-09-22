@@ -17,7 +17,7 @@ import {
   addUserLimitation,
   removeUserLimitation
 } from '../../src/controllers/adminController.js';
-import { UserProfileService } from '../../src/services/userProfileService.postgres.js';
+import { UserProfileService } from '../../src/services/userProfileService.js';
 
 // ============================================================================
 // Test Context
@@ -53,7 +53,9 @@ describe('Admin API Controller Direct Tests', () => {
 
   describe('A1: Get User Profile - Normal Flow', () => {
     it('should return 404 for non-existent user', async () => {
-      mockRequest.params = { userId: 'non-existent-user' };
+      // users.id 是 uuid 列：非 UUID 字符串会走 legacy 空画像分支（200），
+      // 必须用合法但不存在的 UUID 才能命中 404（2026-09 批次3修正）
+      mockRequest.params = { userId: '00000000-0000-4000-8000-000000000000' };
 
       await getUserProfile(mockRequest, mockReply);
 

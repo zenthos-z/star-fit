@@ -1,369 +1,214 @@
+/**
+ * Contract Tests: Exercises API & Video Protocol
+ *
+ * 批次3改造（2026-09-22）：删除本地手抄的 ExerciseSchema / VideoAssetSchema 镜像
+ * （旧 L7-60 本地 z.object，契约改动后测试照样绿——失去镜像意义），改为直接断言
+ * 真源契约：
+ *  - ExerciseSchema       → shared/contracts（数据契约唯一定义源，NA-003 红线）
+ *  - VideoAssetSchema     → backend/src/schemas/videoSchema.ts
+ *    （shared/contracts 无视频资产导出；后端视频资产真源即此文件，
+ *     视频处理链路 videoProcessingService.ts 亦从这里导入）
+ *
+ * 断言按真 schema 形状编写：Exercise 为 NanoID + attributes 嵌套结构；
+ * VideoAsset 为 uuid id + 正数元数据 + quality 枚举 + type/sources 默认值。
+ */
 import { test, describe } from 'node:test';
 import { strict as assert } from 'node:assert';
-import { z } from 'zod';
+import { ExerciseSchema } from '../../shared/contracts/index.js';
+import { VideoAssetSchema } from '../src/schemas/videoSchema.js';
 
-const VideoAssetSchema = z.object({
-  id: z.string(),
-  exerciseName: z.string(),
-  type: z.enum(['local', 'cdn']),
-  baseUrl: z.string(),
-  sources: z.array(z.object({
-    quality: z.enum(['360p', '720p', '1080p']),
-    url: z.string(),
-    size: z.number(),
-    bandwidth: z.number(),
-  })),
-  posterUrl: z.string(),
-  metadata: z.object({
-    originalFilename: z.string(),
-    duration: z.number(),
-    width: z.number(),
-    height: z.number(),
-    codec: z.string(),
-    bitrate: z.number(),
-    size: z.number(),
-  }),
-  createdAt: z.number(),
-  originalVideoUrl: z.string().optional(),
-});
+// ============================================================================
+// 构造器：按真契约形状构造样本
+// ============================================================================
 
-const ExerciseSchema = z.object({
-  id: z.string().min(1).regex(/^\S+$/, 'ID cannot be empty or whitespace'),
-  name: z.string().min(1),
-  body_category: z.string(),
-  exercise_type: z.string(),
-  difficulty: z.string(),
-  muscle_groups: z.union([
-    z.object({
-      primary: z.array(z.object({ name: z.string() })),
-      secondary: z.array(z.object({ name: z.string() })),
-      stabilizers: z.array(z.object({ name: z.string() })),
-    }),
-    z.string(),
-  ]),
-  equipment_required: z.union([
-    z.array(z.string()),
-    z.string(),
-  ]),
-  assets: z.object({
-    cover: z.string().optional(),
-    video: z.union([
-      z.null(),
-      VideoAssetSchema,
-      z.array(VideoAssetSchema),
-    ]).optional(),
-  }),
-});
+/** 合法 NanoID（12-24 字符，如 nanoid 默认 21 位） */
+const NANO_ID = 'test-exercise-0001';
+
+function buildExercise(overrides: Record<string, unknown> = {}) {
+  return {
+    id: NANO_ID,
+    name: 'Test Exercise',
+    exercise_type: 'resistance',
+    difficulty: 'beginner',
+    attributes: {
+      targets: {
+        primary: ['中下胸'],
+        secondary: ['三头'],
+      },
+      equipment_required: ['杠铃', '卧推凳'],
+    },
+    ...overrides,
+  };
+}
+
+function buildVideo(overrides: Record<string, unknown> = {}) {
+  return {
+    id: '9f8b7c6d-5e4a-4b3c-8d2e-1f0a9b8c7d6e',
+    exerciseName: 'bench_press',
+    type: 'local',
+    baseUrl: '/uploads/videos/video-1',
+    sources: [
+      { quality: '360p', url: '/360p.mp4', size: 500000, bandwidth: 500000 },
+      { quality: '720p', url: '/720p.mp4', size: 1500000, bandwidth: 1500000 },
+    ],
+    posterUrl: '/uploads/videos/video-1/poster.jpg',
+    metadata: {
+      originalFilename: 'bench-press.mp4',
+      duration: 45,
+      width: 1920,
+      height: 1080,
+      codec: 'h264',
+      bitrate: 3000000,
+      size: 1500000,
+    },
+    createdAt: Date.now(),
+    ...overrides,
+  };
+}
+
+// ============================================================================
+// Contract Tests: Exercises API（真源 shared/contracts ExerciseSchema）
+// ============================================================================
 
 describe('Contract Tests: Exercises API', () => {
   test('exercise response has valid structure', () => {
-    const sampleExercise = {
-      id: 'test-exercise-1',
-      name: 'Test Exercise',
-      body_category: 'push',
-      exercise_type: 'resistance',
-      difficulty: 'beginner',
-      muscle_groups: JSON.stringify({
-        primary: [{ name: 'chest' }],
-        secondary: [{ name: 'triceps' }],
-        stabilizers: [{ name: 'core' }],
-      }),
-      equipment_required: JSON.stringify(['barbell', 'bench']),
-      assets: {
-        cover: '/uploads/cover.jpg',
-        video: null,
-      },
-    };
-
-    const result = ExerciseSchema.safeParse(sampleExercise);
+    const result = ExerciseSchema.safeParse(buildExercise());
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.ok(result.data.muscle_groups);
-      assert.ok(result.data.equipment_required);
+      assert.ok(result.data.attributes.targets.primary.length > 0);
+      assert.ok(Array.isArray(result.data.attributes.equipment_required));
     }
   });
 
-  test('exercise response has valid JSON fields', () => {
-    const sampleExercise = {
-      id: 'test-exercise-2',
-      name: 'JSON Field Test',
-      body_category: 'pull',
-      exercise_type: 'resistance',
-      difficulty: 'intermediate',
-      muscle_groups: '{"primary":[{"name":"back"}],"secondary":[],"stabilizers":[]}',
-      equipment_required: '["dumbbell"]',
-      assets: {},
-    };
+  test('exercise id is NanoID-shaped (12-24 chars, no whitespace)', () => {
+    // 合法：21 位默认 NanoID
+    const ok = ExerciseSchema.safeParse(buildExercise({ id: '123456789012345678901' }));
+    assert.strictEqual(ok.success, true);
 
-    const result = ExerciseSchema.safeParse(sampleExercise);
-    assert.strictEqual(result.success, true);
-    if (result.success) {
-      assert.strictEqual(typeof result.data.muscle_groups, 'string');
-      assert.strictEqual(typeof result.data.equipment_required, 'string');
-
-      const parsedMuscleGroups = JSON.parse(result.data.muscle_groups as string);
-      const parsedEquipment = JSON.parse(result.data.equipment_required as string);
-
-      assert.strictEqual(Array.isArray(parsedMuscleGroups.primary), true);
-      assert.strictEqual(Array.isArray(parsedEquipment), true);
+    // 非法：过短 / 含空白 —— 真契约必须拦截
+    for (const bad of ['', '  ', '\t', 'short']) {
+      const result = ExerciseSchema.safeParse(buildExercise({ id: bad }));
+      assert.strictEqual(result.success, false, `id "${bad}" should be rejected`);
+      if (!result.success) {
+        assert.ok(
+          result.error.issues.some((i) => i.path.includes('id')),
+          `failure should point at id, got ${JSON.stringify(result.error.issues)}`,
+        );
+      }
     }
   });
 
-  test('exercise with video asset has valid structure', () => {
-    const sampleExercise = {
-      id: 'test-exercise-3',
-      name: 'Video Exercise',
-      body_category: 'legs',
-      exercise_type: 'resistance',
-      difficulty: 'advanced',
-      muscle_groups: JSON.stringify({
-        primary: [{ name: 'quads' }],
-        secondary: [],
-        stabilizers: [],
-      }),
-      equipment_required: JSON.stringify(['squat rack']),
-      assets: {
-        video: {
-          id: 'video-1',
-          exerciseName: 'squat',
-          type: 'local',
-          baseUrl: '/uploads/videos/video-1',
-          sources: [
-            { quality: '360p', url: '/360p.mp4', size: 500000, bandwidth: 500000 },
-            { quality: '720p', url: '/720p.mp4', size: 1500000, bandwidth: 1500000 },
-            { quality: '1080p', url: '/1080p.mp4', size: 3000000, bandwidth: 3000000 },
-          ],
-          posterUrl: '/uploads/videos/video-1/poster.jpg',
-          metadata: {
-            originalFilename: 'squat.mp4',
-            duration: 60,
-            width: 1920,
-            height: 1080,
-            codec: 'h264',
-            bitrate: 4000000,
-            size: 3000000,
-          },
-          createdAt: Date.now(),
-          originalVideoUrl: '/uploads/videos/video-1/original.mp4',
-        },
-      },
-    };
+  test('exercise name must be a string (real contract: no min-length)', () => {
+    // 真契约 name: z.string()——不强制非空（旧镜像的 .min(1) 是手抄件，不是真约束）
+    const emptyOk = ExerciseSchema.safeParse(buildExercise({ name: '' }));
+    assert.strictEqual(emptyOk.success, true);
 
-    const result = ExerciseSchema.safeParse(sampleExercise);
-    assert.strictEqual(result.success, true);
-    if (result.success) {
-      assert.ok(result.data.assets.video);
-      const video = result.data.assets.video as any;
-      assert.ok(video.baseUrl);
-      assert.notStrictEqual(video.baseUrl, '');
-      assert.ok(video.posterUrl);
-      assert.notStrictEqual(video.posterUrl, '');
-      assert.strictEqual(video.originalVideoUrl, '/uploads/videos/video-1/original.mp4');
-      assert.strictEqual(Array.isArray(video.sources), true);
-      assert.strictEqual(video.sources.length, 3);
+    const nonString = ExerciseSchema.safeParse(buildExercise({ name: 123 }));
+    assert.strictEqual(nonString.success, false);
+    if (!nonString.success) {
+      assert.ok(nonString.error.issues.some((i) => i.path.includes('name')));
+    }
+  });
+
+  test('exercise_type must be a known enum value', () => {
+    const result = ExerciseSchema.safeParse(buildExercise({ exercise_type: 'yoga' }));
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes('exercise_type')));
+    }
+  });
+
+  test('difficulty must be a known enum value', () => {
+    const result = ExerciseSchema.safeParse(buildExercise({ difficulty: 'extreme' }));
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes('difficulty')));
+    }
+  });
+
+  test('attributes is required and validates equipment_required as array', () => {
+    const missing = ExerciseSchema.safeParse(buildExercise({ attributes: undefined }));
+    assert.strictEqual(missing.success, false);
+
+    const badEquip = ExerciseSchema.safeParse(
+      buildExercise({ attributes: { targets: { primary: ['胸'] }, equipment_required: 'barbell' } }),
+    );
+    assert.strictEqual(badEquip.success, false);
+    if (!badEquip.success) {
+      assert.ok(
+        badEquip.error.issues.some((i) => i.path.includes('equipment_required')),
+      );
     }
   });
 });
 
+// ============================================================================
+// Contract Tests: Video Protocol（真源 backend/src/schemas/videoSchema.ts）
+// ============================================================================
+
 describe('Contract Tests: Video Protocol', () => {
   test('video asset matches VideoAssetSchema', () => {
-    const sampleVideo = {
-      id: 'video-test-1',
-      exerciseName: 'bench press',
-      type: 'local',
-      baseUrl: '/uploads/videos/video-test-1',
-      sources: [
-        { quality: '360p', url: '/360p.mp4', size: 500000, bandwidth: 500000 },
-        { quality: '720p', url: '/720p.mp4', size: 1500000, bandwidth: 1500000 },
-      ],
-      posterUrl: '/uploads/videos/video-test-1/poster.jpg',
-      metadata: {
-        originalFilename: 'bench-press.mp4',
-        duration: 45,
-        width: 1920,
-        height: 1080,
-        codec: 'h264',
-        bitrate: 3000000,
-        size: 1500000,
-      },
-      createdAt: Date.now(),
-    };
-
-    const result = VideoAssetSchema.safeParse(sampleVideo);
+    const result = VideoAssetSchema.safeParse(buildVideo());
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.strictEqual(result.data.baseUrl, '/uploads/videos/video-test-1');
-      assert.strictEqual(result.data.posterUrl, '/uploads/videos/video-test-1/poster.jpg');
+      assert.strictEqual(result.data.baseUrl, '/uploads/videos/video-1');
+      assert.strictEqual(result.data.posterUrl, '/uploads/videos/video-1/poster.jpg');
       assert.strictEqual(result.data.metadata.originalFilename, 'bench-press.mp4');
       assert.strictEqual(result.data.metadata.duration, 45);
-      assert.strictEqual(result.data.metadata.width, 1920);
-      assert.strictEqual(result.data.metadata.height, 1080);
       assert.strictEqual(Array.isArray(result.data.sources), true);
       assert.strictEqual(result.data.sources.length, 2);
     }
   });
 
-  test('video asset with originalVideoUrl field', () => {
-    const sampleVideo = {
-      id: 'video-test-2',
-      exerciseName: 'deadlift',
-      type: 'cdn',
-      baseUrl: 'https://cdn.example.com/videos/video-test-2',
-      sources: [
-        { quality: '1080p', url: 'https://cdn.example.com/videos/video-test-2/1080p.mp4', size: 5000000, bandwidth: 5000000 },
-      ],
-      posterUrl: 'https://cdn.example.com/videos/video-test-2/poster.jpg',
-      metadata: {
-        originalFilename: 'deadlift.mp4',
-        duration: 90,
-        width: 1920,
-        height: 1080,
-        codec: 'h265',
-        bitrate: 5000000,
-        size: 5000000,
-      },
-      createdAt: Date.now(),
-      originalVideoUrl: 'https://cdn.example.com/videos/video-test-2/original.mp4',
-    };
-
-    const result = VideoAssetSchema.safeParse(sampleVideo);
-    assert.strictEqual(result.success, true);
-    if (result.success) {
-      assert.ok(result.data.originalVideoUrl);
-      assert.strictEqual(result.data.originalVideoUrl, 'https://cdn.example.com/videos/video-test-2/original.mp4');
-      assert.strictEqual(result.data.baseUrl, 'https://cdn.example.com/videos/video-test-2');
-    }
-  });
-
-  test('video asset with multiple sources', () => {
-    const sampleVideo = {
-      id: 'video-test-3',
-      exerciseName: 'squat',
-      type: 'local',
-      baseUrl: '/uploads/videos/video-test-3',
-      sources: [
-        { quality: '360p', url: '/360p.mp4', size: 500000, bandwidth: 500000 },
-        { quality: '720p', url: '/720p.mp4', size: 1500000, bandwidth: 1500000 },
-        { quality: '1080p', url: '/1080p.mp4', size: 3000000, bandwidth: 3000000 },
-      ],
-      posterUrl: '/uploads/videos/video-test-3/poster.jpg',
-      metadata: {
-        originalFilename: 'squat.mp4',
-        duration: 60,
-        width: 1920,
-        height: 1080,
-        codec: 'h264',
-        bitrate: 4000000,
-        size: 3000000,
-      },
-      createdAt: Date.now(),
-    };
-
-    const result = VideoAssetSchema.safeParse(sampleVideo);
-    assert.strictEqual(result.success, true);
-    if (result.success) {
-      assert.strictEqual(result.data.sources.length, 3);
-      assert.strictEqual(result.data.sources[0].quality, '360p');
-      assert.strictEqual(result.data.sources[1].quality, '720p');
-      assert.strictEqual(result.data.sources[2].quality, '1080p');
-    }
-  });
-});
-
-describe('Contract Tests: Protocol Compliance', () => {
-  test('exercise id is never null or empty', () => {
-    const invalidIds = ['', '  ', '\t'];
-
-    invalidIds.forEach(id => {
-      const sampleExercise = {
-        id,
-        name: 'Invalid ID Test',
-        body_category: 'push',
-        exercise_type: 'resistance',
-        difficulty: 'beginner',
-        muscle_groups: JSON.stringify({
-          primary: [{ name: 'chest' }],
-          secondary: [],
-          stabilizers: [],
-        }),
-        equipment_required: JSON.stringify([]),
-        assets: {},
-      };
-
-      const result = ExerciseSchema.safeParse(sampleExercise);
-      assert.strictEqual(result.success, false);
-      if (!result.success) {
-        assert.ok(result.error.issues[0].path.includes('id'));
-      }
-    });
-  });
-
-  test('exercise name is never empty', () => {
-    const sampleExercise = {
-      id: 'test-exercise',
-      name: '',
-      body_category: 'push',
-      exercise_type: 'resistance',
-      difficulty: 'beginner',
-      muscle_groups: JSON.stringify({
-        primary: [{ name: 'chest' }],
-        secondary: [],
-        stabilizers: [],
-      }),
-      equipment_required: JSON.stringify([]),
-      assets: {},
-    };
-
-    const result = ExerciseSchema.safeParse(sampleExercise);
+  test('video id must be a UUID', () => {
+    const result = VideoAssetSchema.safeParse(buildVideo({ id: 'video-test-1' }));
     assert.strictEqual(result.success, false);
     if (!result.success) {
-      assert.ok(result.error.issues[0].path.includes('name'));
+      assert.ok(result.error.issues.some((i) => i.path.includes('id')));
     }
   });
 
-  test('muscle_groups can be parsed from JSON string', () => {
-    const validJsonString = JSON.stringify({
-      primary: [{ name: 'chest' }],
-      secondary: [{ name: 'triceps' }],
-      stabilizers: [],
-    });
-
-    const sampleExercise = {
-      id: 'test-exercise',
-      name: 'Valid JSON Test',
-      body_category: 'push',
-      exercise_type: 'resistance',
-      difficulty: 'beginner',
-      muscle_groups: validJsonString,
-      equipment_required: '[]',
-      assets: {},
-    };
-
-    const result = ExerciseSchema.safeParse(sampleExercise);
-    assert.strictEqual(result.success, true);
-    if (result.success) {
-      assert.strictEqual(result.data.muscle_groups, validJsonString);
+  test('exerciseName must be slug-shaped (no spaces / non-latin)', () => {
+    const result = VideoAssetSchema.safeParse(buildVideo({ exerciseName: '卧推 bench press' }));
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes('exerciseName')));
     }
   });
 
-  test('equipment_required can be parsed from JSON string', () => {
-    const validJsonString = JSON.stringify(['barbell', 'bench']);
-
-    const sampleExercise = {
-      id: 'test-exercise',
-      name: 'Valid Equipment Test',
-      body_category: 'push',
-      exercise_type: 'resistance',
-      difficulty: 'beginner',
-      muscle_groups: JSON.stringify({ primary: [], secondary: [], stabilizers: [] }),
-      equipment_required: validJsonString,
-      assets: {},
-    };
-
-    const result = ExerciseSchema.safeParse(sampleExercise);
+  test('type defaults to local when omitted', () => {
+    const result = VideoAssetSchema.safeParse(buildVideo({ type: undefined }));
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.strictEqual(result.data.equipment_required, validJsonString);
+      assert.strictEqual(result.data.type, 'local');
+    }
+  });
+
+  test('sources defaults to empty array when omitted', () => {
+    const result = VideoAssetSchema.safeParse(buildVideo({ sources: undefined }));
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.data.sources.length, 0);
+    }
+  });
+
+  test('sources quality must be a known enum', () => {
+    const result = VideoAssetSchema.safeParse(
+      buildVideo({ sources: [{ quality: '4k', url: '/4k.mp4', size: 1, bandwidth: 1 }] }),
+    );
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes('quality')));
+    }
+  });
+
+  test('metadata numeric fields reject non-positive values', () => {
+    const result = VideoAssetSchema.safeParse(
+      buildVideo({ metadata: { ...buildVideo().metadata, duration: -5 } }),
+    );
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes('duration')));
     }
   });
 });
