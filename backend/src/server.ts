@@ -777,4 +777,9 @@ const start = async () => {
   }
 };
 
-start();
+// jest 导入本文件时不自启监听（否则：端口 43111 被容器占用 → EADDRINUSE →
+// process.exit(1) 会把整个 jest 进程掐死，后续套件与汇总全部丢失）。
+// JEST_WORKER_ID 仅 jest worker 存在，生产/tsx 路径完全不受影响。
+if (!process.env.JEST_WORKER_ID) {
+  start();
+}

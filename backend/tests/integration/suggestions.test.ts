@@ -111,10 +111,13 @@ describe('SuggestionService.generateBatch', () => {
     expect(s.source).toBe('formula');
     expect(s.adjustment).toBeUndefined();
     expect(s.context_fingerprint).toBe(res.meta.context_fingerprint);
-    // 历史锚点：100×8 → e1RM 124.14；muscle_gain RPE8 → 10 次 @77% → 95.58 → 2.5 网格 95
+    // 历史锚点：100×8 → e1RM 124.14（Brzycki）；muscle_gain RPE8 → 10 次 @77%
+    // 有历史 → novice_cap 0.85（2026 版公式：fitness_level 移除，仅按真实历史判断，
+    // 与 profiles.test.ts L140-145 一致）：124.14 × 0.77 × 0.85 = 81.25 → 5kg 网格 80
     expect(s.profile.data_basis).toBe('history');
     expect(s.profile.est_1rm).toBeCloseTo(124.14, 1);
-    expect(s.values.weight).toBe(95);
+    expect(s.profile.modifiers.novice_cap).toBe(0.85);
+    expect(s.values.weight).toBe(80);
     expect(s.values.reps).toBe(10);
     expect(s.values.set_count).toBe(4);
   });
@@ -137,15 +140,16 @@ describe('SuggestionService.generateBatch', () => {
 
     expect(agent.calls).toHaveLength(1);
     // Agent 输入携带 Service 算好的基准与画像摘要（AI 只读，不算术）
-    expect(agent.calls[0].items[0].baseline.weight).toBeCloseTo(124.14 * 0.77, 1);
+    // 基准含 novice_cap 0.85（有历史）：124.14 × 0.77 × 0.85 = 81.25
+    expect(agent.calls[0].items[0].baseline.weight).toBeCloseTo(124.14 * 0.77 * 0.85, 1);
     expect(agent.calls[0].profileSummary.goal).toBe('muscle_gain');
     expect(agent.calls[0].userId).toBe('user-1');
 
     const s = res.suggestions[0];
     expect(s.source).toBe('hybrid');
     expect(s.adjustment?.reason).toBe('近期恢复偏弱，宁轻勿重');
-    // 95.58 × 0.9 = 86.02 → 2.5 网格 85
-    expect(s.values.weight).toBe(85);
+    // 81.25 × 0.9 = 73.125 → 2.5 网格 72.5
+    expect(s.values.weight).toBe(72.5);
     expect(res.meta.agent_mode).toBe('hybrid');
   });
 
@@ -209,9 +213,10 @@ describe('SuggestionService.generateBatch', () => {
     const s = res.suggestions[0];
 
     expect(agent.calls[0].items[0].injuryLimited).toBe(true);
-    // severity 8 → injury_scale 0.5：95.58 × 0.5 = 47.79 → 47.5；上调被抑制，下调 reps 生效
+    // severity 8 → injury_scale 0.5：124.14 × 0.77 × 0.85 × 0.5 = 40.62 → 网格 40；
+    // 上调被抑制，下调 reps 生效
     expect(s.profile.modifiers.injury_scale).toBe(0.5);
-    expect(s.values.weight).toBe(47.5);
+    expect(s.values.weight).toBe(40);
     expect(s.values.reps).toBe(8);
   });
 

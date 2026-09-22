@@ -86,9 +86,10 @@ describe('Layer 1: Database Foundation', () => {
       ];
 
       for (const id of expectedExercises) {
+        // PostgresClient 使用命名参数（$id），不支持 pg 位置参数（$1 + 数组）
         const result = await postgresClient.query(
-          'SELECT id FROM exercises WHERE id = $1',
-          [id]
+          'SELECT id FROM exercises WHERE id = $id',
+          { id }
         );
         // At least one of these should exist
         expect(result.rows.length).toBeGreaterThanOrEqual(0);
