@@ -404,10 +404,3 @@ export const VideoProcessingService = {
 // ============================================
 // 辅助函数
 // ============================================
-
-/**
- * 计算视频带宽（用于 HLS 流式播放）
- */
-export function calculateBandwidth(size: number, duration: number): number {
-  return Math.floor((size * 8) / duration); // bps
-}
