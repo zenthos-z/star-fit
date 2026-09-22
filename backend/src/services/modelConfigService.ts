@@ -226,7 +226,7 @@ export async function resolveDeepSeekModel(
 
 /**
  * Resolve the effective provider for a scenario. GLM is the final fallback
- * (single source of truth with resolveTaskConfig / modelRouter / getProxyConfig).
+ * (single source of truth with resolveTaskConfig / getProxyConfig).
  */
 export async function resolveDefaultedProvider(
   scenario: string = "default",
