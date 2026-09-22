@@ -45,7 +45,7 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
     "7865b3d7f9647c0094fecae4a2a8c3640e00ed79a8621f249db97b427bcfef8d",
   "exercise-type-guide/knowledge/assisted.md":
-    "ede9c0baae40853587c02e90f4c7a702883528df7f557edbd96c0116c6996156",
+    "78e5a44d2fd374b4d0781e8797af40e86827ce081ff20bbd75ea0b2813e8bbda",
   "exercise-type-guide/knowledge/bodyweight.md":
     "b0cb41dffc8ac171ea867d223a60d2683bad124063afbc476fa42280d907e9eb",
   "exercise-type-guide/knowledge/cardio.md":
@@ -65,7 +65,7 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "4a3f9361c0a5115e279e6f5e6d828a5de41d401fe4f33cdae2150d749ab866d3",
+    "fa1d0d86849e7cc1150ffb72b6e79af0c25b7fdc0585586b4bbfd2d4b45c1002",
   "strength-training-designer/knowledge/non-big-three-guide.md":
     "2cfc4569bf8ee7adf99dd7f4a946e17f2be00c59e6c8989d6f2ed8b3b2320a82",
 };
