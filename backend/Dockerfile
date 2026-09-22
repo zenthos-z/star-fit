@@ -54,6 +54,8 @@ COPY --from=builder /app/shared/dist ./backend/dist/shared/dist
 COPY shared/package.json ./backend/dist/shared/package.json
 # skillLoader 运行时读取 skills 知识文件（.md 数据，非代码）
 COPY --from=builder /app/backend/src/services/mas/skills ./backend/dist/backend/src/services/mas/skills
+# 数据库迁移 SQL（migrationRunner 按自身目录读 *.sql）
+COPY --from=builder /app/backend/src/db/postgresql/migrations ./backend/dist/backend/src/db/postgresql/migrations
 # 运行时裸导入 "shared/contracts" 走 node_modules 解析：把 shared 包放进根 node_modules
 # （复用同一份 dist，避免重复拷贝）。注意：COPY 进来的 node_modules/shared 是 npm
 # workspaces 的 symlink（指向容器里不存在的 /app/shared），先删掉再重建为真目录
