@@ -34,6 +34,7 @@ import { getNowISO } from "../utils/timestamp.js";
 import { wsService } from "../services/wsService.js";
 import { PromptEngineCore } from "../services/promptEngineCore.js";
 import { parseJSONSafe } from "../types/validation.js";
+import { ValidationError } from "../utils/errorHandler.js";
 import {
   getAllConfigs,
   resolveTaskConfig,
@@ -2276,6 +2277,10 @@ export const updateUserProfileStatic = async (
 
     return reply.send({ success: true, message: "Profile static updated" });
   } catch (e: any) {
+    // 画像字段 Zod 校验失败 → 400（客户端数据问题，非服务器故障）
+    if (e instanceof ValidationError) {
+      return reply.status(400).send({ success: false, error: e.message });
+    }
     console.error("[AdminAPI] Update profile static error:", e);
     return reply.status(500).send({ success: false, error: e.message });
   }
@@ -2337,6 +2342,10 @@ export const updateUserProfileDynamic = async (
 
     return reply.send({ success: true, message: "Profile dynamic updated" });
   } catch (e: any) {
+    // 画像字段 Zod 校验失败 → 400（客户端数据问题，非服务器故障）
+    if (e instanceof ValidationError) {
+      return reply.status(400).send({ success: false, error: e.message });
+    }
     console.error("[AdminAPI] Update profile dynamic error:", e);
     return reply.status(500).send({ success: false, error: e.message });
   }
@@ -2408,6 +2417,10 @@ export const updateUserLoadAnchor = async (
       data: { exerciseId, anchor: updatedAnchors[exerciseId] },
     });
   } catch (e: any) {
+    // 画像字段 Zod 校验失败 → 400（客户端数据问题，非服务器故障）
+    if (e instanceof ValidationError) {
+      return reply.status(400).send({ success: false, error: e.message });
+    }
     console.error("[AdminAPI] Update load anchor error:", e);
     return reply.status(500).send({ success: false, error: e.message });
   }

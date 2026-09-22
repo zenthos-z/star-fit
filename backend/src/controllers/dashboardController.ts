@@ -144,7 +144,8 @@ export const getExerciseStats = async (req: FastifyRequest, reply: FastifyReply)
     const exercises = exercisesResult.rows;
 
     // 获取视频任务（PostgreSQL 版本）
-    const videosResult = await db.query('SELECT * FROM media WHERE mime LIKE $mimePattern', { mimePattern: 'video/%' });
+    // user_media 是媒体表真名（media 表不存在，实测 relation does not exist）
+    const videosResult = await db.query('SELECT * FROM user_media WHERE mime LIKE $mimePattern', { mimePattern: 'video/%' });
     const videos = videosResult.rows;
 
     // 安全处理数据

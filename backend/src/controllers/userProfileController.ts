@@ -14,6 +14,7 @@ import {
 } from "../services/userProfileService.js";
 import type { LoadAnchors } from "../services/userProfileService.js";
 import { parseJSONSafe } from "../types/validation.js";
+import { ValidationError } from "../utils/errorHandler.js";
 import { getNowISO } from "../utils/timestamp.js";
 
 // ============================================
@@ -125,6 +126,13 @@ export async function deleteLoadAnchor(
       exerciseId,
     });
   } catch (error) {
+    // 画像字段 Zod 校验失败 → 400（客户端数据问题，非服务器故障）
+    if (error instanceof ValidationError) {
+      return reply.status(400).send({
+        error: "Invalid load anchor data",
+        details: error.message,
+      });
+    }
     console.error("[UserProfile] Delete anchor error:", error);
     reply.status(500).send({
       error: "Failed to delete load anchor",
@@ -217,6 +225,13 @@ export async function updateUserProfile(
       profile: parsedProfile, // 返回解析后的完整数据
     });
   } catch (error) {
+    // 画像字段 Zod 校验失败 → 400（客户端数据问题，非服务器故障）
+    if (error instanceof ValidationError) {
+      return reply.status(400).send({
+        error: "Invalid profile data",
+        details: error.message,
+      });
+    }
     console.error("[UserProfile] Update error:", error);
     reply.status(500).send({
       error: "Failed to update user profile",
