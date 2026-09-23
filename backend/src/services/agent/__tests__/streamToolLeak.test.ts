@@ -23,6 +23,7 @@ import { classifyAgentStream } from "../DeepAgentService.js";
 import {
   isAnswerStartBlock,
   stripToolEchoPrefix,
+  stripToolEchoBlocks,
 } from "../splitLeakedReasoning.js";
 import { extractUiHintEvents } from "../uiHintExtractor.js";
 import type { AgentEvent } from "shared/contracts";
@@ -127,6 +128,19 @@ function texts(events: AgentEvent[], type: AgentEvent["type"]): string {
     .filter((e) => e.type === type && e.text)
     .map((e) => e.text as string)
     .join("");
+}
+
+/** 把 classifyAgentStream 产出的事件流再喂进 uiHintExtractor，收集卡片类型。 */
+async function collectHints(events: AgentEvent[]): Promise<string[]> {
+  const hints: string[] = [];
+  for await (const e of extractUiHintEvents(
+    (async function* () {
+      for (const ev of events) yield ev;
+    })(),
+  )) {
+    if (e.type === "uiHint" && e.card) hints.push(String(e.card.type));
+  }
+  return hints;
 }
 
 // ---------------------------------------------------------------------------
@@ -630,19 +644,6 @@ describe("tool-leak 返工 v3：终步剥离复述段，保留正常回答与围
     "```",
   ].join("\n");
 
-  /** 把 classifyAgentStream 产出的事件流再喂进 uiHintExtractor，收集卡片类型。 */
-  async function collectHints(events: AgentEvent[]): Promise<string[]> {
-    const hints: string[] = [];
-    for await (const e of extractUiHintEvents(
-      (async function* () {
-        for (const ev of events) yield ev;
-      })(),
-    )) {
-      if (e.type === "uiHint" && e.card) hints.push(String(e.card.type));
-    }
-    return hints;
-  }
-
   it("1. 终步 = 动作库 JSON 复述 + 围栏 survey_card + 中文回答 → 复述进 thinking、回答进 token、卡片被 uiHint 提取", async () => {
     // 必测场景 1：真实 LLM 终步消息的混合形态（v2 整段吞掉的全部三件套）。
     const mixed =
@@ -902,5 +903,344 @@ describe("stripToolEchoPrefix 直接单测（剥离边界契约）", () => {
     assert.ok(echo.includes("## 一、动作选择原则"));
     assert.ok(echo.includes("复合动作占比"));
     assert.ok(rest.includes("好的，这是为你准备的"));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 返工 v4（2026-09-23）：任意位置复述块剥离（全段扫描）
+// ---------------------------------------------------------------------------
+// v3（stripToolEchoPrefix）只剥「前缀」复述；真实 DeepSeek 行为是「先写引导语
+// → 再整段 echo read_file 返回（编号行 frontmatter）→ 再写真实回答」——复述在
+// 中间/后置位置时 v3 前导判定全部失效，splitLeakedReasoning 把复述误判成
+// answer 放行成 token（协调者实测 6115 / 2480 字符泄漏）。v4 在 answer 部分
+// 逐块（\n{2,} 分隔）全段扫描：命中复述特征 → 摘进 thinking；未命中 → 保留。
+describe("tool-leak 返工 v4：任意位置复述块剥离（全段扫描）", () => {
+  // 与协调者泄漏 dump 同构的 read_file 编号行 frontmatter（CJK 主导，会被
+  // splitLeakedReasoning 误判为 answer 起点——正是 v3 漏网的形态）
+  const numberedEcho = [
+    "1\t---",
+    '2\tname: "plan-generation"',
+    '3\tdescription: "计划生成能力包 - 训练容量计算、历史数据加载与个性化训练计划编排"',
+    '4\tskills: ["knowledge.md", "prompt.md"]',
+    '5\tversion: "3.1.0"',
+    "6\t# 计划生成知识指南",
+    "7\t## 一、动作选择原则",
+    "8\t- 复合动作占比 60-70%，动作顺序先大肌群后小肌群",
+  ].join("\n");
+
+  it("1. 中间复述形态：引导语 + 编号行 frontmatter 复述 + 围栏卡片 + 正常回答 → 复述进 thinking、引导语/回答/卡片进 token", async () => {
+    // 协调者实测形态：模型先写引导语，再整段复述 read_file 返回，再写真实回答。
+    // v3 的 firstBlock=引导语块 → isNumberedToolEcho 判定失败 → 整段放行泄漏。
+    const leadIn = "好的，明天的训练计划安排如下。";
+    const answer = "深蹲 3 组 × 8 次，卧推 3 组 × 10 次。";
+    const surveyCard = [
+      "```json",
+      JSON.stringify(
+        {
+          type: "survey_card",
+          title: "先确认",
+          data: { questions: [{ id: "goal", question: "目标？" }] },
+        },
+        null,
+        2,
+      ),
+      "```",
+    ].join("\n");
+    const msg =
+      leadIn + "\n\n" + numberedEcho + "\n\n" + surveyCard + "\n\n" + answer;
+    const raws = [msgDelta(msg), modelRequestUpdate(aiTerminal(msg))];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    // 复述块（中间位置）→ thinking
+    assert.ok(
+      thinking.includes('name: "plan-generation"'),
+      "中间位置编号行复述必须进 thinking",
+    );
+    assert.ok(thinking.includes("# 计划生成知识指南"), "复述块整体进 thinking");
+    assert.equal(
+      thinking.includes("深蹲 3 组 × 8 次"),
+      false,
+      "正常回答不得进 thinking",
+    );
+    assert.equal(
+      thinking.includes("好的，明天的训练计划安排如下"),
+      false,
+      "引导语不得进 thinking",
+    );
+    // 引导语 + 回答 + 围栏卡片 → token
+    assert.ok(
+      tokens.includes("好的，明天的训练计划安排如下"),
+      "引导语进 token",
+    );
+    assert.ok(tokens.includes("深蹲 3 组 × 8 次"), "正常回答进 token");
+    assert.ok(tokens.includes("```json"), "围栏卡片保留在 token 流");
+    assert.ok(tokens.includes("survey_card"), "卡片载荷未被剥离");
+    assert.equal(
+      tokens.includes('name: "plan-generation"'),
+      false,
+      "复述块绝不泄漏进 token",
+    );
+    const hints = await collectHints(events);
+    assert.ok(hints.includes("survey_card"), "survey_card 被 uiHint 提取");
+  });
+
+  it("2. 后置复述形态：正常回答 + 复述块（无后续）→ 复述摘除、回答保留", async () => {
+    // 复述在末尾（模型先答完再 echo 工具返回，或 echo 后无真实回答）。
+    const answer = "好的，明天的计划是深蹲 3 组 × 8 次。";
+    const msg = answer + "\n\n" + numberedEcho;
+    const raws = [msgDelta(msg), modelRequestUpdate(aiTerminal(msg))];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.ok(
+      thinking.includes('name: "plan-generation"'),
+      "后置复述块进 thinking",
+    );
+    assert.ok(
+      tokens.includes("好的，明天的计划是深蹲"),
+      "正常回答保留进 token",
+    );
+    assert.equal(
+      tokens.includes('name: "plan-generation"'),
+      false,
+      "后置复述不得泄漏进 token",
+    );
+  });
+
+  it("3. 围栏卡片块紧邻复述块 → 卡片块绝不摘（token 载体）", async () => {
+    // 复述块与围栏卡片之间无任何叙述缓冲，直接相邻。
+    const surveyCard = [
+      "```json",
+      JSON.stringify({
+        type: "survey_card",
+        title: "紧邻测试",
+        data: { questions: [{ id: "q", question: "？", options: [] }] },
+      }),
+      "```",
+    ].join("\n");
+    const msg =
+      numberedEcho + "\n\n" + surveyCard + "\n\n" + "请回答以上问题。";
+    const raws = [msgDelta(msg), modelRequestUpdate(aiTerminal(msg))];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.ok(thinking.includes('name: "plan-generation"'), "复述进 thinking");
+    assert.ok(tokens.includes("```json"), "围栏卡片必须完整保留在 token 流");
+    assert.ok(tokens.includes("survey_card"), "卡片 JSON 内容不得被剥离");
+    assert.ok(tokens.includes("紧邻测试"), "卡片载荷完整");
+    assert.equal(
+      tokens.includes('name: "plan-generation"'),
+      false,
+      "复述不得泄漏",
+    );
+    const hints = await collectHints(events);
+    assert.ok(hints.includes("survey_card"), "紧邻复述的卡片仍被提取");
+  });
+
+  it("4. 纯正常回答（含围栏卡片）→ 全进 token（回归防破坏）", async () => {
+    // 无任何复述的合法回答：中文叙述 + 围栏卡片，stripToolEchoBlocks 不得误摘。
+    const card = [
+      "```json",
+      JSON.stringify({ type: "plan_card", title: "明日训练", items: [] }),
+      "```",
+    ].join("\n");
+    const msg = "好的，明天计划如下：\n\n" + card + "\n\n" + "请按计划执行。";
+    const raws = [msgDelta(msg), modelRequestUpdate(aiTerminal(msg))];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.ok(tokens.includes("好的，明天计划如下"), "叙述进 token");
+    assert.ok(tokens.includes("```json"), "围栏卡片进 token");
+    assert.ok(tokens.includes("请按计划执行"), "回答尾部进 token");
+    const hints = await collectHints(events);
+    assert.ok(hints.includes("plan_card"), "plan_card 被 uiHint 提取");
+  });
+
+  it("5. 中间复述形态（技能头延续被空行切开）→ 链式延续块一并摘除", async () => {
+    // read_file 输出内部含空行，编号行 frontmatter 被 \n{2,} 切成多块；
+    // 首块命中后，后续文档结构块（isSkillDocContinuation）链式跟剥。
+    const echoPart1 = ["1\t---", '2\tname: "plan-generation"'].join("\n");
+    const echoPart2 = [
+      '3\tdescription: "计划生成能力包 - 训练容量计算、历史数据加载"',
+      '4\tversion: "3.1.0"',
+      "5\t# 计划生成知识指南",
+      "6\t## 一、动作选择原则",
+      "7\t- 复合动作占比 60-70%，动作顺序先大肌群后小肌群",
+    ].join("\n");
+    const leadIn = "好的，我来看一下计划生成相关的技能说明。";
+    const answer = "明天练深蹲 3 组 × 8 次。";
+    const msg =
+      leadIn + "\n\n" + echoPart1 + "\n\n" + echoPart2 + "\n\n" + answer;
+    const raws = [msgDelta(msg), modelRequestUpdate(aiTerminal(msg))];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.ok(
+      thinking.includes('name: "plan-generation"'),
+      "复述首块进 thinking",
+    );
+    assert.ok(
+      thinking.includes("## 一、动作选择原则"),
+      "链式延续块（被空行切开的后续文档结构）一并进 thinking",
+    );
+    assert.ok(tokens.includes("明天练深蹲"), "正常回答进 token");
+    assert.equal(
+      tokens.includes("## 一、动作选择原则"),
+      false,
+      "延续块不得泄漏进 token",
+    );
+  });
+});
+
+describe("stripToolEchoBlocks 直接单测（任意位置剥离边界契约）", () => {
+  const numberedEcho = [
+    "1\t---",
+    '2\tname: "plan-generation"',
+    '3\tdescription: "计划生成能力包 - 训练容量计算、历史数据加载"',
+    '4\tskills: ["knowledge.md", "prompt.md"]',
+    '5\tversion: "3.1.0"',
+  ].join("\n");
+
+  it("中间复述：引导语 + 编号行复述 + 回答 → 只摘复述块", () => {
+    const leadIn = "好的，我来为你安排明天的训练。";
+    const answer = "深蹲 3 组 × 8 次。";
+    const { echo, rest } = stripToolEchoBlocks(
+      leadIn + "\n\n" + numberedEcho + "\n\n" + answer,
+    );
+    assert.ok(echo.includes('name: "plan-generation"'), "中间复述块摘出");
+    assert.ok(rest.includes(leadIn), "引导语保留");
+    assert.ok(rest.includes(answer), "回答保留");
+    assert.equal(rest.includes("1\t---"), false, "复述不留 rest");
+  });
+
+  it("后置复述：回答 + 编号行复述（无后续）→ 摘复述、留回答", () => {
+    const answer = "好的，明天计划是深蹲 3 组 × 8 次。";
+    const { echo, rest } = stripToolEchoBlocks(answer + "\n\n" + numberedEcho);
+    assert.ok(echo.includes('name: "plan-generation"'), "后置复述摘出");
+    assert.ok(rest.includes(answer), "回答保留");
+  });
+
+  it("围栏卡片紧邻复述 → 卡片绝不摘", () => {
+    const card = '```json\n{"type":"survey_card","title":"t"}\n```';
+    const { echo, rest } = stripToolEchoBlocks(
+      numberedEcho + "\n\n" + card + "\n\n请回答。",
+    );
+    assert.ok(echo.includes('name: "plan-generation"'));
+    assert.ok(rest.includes("```json"), "卡片块保留");
+    assert.ok(rest.includes("survey_card"));
+    assert.ok(rest.includes("请回答。"));
+  });
+
+  it("纯正常回答 → 完全不摘", () => {
+    const answer =
+      "好的，明天计划如下：\n\n- 深蹲 3 组 × 8 次\n- 卧推 3 组 × 10 次\n\n请按计划执行。";
+    const { echo, rest } = stripToolEchoBlocks(answer);
+    assert.equal(echo, "");
+    assert.equal(rest, answer);
+  });
+
+  it("短块（<30 字符）不判定 → 保留", () => {
+    const short = "好的，明天练腿。";
+    const { echo, rest } = stripToolEchoBlocks(short + "\n\n" + numberedEcho);
+    assert.ok(echo.includes('name: "plan-generation"'));
+    assert.ok(rest.includes(short), "短块保留（未误摘）");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 返工 v4（2026-09-23）：looksLikeZhDeliberation 收紧「来」——正常回答开首保护
+// ---------------------------------------------------------------------------
+// 真实 LLM 冒烟（8 轮）发现 3 轮正文 0 字符：模型正常回答以「我来定/我来给」
+// （对用户承诺句式）开首，裸 `|来|` 判定为中文自言自语 → 整段摘进 thinking。
+// 收紧为「来 + 元认知动词」才算自言自语，「我来定/我来为你/我来给」必须保留正文。
+describe("tool-leak 返工 v4：looksLikeZhDeliberation 收紧「来」（正常回答开首保护）", () => {
+  it("「我来定」式承诺句式 → 不是自言自语，不摘", async () => {
+    const answer =
+      "明天的计划我来定，先确认几个关键信息（顺便的话也告诉我：一周练几次、体重多少、有没有旧伤，我好把强度调准）：";
+    const raws = [msgDelta(answer), modelRequestUpdate(aiTerminal(answer))];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.ok(
+      tokens.includes("明天的计划我来定"),
+      "「我来定」承诺句式必须保留进 token（实际 token: " +
+        JSON.stringify(tokens) +
+        "）",
+    );
+    assert.equal(
+      thinking.includes("明天的计划我来定"),
+      false,
+      "「我来定」不得被摘进 thinking",
+    );
+  });
+
+  it("「我来看看」式元认知动词 → 仍是自言自语，照旧摘", async () => {
+    // 收敛保护：真正的自言自语形态必须仍被识别（不能因为收紧而漏放）。
+    // 用双块形态：前块自言自语 + 后块真实回答，走 splitLeakedReasoning 判定。
+    const deliberation = "好的，我来看看计划生成指南，熟悉一下动作库的用法。";
+    const answer = "深蹲 3 组 × 8 次，卧推 3 组 × 10 次。";
+    const msg = deliberation + "\n\n" + answer;
+    const raws = [msgDelta(msg), modelRequestUpdate(aiTerminal(msg))];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.equal(
+      tokens.includes("我来看看计划生成指南"),
+      false,
+      "「我来看看」自言自语不得进 token",
+    );
+    assert.ok(
+      thinking.includes("我来看看计划生成指南"),
+      "「我来看看」仍进 thinking",
+    );
+    assert.ok(tokens.includes("深蹲 3 组"), "真实回答照常进 token");
+  });
+
+  it("「我来为你」承诺句式 → 不摘（另一真实变体）", async () => {
+    const answer = "好的，我来为你安排明天的训练，深蹲 3 组 × 8 次。";
+    const raws = [msgDelta(answer), modelRequestUpdate(aiTerminal(answer))];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.ok(
+      tokens.includes("我来为你安排"),
+      "「我来为你」承诺句式必须进 token",
+    );
   });
 });

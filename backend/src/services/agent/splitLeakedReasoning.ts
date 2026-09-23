@@ -18,9 +18,15 @@ export function cjkRatio(s: string): number {
  * 而旧启发式只切英文前缀）。特征：第一人称元认知动词（我需要/我应该/让我看看/我先查看/
  * 接下来我…）或对用户的第三人称转述（用户想/用户一直…）——这些是对着草稿纸自说自话，
  * 不是对用户说话（对用户说话用"你"，且以结论/建议句式开头）。
+ *
+ * 2026-09-23 返工 v4 收紧元认知动词：真实 LLM 冒烟（8 轮 3 轮正文 0 字符）发现
+ * 裸 `来` / `先` / `得` 会把正常回答开首误判为自言自语（"明天的计划我来定"、
+ * "我得先知道几个关键信息"——对用户的承诺/征询句式，不是草稿纸自白）。只有
+ * 紧跟「读/查/看」类元认知动词（来(看看|查看|确认|查|读|想)、先(查看|看看|查|读)、
+ * 得(看看|查看|查|读|先看看)）才算自言自语；承诺/征询句式必须保留在正文。
  */
 export function looksLikeZhDeliberation(s: string): boolean {
-  return /(我(需要|应该|想(先|看看|查看)|先|来|得|打算|准备)|让我(看看|查看|想|先)|接下来我|用户(想|要|一直|反复|这是)|他(上周|之前|的历史))/.test(
+  return /(我(需要|应该|想(先|看看|查看)|先(查看|看看|查|读)|来(看看|查看|确认|查|读|想)|得(看看|查看|查|读|先看看)|打算|准备)|让我(看看|查看|想|先)|接下来我|用户(想|要|一直|反复|这是)|他(上周|之前|的历史))/.test(
     s,
   );
 }
@@ -215,6 +221,85 @@ export function stripToolEchoPrefix(text: string): {
   }
 
   return { echo: "", rest: text };
+}
+
+/**
+ * 终步工具复述「全段扫描剥离」（2026-09-23 返工 v4）。
+ *
+ * v3（stripToolEchoPrefix）只剥离「开头」的复述段；真实 DeepSeek 行为是
+ * 在任意位置复述工具返回——先写引导语（如"好的我来看看计划生成指南"）→
+ * 再整段 echo read_file 返回（编号行 frontmatter：`1\t---`、`2\tname: ...`）
+ * → 再写真实回答。复述落在中间/后置时，v3 的 B 分支 firstBlock = 引导语块，
+ * isNumberedToolEcho 判定失败，整段被 splitLeakedReasoning 误判成 answer
+ * 放行成 token（协调者实测 6115 / 2480 字符泄漏）。
+ *
+ * 本函数对 answer 部分逐块（\n{2,} 分隔）扫描，把「前缀剥离」扩展为
+ * 「任意位置剥离」：
+ *   - 命中复述特征（looksLikeToolReturnEcho / isNumberedToolEcho）→ 摘进
+ *     thinking（leakedThinking），绝不进 token；
+ *   - 命中后紧跟的文档延续块（编号行 frontmatter 被空行切开的后续块、技能
+ *     文档结构块）→ 链式一并摘除，遇围栏/普通叙述块即断链；
+ *   - 其余块原样保留为 token。
+ * 防误伤铁律：
+ *   - 含 ``` 的围栏卡片块绝不摘——它是卡片的 token 载体（uiHintExtractor
+ *     只扫 token/answer 事件），必须完整保留；
+ *   - 正常中文回答块无复述特征（非编号行、非 JSON 主导、非技能头），不受
+ *     影响；短块（<30 字符）不判定（isNumberedToolEcho 阈值）。
+ *   - 链式延续只认「强文档结构」块（标题/引用/表格/编号行，见
+ *     isSkillDocContinuationStrong）——纯 bullet 列表的回答块（- / * 主导）
+ *     不是 read_file 复述的延续，绝不跟剥。
+ */
+export function stripToolEchoBlocks(text: string): {
+  echo: string;
+  rest: string;
+} {
+  if (!text || text.trim().length === 0) return { echo: "", rest: text };
+  const blocks = text.split(/\n{2,}/);
+  const keep: string[] = [];
+  const echoes: string[] = [];
+  let inEchoChain = false; // 前一块已确认是复述 → 允许文档延续块跟剥
+  for (const raw of blocks) {
+    const block = raw.trim();
+    if (block.length === 0) continue;
+    if (block.includes("```")) {
+      // 围栏卡片——token 载体，绝不摘；链同步断开（卡片不属于复述文档）。
+      inEchoChain = false;
+      keep.push(block);
+      continue;
+    }
+    const hit = looksLikeToolReturnEcho(block) || isNumberedToolEcho(block);
+    if (hit) {
+      echoes.push(block);
+      inEchoChain = true;
+      continue;
+    }
+    if (inEchoChain && isSkillDocContinuationStrong(block)) {
+      echoes.push(block);
+      continue;
+    }
+    inEchoChain = false;
+    keep.push(block);
+  }
+  return { echo: echoes.join("\n\n"), rest: keep.join("\n\n") };
+}
+
+/**
+ * 复述文档延续块的「强结构」判定：read_file 复述（编号行 frontmatter / 技能
+ * 文档结构）被空行切开的后续块，行首应为标题（#）、引用（>）、表格（|）或
+ * 编号行（\d+[.)\t]）等强文档标记，且结构化行占比 ≥60%。
+ *
+ * 与 isSkillDocContinuation 的区别：不含纯 bullet 列表（- / * 主导）——模型
+ * 正常回答常以「- 深蹲 3 组」式列表呈现，紧跟复述块时绝不能当延续摘走。
+ */
+function isSkillDocContinuationStrong(block: string): boolean {
+  if (block.includes("```")) return false; // 围栏卡片——绝不剥离
+  if (looksLikeToolReturnEcho(block)) return true;
+  const lines = block.split("\n").filter((l) => l.trim().length > 0);
+  if (lines.length === 0) return false;
+  const structured = lines.filter((l) =>
+    /^(#|>|\||\d+[.)\t]|_)/.test(l.trim()),
+  ).length;
+  return structured / lines.length >= 0.6;
 }
 
 /**

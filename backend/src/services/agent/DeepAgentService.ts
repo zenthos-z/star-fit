@@ -63,6 +63,7 @@ import { mountAllSkills } from "./skillLoader.js";
 import { splitLeakedReasoning } from "./splitLeakedReasoning.js";
 import { chunkAnswerText } from "./splitLeakedReasoning.js";
 import { stripToolEchoPrefix } from "./splitLeakedReasoning.js";
+import { stripToolEchoBlocks } from "./splitLeakedReasoning.js";
 export { splitLeakedReasoning };
 
 // ---------------------------------------------------------------------------
@@ -751,7 +752,7 @@ export async function* classifyAgentStream(
       // live as tokens (首字延迟 = 该步 prefill + 生成中已缓冲的首段，
       // 秒级而非整轮)。
       //
-      // ★终步工具复述剥离（2026-09-23 返工 v3）：v2 在 flush 前对「整个
+      // ★终步工具复述剥离（2026-09-23 返工 v3 + v4）：v2 在 flush 前对「整个
       // stepRaw」跑 looksLikeToolReturnEcho，命中就把复述+正常回答+围栏卡片
       // 整体吞进 thinking（回放 3 轮正文 0 字符 + 卡片 0 张）。v3 只精确剥
       // 离「开头的裸工具返回复述段」（stripToolEchoPrefix：动作库/历史 JSON
@@ -759,6 +760,14 @@ export async function* classifyAgentStream(
       // （正常回答 + 围栏卡片）继续走 splitLeakedReasoning：answer 进 token、
       // 围栏卡片经 uiHint 提取正常落地。拦截只能摘「裸复述」，不能误伤以
       // ``` 开头的围栏卡片。
+      // ★v4（返工）：v3 只覆盖「前缀」复述，真实模型会在任意位置复述工具
+      // 返回——先写引导语（如"好的我来看看计划生成指南"）再整段 echo
+      // read_file 返回（编号行 frontmatter），复述落在中间/后置时 v3 的
+      // 前导判定全部失效，整段被 splitLeakedReasoning 误判成 answer 放行成
+      // token（协调者实测 6115 / 2480 字符泄漏）。v4 在 splitLeakedReasoning
+      // 之后对 answer 部分再做「全段扫描剥离」（stripToolEchoBlocks）：逐块
+      // 命中复述特征 → 摘进 thinking；未命中 → 保留为 token。双保险：前缀
+      // 剥离（pass 1）+ 任意位置剥离（pass 2）。
       const { echo, rest } = stripToolEchoPrefix(stepRaw);
       if (echo) {
         leakedThinking = leakedThinking ? `${leakedThinking}\n\n${echo}` : echo;
@@ -770,8 +779,17 @@ export async function* classifyAgentStream(
           : split.reasoning;
       }
       if (split.answer) {
-        for (const chunk of chunkAnswerText(split.answer)) {
-          yield { type: "token", text: chunk };
+        // pass 2（v4）：对 answer 部分逐块扫描，摘任意位置的工具复述块。
+        const mid = stripToolEchoBlocks(split.answer);
+        if (mid.echo) {
+          leakedThinking = leakedThinking
+            ? `${leakedThinking}\n\n${mid.echo}`
+            : mid.echo;
+        }
+        if (mid.rest) {
+          for (const chunk of chunkAnswerText(mid.rest)) {
+            yield { type: "token", text: chunk };
+          }
         }
       }
       // 终步 flush 后清空缓冲：已 flush 的 stepRaw 不得在流尾被二次转
