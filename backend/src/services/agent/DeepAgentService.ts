@@ -62,6 +62,7 @@ import { mountAllSkills } from "./skillLoader.js";
 // 避免顶层 import.meta（skillLoader）把整条链拖进 ESM 域。
 import { splitLeakedReasoning } from "./splitLeakedReasoning.js";
 import { chunkAnswerText } from "./splitLeakedReasoning.js";
+import { looksLikeToolReturnEcho } from "./splitLeakedReasoning.js";
 export { splitLeakedReasoning };
 
 // ---------------------------------------------------------------------------
@@ -74,7 +75,6 @@ export { splitLeakedReasoning };
 // premature `isAnswerStartBlock` flip was the regression vector. The batch
 // splitter (splitLeakedReasoning) now owns all text classification at the
 // `updates` snapshot boundary.
-
 
 // ---------------------------------------------------------------------------
 // Types
@@ -747,6 +747,23 @@ export async function* classifyAgentStream(
       // then flip `answerLive` so subsequent deltas of THIS step stream
       // live as tokens (首字延迟 = 该步 prefill + 生成中已缓冲的首段，
       // 秒级而非整轮)。
+      //
+      // ★终步工具返回拦截（2026-09-23 返工）：模型在无 tool_calls 的终步
+      // 消息里复述工具返回内容（list_exercises 动作库 JSON / read_file 技能
+      // 全文）时，splitLeakedReasoning 会把这段复述判成 answer 放行成 token
+      // （首正文时间=完成时间，flush 一次性吐出 7-11k 字符——快照锚解决中间步
+      // 误判，解决不了终步复述）。flush 前先查 `looksLikeToolReturnEcho`：
+      // 命中 → 整段转 thinking，绝不放行成 token，且不翻 answerLive（后续
+      // delta 继续缓冲，流尾兜底仍按 thinking 处理）。
+      if (looksLikeToolReturnEcho(stepRaw)) {
+        if (stepRaw.trim()) {
+          leakedThinking = leakedThinking
+            ? `${leakedThinking}\n\n${stepRaw.trim()}`
+            : stepRaw.trim();
+        }
+        resetStep();
+        continue;
+      }
       const split = splitLeakedReasoning(stepRaw);
       if (split.reasoning) {
         leakedThinking = leakedThinking
@@ -758,6 +775,10 @@ export async function* classifyAgentStream(
           yield { type: "token", text: chunk };
         }
       }
+      // 终步 flush 后清空缓冲：已 flush 的 stepRaw 不得在流尾被二次转
+      // thinking（v1 遗漏——流尾 `if (stepRaw.trim())` 会把刚放行的整段答案
+      // 重复进 thinking 面板）。
+      stepRaw = "";
       answerLive = true;
     }
   }

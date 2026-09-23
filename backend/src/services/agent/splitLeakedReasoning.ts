@@ -75,6 +75,63 @@ export function chunkAnswerText(text: string, maxLen = 24): string[] {
   return chunks;
 }
 
+/**
+ * 工具返回特征检测（2026-09-23 返工）：模型在「无 tool_calls 的终步消息」里
+ * 复述工具返回内容（动作库 JSON / 技能文件全文），splitLeakedReasoning 会把这
+ * 段复述误判为 answer 放行成 token（7-11k 字符泄漏实锤）。终步 flush 前用本
+ * 函数拦截：命中 → 整段转 thinking，绝不放行。
+ *
+ * 命中规则（任一即拦）：
+ *   A. 动作库 JSON 签名：`{"count":N,"exercises"`（容忍空白/换行）——list_exercises
+ *      工具返回的特征形状，正文绝不可能长这样；
+ *   B. JSON 主导：trim 后以 `{` / `[` 开头，且非空白字符中 >60% 是 ASCII 结构
+ *      字符/引号（{}[]",:）——整段是裸 JSON（无 ``` 围栏，围栏卡片以 ``` 开头
+ *      不会误伤）；
+ *   C. 技能文件头：含 `# 计划生成知识指南`，或以 `1\t#` 开头的编号行（read_file
+ *      复述 plan-generation/knowledge.md 的标题/目录形状）。
+ */
+export function looksLikeToolReturnEcho(text: string): boolean {
+  if (!text || text.trim().length === 0) return false;
+  const t = text.trim();
+
+  // A. 动作库 JSON 签名（count + exercises 共现，容忍空白/换行）
+  if (
+    /\{\s*"count"\s*:\s*\d+\s*,\s*"exercises"/.test(t) ||
+    (/\{\s*"count"\s*:/.test(t) && /"exercises"\s*:/.test(t))
+  ) {
+    return true;
+  }
+
+  // C. 技能文件头
+  if (t.includes("# 计划生成知识指南") || /(^|\n)[ \t]*\d+[ \t]*\t#/.test(t)) {
+    return true;
+  }
+
+  // B. JSON 主导：trim 后以 { / [ 开头（裸 JSON，无 ``` 围栏——围栏卡片以
+  // ``` 开头不会误伤）。双重判定：
+  //   B1. 任务原话：非空白中 >60% 是 ASCII 结构字符/引号（{}[]",:）；
+  //   B2. 兜底：整段能被 JSON.parse 解析的对象/数组且长度足够大——正文绝不
+  //       可能以「大段可解析裸 JSON」开头；短 JSON（如 {"ok":true}）用长度
+  //       阈值排除误杀。真实动作库 JSON 含中文名/英文键，结构字符占比可能
+  //       低于 60%（如 {"id":"ex_1","name":"深蹲"} 仅约 1/3），B2 兜住。
+  if (t.startsWith("{") || t.startsWith("[")) {
+    const nonWs = t.replace(/\s+/g, "");
+    if (nonWs.length === 0) return false;
+    const structural = (nonWs.match(/[\{\}\[\]"',:]/g) ?? []).length;
+    if (structural / nonWs.length > 0.6) return true;
+    if (t.length >= 100) {
+      try {
+        const parsed: unknown = JSON.parse(t);
+        if (parsed !== null && typeof parsed === "object") return true;
+      } catch {
+        // 非纯 JSON（含叙述包裹）——B2 不判定，交给 A/C 签名兜底
+      }
+    }
+  }
+
+  return false;
+}
+
 export function splitLeakedReasoning(text: string): {
   reasoning: string;
   answer: string;

@@ -217,7 +217,11 @@ describe("tool-leak 回归：工具调用轮的中间叙述绝不产出 token �
       })(),
     );
     const tokens = texts(events, "token");
-    assert.equal(tokens.includes("ex-1"), false, "动作库 JSON 不得泄漏进 token");
+    assert.equal(
+      tokens.includes("ex-1"),
+      false,
+      "动作库 JSON 不得泄漏进 token",
+    );
     assert.ok(tokens.includes("这是最终计划"), "终步答案正常放行");
   });
 
@@ -242,7 +246,10 @@ describe("tool-leak 回归：工具调用轮的中间叙述绝不产出 token �
       answer.replace(/\s/g, ""),
       "纯文本轮答案完整",
     );
-    assert.ok(events.some((e) => e.type === "done"), "done 事件必达");
+    assert.ok(
+      events.some((e) => e.type === "done"),
+      "done 事件必达",
+    );
   });
 
   it("终步快照后的 delta 直通（answerLive），首字延迟收益保留", async () => {
@@ -305,7 +312,10 @@ describe("tool-leak 回归：工具调用轮的中间叙述绝不产出 token �
     assert.equal(tokens, "", "无快照 = 无 token（绝不猜）");
     const thinking = texts(events, "thinking");
     assert.ok(thinking.includes(dangling), "悬空缓冲进 thinking 不丢失");
-    assert.ok(events.some((e) => e.type === "done"), "done 事件必达");
+    assert.ok(
+      events.some((e) => e.type === "done"),
+      "done 事件必达",
+    );
   });
 });
 
@@ -316,7 +326,8 @@ describe("tool-leak 回归：工具调用轮的中间叙述绝不产出 token �
 describe("tool-leak 修复前后对照（同一合成流）", () => {
   const bigLeak = Array.from(
     { length: 120 },
-    (_, i) => `动作 ${i}：哑铃卧推（胸）——每组 8-12 次，注意肘部角度，宁轻勿伤。`,
+    (_, i) =>
+      `动作 ${i}：哑铃卧推（胸）——每组 8-12 次，注意肘部角度，宁轻勿伤。`,
   ).join("\n");
 
   it("工具轮复述 CJK 长文本：旧版全量泄漏进 token，新版零 token", async () => {
@@ -355,7 +366,8 @@ describe("tool-leak 修复前后对照（同一合成流）", () => {
   });
 
   it("工具轮复述围栏 JSON：旧版围栏块被 isAnswerStartBlock 必判为答案 → 泄漏；新版零 token", async () => {
-    const fenced = "```json\n{\n  \"plan\": { \"goal\": \"增肌\", \"days\": 4 }\n}\n```";
+    const fenced =
+      '```json\n{\n  "plan": { "goal": "增肌", "days": 4 }\n}\n```';
     const raws = [
       msgDelta("计划技能文件内容：\n\n"),
       msgDelta(fenced),
@@ -378,5 +390,185 @@ describe("tool-leak 修复前后对照（同一合成流）", () => {
     const tokens = texts(events, "token");
     assert.equal(tokens.includes("```json"), false, "新版围栏复述零泄漏");
     assert.ok(tokens.includes("明天计划已生成"), "新版终步答案正常放行");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 返工 v2（2026-09-23）：终步消息复述工具返回 → 拦截成 thinking，零 token
+// ---------------------------------------------------------------------------
+// 第一版修复（updates 快照锚）封住了「中间步叙述」泄漏，但真实 LLM 回放暴露：
+// 模型在「无 tool_calls 的终步消息」里复述工具返回（动作库 JSON / 技能文件
+// 全文），splitLeakedReasoning 把复述判成 answer 放行成 token（首正文时间=
+// 完成时间，flush 一次性吐出 7-11k 字符）。本节验证：终步复述命中工具返回
+// 特征 → 整段转 thinking，绝不放行成 token。
+describe("tool-leak 返工：终步消息复述工具返回 → 拦截零 token", () => {
+  // 与 mcpTools.list_exercises 真实返回同构的动作库 JSON（count + exercises）
+  const actionLibJson = JSON.stringify({
+    count: 31,
+    exercises: Array.from({ length: 31 }, (_, i) => ({
+      id: `ex-${i + 1}`,
+      name: `动作${i + 1}`,
+      type: i % 3 === 0 ? "compound" : "isolation",
+      equipment: "barbell",
+      description:
+        "这是动作库中的第 " + (i + 1) + " 个动作，用于训练计划编排参考。",
+    })),
+  });
+
+  it("终步复述动作库 JSON（count+exercises 签名）→ 零 token", async () => {
+    // 模型在无 tool_calls 的终步消息里原样复述 list_exercises 返回——
+    // 快照锚把它判为「无工具终步」，旧逻辑 splitLeakedReasoning 因 JSON 含
+    // 中文描述（CJK 主导）放行成 answer → 泄漏。
+    const raws = [
+      msgDelta(actionLibJson),
+      modelRequestUpdate(aiTerminal(actionLibJson)),
+    ];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.equal(
+      tokens.length,
+      0,
+      `终步复述动作库 JSON 必须零 token（实际 ${tokens.length} 字符）`,
+    );
+    const thinking = texts(events, "thinking");
+    assert.ok(
+      thinking.includes('"count"'),
+      "复述应整体进入 thinking 面板（不丢失）",
+    );
+    assert.ok(
+      events.some((e) => e.type === "done"),
+      "done 事件必达",
+    );
+  });
+
+  it("终步复述技能文件头（# 计划生成知识指南）→ 零 token", async () => {
+    // 模型终步复述 plan-generation/knowledge.md 全文——以标题行开头，
+    // CJK 主导且无自说自话特征，旧 splitLeakedReasoning 必判为 answer。
+    const skillLeak = [
+      "# 计划生成知识指南 (Plan Generation Knowledge Guide)",
+      "",
+      "> 本指南由 Starfit MAS 系统维护，基于当前运动科学研究和最佳实践设计。",
+      "",
+      "## 一、动作选择原则",
+      "",
+      "### 1.1 复合动作优先原则",
+      "",
+      "- **复合动作占比**：60-70% 的训练量应来自复合动作",
+      "- **优先级排序**：",
+      "  1. 大肌群复合动作（深蹲、卧推、硬拉、引体向上、划船）",
+      "  2. 多关节孤立动作（侧平举、弯举、三头下压）",
+    ].join("\n");
+    const raws = [
+      msgDelta(skillLeak),
+      modelRequestUpdate(aiTerminal(skillLeak)),
+    ];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.equal(
+      tokens.length,
+      0,
+      `终步复述技能文件头必须零 token（实际 ${tokens.length} 字符）`,
+    );
+    const thinking = texts(events, "thinking");
+    assert.ok(
+      thinking.includes("# 计划生成知识指南"),
+      "技能文件复述应整体进入 thinking 面板",
+    );
+    assert.ok(
+      events.some((e) => e.type === "done"),
+      "done 事件必达",
+    );
+  });
+
+  it("终步复述纯 JSON 结构（{ 开头 + 结构字符 >60%）→ 零 token", async () => {
+    // 无 count/exercises 签名的裸 JSON 大块（如 load_history 等工具返回的
+    // 其他 JSON 形状）——靠 B 规则：以 { 开头且非空白中结构字符占比 >60%。
+    const bareJson = JSON.stringify({
+      items: Array.from({ length: 20 }, (_, i) => ({
+        k: `key_${i}`,
+        v: `val_${i}`,
+        t: i,
+      })),
+    });
+    assert.ok(bareJson.length > 400, "样本需足够大才符合「大段 JSON」");
+    const raws = [msgDelta(bareJson), modelRequestUpdate(aiTerminal(bareJson))];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.equal(
+      tokens.length,
+      0,
+      `终步复述裸 JSON 必须零 token（实际 ${tokens.length} 字符）`,
+    );
+    assert.ok(
+      events.some((e) => e.type === "done"),
+      "done 事件必达",
+    );
+  });
+
+  it("终步纯文本答案不受拦截影响（无工具返回特征）→ 正常放行", async () => {
+    // 回归保护：合法终步答案（中文叙述 + 短 JSON 卡片围栏）不得误拦截。
+    const answer = [
+      "明天的训练计划如下：",
+      "```json",
+      '{"type":"plan_card","title":"明日训练","items":[{"name":"深蹲","sets":3}]}',
+      "```",
+      "请按以上计划执行。",
+    ].join("\n");
+    const raws = [msgDelta(answer), modelRequestUpdate(aiTerminal(answer))];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.ok(
+      tokens.includes("明天的训练计划如下"),
+      "合法答案必须放行（实际 token 缺失）",
+    );
+    assert.ok(
+      tokens.includes("```json"),
+      "围栏卡片必须到达 token 流（uiHint 提取器只扫 token）",
+    );
+    assert.ok(tokens.includes("请按以上计划执行"), "答案尾部正常放行");
+  });
+
+  it("终步复述动作库 JSON 后跟真答案 delta：复述拦截，后续 delta 也零 token", async () => {
+    // 最保守场景：模型先复述 JSON，随后同一终步继续输出真答案 delta——
+    // 拦截后不翻 answerLive，后续 delta 进缓冲，流尾按 thinking 处理，
+    // 绝不实时放行为 token（宁可保守不漏）。
+    const raws = [
+      msgDelta(actionLibJson),
+      modelRequestUpdate(aiTerminal(actionLibJson)),
+      msgDelta("以上是动作库，明天计划如下："),
+      msgDelta("深蹲 3×8。"),
+    ];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.equal(
+      tokens.length,
+      0,
+      `复述被拦截后，后续 delta 也不得实时放行（实际 ${tokens.length} 字符）`,
+    );
   });
 });
