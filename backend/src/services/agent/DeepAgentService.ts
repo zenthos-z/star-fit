@@ -318,16 +318,60 @@ const SCENARIO_DATA_GUIDES: Record<string, string> = {
 };
 
 /**
+ * plan 场景速查表（2026-09-23）— plan-generation 技能知识的最小可行动作集，
+ * 直接注入 systemPrompt，让 Agent 无需 read_file 即可走完主流路径
+ * （省一次工具往返 ≈ 5-20s）。逐条溯源 plan-generation/knowledge.md（v3.1.0），
+ * 数字全部来自原文，未引入新数值。技能文件本身不动，Agent 仍可自选深读。
+ * 长度约束：注入后 buildSystemPrompt 总长不得超出现状 +70 行（PLAN_QUICKREF 行数）。
+ */
+const PLAN_SCENARIO_QUICKREF = [
+  "## Plan scenario quick reference (pre-injected from plan-generation skill)",
+  "You already have the plan-generation skill's fast path here — do NOT read_file",
+  "that skill for the main flow; read it only for deep edge cases.",
+  "FIVE PREREQUISITES (goal / experience / equipment / weekly frequency /",
+  "injuries+body weight): take them from load_history or this conversation.",
+  "Missing any AND not answerable from tools -> ONE survey_card collecting",
+  "them together, NO plan_card this turn (knowledge.md §3.2.0).",
+  "BEGINNER STARTER LOADS (no load_anchor, experience=beginner or user chose",
+  "self_select): barbell compounds = empty bar 20kg or machine's minimal plate;",
+  "dumbbell/cable/machine isolation = smallest increment 2.5-5kg; mark each",
+  "note with 「第一次找感觉：动作标准优先，练完把实际重量告诉我，下次按它进阶」.",
+  "After the session save reported loads as load_anchors. Never invent other",
+  "percentages. Experienced users w/o anchor: PRE-test instruction instead.",
+  "plan_card HARD RULES:",
+  "- id MUST come from list_exercises real entries (never invent ids/names).",
+  "- data = array of {exerciseId, name, exercise_type, sets, reps, weight};",
+  '  sets 1-20, reps integer 1-200 (never "8-12" string), weight >= 0.',
+  "- weight 0 ONLY for bodyweight moves; resistance moves without an anchor",
+  "  get starter loads above (weight=0 resistance is rejected -> 30-90s retry).",
+  '- Tomorrow/next-day requests MUST set top-level "target": "next_day";',
+  "  and EVERY tomorrow-plan turn must emit a plan_card (never prose-only).",
+  "- No submit_plan/calculate_capacity tools exist — emit the plan card",
+  "  directly in the reply as a ```json fenced block.",
+  "- explanation non-empty; respect equipment + active limitations (hard).",
+  "SELF-CHECK before emitting the card: real ids / type matches library /",
+  "integer sets+reps / no weight=0 on resistance / target marker if tomorrow.",
+  "Validation failures come back as feedback retries (rejected turn shows as",
+  "thinking) — fix the named fields and re-emit the whole card.",
+].join("\n");
+
+/**
  * Build the single systemPrompt: base + scenario data guide (when known) + the
  * M5a uiHint card-format skill (so the agent emits cards in the exact validated
  * shape). No scenario branching of the agent itself — one generic agent serves
  * every intent; the scenario only adds data-interpretation guidance.
+ *
+ * plan 场景额外注入 PLAN_SCENARIO_QUICKREF（速查表预注入，省 read_file 往返）。
+ * 导出仅供单测断言各场景 systemPrompt 组装；运行时仅模块内部调用。
  */
-function buildSystemPrompt(scenario?: string): string {
+export function buildSystemPrompt(scenario?: string): string {
   const parts = [BASE_SYSTEM_PROMPT];
   const guide = scenario ? SCENARIO_DATA_GUIDES[scenario] : undefined;
   if (guide) {
     parts.push(guide);
+  }
+  if (scenario === "plan") {
+    parts.push(PLAN_SCENARIO_QUICKREF);
   }
   parts.push(loadUiHintFormatSkill());
   return parts.join("\n\n");
