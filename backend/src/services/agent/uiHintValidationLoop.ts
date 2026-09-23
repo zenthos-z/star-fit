@@ -163,17 +163,23 @@ type StreamItem =
 /**
  * Wrap `deepAgent.chat(req)` as an async iterable of {@link StreamItem}.
  *
- * Tokens are BUFFERED per attempt (not forwarded live). Rationale: a rejected
- * card invalidates everything the model said in that attempt (the prose was
- * written around the bad card), so re-emitting it to the user would leak the
- * agent's mid-revision monologue into the chat as fake "chain of thought".
- * Instead:
- *   - valid card  -> flush the buffered tokens, then forward the card;
- *   - invalid card-> yield the buffered prose as a `rejected_thinking` item
- *     (the caller surfaces it as a collapsible thinking block), then
- *     `{ kind: 'invalid' }` and the caller retries.
- * - `done` / `error` events and cardless `uiHint` events flush the buffer and
- *   are forwarded verbatim.
+ * Two-phase release (M5c real streaming):
+ *   - Phase 1 — prose tokens arriving BEFORE the attempt's first card event
+ *     cannot be card body: a card only ever begins at a ``` fence, and
+ *     anything the upstream extractor flushed before that point is standalone
+ *     prose (it would be shown verbatim whether or not the card validates).
+ *     Those tokens are forwarded LIVE, so cardless turns stream end-to-end and
+ *     card turns stream their preamble immediately — no per-attempt buffering.
+ *   - Phase 2 — once a card event has been seen, whatever follows (closing
+ *     prose, further cards) is BUFFERED until that card's verdict settles: a
+ *     rejected card invalidates the prose written around it, so:
+ *       - valid card  -> flush the held post-card prose as tokens, forward the
+ *         card, and keep holding for whatever comes after;
+ *       - invalid card-> yield the held post-card prose as a
+ *         `rejected_thinking` item (the caller surfaces it as a collapsible
+ *         thinking block), then `{ kind: 'invalid' }` and the caller retries.
+ * - `done` / `error` events and cardless `uiHint` events flush the held buffer
+ *   and are forwarded verbatim.
  */
 async function* consumeStreamLookingForInvalidCard(
   deepAgent: AgentService,
@@ -181,18 +187,22 @@ async function* consumeStreamLookingForInvalidCard(
   sessionFacts: WorkoutSessionFacts | null,
 ): AsyncIterable<StreamItem> {
   const stream = deepAgent.chat(req);
-  let bufferedText = ""; // this attempt's prose, held until the card verdict
+  // Phase 1 (live) vs Phase 2 (held): see the docstring above. `pastFirstCard`
+  // flips only after a VALID card is forwarded — an invalid card terminates
+  // the attempt immediately, so nothing after it is ever read.
+  let pastFirstCard = false;
+  let heldText = ""; // post-first-card prose, held until the verdict settles
   for await (const event of stream) {
     if (event.type === "uiHint" && event.card !== undefined) {
       const result = validateUiHint(event.card);
       if (!result.ok) {
-        if (bufferedText) {
-          yield { kind: "rejected_thinking", text: bufferedText };
+        if (heldText) {
+          yield { kind: "rejected_thinking", text: heldText };
         }
         yield {
           kind: "invalid",
           errors: result.errors,
-          rejectedText: bufferedText,
+          rejectedText: heldText,
         };
         return; // stop this stream; caller decides retry
       }
@@ -204,39 +214,49 @@ async function* consumeStreamLookingForInvalidCard(
           sessionFacts,
         );
         if (!quality.ok) {
-          if (bufferedText) {
-            yield { kind: "rejected_thinking", text: bufferedText };
+          if (heldText) {
+            yield { kind: "rejected_thinking", text: heldText };
           }
           yield {
             kind: "invalid",
             errors: quality.issues,
-            rejectedText: bufferedText,
+            rejectedText: heldText,
           };
           return;
         }
       }
-      // Valid card — flush the buffered prose first, then forward the card.
-      if (bufferedText) {
-        yield { kind: "event", event: { type: "token", text: bufferedText } };
-        bufferedText = "";
+      // Valid card — flush post-card prose held since the previous card, then
+      // forward the card and enter hold mode for whatever follows it.
+      if (heldText) {
+        yield { kind: "event", event: { type: "token", text: heldText } };
+        heldText = "";
       }
+      pastFirstCard = true;
       yield { kind: "event", event };
       continue;
     }
     if (event.type === "token") {
-      bufferedText += event.text ?? "";
+      const text = event.text ?? "";
+      if (!text) continue;
+      if (!pastFirstCard) {
+        // Phase 1: pre-card prose cannot be card body — release live (real
+        // streaming). A rejected card does not invalidate this text.
+        yield { kind: "event", event };
+      } else {
+        heldText += text;
+      }
       continue;
     }
-    // done / error / cardless uiHint — flush any pending prose, pass through.
-    if (bufferedText) {
-      yield { kind: "event", event: { type: "token", text: bufferedText } };
-      bufferedText = "";
+    // done / error / cardless uiHint — flush any held prose, pass through.
+    if (heldText) {
+      yield { kind: "event", event: { type: "token", text: heldText } };
+      heldText = "";
     }
     yield { kind: "event", event };
   }
   // Stream drained with no card (cardless chat turn) — flush remaining prose.
-  if (bufferedText) {
-    yield { kind: "event", event: { type: "token", text: bufferedText } };
+  if (heldText) {
+    yield { kind: "event", event: { type: "token", text: heldText } };
   }
 }
 

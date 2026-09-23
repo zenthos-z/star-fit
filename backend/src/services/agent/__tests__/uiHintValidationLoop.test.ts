@@ -178,10 +178,17 @@ describe("chatWithValidationLoop — B4 retry loop", () => {
     );
   });
 
-  it("emits rejected-round prose as thinking, never as answer tokens", async () => {
+  it("releases pre-card prose live; rejected-round post-card prose goes to thinking, never tokens", async () => {
     const agent = new ScriptedAgent([
-      // attempt 0: prose around the bad card — must NOT leak as answer text
-      [{ type: "token", text: "让我重新算一下…" }, uiHint(INVALID_PLAN)],
+      // attempt 0: prose before the first card is released live (two-phase
+      // phase 1 — it cannot be card body); prose AFTER a valid card is held
+      // and, when a later card is rejected, becomes thinking.
+      [
+        { type: "token", text: "让我重新算一下…" },
+        uiHint(VALID_PLAN),
+        { type: "token", text: "（这是围绕卡片的初稿叙述）" },
+        uiHint(INVALID_PLAN),
+      ],
       // attempt 1: clean answer + valid card
       [
         { type: "token", text: "最终分析：" },
@@ -195,23 +202,31 @@ describe("chatWithValidationLoop — B4 retry loop", () => {
     );
 
     assert.equal(agent.calls.length, 2);
+
+    // Post-card prose of the rejected round surfaces once as thinking.
     const thinkings = events.filter((e) => e.type === "thinking");
     assert.equal(
       thinkings.length,
       1,
-      "rejected prose surfaces once as thinking",
+      "rejected-round post-card prose surfaces once as thinking",
     );
-    assert.equal(thinkings[0].text, "让我重新算一下…");
+    assert.equal(thinkings[0].text, "（这是围绕卡片的初稿叙述）");
 
-    // Answer tokens contain ONLY the final attempt's prose.
+    // Pre-card prose of the rejected round was released live as a token.
     const tokens = events.filter((e) => e.type === "token");
-    assert.equal(tokens.length, 1);
-    assert.equal(tokens[0].text, "最终分析：");
-    assert.equal(
-      events.some((e) => e.type === "token" && e.text?.includes("让我重新算")),
-      false,
-      "rejected-round prose must never appear as answer text",
+    assert.deepEqual(
+      tokens.map((t) => t.text),
+      ["让我重新算一下…", "最终分析："],
     );
+    assert.equal(
+      events.some((e) => e.type === "token" && e.text?.includes("初稿叙述")),
+      false,
+      "held post-card prose must never appear as answer text",
+    );
+
+    // Both valid cards (attempt 0's first card + the retry's card) forward.
+    const uiHints = events.filter((e) => e.type === "uiHint");
+    assert.equal(uiHints.length, 2);
   });
 
   it("passes a valid card through on the first attempt with no retry", async () => {
@@ -236,7 +251,7 @@ describe("chatWithValidationLoop — B4 retry loop", () => {
     );
   });
 
-  it("passes token / done / error through when no uiHint card is present (tokens coalesced per attempt)", async () => {
+  it("streams a cardless turn through live, preserving per-token chunk boundaries", async () => {
     const agent = new ScriptedAgent([
       [
         { type: "token", text: "Hello" },
@@ -252,11 +267,13 @@ describe("chatWithValidationLoop — B4 retry loop", () => {
     assert.equal(agent.calls.length, 1);
     assert.deepEqual(
       events.map((e) => e.type),
-      ["token", "done"],
+      ["token", "token", "done"],
     );
-    // Tokens are buffered per attempt and flushed on the terminal event, so
-    // prose written around a rejected card can never leak to the user.
-    assert.equal(events[0].text, "Hello world");
+    // Two-phase release: cardless turns are never buffered — every token
+    // event passes through as it arrives (the old per-attempt coalescing is
+    // gone, which is exactly what makes pure-text turns stream in real time).
+    assert.equal(events[0].text, "Hello");
+    assert.equal(events[1].text, " world");
   });
 
   it("passes an upstream error event through (does not retry on error)", async () => {
@@ -285,3 +302,137 @@ function feedbackBackHasErrors(req: ChatRequest): boolean {
     { errors?: Array<{ code?: string; message?: string }> } | undefined;
   return Array.isArray(fb?.errors) && (fb?.errors?.length ?? 0) > 0;
 }
+
+// ---------------------------------------------------------------------------
+// 真流式两阶段放行（M5c）
+// ---------------------------------------------------------------------------
+
+describe("chatWithValidationLoop — two-phase real streaming", () => {
+  it("纯文本轮全程流式：每个 token 事件按到达顺序逐字放行，不合并", async () => {
+    const agent = new ScriptedAgent([
+      [
+        { type: "token", text: "好" },
+        { type: "token", text: "的，" },
+        { type: "token", text: "马上" },
+        { type: "token", text: "给你算。" },
+        { type: "done" },
+      ],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    assert.deepEqual(
+      events.map((e) => (e.type === "token" ? e.text : e.type)),
+      ["好", "的，", "马上", "给你算。", "done"],
+      "cardless turn streams token-by-token with zero buffering",
+    );
+  });
+
+  it("卡片轮：围栏前散文立即放行，卡片后散文缓冲至 done 再 flush（不丢字）", async () => {
+    const agent = new ScriptedAgent([
+      [
+        { type: "token", text: "这是为你定的计划：" },
+        uiHint(VALID_PLAN),
+        { type: "token", text: "注意热身。" },
+        { type: "done" },
+      ],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    assert.deepEqual(
+      events.map((e) =>
+        e.type === "token"
+          ? `token:${e.text}`
+          : e.type === "uiHint"
+            ? "uiHint"
+            : e.type,
+      ),
+      ["token:这是为你定的计划：", "uiHint", "token:注意热身。", "done"],
+      "pre-card prose streams live before the card; post-card prose flushes at done",
+    );
+  });
+
+  it("坏卡打回：围栏前散文已放行为 token；围栏内/卡片间散文走 thinking，绝不外漏", async () => {
+    const agent = new ScriptedAgent([
+      // attempt 0: valid card + card-interstitial prose + invalid card
+      [
+        { type: "token", text: "开场白。" },
+        uiHint(VALID_PLAN),
+        { type: "token", text: "（坏卡周围的草稿叙述）" },
+        uiHint(INVALID_PLAN),
+      ],
+      // attempt 1: clean
+      [uiHint(VALID_PLAN), { type: "done" }],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    const tokens = events.filter((e) => e.type === "token");
+    const thinkings = events.filter((e) => e.type === "thinking");
+
+    // Pre-card prose was released live; the retry round's card has no prose.
+    assert.deepEqual(
+      tokens.map((t) => t.text),
+      ["开场白。"],
+    );
+    // Card-interstitial prose of the rejected round → thinking, never token.
+    assert.deepEqual(
+      thinkings.map((t) => t.text),
+      ["（坏卡周围的草稿叙述）"],
+    );
+    assert.equal(
+      events.some((e) => e.type === "token" && e.text?.includes("草稿叙述")),
+      false,
+      "rejected-round interstitial prose must never leak as tokens",
+    );
+  });
+
+  it("重试轮同样两阶段：重试轮的围栏前散文照常实时放行", async () => {
+    const agent = new ScriptedAgent([
+      [uiHint(INVALID_PLAN)], // attempt 0: invalid, no prose
+      [
+        { type: "token", text: "修正后的开场。" },
+        uiHint(VALID_PLAN),
+        { type: "token", text: "收尾。" },
+        { type: "done" },
+      ],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    assert.equal(agent.calls.length, 2);
+    assert.deepEqual(
+      events.map((e) => (e.type === "token" ? e.text : e.type)),
+      ["修正后的开场。", "uiHint", "收尾。", "done"],
+      "retry round streams its pre-card prose live and flushes tail at done",
+    );
+  });
+
+  it("纯文本轮中途无卡片但以 error 结束：已放行的 token 不丢", async () => {
+    const agent = new ScriptedAgent([
+      [
+        { type: "token", text: "部分输出" },
+        { type: "error", error: { code: "MODEL_ERROR", message: "boom" } },
+      ],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    assert.deepEqual(
+      events.map((e) => (e.type === "token" ? e.text : e.type)),
+      ["部分输出", "error"],
+      "live-released tokens before an error are not swallowed",
+    );
+  });
+});

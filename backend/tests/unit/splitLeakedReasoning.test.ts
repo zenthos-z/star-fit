@@ -1,6 +1,10 @@
 import { describe, it, expect } from "@jest/globals";
 
-import { splitLeakedReasoning } from "../../src/services/agent/splitLeakedReasoning.js";
+import {
+  splitLeakedReasoning,
+  isAnswerStartBlock,
+  chunkAnswerText,
+} from "../../src/services/agent/splitLeakedReasoning.js";
 
 describe("splitLeakedReasoning", () => {
   it("english deliberation stripped, chinese answer kept", () => {
@@ -64,5 +68,52 @@ describe("splitLeakedReasoning", () => {
     const r = splitLeakedReasoning(one);
     expect(r.answer).toBe(one);
     expect(r.reasoning).toBe("");
+  });
+});
+
+describe("isAnswerStartBlock (streaming two-phase judge)", () => {
+  it("CJK-dominant non-self-talk block is the answer start", () => {
+    expect(isAnswerStartBlock("好的，这是为你安排的计划。")).toBe(true);
+  });
+
+  it("direct advice with 我建议 is answer, not self-talk", () => {
+    expect(isAnswerStartBlock("我建议你明天练推拉。")).toBe(true);
+  });
+
+  it("Latin-dominant block is deliberation, not answer", () => {
+    expect(
+      isAnswerStartBlock("The user has asked for a plan several times now."),
+    ).toBe(false);
+  });
+
+  it("Chinese self-talk block is deliberation, not answer", () => {
+    expect(
+      isAnswerStartBlock("我需要先查看他的历史训练记录，然后决定强度。"),
+    ).toBe(false);
+  });
+
+  it("a fenced ``` block is ALWAYS answer regardless of ratios", () => {
+    expect(isAnswerStartBlock("```json")).toBe(true);
+  });
+});
+
+describe("chunkAnswerText (逐 token 转发)", () => {
+  it("short text returned untouched as a single chunk", () => {
+    expect(chunkAnswerText("好")).toEqual(["好"]);
+  });
+
+  it("long text splits on natural boundaries and reassembles losslessly", () => {
+    const text =
+      "第一段内容比较长，我们看看切在哪里。第二句继续讲。第三句收尾。";
+    const chunks = chunkAnswerText(text, 12);
+    expect(chunks.length).toBeGreaterThan(1);
+    expect(chunks.join("")).toBe(text);
+  });
+
+  it("every chunk respects maxLen unless a single token is longer", () => {
+    const text = "abcdefghijklmnopqrstuvwxyz1234567890ABCDEFGHIJ";
+    const chunks = chunkAnswerText(text, 8);
+    for (const c of chunks) expect(c.length).toBeLessThanOrEqual(10);
+    expect(chunks.join("")).toBe(text);
   });
 });

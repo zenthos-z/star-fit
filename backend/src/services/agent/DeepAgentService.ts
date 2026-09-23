@@ -61,7 +61,18 @@ import { mountAllSkills } from "./skillLoader.js";
 // 拆出的纯函数（2026-09-22）：独立模块可在 jest CJS 下直接测试，
 // 避免顶层 import.meta（skillLoader）把整条链拖进 ESM 域。
 import { splitLeakedReasoning } from "./splitLeakedReasoning.js";
+import { isAnswerStartBlock } from "./splitLeakedReasoning.js";
+import { chunkAnswerText } from "./splitLeakedReasoning.js";
 export { splitLeakedReasoning };
+
+// ---------------------------------------------------------------------------
+// Streaming constants (per-step paragraph release)
+// ---------------------------------------------------------------------------
+
+/** Paragraph separator used to rejoin streamed blocks (parity with the batch splitter). */
+const BLOCK_SEP = "\n\n";
+/** Regex that cuts completed paragraphs out of the in-progress tail. */
+const BLOCK_SEP_RE = /\n{2,}/;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -525,9 +536,9 @@ export class DeepAgentService implements AgentService {
       // Dual stream mode: 'updates' gives us each completed graph step's state
       // (so the final answer can be pulled from the FULL message list exactly
       // as `.invoke` did), while 'messages' gives per-token text deltas for the
-      // live thinking narration. A step is classified as FINAL once its state
-      // contains a tool-free AI message; until then every streamed text delta
-      // belongs to intermediate narration and is emitted as `thinking`.
+      // live streaming. A step is classified as FINAL once its state contains
+      // a tool-free AI message; until then every streamed text delta belongs
+      // to intermediate narration and is emitted as `thinking`.
       const stream = await agent.stream(
         { messages: [{ role: "user", content: userContent }] },
         {
@@ -539,17 +550,34 @@ export class DeepAgentService implements AgentService {
       // Track which AI messages are FINAL (no tool_calls). LangGraph multi-mode
       // stream yields `[mode, data]` tuples: 'messages' data = [chunk, metadata]
       // (per-token deltas), 'updates' data = { node: { messages } } (per-step
-      // completed state). Deltas are BUFFERED per model step and classified
-      // when that step's `updates` snapshot lands:
-      //   - AI message WITH tool_calls  -> intermediate narration: flush the
-      //     buffered text as `thinking` (live, collapsible).
-      //   - AI message WITHOUT tool_calls -> terminal answer: captured as
-      //     finalText and emitted ONCE as `token` (identical rule to the old
-      //     `.invoke` + finalAnswerText path; the buffer is discarded so the
-      //     answer is never duplicated into the thinking block).
-      let finalText: string | undefined;
-      let buffered = ""; // current model step's narration, pending classification
+      // completed state).
+      //
+      // 真流式（2026-09-23）：deltas 到达时还不知道当前步是终步还是中间步
+      // （分类要等该步的 `updates` 快照落地）。为了既实时又不出错，采用
+      // 逐段判定 + 两阶段放行：
+      //   - 已完成段落中，一旦出现「答案起点」段（含 ``` 围栏，或 CJK 主导且
+      //     非自言自语——与 splitLeakedReasoning 共用同一判定），该段及其后
+      //     所有 delta 立即以 token 事件逐段/逐 token 实时转发；
+      //   - 起点之前的未定段落（拉丁主导草稿 / 中文自言自语）留在 preAnswer
+      //     等分类：终步 → 推理（thinking），中间步 → 叙述（thinking），
+      //     殊途同归，永远不会以 token 外泄；
+      //   - 进行中的半截段（partial）最多等到该步快照（微小延迟：一段）。
+      //   中间步若在已放行 token 之后才出现 tool_call（DeepSeek 正文先于工具
+      //   参数），已放行的段落即为叙述泄露——系统提示词要求终答前不写推理，
+      //   实际中中间步叙述命中自言自语特征被拦下，风险有界（见测试）。
       let leakedThinking = ""; // reasoning stripped from terminal messages
+
+      // Per-step streaming state (reset at every `updates` classification).
+      let stepRaw = ""; // this step's full delta text (parity/fallback)
+      let answerStarted = false; // a provable answer block was streamed
+      let preAnswer = ""; // completed blocks, verdict pending
+      let partial = ""; // in-progress block tail
+      const resetStep = (): void => {
+        stepRaw = "";
+        answerStarted = false;
+        preAnswer = "";
+        partial = "";
+      };
 
       for await (const raw of stream) {
         // Unwrap the [mode, data] tuple (defensive: also accept untagged).
@@ -570,7 +598,34 @@ export class DeepAgentService implements AgentService {
           // [AIMessageChunk, metadata] — per-token delta of the running step.
           const delta = extractText(data);
           if (delta) {
-            buffered += delta;
+            stepRaw += delta;
+            partial += delta;
+            if (!answerStarted) {
+              // Still undecided: parse completed paragraphs out of the tail.
+              // A block that provably starts the answer (fence / CJK-dominant
+              // non-self-talk) flips `answerStarted` — everything from there on
+              // streams as `token` immediately. Earlier blocks are held in
+              // `preAnswer` (they may be deliberation → thinking, or narration
+              // → thinking; same destination either way).
+              for (;;) {
+                const m = BLOCK_SEP_RE.exec(partial);
+                if (!m || m.index === undefined) break;
+                const block = partial.slice(0, m.index);
+                partial = partial.slice(m.index + m[0].length);
+                if (isAnswerStartBlock(block)) {
+                  answerStarted = true;
+                  yield { type: "token", text: block + BLOCK_SEP };
+                  break; // stream the remainder of this delta live below
+                }
+                preAnswer += block + BLOCK_SEP;
+              }
+            }
+            if (answerStarted && partial) {
+              // Answer confirmed — every remaining delta streams live, no
+              // paragraph granularity needed anymore.
+              yield { type: "token", text: partial };
+              partial = "";
+            }
           }
           // ★字段级思考链（2026-09-16）：thinking 开启时 DeepSeek 把推理放在
           // reasoning_content（ChatDeepSeek 透传到 additional_kwargs），协议级
@@ -616,36 +671,72 @@ export class DeepAgentService implements AgentService {
           (Array.isArray(last.additional_kwargs?.tool_calls) &&
             last.additional_kwargs!.tool_calls!.length > 0);
         if (hasTools) {
-          // Intermediate model step: its prose was narration around a tool call.
-          if (buffered) {
-            yield { type: "thinking", text: buffered };
-            buffered = "";
+          // Intermediate model step: undecided leading blocks + the partial
+          // tail were narration around a tool call. (Blocks already streamed
+          // as tokens before the tool_call arrived are the bounded leak
+          // documented in the streaming comment above.)
+          const narration = (preAnswer + partial).trim();
+          if (narration) {
+            yield { type: "thinking", text: narration };
           }
+          resetStep();
         } else {
-          // Terminal answer: emit as answer prose only (buffer discarded so the
-          // final answer never leaks into the thinking block as duplication).
-          // Belt-and-braces: even with the "no visible reasoning" system-prompt
-          // rule, deepseek-v4-flash (thinking: disabled) sometimes writes its
-          // English deliberation INTO the tool-free message ahead of the
-          // Chinese answer. Split it: deliberation → thinking, answer → token.
-          const raw = extractText([last, {}]) ?? "";
-          const split = splitLeakedReasoning(raw);
-          if (split.reasoning) {
-            leakedThinking = leakedThinking
-              ? `${leakedThinking}\n\n${split.reasoning}`
-              : split.reasoning;
+          // Terminal answer step. Blocks already streamed as `token` are the
+          // answer; flush what the streaming state still holds:
+          //   - answerStarted: only the in-progress tail is left — emit it as
+          //     small token chunks (逐 token 转发, never one big event).
+          //   - otherwise the step never produced a provable answer block
+          //     (all-Latin / single-block / deliberation-only message): fall
+          //     back to the batch splitter for exact parity with the old path,
+          //     deliberation → leakedThinking, answer → chunked token events.
+          if (answerStarted) {
+            if (partial) {
+              for (const chunk of chunkAnswerText(partial)) {
+                yield { type: "token", text: chunk };
+              }
+            }
+            if (preAnswer.trim()) {
+              leakedThinking = leakedThinking
+                ? `${leakedThinking}\n\n${preAnswer.trim()}`
+                : preAnswer.trim();
+            }
+          } else {
+            // Belt-and-braces parity: if no text delta ever arrived for this
+            // step (multimodal edge / dropped chunks) but the snapshot carries
+            // content, fall back to the batch splitter on the snapshot text.
+            const raw = stepRaw || (extractText([last, {}]) ?? "");
+            if (raw) {
+              const split = splitLeakedReasoning(raw);
+              if (split.reasoning) {
+                leakedThinking = leakedThinking
+                  ? `${leakedThinking}\n\n${split.reasoning}`
+                  : split.reasoning;
+              }
+              if (split.answer) {
+                for (const chunk of chunkAnswerText(split.answer)) {
+                  yield { type: "token", text: chunk };
+                }
+              }
+            }
           }
-          finalText = split.answer || undefined;
-          buffered = "";
+          resetStep();
         }
       }
 
-      // Stream ended mid-step (no closing updates): any residual buffer is
+      // Stream ended mid-step (no closing updates): the undecided tail is
       // narration by definition (the final answer path always arrives via an
       // updates snapshot) — surface it as thinking so nothing is silently lost.
-      if (buffered) {
-        yield { type: "thinking", text: buffered };
-        buffered = "";
+      // If the answer had already started, the tail is answer text: emit it as
+      // token chunks rather than dropping or mislabelling it.
+      const residual = preAnswer + partial;
+      if (residual) {
+        if (answerStarted) {
+          for (const chunk of chunkAnswerText(residual)) {
+            yield { type: "token", text: chunk };
+          }
+        } else {
+          yield { type: "thinking", text: residual.trim() };
+        }
       }
 
       // Reasoning that leaked into terminal messages goes to the collapsible
@@ -654,11 +745,8 @@ export class DeepAgentService implements AgentService {
         yield { type: "thinking", text: leakedThinking };
       }
 
-      // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。）
-
-      if (finalText) {
-        yield { type: "token", text: finalText };
-      }
+      // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。
+      //   最终答案同样已在循环内逐段/逐 token 实时转发，流尾不再补发。）
       yield { type: "done" };
     } catch (err) {
       yield toErrorEvent(err);
