@@ -284,6 +284,159 @@ export function stripToolEchoBlocks(text: string): {
 }
 
 /**
+ * 直通段「复述可疑」判定（返工 v5）：
+ * 未完成块是否可能构成工具返回复述的起点——命中则缓冲等待完整块判定
+ * （绝不提前放行），未命中立即放行（保留流式首字收益）。
+ *
+ * 可疑形态（都是「正常正文绝不可能」的形状）：
+ *   - `\d+\t` 编号行（read_file 返回复述的特征行首，Markdown 编号用 . / )）；
+ *   - `{` / `[` 起始行（工具返回裸 JSON / 粘接 JSON 的特征）；
+ *   - 技能文件头签名（# 计划生成知识指南）。
+ */
+export function isEchoSuspicious(text: string): boolean {
+  if (!text) return false;
+  return (
+    /(^|\n)[ \t]*(\d+\t|\{|\[)/.test(text) ||
+    text.includes("# 计划生成知识指南")
+  );
+}
+
+export interface LiveGateDrain {
+  /** 已判定安全的块 → 放行成 token 事件 */
+  tokens: string;
+  /** 已判定为工具返回复述的块 → 转 thinking（绝不 yield token） */
+  echoes: string;
+}
+
+/**
+ * 直通段复述闸门（返工 v5 核心，2026-09-23）。
+ *
+ * v4（231fed9）的剥离链（stripToolEchoPrefix + stripToolEchoBlocks）只在终步
+ * 快照到达那一刻对「已缓冲的 stepRaw」执行一次；快照确认终步后 answerLive=
+ * true，后续 messages delta 走 `if (answerLive)` 直通分支直接 yield 成 token，
+ * 完全绕过剥离检查——DeepSeek「先出快照再补输出」时，模型在直通段复述
+ * read_file 返回（编号行 frontmatter `1\t---`、`2\tname: ...`）全部裸奔进正文
+ * （协调者实测：污染用户 5 轮 3 泄漏 + 全新用户 4 轮 3 泄漏，历史污染假设排除，
+ * 代码缺陷坐实）。
+ *
+ * 本闸门挂在 answerLive 直通分支：delta 先入缓冲，按块判定后再放行——
+ *   - 完整块（\n{2,} 边界）出现 → 跑 stripToolEchoBlocks 同款判定链
+ *     （looksLikeToolReturnEcho / isNumberedToolEcho /
+ *     isSkillDocContinuationStrong），命中 → 转 thinking；未命中 → 放行 token；
+ *   - 无 \n{2,} 的巨型单块（编号行复述全文等）→ 累积到阈值（默认 400 字符）
+ *     后按行对齐切割判定，缓冲延迟钳在阈值量级；
+ *   - 非「复述可疑」的未完成块 → 立即放行（eager-yield），保留 v4 的流式首字
+ *     收益；只有复述可疑形态或复述链（echoChain）内才缓冲等待判定。
+ *
+ * 防误伤铁律（与批量链一致）：含 ``` 的围栏卡片块绝不摘（uiHint 提取器只扫
+ * token 流）；正常中文/英文回答块不受影响；短块（<30 字符）不判为复述
+ * （isNumberedToolEcho 阈值）。复述链跨 feed 保持：被阈值切开的编号行复述
+ * 后续块、以及紧跟复述的文档结构延续块，不会被当成新块漏判。
+ */
+export class LiveEchoGate {
+  private pending = "";
+  private chain = false;
+
+  constructor(private readonly threshold = 400) {}
+
+  /** 追加一个 messages delta，返回可放行的 token 与待转 thinking 的复述。 */
+  feed(delta: string): LiveGateDrain {
+    this.pending += delta;
+    return this.drain();
+  }
+
+  /** 流结束：判定残余未完成块（复述 → thinking，正常 → token）。 */
+  flush(): LiveGateDrain {
+    const r = this.judge(this.pending);
+    this.pending = "";
+    this.chain = false;
+    return r;
+  }
+
+  /** 重置（新 step 开始；answerLive 翻转前调用）。 */
+  reset(): void {
+    this.pending = "";
+    this.chain = false;
+  }
+
+  private drain(): LiveGateDrain {
+    const tokens: string[] = [];
+    const echoes: string[] = [];
+    for (;;) {
+      // 1. 完整块边界：最后一个 \n{2,} 之前的文本全是完整块，整体判定
+      const sep = this.pending.lastIndexOf("\n\n");
+      if (sep > 0) {
+        const complete = this.pending.slice(0, sep);
+        this.pending = this.pending.slice(sep);
+        const r = this.judge(complete);
+        if (r.tokens) tokens.push(r.tokens);
+        if (r.echoes) echoes.push(r.echoes);
+        continue;
+      }
+      // 2. 阈值：无 \n{2,} 的巨型单块按行对齐切割判定（最后一行若未完成
+      //    则留在缓冲等后续增量），避免无限缓冲拖死流式
+      if (this.pending.length >= this.threshold) {
+        const lastNl = this.pending.lastIndexOf("\n");
+        let complete: string;
+        if (lastNl > 0 && lastNl < this.pending.length - 1) {
+          complete = this.pending.slice(0, lastNl + 1);
+          this.pending = this.pending.slice(lastNl + 1);
+        } else {
+          complete = this.pending;
+          this.pending = "";
+        }
+        const r = this.judge(complete);
+        if (r.tokens) tokens.push(r.tokens);
+        if (r.echoes) echoes.push(r.echoes);
+        continue;
+      }
+      // 3. 非复述可疑的未完成块 → 立即放行（流式首字收益；复述链内不放行，
+      //    等待下一次完整块判定以完成文档延续剥离）
+      if (
+        this.pending.trim().length > 0 &&
+        !this.chain &&
+        !isEchoSuspicious(this.pending)
+      ) {
+        tokens.push(this.pending);
+        this.pending = "";
+        continue;
+      }
+      break;
+    }
+    return { tokens: tokens.join(""), echoes: echoes.join("\n\n") };
+  }
+
+  private judge(text: string): LiveGateDrain {
+    const blocks = text.split(/\n{2,}/);
+    const keep: string[] = [];
+    const echoes: string[] = [];
+    for (const raw of blocks) {
+      const block = raw.trim();
+      if (block.length === 0) continue;
+      if (block.includes("```")) {
+        // 围栏卡片——token 载体，绝不摘；复述链同步断开
+        this.chain = false;
+        keep.push(block);
+        continue;
+      }
+      const hit = looksLikeToolReturnEcho(block) || isNumberedToolEcho(block);
+      if (hit) {
+        echoes.push(block);
+        this.chain = true;
+        continue;
+      }
+      if (this.chain && isSkillDocContinuationStrong(block)) {
+        echoes.push(block);
+        continue;
+      }
+      this.chain = false;
+      keep.push(block);
+    }
+    return { tokens: keep.join("\n\n"), echoes: echoes.join("\n\n") };
+  }
+}
+
+/**
  * 复述文档延续块的「强结构」判定：read_file 复述（编号行 frontmatter / 技能
  * 文档结构）被空行切开的后续块，行首应为标题（#）、引用（>）、表格（|）或
  * 编号行（\d+[.)\t]）等强文档标记，且结构化行占比 ≥60%。

@@ -24,6 +24,8 @@ import {
   isAnswerStartBlock,
   stripToolEchoPrefix,
   stripToolEchoBlocks,
+  LiveEchoGate,
+  isEchoSuspicious,
 } from "../splitLeakedReasoning.js";
 import { extractUiHintEvents } from "../uiHintExtractor.js";
 import type { AgentEvent } from "shared/contracts";
@@ -1241,6 +1243,320 @@ describe("tool-leak 返工 v4：looksLikeZhDeliberation 收紧「来」（正常
     assert.ok(
       tokens.includes("我来为你安排"),
       "「我来为你」承诺句式必须进 token",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 返工 v5（2026-09-23）：快照后直通段（answerLive）增量也必须过复述判定
+// ---------------------------------------------------------------------------
+// v4（231fed9）剥离链只在快照那一刻对缓冲 stepRaw 跑一次；快照确认终步后
+// answerLive=true，后续 messages delta 走 `if (answerLive)` 直通分支直接 yield
+// 成 token，完全绕过剥离检查——DeepSeek「先出快照再补输出」时，模型在直通段
+// 复述 read_file 返回（编号行 frontmatter）全部裸奔进正文。协调者独立验收
+// 实测：污染用户 5 轮 3 泄漏（2474/2604/2582 字符）+ 全新用户（零历史）4 轮
+// 3 泄漏（2560/2413/2558 字符）——历史污染假设排除，代码缺陷坐实。泄漏形态
+// 与 read_file 技能文件 frontmatter 编号行复述同构（`1\t---` 开头），且从正文
+// 开头就在（flush/直通一次性吐出）。
+//
+// v5 修复：直通分支挂 LiveEchoGate——delta 先进闸门缓冲，完整块（\n{2,} 边界）
+// 或阈值（400 字符）到达时按 stripToolEchoBlocks 同款判定链（looksLikeToolReturnEcho
+// / isNumberedToolEcho / isSkillDocContinuationStrong）判定：命中复述 → 转
+// thinking；未命中 → 放行 token。普通正文增量（非复述可疑）立即放行，保留
+// 流式首字收益；仅复述可疑形态（\d+\t 编号行 / { [ JSON 起始 / 技能头签名）
+// 或复述链内才缓冲等待判定。
+describe("tool-leak 返工 v5：快照后直通段增量同样过复述判定（真根因封堵）", () => {
+  // 与协调者泄漏 dump 同构的 read_file 编号行 frontmatter（快照后直通段到达）
+  const numberedEcho = [
+    "1\t---",
+    '2\tname: "plan-generation"',
+    '3\tdescription: "计划生成能力包 - 训练容量计算、历史数据加载与个性化训练计划编排"',
+    '4\tskills: ["knowledge.md", "prompt.md"]',
+    '5\tversion: "3.1.0"',
+    "6\t# 计划生成知识指南",
+  ].join("\n");
+
+  it("1. 快照后直通段复述（编号行 frontmatter）→ 转 thinking、零 token 事件", async () => {
+    // 必测场景：先发终步快照（无 tool_calls）触发 answerLive，再发含编号行
+    // frontmatter 复述的后续 messages delta——v4 直通分支裸放行全泄漏。
+    const raws = [modelRequestUpdate(aiTerminal("")), msgDelta(numberedEcho)];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.equal(
+      tokens.includes("plan-generation"),
+      false,
+      `快照后直通段复述不得泄漏进 token（实际 token: ${JSON.stringify(tokens.slice(0, 80))}）`,
+    );
+    assert.equal(tokens.includes("1\t---"), false, "编号行不得泄漏");
+    assert.ok(
+      thinking.includes("plan-generation"),
+      "复述块应转 thinking 面板（不丢失）",
+    );
+    assert.ok(thinking.includes("1\t---"), "编号行进 thinking");
+  });
+
+  it("2. 快照后直通段正常回答 → token 事件正常产出（防误伤）", async () => {
+    const raws = [
+      modelRequestUpdate(aiTerminal("")),
+      msgDelta("好的，明天计划如下："),
+      msgDelta("深蹲 3 组 × 8 次。"),
+    ];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.ok(
+      tokens.includes("好的，明天计划如下"),
+      "正常回答必须放行成 token（实际 token: " + JSON.stringify(tokens) + "）",
+    );
+    assert.ok(tokens.includes("深蹲 3 组 × 8 次"), "回答内容放行");
+    const thinking = texts(events, "thinking");
+    assert.equal(thinking.includes("深蹲"), false, "正常回答不得进 thinking");
+  });
+
+  it("3. 快照后直通段围栏卡片 → 卡片块完整保留（可被 uiHint 提取）", async () => {
+    const card = [
+      "```json",
+      JSON.stringify({
+        type: "survey_card",
+        title: "先确认",
+        data: { questions: [{ id: "goal", question: "目标？" }] },
+      }),
+      "```",
+    ].join("\n");
+    const raws = [modelRequestUpdate(aiTerminal("")), msgDelta(card)];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.ok(tokens.includes("```json"), "围栏卡片完整保留在 token 流");
+    assert.ok(tokens.includes("survey_card"), "卡片载荷未被剥离/截断");
+    assert.ok(tokens.includes("先确认"), "卡片标题保留");
+    const hints = await collectHints(events);
+    assert.ok(
+      hints.includes("survey_card"),
+      `快照后直通段卡片必须被 uiHintExtractor 提取（实际 ${hints.join(",")}）`,
+    );
+  });
+
+  it("4. 快照后混合形态：复述 + 围栏卡片 + 正常回答 全在直通段", async () => {
+    // 与 v4 泄漏同构的完整形态：快照后模型一口气输出 复述→卡片→回答。
+    const card = [
+      "```json",
+      JSON.stringify({
+        type: "survey_card",
+        title: "先确认三件事",
+        data: { questions: [{ id: "goal", question: "目标？" }] },
+      }),
+      "```",
+    ].join("\n");
+    const answer = "答完这三个问题，我马上给你出明天的完整计划。";
+    const mixed = numberedEcho + "\n\n" + card + "\n\n" + answer;
+    const raws = [modelRequestUpdate(aiTerminal("")), msgDelta(mixed)];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.ok(thinking.includes("plan-generation"), "复述转 thinking");
+    assert.ok(thinking.includes("1\t---"), "编号行进 thinking");
+    assert.equal(
+      tokens.includes("plan-generation"),
+      false,
+      "复述绝不泄漏进 token",
+    );
+    assert.ok(tokens.includes("```json"), "围栏卡片保留");
+    assert.ok(tokens.includes("survey_card"), "卡片载荷保留");
+    assert.ok(tokens.includes("马上给你出明天的完整计划"), "正常回答保留");
+    const hints = await collectHints(events);
+    assert.ok(
+      hints.includes("survey_card"),
+      `混合形态卡片仍被 uiHint 提取（实际 ${hints.join(",")}）`,
+    );
+  });
+
+  it("5. 快照后巨型编号行复述（超阈值、多 delta）→ 分块全剥、零 token", async () => {
+    // 真实泄漏 2500+ 字符：编号行全文超过 LiveEchoGate 阈值（400），必须
+    // 分块判定全部摘除，且正常回答尾随照常放行。
+    const bigEcho = Array.from(
+      { length: 40 },
+      (_, i) =>
+        `${i + 1}\t行 ${i + 1} 的内容：训练容量计算参考、历史数据加载说明、计划格式验证规则，宁轻勿伤。`,
+    ).join("\n");
+    assert.ok(bigEcho.length > 1500, "样本需超过泄漏门槛量级");
+    const answer = "好的，以下是明天的训练计划。";
+    const raws = [
+      modelRequestUpdate(aiTerminal("")),
+      msgDelta(bigEcho.slice(0, 700)),
+      msgDelta(bigEcho.slice(700)),
+      msgDelta("\n\n" + answer),
+    ];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.equal(
+      tokens.includes("\t行 "),
+      false,
+      "巨型编号行复述不得泄漏（分块判定全剥）",
+    );
+    assert.ok(thinking.includes("行 1 的内容"), "复述首块进 thinking");
+    assert.ok(
+      thinking.includes("行 40 的内容"),
+      "复述尾块（跨 delta + 阈值切分）进 thinking",
+    );
+    assert.ok(tokens.includes("明天的训练计划"), "正常回答放行");
+  });
+
+  it("6. 快照前已缓冲 + 快照后直通段续写 → 两段都受控（全链路封堵）", async () => {
+    // 快照前缓冲里已有正常引导语（快照时批量链放行），快照后直通段再补
+    // 复述——两端都必须受控，复述绝不能借直通段漏出。
+    const leadIn = "好的，我来安排明天的训练。";
+    const answer = "深蹲 3 组 × 8 次。";
+    const raws = [
+      msgDelta(leadIn),
+      modelRequestUpdate(aiTerminal(leadIn)),
+      msgDelta(numberedEcho),
+      msgDelta("\n\n" + answer),
+    ];
+
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.ok(tokens.includes(leadIn), "快照前引导语放行");
+    assert.ok(tokens.includes(answer), "直通段正常回答放行");
+    assert.equal(
+      tokens.includes("plan-generation"),
+      false,
+      "直通段复述不得泄漏进 token",
+    );
+    assert.ok(thinking.includes("plan-generation"), "直通段复述进 thinking");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 返工 v5：LiveEchoGate 直接单测（直通段增量判定边界契约）
+// ---------------------------------------------------------------------------
+describe("LiveEchoGate 直接单测（直通段增量判定边界契约）", () => {
+  it("普通正文增量立即放行（eager-yield，流式首字收益保留）", () => {
+    const g = new LiveEchoGate();
+    const r1 = g.feed("好的，明天计划如下：");
+    assert.ok(r1.tokens.includes("好的，明天计划如下"), "首 delta 立即放行");
+    assert.equal(r1.echoes, "");
+    const r2 = g.feed("深蹲 3 组 × 8 次。");
+    assert.ok(r2.tokens.includes("深蹲"), "后续增量继续放行");
+    const r3 = g.flush();
+    assert.equal(r3.tokens, "");
+    assert.equal(r3.echoes, "");
+  });
+
+  it("编号行复述整块摘除（不足阈值也缓冲到 flush，绝不提前放行）", () => {
+    const g = new LiveEchoGate();
+    const echo = [
+      "1\t---",
+      '2\tname: "plan-generation"',
+      '3\tdescription: "训练容量计算、历史数据加载"',
+    ].join("\n");
+    const r1 = g.feed(echo);
+    assert.equal(r1.tokens, "", "复述可疑形态不得提前放行");
+    const r2 = g.flush();
+    assert.equal(r2.tokens, "", "复述零 token");
+    assert.ok(r2.echoes.includes("plan-generation"), "复述进 echoes");
+  });
+
+  it("围栏卡片绝不被摘（含 { 起始行也不误伤）", () => {
+    const g = new LiveEchoGate();
+    const card =
+      '```json\n{"type":"survey_card","title":"先确认","data":{"questions":[]}}\n```';
+    const r1 = g.feed(card);
+    const r2 = g.flush();
+    const all = r1.tokens + r2.tokens;
+    assert.ok(all.includes("```json"), "卡片保留");
+    assert.ok(all.includes("survey_card"), "卡片载荷保留");
+    assert.equal(r1.echoes + r2.echoes, "", "卡片绝不进 echoes");
+  });
+
+  it("复述后跟正常回答（\\n\\n 分隔）→ 复述摘除、回答放行", () => {
+    const g = new LiveEchoGate();
+    const echo = [
+      "1\t---",
+      '2\tname: "plan-generation"',
+      '3\tdesc: "训练容量计算、历史数据加载"',
+    ].join("\n");
+    g.feed(echo);
+    // 真实模型行为：复述块结束后以空行分隔再写正常回答
+    const r = g.feed("\n\n好的以下是计划：\n\n深蹲 3 组 × 8 次。");
+    assert.ok(r.echoes.includes("plan-generation"), "复述块摘除");
+    assert.ok(r.tokens.includes("好的以下是计划"), "回答放行");
+    assert.ok(r.tokens.includes("深蹲 3 组"), "回答内容放行");
+    const tail = g.flush();
+    assert.equal(tail.echoes, "", "无残余复述");
+    assert.equal(tail.tokens, "", "无残余 token（均已放行）");
+  });
+
+  it("复述链跨 feed 保持：被阈值切开的编号行后续块继续摘除", () => {
+    const g = new LiveEchoGate(100); // 小阈值强制触发切分
+    const echo = Array.from(
+      { length: 12 },
+      (_, i) => `${i + 1}\t编号行 ${i + 1} 的内容，训练容量与历史数据说明`,
+    ).join("\n");
+    const r1 = g.feed(echo.slice(0, 150));
+    assert.ok(r1.echoes.length > 0, "首块判定为复述");
+    const r2 = g.feed(echo.slice(150));
+    assert.ok(r2.echoes.length > 0, "跨 feed 后续编号行继续摘除（链保持）");
+    assert.equal(
+      (r1.tokens + r2.tokens).includes("\t"),
+      false,
+      "编号行零 token",
+    );
+    const tail = g.feed("\n\n好的以下是计划：\n\n深蹲 3 组。");
+    assert.ok(
+      tail.echoes.includes("编号行 12"),
+      "切分残留的尾行也摘除（链保持）",
+    );
+    assert.ok(
+      (tail.tokens + g.flush().tokens).includes("深蹲 3 组"),
+      "回答放行",
+    );
+  });
+
+  it("isEchoSuspicious：编号行/JSON 起始/技能头可疑，正常正文不可疑", () => {
+    assert.equal(isEchoSuspicious("1\t---"), true, "编号行可疑");
+    assert.equal(isEchoSuspicious("好的\n1\t---"), true, "行内编号行可疑");
+    assert.equal(isEchoSuspicious('{"count":1'), true, "JSON 起始可疑");
+    assert.equal(isEchoSuspicious("# 计划生成知识指南"), true, "技能头可疑");
+    assert.equal(
+      isEchoSuspicious("好的，明天计划如下："),
+      false,
+      "正常正文不可疑",
+    );
+    assert.equal(
+      isEchoSuspicious("1. 深蹲 3 组"),
+      false,
+      "Markdown 编号不可疑",
     );
   });
 });

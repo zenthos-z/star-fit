@@ -64,6 +64,7 @@ import { splitLeakedReasoning } from "./splitLeakedReasoning.js";
 import { chunkAnswerText } from "./splitLeakedReasoning.js";
 import { stripToolEchoPrefix } from "./splitLeakedReasoning.js";
 import { stripToolEchoBlocks } from "./splitLeakedReasoning.js";
+import { LiveEchoGate } from "./splitLeakedReasoning.js";
 export { splitLeakedReasoning };
 
 // ---------------------------------------------------------------------------
@@ -654,9 +655,13 @@ export async function* classifyAgentStream(
   // Per-step streaming state (reset at every `updates` classification).
   let stepRaw = ""; // this step's buffered delta text (classified at snapshot)
   let answerLive = false; // snapshot confirmed terminal → deltas stream live
+  // ★直通段复述闸门（返工 v5）：answerLive 后的增量也必须过复述判定——
+  // v4 剥离链只在快照时对缓冲 stepRaw 跑一次，直通段裸放行（真根因）。
+  const liveGate = new LiveEchoGate();
   const resetStep = (): void => {
     stepRaw = "";
     answerLive = false;
+    liveGate.reset();
   };
 
   for await (const raw of stream) {
@@ -685,7 +690,29 @@ export async function* classifyAgentStream(
           // stream every remaining delta live (真流式收益保留在终步). 不再
           // 回写 stepRaw：终步快照后缓冲已 flush，若继续累积，流尾
           // `if (stepRaw.trim())` 会把刚直通的答案二次转进 thinking 面板。
-          yield { type: "token", text: delta };
+          //
+          // ★返工 v5（2026-09-23）：v4 剥离链（stripToolEchoPrefix +
+          // stripToolEchoBlocks）只在快照那一刻对缓冲 stepRaw 跑一次；这里
+          // 的直通分支在 v4 里完全绕过剥离检查——DeepSeek「先出快照再补
+          // 输出」时，模型在直通段复述 read_file 返回（编号行 frontmatter）
+          // 全部裸奔进正文（协调者实测 5 轮 3 泄漏 / 全新用户 4 轮 3 泄漏，
+          // 且泄漏从正文开头就在 = flush/直通一次性吐出）。v5 在直通分支挂
+          // LiveEchoGate：delta 先入闸门缓冲，完整块/阈值到达时按
+          // stripToolEchoBlocks 同款判定链判定——命中复述特征 → 转 thinking
+          // （绝不 yield token）；未命中 → 放行 token。普通正文增量（非复述
+          // 可疑）立即放行，流式首字收益保留；仅复述可疑形态或复述链内才
+          // 缓冲等待判定（块尾部延迟 ≤ 1 个块大小，秒级流式）。
+          const gated = liveGate.feed(delta);
+          if (gated.echoes) {
+            leakedThinking = leakedThinking
+              ? `${leakedThinking}\n\n${gated.echoes}`
+              : gated.echoes;
+          }
+          if (gated.tokens) {
+            for (const chunk of chunkAnswerText(gated.tokens)) {
+              yield { type: "token", text: chunk };
+            }
+          }
         } else {
           stepRaw += delta;
         }
@@ -810,6 +837,19 @@ export async function* classifyAgentStream(
   // residual as thinking so nothing is silently lost — NEVER as token:
   // an un-snapshotted step has no proof it isn't tool-call narration
   // (the exact regression this anchor fixes).
+  // ★返工 v5：直通段闸门残余 flush——answerLive 后未完成块的最终判定
+  // （复述 → thinking，正常 → token），避免流尾把待判定内容吞掉。
+  const gateTail = liveGate.flush();
+  if (gateTail.echoes) {
+    leakedThinking = leakedThinking
+      ? `${leakedThinking}\n\n${gateTail.echoes}`
+      : gateTail.echoes;
+  }
+  if (gateTail.tokens) {
+    for (const chunk of chunkAnswerText(gateTail.tokens)) {
+      yield { type: "token", text: chunk };
+    }
+  }
   if (stepRaw.trim()) {
     yield { type: "thinking", text: stepRaw.trim() };
   }
