@@ -52,6 +52,19 @@ import { SessionRepo } from "../sessionRepo.js";
  */
 export const DEFAULT_MAX_RETRIES = 2;
 
+/**
+ * Lightweight user-facing status token yielded at the START of each retry
+ * round (feature C — kill the dead 30-90s re-roll gap).
+ *
+ * It is a plain `token` AgentEvent: the frontend renders it as ordinary text
+ * (zero frontend change). Hard rules:
+ *   - backend-injected ONLY by this loop (never composed by the model),
+ *   - NEVER part of any uiHint card payload,
+ *   - NEVER fed to the quality-gate text comparison (`cardToCheckableText`
+ *     only ever sees `event.card`, so this string cannot influence a verdict).
+ */
+export const RETRY_STATUS_TOKEN = "\n\n正在修订卡片…";
+
 /** Options for {@link chatWithValidationLoop}. */
 export interface ValidationLoopOptions {
   /**
@@ -109,7 +122,10 @@ export async function* chatWithValidationLoop(
       sessionFacts,
     );
 
-    let firstInvalid: { errors: StructuredError[] } | null = null;
+    let firstInvalid: {
+      errors: StructuredError[];
+      rejectedCard: unknown;
+    } | null = null;
     for await (const item of invalid) {
       if (item.kind === "event") {
         // Forward token / done / error / valid-uiHint / cardless-uiHint.
@@ -120,7 +136,7 @@ export async function* chatWithValidationLoop(
         yield { type: "thinking", text: item.text };
       } else {
         // kind === 'invalid' — first invalid card in this stream.
-        firstInvalid = { errors: item.errors };
+        firstInvalid = { errors: item.errors, rejectedCard: item.rejectedCard };
         break;
       }
     }
@@ -147,7 +163,18 @@ export async function* chatWithValidationLoop(
     }
 
     attempt += 1;
-    currentReq = buildFeedbackRequest(req, firstInvalid.errors, attempt);
+    // Feature C — retry-round user perception: before re-invoking the model,
+    // yield the backend-injected status token so the user sees progress
+    // instead of a dead 30-90s gap while the card is being re-rolled.
+    // The token is a plain `token` event (frontend zero change) and never
+    // enters any card payload or the quality-gate text comparison.
+    yield { type: "token", text: RETRY_STATUS_TOKEN };
+    currentReq = buildFeedbackRequest(
+      req,
+      firstInvalid.errors,
+      attempt,
+      firstInvalid.rejectedCard,
+    );
   }
 }
 
@@ -157,7 +184,12 @@ export async function* chatWithValidationLoop(
 
 type StreamItem =
   | { kind: "event"; event: AgentEvent }
-  | { kind: "invalid"; errors: StructuredError[]; rejectedText: string }
+  | {
+      kind: "invalid";
+      errors: StructuredError[];
+      rejectedCard: unknown;
+      rejectedText: string;
+    }
   | { kind: "rejected_thinking"; text: string };
 
 /**
@@ -202,6 +234,7 @@ async function* consumeStreamLookingForInvalidCard(
         yield {
           kind: "invalid",
           errors: result.errors,
+          rejectedCard: event.card,
           rejectedText: heldText,
         };
         return; // stop this stream; caller decides retry
@@ -220,6 +253,7 @@ async function* consumeStreamLookingForInvalidCard(
           yield {
             kind: "invalid",
             errors: quality.issues,
+            rejectedCard: event.card,
             rejectedText: heldText,
           };
           return;
@@ -266,16 +300,38 @@ async function* consumeStreamLookingForInvalidCard(
 
 /**
  * Build a correction request from the ORIGINAL request + the structured
- * errors from the just-rejected card.
+ * errors from the just-rejected card + the rejected card's raw JSON.
+ *
+ * Feature A — "只修卡不重写" (card-only correction): the feedback text is an
+ * explicit directive that tells the model to re-emit ONLY the corrected card
+ * inside a json fence, and to NOT rewrite surrounding prose, NOT re-call any
+ * tools, and NOT re-read any skill files. The rejected card's verbatim JSON
+ * is attached so the model can diff against it without re-deriving it from
+ * context. Goal: retry-round decode tokens drop from a full reply to a single
+ * card, cutting the 30-90s re-roll window to seconds.
+ *
+ * Feature B — retry context slimming: the correction request keeps only the
+ * ORIGINAL user message + the card JSON + the structured errors. The LangGraph
+ * checkpointer thread (keyed by `userId:threadId`) still replays the full
+ * prior turn history into the model's context on every `deepAgent.chat` call —
+ * that history cannot be trimmed from this seam without forking the thread /
+ * rewriting the checkpointer (a structural constraint of Deep Agents). The
+ * tradeoff is accepted: context re-READ stays the same, but the instruction
+ * constraint in A is what drives the token win (decode, not read). Any future
+ * thread-truncation work belongs in DeepAgentService, not here.
  *
  * The correction is carried both as LLM-readable prose (appended to
  * `message`) and as structured data (under `metadata.uiHintValidationFeedback`)
  * so programmatic consumers can inspect it.
  */
-function buildFeedbackRequest(
+/**
+ * 导出仅供验证脚本使用；运行时仅模块内部调用。
+ */
+export function buildFeedbackRequest(
   original: ChatRequest,
   errors: StructuredError[],
   attempt: number,
+  rejectedCard: unknown,
 ): ChatRequest {
   // Detect type-related errors for enhanced guidance
   const typeErrors = errors.filter((e) =>
@@ -305,11 +361,23 @@ function buildFeedbackRequest(
         ].join("\n")
       : "";
 
+  const rejectedCardJson = stringifyCard(rejectedCard);
+
   const correction = [
     "",
     `--- uiHint validation feedback (attempt ${attempt} was rejected) ---`,
-    "The uiHint card you emitted was invalid. Fix every error below and",
-    "re-emit a single corrected uiHint card.",
+    "Your uiHint card was rejected. Fix the errors below and RE-EMIT ONLY THE",
+    "CORRECTED CARD, wrapped in a json fence (```json ... ```).",
+    "HARD CONSTRAINTS — do not do anything else:",
+    "- Do NOT rewrite or repeat the surrounding prose.",
+    "- Do NOT re-call any tools.",
+    "- Do NOT re-read any skill files.",
+    "- Output a single card, nothing before or after the fence.",
+    "",
+    "Rejected card (verbatim JSON — fix this exact card):",
+    "```json",
+    rejectedCardJson,
+    "```",
     "Errors:",
     errors
       .map((e) => `- [${e.code}] at ${pathToString(e.path)}: ${e.message}`)
@@ -324,7 +392,11 @@ function buildFeedbackRequest(
     message: `${original.message}\n${correction}`,
     metadata: {
       ...(original.metadata ?? {}),
-      uiHintValidationFeedback: { attempt, errors },
+      uiHintValidationFeedback: {
+        attempt,
+        errors,
+        rejectedCard,
+      },
     },
   };
 }
@@ -341,4 +413,22 @@ function formatErrors(errors: StructuredError[]): string {
 
 function pathToString(path: (string | number)[]): string {
   return path.length === 0 ? "<root>" : path.join(".");
+}
+
+/**
+ * Serialise a rejected card for embedding in the feedback message.
+ *
+ * A plain `JSON.stringify` is used (pretty-printed) so the model sees the
+ * card exactly as emitted — key order, field casing and all — which it can
+ * diff against without re-deriving from context. If serialisation fails
+ * (non-JSON-serialisable card), fall back to a stable placeholder rather than
+ * crashing the retry path: the structured errors in `metadata` still carry
+ * the rejection reason.
+ */
+function stringifyCard(card: unknown): string {
+  try {
+    return JSON.stringify(card, null, 2);
+  } catch {
+    return "<card JSON could not be serialised — see structured errors>";
+  }
 }

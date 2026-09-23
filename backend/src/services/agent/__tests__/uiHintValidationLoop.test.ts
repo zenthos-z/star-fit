@@ -19,7 +19,10 @@ import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import type { AgentEvent, ChatRequest } from "shared/contracts";
 import type { AgentService } from "../AgentService.js";
-import { chatWithValidationLoop } from "../uiHintValidationLoop.js";
+import {
+  chatWithValidationLoop,
+  RETRY_STATUS_TOKEN,
+} from "../uiHintValidationLoop.js";
 
 // ---------------------------------------------------------------------------
 // Probe: a scripted AgentService
@@ -212,11 +215,12 @@ describe("chatWithValidationLoop — B4 retry loop", () => {
     );
     assert.equal(thinkings[0].text, "（这是围绕卡片的初稿叙述）");
 
-    // Pre-card prose of the rejected round was released live as a token.
+    // Pre-card prose of the rejected round was released live as a token;
+    // the retry round opened with the backend-injected retry status token.
     const tokens = events.filter((e) => e.type === "token");
     assert.deepEqual(
       tokens.map((t) => t.text),
-      ["让我重新算一下…", "最终分析："],
+      ["让我重新算一下…", RETRY_STATUS_TOKEN, "最终分析："],
     );
     assert.equal(
       events.some((e) => e.type === "token" && e.text?.includes("初稿叙述")),
@@ -377,10 +381,11 @@ describe("chatWithValidationLoop — two-phase real streaming", () => {
     const tokens = events.filter((e) => e.type === "token");
     const thinkings = events.filter((e) => e.type === "thinking");
 
-    // Pre-card prose was released live; the retry round's card has no prose.
+    // Pre-card prose was released live; the retry round opened with the
+    // backend-injected retry status token; the retry card has no prose.
     assert.deepEqual(
       tokens.map((t) => t.text),
-      ["开场白。"],
+      ["开场白。", RETRY_STATUS_TOKEN],
     );
     // Card-interstitial prose of the rejected round → thinking, never token.
     assert.deepEqual(
@@ -412,8 +417,8 @@ describe("chatWithValidationLoop — two-phase real streaming", () => {
     assert.equal(agent.calls.length, 2);
     assert.deepEqual(
       events.map((e) => (e.type === "token" ? e.text : e.type)),
-      ["修正后的开场。", "uiHint", "收尾。", "done"],
-      "retry round streams its pre-card prose live and flushes tail at done",
+      [RETRY_STATUS_TOKEN, "修正后的开场。", "uiHint", "收尾。", "done"],
+      "retry round opens with the status token, then streams its pre-card prose live and flushes tail at done",
     );
   });
 
@@ -433,6 +438,201 @@ describe("chatWithValidationLoop — two-phase real streaming", () => {
       events.map((e) => (e.type === "token" ? e.text : e.type)),
       ["部分输出", "error"],
       "live-released tokens before an error are not swallowed",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 便宜重试（validation cheap retry）—— 只修卡不重写
+// ---------------------------------------------------------------------------
+
+describe("chatWithValidationLoop — cheap retry (card-only correction)", () => {
+  it("重试请求含被拒卡 JSON 原文与「只修卡不重写」指令", async () => {
+    const agent = new ScriptedAgent([
+      [uiHint(INVALID_PLAN)],
+      [uiHint(VALID_PLAN), { type: "done" }],
+    ]);
+
+    await drain(chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }));
+
+    const feedbackReq = agent.calls[1];
+    // 坏卡 JSON 原文（带 type 字段）内嵌在反馈消息里。
+    assert.ok(
+      feedbackReq.message.includes('"type": "plan_card"'),
+      "feedback must embed the rejected card's verbatim JSON",
+    );
+    assert.ok(
+      /RE-EMIT ONLY THE\s+CORRECTED CARD/.test(feedbackReq.message),
+      "feedback must demand a card-only re-emit",
+    );
+    // 显式禁止：重写散文 / 重调工具 / 重读技能文件。
+    assert.match(
+      feedbackReq.message,
+      /Do NOT rewrite or repeat the surrounding prose/i,
+    );
+    assert.match(feedbackReq.message, /Do NOT re-call any tools/i);
+    assert.match(feedbackReq.message, /Do NOT re-read any skill files/i);
+    assert.match(
+      feedbackReq.message,
+      /```json[\s\S]*```/,
+      "card JSON is fenced",
+    );
+    // 结构化元数据同样携带被拒卡（程序化消费方可用）。
+    const meta = feedbackReq.metadata as Record<string, unknown> | undefined;
+    const fb = meta?.uiHintValidationFeedback as
+      { attempt?: number; rejectedCard?: unknown } | undefined;
+    assert.ok(fb && fb.attempt === 1, "metadata carries the retry attempt");
+    assert.ok(fb?.rejectedCard, "metadata carries the rejected card");
+    // 上下文瘦身：重试请求仅基于 ORIGINAL message（不叠加历史轮次散文）。
+    assert.equal(
+      feedbackReq.message.startsWith(baseReq.message),
+      true,
+      "feedback appends to the ORIGINAL user message only",
+    );
+  });
+
+  it("重试轮开始时 yield 修订卡提示 token（仅重试轮，首轮不出）", async () => {
+    const agent = new ScriptedAgent([
+      // 首轮：坏卡
+      [uiHint(INVALID_PLAN)],
+      // 重试轮：好卡 + done
+      [uiHint(VALID_PLAN), { type: "done" }],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    const tokens = events.filter((e) => e.type === "token");
+    // 提示 token 恰在重试轮开始时出现一次，且内容为后端显式注入的标记。
+    assert.deepEqual(
+      tokens.map((t) => t.text),
+      [RETRY_STATUS_TOKEN],
+      "the retry status token is the ONLY token in this retry round",
+    );
+    // 标记 token 前是首轮的 done 位置——事件序列中它先于修正卡。
+    const markerIdx = events.findIndex((e) => e.type === "token");
+    const cardIdx = events.findIndex((e) => e.type === "uiHint");
+    assert.ok(markerIdx < cardIdx, "status token precedes the corrected card");
+    assert.ok(
+      RETRY_STATUS_TOKEN.startsWith("\n"),
+      "status token starts with a newline (轻量、独立成行)",
+    );
+  });
+
+  it("首轮卡合法时不发提示 token（零干扰）", async () => {
+    const agent = new ScriptedAgent([[uiHint(VALID_PLAN), { type: "done" }]]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    assert.equal(
+      events.some((e) => e.type === "token" && e.text === RETRY_STATUS_TOKEN),
+      false,
+      "no status token when the first card is already valid",
+    );
+    assert.equal(agent.calls.length, 1);
+  });
+
+  it("重试轮成功出卡：提示 token 后正常继续，卡片照常转发、done 照常放行", async () => {
+    const agent = new ScriptedAgent([
+      [uiHint(INVALID_PLAN)],
+      [
+        { type: "token", text: "这是修正后的方案：" },
+        uiHint(VALID_PLAN),
+        { type: "token", text: "注意热身。" },
+        { type: "done" },
+      ],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    // 事件序列：提示 token → 重试轮散文 → 卡片 → 收尾散文 → done。
+    assert.deepEqual(
+      events.map((e) => (e.type === "token" ? e.text : e.type)),
+      [
+        RETRY_STATUS_TOKEN,
+        "这是修正后的方案：",
+        "uiHint",
+        "注意热身。",
+        "done",
+      ],
+    );
+    const uiHints = events.filter((e) => e.type === "uiHint");
+    assert.deepEqual(uiHints[0].card, VALID_PLAN);
+    assert.equal(
+      events.some((e) => e.type === "error"),
+      false,
+      "retry success yields no error",
+    );
+  });
+
+  it("maxRetries 耗尽仍 VALIDATION_ERROR，且每个重试轮各发一次提示 token", async () => {
+    const agent = new ScriptedAgent([
+      [uiHint(INVALID_PLAN)],
+      [uiHint(INVALID_PLAN)],
+      [uiHint(INVALID_PLAN)],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    // 1 首轮 + 2 重试轮 = 3 次调用后放弃。
+    assert.equal(agent.calls.length, 3);
+    const errEvent = events.find((e) => e.type === "error");
+    assert.equal(errEvent?.error?.code, "VALIDATION_ERROR");
+    assert.ok(errEvent?.error?.message?.includes("3 attempt(s)"));
+    // 两个重试轮各注入一次提示 token（首轮不注入）。
+    assert.equal(
+      events.filter((e) => e.type === "token" && e.text === RETRY_STATUS_TOKEN)
+        .length,
+      2,
+      "one status token per retry round",
+    );
+    // 坏卡从未外泄为 uiHint。
+    assert.equal(
+      events.some((e) => e.type === "uiHint"),
+      false,
+    );
+  });
+
+  it("坏卡散文仍不外漏：重试轮散文照旧走 thinking，标记 token 是唯一新增 token", async () => {
+    const agent = new ScriptedAgent([
+      // 首轮：先一张合法卡（进入 hold 模式），卡片间的草稿散文 + 坏卡
+      [
+        uiHint(VALID_PLAN),
+        { type: "token", text: "（围绕坏卡的草稿叙述）" },
+        uiHint(INVALID_PLAN),
+      ],
+      // 重试轮：好卡
+      [uiHint(VALID_PLAN), { type: "done" }],
+    ]);
+
+    const events = await drain(
+      chatWithValidationLoop(agent, baseReq, { maxRetries: 2 }),
+    );
+
+    const tokens = events.filter((e) => e.type === "token");
+    const thinkings = events.filter((e) => e.type === "thinking");
+    // 卡片间散文（被坏卡打回的那个围栏段）→ thinking，绝不进 answer token 流。
+    assert.deepEqual(
+      thinkings.map((t) => t.text),
+      ["（围绕坏卡的草稿叙述）"],
+    );
+    assert.deepEqual(
+      tokens.map((t) => t.text),
+      [RETRY_STATUS_TOKEN],
+      "only the backend-injected status token leaks into the token stream",
+    );
+    // 标记 token 内容不计入任何卡片/质量门比对（此处验证它独立于卡外泄）。
+    assert.equal(
+      events.some((e) => e.type === "token" && e.text?.includes("草稿叙述")),
+      false,
+      "rejected-round prose never appears as answer text",
     );
   });
 });
