@@ -37,9 +37,11 @@ version: "3.1.0"
 
 - 每个动作包含: `exerciseId`, `name`, `exercise_type`, `sets`, `reps`, `weight`
 - `exerciseId` 必须来自 `list_exercises` 返回的真实条目（禁止编造）
-- `weight` 允许为 0：无 load_anchor 的动作留 0 并在正文说明
-  「首次尝试请自选重量」——首训重量由用户自选，该次实际重量即成为下次
-  计划的锚点（load_history 会随训练落库更新）
+- `weight` 只有 bodyweight 动作允许 0；抗阻动作无 load_anchor 时按经验
+  分支给值：beginner → 空杆 20kg 或最小配重 2.5-5kg（备注「第一次找感觉：
+  练完报实际重量」）；有经验 → 先出 survey_card 问一个重量再出计划。
+  （2026-09-23 起：抗阻动作 weight=0 会被校验器打回，AI 直接重试浪费
+  30-90 秒——预先给对值，不要赌校验器）
 
 ```typescript
 // ✅ 正确：data 数组中的动作对象

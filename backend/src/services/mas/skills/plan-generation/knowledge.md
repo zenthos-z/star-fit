@@ -89,8 +89,9 @@
    规则同构：先补数据，再出计划）。多题合并为一张卡，一次问完。
 2. bodyweight 动作 weight=0 是正确值，不需要为此询问；询问体重是为了
    assisted 辅助定位与抗阻推算，问卷文案要说清用途（用户才知道为什么问）。
-3. 用户拒绝回答 → 以 weight=0 +「首次自选重量」文案出计划（既有 fallback），
-   并在正文中说明该计划未经重量校准。
+3. 用户拒绝回答 → 按规则 4 的起步重量（空杆/最小配重）出计划并在正文说明
+   「先找感觉，练完报实际重量」（2026-09-23 起 weight=0 会被校验器打回，
+   只有 bodyweight 动作允许 0）。
 4. **新手起步重量分支（2026-09-23 拍板）**：experience=beginner 或用户选
    「自己试/不知道怎么测」时，禁止要求用户先报出所有动作重量——直接出
    plan_card：杠铃复合动作给空杆 20kg（或器械最小配重片），哑铃/绳索/器械
@@ -214,8 +215,10 @@
 - id 来自 `list_exercises` 返回的真实条目（禁止编造）
 - exercise_type 与动作库中该动作的类型一致
 - sets/reps 为整数（reps 不能是 "8-12" 这类范围字符串）
-- weight >= 0；无 load_anchor 的动作 weight 留 0 并在 explanation
-  中说明「首次尝试请自选重量」
+- weight >= 0；抗阻动作无 load_anchor 时按 beginner/有经验 分支给起步
+  重量（空杆 20kg / 最小配重 2.5-5kg / 问用户），禁止留 0（会被打回）；
+  bodyweight 动作 weight=0 正确。无 load_anchor 时在 explanation 中
+  说明「第一次找感觉：动作标准优先，练完把实际重量告诉我」
 - explanation 为非空字符串
 - **target 标记**：用户明确要「明天/第二天」的计划（非训练结束时），
   在卡片顶层加 `target: "next_day"`（例：`{ "type": "plan_card",

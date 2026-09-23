@@ -276,7 +276,7 @@ function buildFeedbackRequest(
           "- isometric: duration > 0 (required), reps=1",
           "- cardio: duration > 0 (required)",
           "- outdoor: distance > 0 (required)",
-          "- resistance/unilateral/heavy_weight: weight optional (0 = user self-selects on first attempt)",
+          "- resistance/unilateral/heavy_weight: beginner/自选 → 给空杆20kg或最小配重2.5-5kg（不能为0）；有经验用户用其报出的具体重量",
           "- assisted: weight MUST be <= 0 (negative = assistance kg, e.g. -20 = 20kg assist)",
           "- bodyweight/rep_training: no required fields (weight defaults to 0)",
           "- flexibility: no required fields",
