@@ -1560,3 +1560,167 @@ describe("LiveEchoGate 直接单测（直通段增量判定边界契约）", () 
     );
   });
 });
+
+// ---------------------------------------------------------------------------
+// 返工 v6（2026-09-23）：切碎的 delta（`1`+`\t---`）也能识别复述特征
+// ---------------------------------------------------------------------------
+// v5（36f37dd）的 LiveEchoGate 只在「行首已成形」时判可疑
+// （`(^|\n)[ \t]*(\d+\t|\{|\[)`）。SSE 增量切分不保证行首对齐——DeepSeek
+// 复述 read_file 时 delta 可能切在 `1\t---` 中间（先来 `1` 再来 `\t---`），
+// 每个增量单独看都不满足行首特征 → 走「非可疑立即放行」分支 → 整段编号行
+// frontmatter 逐 delta 漏出（chat 场景 5997 / 2563 / 2460 字符泄漏实锤）。
+// v6 把 isEchoSuspicious 强化为「任意位置指纹 + 可疑前缀」：任意 `\t`（正常
+// 正文绝无制表符）、任意行行首 `{`/`[`、行首裸数字且数字在行尾（可能是
+// `N\t` 编号行的前缀）都判可疑 → 挂链缓冲到完整块边界统一判定；正常回答
+// （无 `\t`、无 `{`/`[` 行、无行首裸数字前缀）仍立即放行，流式首字保留。
+describe("tool-leak 返工 v6：切碎 delta 的复述特征识别（真根因封堵）", () => {
+  const fragments = [
+    "1",
+    "\t---\n",
+    '     2\tname: "plan-generation"\n',
+    '     3\tdescription: "计划生成能力包 - 训练容量计算、历史数据加载"\n',
+    '     4\tskills: ["knowledge.md", "prompt.md"]\n',
+    '     5\tversion: "3.1.0"\n',
+  ];
+
+  /** 把碎 delta 依次喂进闸门，汇总 token / echoes，最后 flush。 */
+  function drainAll(
+    g: LiveEchoGate,
+    deltas: string[],
+  ): { tokens: string; echoes: string } {
+    let tokens = "";
+    let echoes = "";
+    for (const d of deltas) {
+      const r = g.feed(d);
+      tokens += r.tokens;
+      echoes += r.echoes;
+    }
+    const tail = g.flush();
+    tokens += tail.tokens;
+    echoes += tail.echoes;
+    return { tokens, echoes };
+  }
+
+  it("1. 碎 delta 复述（`1` 与 `\t---` 拆开，模拟 SSE 切碎）→ 全判复述转 thinking、零 token", () => {
+    const { tokens, echoes } = drainAll(new LiveEchoGate(), fragments);
+    assert.equal(
+      tokens,
+      "",
+      `碎 delta 复述必须零 token（实际 ${JSON.stringify(tokens.slice(0, 120))}）`,
+    );
+    assert.ok(echoes.includes("1\t---"), "编号行整体进 echoes（thinking）");
+    assert.ok(echoes.includes("plan-generation"), "复述内容进 echoes");
+    assert.ok(echoes.includes("version"), "复述尾部进 echoes");
+  });
+
+  it("2. 碎 delta 正常回答（数字+空格/中置数字不误伤）→ token 正常产出", () => {
+    const { tokens, echoes } = drainAll(new LiveEchoGate(), [
+      "好的",
+      "我来看看\n",
+      "你上周",
+      "练了3次\n",
+      "深蹲 5 组，每组 8 次\n",
+      "第 3 组做 10 次。\n",
+    ]);
+    assert.ok(tokens.includes("好的"), "首 delta 立即放行（流式首字保留）");
+    assert.ok(tokens.includes("练了3次"), "中置数字不误伤");
+    assert.ok(tokens.includes("深蹲 5 组"), "行首数字+空格不误伤");
+    assert.ok(tokens.includes("第 3 组做 10 次"), "数字+空格不误伤");
+    assert.equal(echoes, "", "正常回答绝不进 echoes");
+  });
+
+  it("3. 碎 delta 围栏卡片（```json 拆开喂）→ 卡片块完整保留、绝不进 echoes", () => {
+    const { tokens, echoes } = drainAll(new LiveEchoGate(), [
+      "```json\n",
+      "{",
+      '"type": "survey_card",',
+      '\n"title": "先确认",',
+      '\n"data": {"questions": [{"id": "goal", "question": "目标？"}]}',
+      "\n}",
+      "\n```\n",
+    ]);
+    assert.ok(tokens.includes("```json"), "围栏头保留在 token 流");
+    assert.ok(tokens.includes("survey_card"), "卡片载荷保留");
+    assert.ok(tokens.includes("先确认"), "卡片内容完整");
+    assert.ok(tokens.includes("```"), "围栏闭合保留");
+    assert.equal(echoes, "", "卡片绝不进 echoes");
+  });
+
+  it("4. 碎 delta 混合：正常回答 → 碎复述 → 正常回答 → 仅复述段进 thinking", () => {
+    const { tokens, echoes } = drainAll(new LiveEchoGate(), [
+      "好的，我来看下你的训练记录。\n",
+      ...fragments,
+      "\n\n", // 复述块边界（空行分隔）
+      "好的，以下是你的训练总结：\n",
+    ]);
+    assert.ok(
+      tokens.includes("好的，我来看下你的训练记录"),
+      "开头正常回答放行",
+    );
+    assert.ok(echoes.includes("plan-generation"), "碎复述整体进 echoes");
+    assert.equal(
+      tokens.includes("plan-generation"),
+      false,
+      "复述绝不泄漏进 token",
+    );
+    assert.ok(tokens.includes("好的，以下是你的训练总结"), "结尾正常回答放行");
+  });
+
+  it("5. 快照后直通段碎 delta 复述（生产 chat 泄漏路径）→ 零 token、全转 thinking", async () => {
+    // 生产可达路径：终步快照触发 answerLive 后，DeepSeek 以切碎的 delta
+    // 复述 read_file 返回——v5 每个增量单独不可疑被立即放行，整段泄漏。
+    const raws = [
+      modelRequestUpdate(aiTerminal("")),
+      ...fragments.map((f) => msgDelta(f)),
+    ];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.equal(
+      tokens.includes("plan-generation"),
+      false,
+      `碎 delta 复述不得泄漏进 token（实际 ${JSON.stringify(tokens.slice(0, 100))}）`,
+    );
+    assert.equal(tokens.includes("1\t---"), false, "编号行不得泄漏");
+    assert.ok(thinking.includes("plan-generation"), "复述转 thinking 面板");
+    assert.ok(thinking.includes("1\t---"), "编号行完整进 thinking");
+  });
+
+  it("6. isEchoSuspicious v6 强化：任意位置指纹/可疑前缀可疑，正常正文不可疑", () => {
+    // 任意位置制表符——切碎 delta 的最独特指纹
+    assert.equal(isEchoSuspicious("1\t---"), true, "编号行可疑");
+    assert.equal(isEchoSuspicious("\t---\n"), true, "拆碎的制表符增量可疑");
+    assert.equal(isEchoSuspicious("好的\n1\t---"), true, "行内编号行可疑");
+    // 行首裸数字前缀（可能是 `N\t` 前缀，SSE 切在数字与制表符之间）
+    assert.equal(
+      isEchoSuspicious("1"),
+      true,
+      "行首裸数字（`1`+`\t---` 前缀）可疑",
+    );
+    assert.equal(isEchoSuspicious("好的\n1"), true, "行尾裸数字可疑");
+    assert.equal(isEchoSuspicious("  3"), true, "缩进行首裸数字可疑");
+    // 行首 { [（裸 JSON 复述起始）
+    assert.equal(isEchoSuspicious('{"count":1'), true, "JSON 起始可疑");
+    assert.equal(isEchoSuspicious("好的\n[{"), true, "行内 JSON 起始可疑");
+    assert.equal(isEchoSuspicious("# 计划生成知识指南"), true, "技能头可疑");
+    // 正常正文绝不误伤
+    assert.equal(
+      isEchoSuspicious("好的，明天计划如下："),
+      false,
+      "正常正文不可疑",
+    );
+    assert.equal(
+      isEchoSuspicious("1. 深蹲 3 组"),
+      false,
+      "Markdown 编号不可疑",
+    );
+    assert.equal(isEchoSuspicious("3组深蹲"), false, "行首数字后跟 CJK 不可疑");
+    assert.equal(isEchoSuspicious("练了3次"), false, "中置数字不可疑");
+    assert.equal(isEchoSuspicious("第 3 组做 10 次"), false, "数字+空格不可疑");
+    assert.equal(isEchoSuspicious("12:30 开始训练"), false, "数字+冒号不可疑");
+  });
+});

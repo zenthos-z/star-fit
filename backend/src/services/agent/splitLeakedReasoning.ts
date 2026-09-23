@@ -284,19 +284,34 @@ export function stripToolEchoBlocks(text: string): {
 }
 
 /**
- * 直通段「复述可疑」判定（返工 v5）：
- * 未完成块是否可能构成工具返回复述的起点——命中则缓冲等待完整块判定
+ * 直通段「复述可疑」判定（返工 v6）：
+ * 未完成块是否可能构成工具返回复述（或其前缀）——命中则缓冲等待完整块判定
  * （绝不提前放行），未命中立即放行（保留流式首字收益）。
  *
- * 可疑形态（都是「正常正文绝不可能」的形状）：
- *   - `\d+\t` 编号行（read_file 返回复述的特征行首，Markdown 编号用 . / )）；
- *   - `{` / `[` 起始行（工具返回裸 JSON / 粘接 JSON 的特征）；
+ * v6 修正（v5 失效根因）：v5 只匹配「行首已成形」的复述特征
+ * （`(^|\n)[ \t]*(\d+\t|\{|\[)`），但 SSE 增量切分不保证行首对齐——DeepSeek
+ * 复述 read_file 时 delta 可能切在 `1\t---` 中间（先来 `1` 再来 `\t---`），
+ * 每个增量单独看都不满足行首特征 → 走「非可疑立即放行」分支 → 整段编号行
+ * frontmatter 逐 delta 漏出（chat 场景 5997 / 2563 / 2460 字符泄漏实锤）。
+ *
+ * 可疑形态（命中任一即缓冲，都是「正常正文绝不可能」的形状）：
+ *   - 任意位置出现制表符 `\t`：中文/英文回答、Markdown 正文绝不用制表符，
+ *     read_file 复述的编号行 `N\t...` 及其任意切碎增量（`1`+`\t---`、
+ *     `\t`+`1---`、`1\t`+`---`）都含 `\t`——这是复述最独特的指纹；
+ *   - 任意行行首（可缩进）的 `{` / `[`：裸 JSON 工具返回复述的起始
+ *     （list_exercises / load_history），被切碎的 `{` 单字符增量同样命中；
+ *   - 行首裸数字且数字在行尾（`(^|\n)[ \t]*\d+[ \t]*$`）：可能是 `N\t` 编号行
+ *     的前缀——SSE 增量切在数字与 `\t` 之间时（先来 `1`）数字后面还没有制表符；
+ *     数字后紧跟非行尾字符（`3组深蹲`、`1. 深蹲`、`10次`、`12:30`）不判可疑，
+ *     避免误伤正常回答（Markdown 有序列表用 `.`/`)`，正文绝无数字+制表符）；
  *   - 技能文件头签名（# 计划生成知识指南）。
  */
 export function isEchoSuspicious(text: string): boolean {
   if (!text) return false;
   return (
-    /(^|\n)[ \t]*(\d+\t|\{|\[)/.test(text) ||
+    text.includes("\t") ||
+    /(^|\n)[ \t]*(\{|\[)/.test(text) ||
+    /(^|\n)[ \t]*\d+[ \t]*$/.test(text) ||
     text.includes("# 计划生成知识指南")
   );
 }
@@ -332,6 +347,11 @@ export interface LiveGateDrain {
  * token 流）；正常中文/英文回答块不受影响；短块（<30 字符）不判为复述
  * （isNumberedToolEcho 阈值）。复述链跨 feed 保持：被阈值切开的编号行复述
  * 后续块、以及紧跟复述的文档结构延续块，不会被当成新块漏判。
+ *
+ * v6（返工）：isEchoSuspicious 从「行首已成形特征」强化为「任意位置指纹 +
+ * 可疑前缀」——切碎的 delta（`1` 与 `\t---` 分属两个增量）单独不再放行，
+ * 统一挂链缓冲到完整块边界由 judge 判定；正常回答（无 `\t`、无 `{`/`[` 行、
+ * 无行首裸数字前缀）仍立即放行，流式首字收益保留。
  */
 export class LiveEchoGate {
   private pending = "";
@@ -390,8 +410,12 @@ export class LiveEchoGate {
         if (r.echoes) echoes.push(r.echoes);
         continue;
       }
-      // 3. 非复述可疑的未完成块 → 立即放行（流式首字收益；复述链内不放行，
-      //    等待下一次完整块判定以完成文档延续剥离）
+      // 3. 未完成块：非「复述可疑」且非链内 → 立即放行（eager-yield，保留
+      //    流式首字收益）；复述可疑 → 绝不逐 delta 放行，挂链缓冲等完整块
+      //    边界由 judge 统一判定（返工 v6：v5 只判「行首已成形」特征，
+      //    被切碎的 `1` / `\t---` 增量单独看都不可疑被立即放行 → 整段编号行
+      //    frontmatter 逐 delta 漏出；现在任意位置含 `\t` / 行首 `{` `[` /
+      //    行首裸数字前缀都视为可疑，链式缓冲直到边界）
       if (
         this.pending.trim().length > 0 &&
         !this.chain &&
@@ -400,6 +424,9 @@ export class LiveEchoGate {
         tokens.push(this.pending);
         this.pending = "";
         continue;
+      }
+      if (this.pending.trim().length > 0 && isEchoSuspicious(this.pending)) {
+        this.chain = true; // 可疑 → 后续增量一并纳入缓冲，直到完整块判定断开
       }
       break;
     }
