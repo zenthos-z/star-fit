@@ -62,7 +62,7 @@ import { mountAllSkills } from "./skillLoader.js";
 // 避免顶层 import.meta（skillLoader）把整条链拖进 ESM 域。
 import { splitLeakedReasoning } from "./splitLeakedReasoning.js";
 import { chunkAnswerText } from "./splitLeakedReasoning.js";
-import { looksLikeToolReturnEcho } from "./splitLeakedReasoning.js";
+import { stripToolEchoPrefix } from "./splitLeakedReasoning.js";
 export { splitLeakedReasoning };
 
 // ---------------------------------------------------------------------------
@@ -679,11 +679,14 @@ export async function* classifyAgentStream(
       // 终步确认后（answerLive）才逐 delta 直通放行为 token。
       const delta = extractText(data);
       if (delta) {
-        stepRaw += delta;
         if (answerLive) {
           // Snapshot already confirmed this step is the terminal answer —
-          // stream every remaining delta live (真流式收益保留在终步).
+          // stream every remaining delta live (真流式收益保留在终步). 不再
+          // 回写 stepRaw：终步快照后缓冲已 flush，若继续累积，流尾
+          // `if (stepRaw.trim())` 会把刚直通的答案二次转进 thinking 面板。
           yield { type: "token", text: delta };
+        } else {
+          stepRaw += delta;
         }
       }
       // ★字段级思考链（2026-09-16）：thinking 开启时 DeepSeek 把推理放在
@@ -748,23 +751,19 @@ export async function* classifyAgentStream(
       // live as tokens (首字延迟 = 该步 prefill + 生成中已缓冲的首段，
       // 秒级而非整轮)。
       //
-      // ★终步工具返回拦截（2026-09-23 返工）：模型在无 tool_calls 的终步
-      // 消息里复述工具返回内容（list_exercises 动作库 JSON / read_file 技能
-      // 全文）时，splitLeakedReasoning 会把这段复述判成 answer 放行成 token
-      // （首正文时间=完成时间，flush 一次性吐出 7-11k 字符——快照锚解决中间步
-      // 误判，解决不了终步复述）。flush 前先查 `looksLikeToolReturnEcho`：
-      // 命中 → 整段转 thinking，绝不放行成 token，且不翻 answerLive（后续
-      // delta 继续缓冲，流尾兜底仍按 thinking 处理）。
-      if (looksLikeToolReturnEcho(stepRaw)) {
-        if (stepRaw.trim()) {
-          leakedThinking = leakedThinking
-            ? `${leakedThinking}\n\n${stepRaw.trim()}`
-            : stepRaw.trim();
-        }
-        resetStep();
-        continue;
+      // ★终步工具复述剥离（2026-09-23 返工 v3）：v2 在 flush 前对「整个
+      // stepRaw」跑 looksLikeToolReturnEcho，命中就把复述+正常回答+围栏卡片
+      // 整体吞进 thinking（回放 3 轮正文 0 字符 + 卡片 0 张）。v3 只精确剥
+      // 离「开头的裸工具返回复述段」（stripToolEchoPrefix：动作库/历史 JSON
+      // 粘接串、read_file 编号行、技能文件头签名块）进 thinking，其余
+      // （正常回答 + 围栏卡片）继续走 splitLeakedReasoning：answer 进 token、
+      // 围栏卡片经 uiHint 提取正常落地。拦截只能摘「裸复述」，不能误伤以
+      // ``` 开头的围栏卡片。
+      const { echo, rest } = stripToolEchoPrefix(stepRaw);
+      if (echo) {
+        leakedThinking = leakedThinking ? `${leakedThinking}\n\n${echo}` : echo;
       }
-      const split = splitLeakedReasoning(stepRaw);
+      const split = splitLeakedReasoning(rest);
       if (split.reasoning) {
         leakedThinking = leakedThinking
           ? `${leakedThinking}\n\n${split.reasoning}`
@@ -779,6 +778,9 @@ export async function* classifyAgentStream(
       // thinking（v1 遗漏——流尾 `if (stepRaw.trim())` 会把刚放行的整段答案
       // 重复进 thinking 面板）。
       stepRaw = "";
+      // 复述段剥离后不翻 answerLive 的旧保守行为会再次吞掉「快照之后到达」
+      // 的正常回答 delta——v3 目标是保留正常回答：剥离完复述，剩余/后续 delta
+      // 一律按 token 直通。
       answerLive = true;
     }
   }

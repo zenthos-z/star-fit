@@ -1,12 +1,15 @@
 /**
- * 真实 LLM 冒烟 v3（2026-09-23 tool-leak 返工验证）——≥3 轮循环，走完整 HTTP SSE。
+ * 真实 LLM 冒烟 v4（2026-09-23 tool-leak 返工 v3 验证）——≥3 轮循环，走完整 HTTP SSE。
  *
  * 每轮独立 threadId（冷上下文，真实触发 list_exercises / read_file 工具调用），
- * 统计该轮 token 事件总字符数，断言 < 1500（修复前泄漏 7-11k）。
+ * 统计该轮 token 事件总字符数，断言三个条件（返工 v3 双向验收）：
+ *   - token_chars < 1500  （无泄漏：v1/v2 修复前泄漏 7-11k）
+ *   - token_chars > 50    （有真实回答：v2 整段拦截后正文 0 字符）
+ *   - survey_card ≥ 1 张  （卡片不被吞：v2 拦截后卡片 0 张）
  *
  * 用法：
  *   set -a && . ./.env.local && set +a
- *   DATABASE_URL=... STARFIT_PORT=0 \
+ *   DATABASE_URL=postgresql://starfit:starfit@localhost:5439/starfit \
  *   npx tsx scripts/smoke-stream-tool-leak-multi.ts
  */
 import Fastify from "fastify";
@@ -20,6 +23,13 @@ const MESSAGES = [
   "帮我制定一份明天的训练计划",
   "明天想练一次，帮我安排计划",
 ];
+
+// 返工 v3 验收（每轮必须同时满足）：
+//   - 正文 < 1500 字符（无工具复述泄漏）
+//   - 正文 > 50 字符（有真实回答，防整段吞）
+//   - survey_card ≥ 1 张（防吞卡）
+const MAX_TOKEN_CHARS = 1500;
+const MIN_TOKEN_CHARS = 50;
 
 async function runRound(
   base: string,
@@ -96,9 +106,24 @@ async function main(): Promise<number> {
     const startedAt = Date.now();
     const res = await runRound(base, r);
     const ms = Date.now() - startedAt;
-    const ok = !res.error && res.done && res.tokenChars < 1500;
+    const hasSurveyCard = res.cards.includes("survey_card");
+    const ok =
+      !res.error &&
+      res.done &&
+      res.tokenChars < MAX_TOKEN_CHARS &&
+      res.tokenChars > MIN_TOKEN_CHARS &&
+      hasSurveyCard;
+    const reasons = [
+      res.error ? "error" : "",
+      !res.done ? "no-done" : "",
+      res.tokenChars >= MAX_TOKEN_CHARS ? `leak(${res.tokenChars})` : "",
+      res.tokenChars <= MIN_TOKEN_CHARS ? `swallowed(${res.tokenChars})` : "",
+      !hasSurveyCard ? `no-card([${res.cards.join(",")}])` : "",
+    ]
+      .filter(Boolean)
+      .join(",");
     console.log(
-      `round ${r + 1}: token_chars=${res.tokenChars} cards=[${res.cards.join(",")}] done=${res.done} error=${res.error} ms=${ms} ${ok ? "OK" : "FAIL"}`,
+      `round ${r + 1}: token_chars=${res.tokenChars} cards=[${res.cards.join(",")}] done=${res.done} error=${res.error} ms=${ms} ${ok ? "OK" : `FAIL(${reasons})`}`,
     );
     if (!ok) fail++;
   }
