@@ -114,9 +114,9 @@ cd android && ./gradlew assembleRelease
 | `backend/src/services/mas/skills/` | 领域技能知识（动作类型指南、计划生成、力量训练设计等），由 skillLoader 挂载 |
 | `backend/src/db/postgresql/repository/` | Repository 层（禁止绕过直连库） |
 | `shared/contracts/` | 数据契约唯一来源：`index.ts` 扁平导出，按 `database` / `logging` / `mapping` 分子模块 |
-| `packages/` | 共享工具包（如 `e2e-link-checker`） |
+| `packages/` | 已清理（2026-09-24 整编：e2e-link-checker 删除） |
 | `android/` | Capacitor Android 壳 |
-| `docs-site/` | 架构文档（VitePress） |
+| `docs-site/` | 设计哲学页（VitePress，仅保留 design-philosophy） |
 | `docs/` | 领域知识与分析资料 |
 
 ────────────────────────────────────────
@@ -153,7 +153,4 @@ cd android && ./gradlew assembleRelease
 ────────────────────────────────────────
 │ 8. 文档索引
 ────────────────────────────────────────
-数据架构: docs-site/database/postgresql-schema.md
-Repository层: docs-site/database/repository-layer.md
-数据流: docs-site/architecture/three-state-data-flow.md
-共享类型: docs-site/api/shared-types.md
+（docs-site 已于 2026-09-24 整编清扫，仅保留设计哲学；数据库/架构真源 = backend 代码 + shared/contracts）
