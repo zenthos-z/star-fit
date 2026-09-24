@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { ExerciseRenderer } from './ExerciseRenderer';
 import { ExerciseAction, LoadAnchors } from '../../types/protocol';
-import SwipeableRow from '../../../../components/SwipeableRow';
+import SwipeableRow from '@/src/components/SwipeableRow';
 
 interface ExerciseCardV2Props {
   exercise: any;

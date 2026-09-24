@@ -1,9 +1,9 @@
 import { idbGet, idbSet, idbRemove, idbKeys, idbClear } from "./adapters/indexeddb";
 import { lsGet, lsSet, lsRemove, lsKeys, lsClear } from "./adapters/localstorage";
 import { Keys, TutorialCache, UserPrefs, WorkoutDraft, SessionLite, ServerHistoryEntry, LoginCredentials } from "./schemas";
-import type { ChatMessage } from "../src/v2/hooks/useAICoach";
+import type { ChatMessage } from "../v2/hooks/useAICoach";
 import { v4 as uuidv4 } from "uuid";
-import type { Session } from "../types";
+import type { Session } from "@/src/types/legacy";
 
 // Chat Thread Types
 export interface ChatThread {

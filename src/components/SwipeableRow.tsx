@@ -1,6 +1,6 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { motion, useAnimation } from 'framer-motion';
-import { haptic } from '../src/lib/nativeHaptics';
+import { haptic } from '../lib/nativeHaptics';
 
 interface SwipeAction {
   label: string;

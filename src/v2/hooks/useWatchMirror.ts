@@ -14,7 +14,7 @@
  */
 import { useEffect, useMemo } from 'react';
 import { broadcastCurrentSet, isWatchBridge, onWatchEvent } from '../services/watchConnectivity';
-import type { Exercise, ExerciseType } from '../../../types';
+import type { Exercise, ExerciseType } from '@/src/types/legacy';
 
 type Focus =
   | { kind: 'rest'; exId: string; setId: string; exName: string; exType: ExerciseType; setNo: number; total: number; end: number }

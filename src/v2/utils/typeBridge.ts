@@ -1,4 +1,4 @@
-import { Exercise, ExerciseSet, Session } from '../../../types';
+import { Exercise, ExerciseSet, Session } from '@/src/types/legacy';
 import { ExerciseAction, WorkoutSession } from '../types/protocol';
 
 // Unified lowercase type system - no conversion needed

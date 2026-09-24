@@ -15,7 +15,7 @@
 import { useEffect } from 'react';
 import { isWatchBridge, onWatchEvent } from '../services/watchConnectivity';
 import { computeWatchFocus } from './useWatchMirror';
-import type { Exercise, ExerciseSet } from '../../../types';
+import type { Exercise, ExerciseSet } from '@/src/types/legacy';
 
 const isSetDone = (s: any) => s.completed === true || s.status === 'COMPLETED';
 

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { setTabBarHidden } from '../src/lib/nativeTabBar';
+import { setTabBarHidden } from '../lib/nativeTabBar';
 
 interface TimeEditorProps {
   currentDuration: number; // in milliseconds

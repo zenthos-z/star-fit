@@ -9,7 +9,7 @@
  * 5. Fallback to history if LAN scan fails
  */
 
-import { loadServerHistory } from '../storage';
+import { loadServerHistory } from '@/storage';
 
 /**
  * Get client's local IP address using WebRTC

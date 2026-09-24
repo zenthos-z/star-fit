@@ -2,8 +2,8 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, WifiOff, RefreshCw, Search } from 'lucide-react';
 import { guessExerciseType } from '@/utils/exerciseLogic';
-import { ExerciseLibraryService } from '../services/exerciseLibraryService';
-import { haptic } from '../src/lib/nativeHaptics';
+import { ExerciseLibraryService } from '@/services/exerciseLibraryService';
+import { haptic } from '../lib/nativeHaptics';
 
 interface ExerciseLibraryModalProps {
   onSelect: (id: string, name: string, defaultType?: string, bodyCategory?: string, muscles?: string[], equipment?: string) => void;

@@ -15,7 +15,7 @@
  */
 
 import { useEffect, useState } from 'react';
-import { API_BASE, getHeaders } from '../../../services/geminiService';
+import { API_BASE, getHeaders } from '@/services/geminiService';
 
 export interface BackendHealth {
   ok: boolean;

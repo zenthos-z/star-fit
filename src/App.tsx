@@ -1,39 +1,39 @@
 import React, { useState, useEffect, useRef, useCallback, useReducer } from 'react';
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion';
-import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiScenario } from './types';
-import { navigationReducer, initialNavigation } from './src/v2/lib/navigation';
-import { computeSettlementSummary } from './src/v2/lib/settlementSummary';
-import { LoadAnchors } from './src/v2/types/protocol';
+import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiScenario } from '@/src/types/legacy';
+import { navigationReducer, initialNavigation } from './v2/lib/navigation';
+import { computeSettlementSummary } from './v2/lib/settlementSummary';
+import { LoadAnchors } from './v2/types/protocol';
 import TimerCapsule from './components/TimerCapsule';
-import LockScreen from './src/v2/components/execution/LockScreen';
-import { ExerciseCardV2 } from './src/v2/components/execution/ExerciseCardV2';
-import ReorderMode from './src/v2/components/execution/ReorderMode';
-import SettlementV2 from './src/v2/components/settlement/SettlementV2';
+import LockScreen from './v2/components/execution/LockScreen';
+import { ExerciseCardV2 } from './v2/components/execution/ExerciseCardV2';
+import ReorderMode from './v2/components/execution/ReorderMode';
+import SettlementV2 from './v2/components/settlement/SettlementV2';
 import History from './components/History';
-import { haptic } from './src/lib/nativeHaptics';
-import { startLiveActivity, pauseLiveActivity, endLiveActivity } from './src/lib/liveActivity';
+import { haptic } from './lib/nativeHaptics';
+import { startLiveActivity, pauseLiveActivity, endLiveActivity } from './lib/liveActivity';
 import TimeEditor from './components/TimeEditor';
 import MainTabBar, { MainTab } from './components/MainTabBar';
 import ExerciseSettingsModal from './components/ExerciseSettingsModal';
-import { ExerciseAction } from './src/v2/types/protocol';
+import { ExerciseAction } from './v2/types/protocol';
 
-import { ExerciseTutorialModal } from './src/v2/components/execution/ExerciseTutorialModal';
+import { ExerciseTutorialModal } from './v2/components/execution/ExerciseTutorialModal';
 import LoginV2 from './components/LoginV2';
-import { AICoachOverlay } from './src/v2/components/execution/AICoachOverlay';
-import { SettingsPage } from './src/v2/pages';
-import { useAICoach } from './src/v2/hooks/useAICoach';
-import { useLoginStatus } from './src/hooks/useLoginStatus';
-import { UserProfileService } from './src/services/userProfileService';
+import { AICoachOverlay } from './v2/components/execution/AICoachOverlay';
+import { SettingsPage } from './v2/pages';
+import { useAICoach } from './v2/hooks/useAICoach';
+import { useLoginStatus } from './hooks/useLoginStatus';
+import { UserProfileService } from './services/userProfileService';
 import {
   SyncService,
   socketService,
   ExerciseLibraryService
-} from './services';
-import { SuggestionService } from './src/services/suggestionService';
+} from '@/services';
+import { SuggestionService } from './services/suggestionService';
 import { App as CapacitorApp } from '@capacitor/app';
-import { eventTracking, TrackingEvent } from './services/eventTracking';
-import { DEFAULT_REST_TIME, RPE_COLORS, DEFAULT_AI_CONFIG } from './constants';
+import { eventTracking, TrackingEvent } from '@/services/eventTracking';
+import { DEFAULT_REST_TIME, RPE_COLORS, DEFAULT_AI_CONFIG } from '@/constants';
 import {
   saveHistory,
   loadHistory,
@@ -52,12 +52,12 @@ import {
   loadNextPlanMeta,
   clearNextPlan,
   migrateLegacyLoginData
-} from './storage';
-import type { PlanConsumeRecord } from './src/v2/components/execution/cards/PlanCard';
-import { isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from './src/v2/services/watchConnectivity';
-import { watchHeartRateStore } from './src/v2/services/watchHeartRateStore';
-import { useWatchMirror } from './src/v2/hooks/useWatchMirror';
-import { useWatchRemoteControl } from './src/v2/hooks/useWatchRemoteControl';
+} from '@/storage';
+import type { PlanConsumeRecord } from './v2/components/execution/cards/PlanCard';
+import { isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from './v2/services/watchConnectivity';
+import { watchHeartRateStore } from './v2/services/watchHeartRateStore';
+import { useWatchMirror } from './v2/hooks/useWatchMirror';
+import { useWatchRemoteControl } from './v2/hooks/useWatchRemoteControl';
 
 interface ChatMessage {
     role: 'user' | 'ai';

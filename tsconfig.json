@@ -19,6 +19,24 @@
     "allowJs": true,
     "jsx": "react-jsx",
     "paths": {
+      "@/services/*": [
+        "./src/services/*"
+      ],
+      "@/services": [
+        "./src/services/index.ts"
+      ],
+      "@/storage/*": [
+        "./src/storage/*"
+      ],
+      "@/storage": [
+        "./src/storage/index.ts"
+      ],
+      "@/utils/*": [
+        "./src/utils/*"
+      ],
+      "@/constants": [
+        "./src/constants.ts"
+      ],
       "@/*": [
         "./*"
       ],
