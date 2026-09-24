@@ -1,5 +1,5 @@
 // Use unified WebSocketClient instead of legacy SocketService
-import { socketService } from '../v2/services/transport/WebSocketClient';
+import { socketService } from './transport/WebSocketClient';
 
 export enum TrackingEvent {
   CORRECTION_WEIGHT = 'correction_weight',

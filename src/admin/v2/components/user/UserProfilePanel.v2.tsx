@@ -28,7 +28,7 @@ import { AdminService } from '../../services/api';
 import type { FlattenedProfile } from '../../services/api';
 import { ProfileFullSheet } from './ProfileFullSheet';
 import { parseJSONSafe } from '../../../../types/validation';
-import { transitions } from '../../../../v2/lib/animations';
+import { transitions } from '../../../../lib/animations';
 
 interface UserStats {
   session_count?: number;

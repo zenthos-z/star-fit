@@ -19,7 +19,7 @@ import { API_BASE, setApiBase, getHeaders } from '@/services/geminiService';
 import { useLoginStatus } from '../hooks/useLoginStatus';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '../lib/nativeHaptics';
-import { transitions } from '../v2/lib/animations';
+import { transitions } from '../lib/animations';
 import {
   isNativeGlassMenu,
   showGlassMenu,
@@ -29,8 +29,8 @@ import {
 } from '../lib/nativeGlassMenu';
 import { isNativeTabBar, setTabBarHidden } from '../lib/nativeTabBar';
 import { List } from 'react-window';
-import { setVolume } from '../v2/utils/workoutSummary';
-import { WatchDiagnosticsCard } from '../v2/components/settings/WatchStatusCard';
+import { setVolume } from '../utils/workoutSummary';
+import { WatchDiagnosticsCard } from './settings/WatchStatusCard';
 // （DEFAULT_BODYWEIGHT 已不再使用：容量统一走 setVolume，自重兜底逻辑在其内部）
 
 // 容量口径统一（2026-09-16）：单组容量共用 workoutSummary.setVolume

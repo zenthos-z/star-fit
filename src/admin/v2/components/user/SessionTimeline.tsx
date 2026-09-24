@@ -26,7 +26,7 @@ import {
 import { AppExerciseType, getExerciseType } from '../../services/types';
 import { parseJSONSafe } from '../../../../types/validation';
 import { agentContextStore, useAgentContextAttachments } from '../../state/agentContextStore';
-import { transitions } from '../../../../v2/lib/animations';
+import { transitions } from '../../../../lib/animations';
 
 interface Set {
   id?: string;

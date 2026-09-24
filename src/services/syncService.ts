@@ -2,7 +2,7 @@ import { API_BASE, getHeaders } from './geminiService';
 import { Keys } from '@/storage/schemas';
 import { storageGet, storageSet, getDeviceId as getStorageDeviceId } from '@/storage';
 import { ExerciseLibraryService } from './exerciseLibraryService';
-import { deviationBuffer } from '../v2/services/DeviationBuffer';
+import { deviationBuffer } from './DeviationBuffer';
 
 const QUEUE_KEY = 'STARFIT_SYNC_QUEUE';
 const DELETE_QUEUE_KEY = 'STARFIT_DELETE_QUEUE';

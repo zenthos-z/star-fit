@@ -1,7 +1,7 @@
 import { test, describe, expect } from 'vitest';
-import { TrackSmoother, gainsFor, smoothTrack, MAX_ACCEL_MPS2 } from '../src/v2/utils/trackSmoother';
-import { wgs84ToGcj02, outOfChina } from '../src/v2/utils/coordTransform';
-import type { Position } from '../src/v2/hooks/useGeolocation';
+import { TrackSmoother, gainsFor, smoothTrack, MAX_ACCEL_MPS2 } from '../src/utils/trackSmoother';
+import { wgs84ToGcj02, outOfChina } from '../src/utils/coordTransform';
+import type { Position } from '../src/hooks/useGeolocation';
 
 const DEG_LAT_M = 111320;
 

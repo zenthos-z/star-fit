@@ -10,7 +10,7 @@
  * 展示时只读、不回写（写权限留在 admin 后台）。
  */
 
-import { API_BASE, getHeaders } from '../services/geminiService';
+import { API_BASE, getHeaders } from './geminiService';
 
 export interface ModelTaskConfig {
   provider: string;

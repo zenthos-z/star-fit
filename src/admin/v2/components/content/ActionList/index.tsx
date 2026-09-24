@@ -4,7 +4,7 @@ import { ActionCard } from './ActionCard';
 import { Button } from '../../ui/Button';
 import { AdminService } from '../../../services/api';
 import { Exercise } from '../../../services/types';
-import { ActionEditor } from '../ActionEditor';
+import { ActionEditor } from '../ActionEditor/index';
 import { ExportDialog, ImportDialog } from '@/src/components/ExerciseIO/ExerciseIODialogs';
 
 type SortOption = 'name-asc' | 'name-desc' | 'created-asc' | 'created-desc' | 'modified-asc' | 'modified-desc';

@@ -19,7 +19,7 @@ export type {
   WorkoutSession,
   BiometricMetric,
   AgentInteraction
-} from '../../shared/contracts';
+} from '../../shared/contracts/index';
 
 // Re-export schemas
 export {
@@ -35,4 +35,4 @@ export {
   WorkoutSessionSchema,
   BiometricMetricSchema,
   AgentInteractionSchema
-} from '../../shared/contracts';
+} from '../../shared/contracts/index';

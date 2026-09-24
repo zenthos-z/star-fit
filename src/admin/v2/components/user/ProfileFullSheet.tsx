@@ -26,7 +26,7 @@ import {
 import type { FlattenedProfile } from '../../services/api';
 import type { LoadAnchor } from 'shared/contracts';
 import { agentContextStore } from '../../state/agentContextStore';
-import { transitions } from '../../../../v2/lib/animations';
+import { transitions } from '../../../../lib/animations';
 
 interface ProfileFullSheetProps {
   userId: string;

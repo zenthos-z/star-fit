@@ -2,27 +2,27 @@ import React, { useState, useEffect, useRef, useCallback, useReducer } from 'rea
 import { v4 as uuidv4 } from 'uuid';
 import { motion, AnimatePresence, useMotionValue, animate } from 'framer-motion';
 import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiScenario } from '@/src/types/legacy';
-import { navigationReducer, initialNavigation } from './v2/lib/navigation';
-import { computeSettlementSummary } from './v2/lib/settlementSummary';
-import { LoadAnchors } from './v2/types/protocol';
+import { navigationReducer, initialNavigation } from './lib/navigation';
+import { computeSettlementSummary } from './lib/settlementSummary';
+import { LoadAnchors } from './types/protocol';
 import TimerCapsule from './components/TimerCapsule';
-import LockScreen from './v2/components/execution/LockScreen';
-import { ExerciseCardV2 } from './v2/components/execution/ExerciseCardV2';
-import ReorderMode from './v2/components/execution/ReorderMode';
-import SettlementV2 from './v2/components/settlement/SettlementV2';
+import LockScreen from './components/execution/LockScreen';
+import { ExerciseCardV2 } from './components/execution/ExerciseCardV2';
+import ReorderMode from './components/execution/ReorderMode';
+import SettlementV2 from './components/settlement/SettlementV2';
 import History from './components/History';
 import { haptic } from './lib/nativeHaptics';
 import { startLiveActivity, pauseLiveActivity, endLiveActivity } from './lib/liveActivity';
 import TimeEditor from './components/TimeEditor';
 import MainTabBar, { MainTab } from './components/MainTabBar';
 import ExerciseSettingsModal from './components/ExerciseSettingsModal';
-import { ExerciseAction } from './v2/types/protocol';
+import { ExerciseAction } from './types/protocol';
 
-import { ExerciseTutorialModal } from './v2/components/execution/ExerciseTutorialModal';
+import { ExerciseTutorialModal } from './components/execution/ExerciseTutorialModal';
 import LoginV2 from './components/LoginV2';
-import { AICoachOverlay } from './v2/components/execution/AICoachOverlay';
-import { SettingsPage } from './v2/pages';
-import { useAICoach } from './v2/hooks/useAICoach';
+import { AICoachOverlay } from './components/execution/AICoachOverlay';
+import { SettingsPage } from './pages/index';
+import { useAICoach } from './hooks/useAICoach';
 import { useLoginStatus } from './hooks/useLoginStatus';
 import { UserProfileService } from './services/userProfileService';
 import {
@@ -53,11 +53,11 @@ import {
   clearNextPlan,
   migrateLegacyLoginData
 } from '@/storage';
-import type { PlanConsumeRecord } from './v2/components/execution/cards/PlanCard';
-import { isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from './v2/services/watchConnectivity';
-import { watchHeartRateStore } from './v2/services/watchHeartRateStore';
-import { useWatchMirror } from './v2/hooks/useWatchMirror';
-import { useWatchRemoteControl } from './v2/hooks/useWatchRemoteControl';
+import type { PlanConsumeRecord } from './components/execution/cards/PlanCard';
+import { isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from './services/watchConnectivity';
+import { watchHeartRateStore } from './services/watchHeartRateStore';
+import { useWatchMirror } from './hooks/useWatchMirror';
+import { useWatchRemoteControl } from './hooks/useWatchRemoteControl';
 
 interface ChatMessage {
     role: 'user' | 'ai';

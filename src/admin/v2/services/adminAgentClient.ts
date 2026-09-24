@@ -13,9 +13,9 @@
  * @module adminAgentClient
  */
 
-import { parseSSEChunk } from '../../../v2/services/agent/sseAgentClient';
+import { parseSSEChunk } from '../../../services/agent/sseAgentClient';
 import type { AgentEvent } from 'shared/contracts';
-import { API_BASE } from '../services/geminiService';
+import { API_BASE } from './geminiService';
 import { getAccessToken } from '@/services/geminiService';
 
 export interface AdminChatRequest {

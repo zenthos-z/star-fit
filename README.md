@@ -373,7 +373,6 @@ star-fit/
 ├── docs-site/              # VitePress 文档站点
 ├── docs/                   # 领域知识与分析资料
 ├── registry/               # 固化知识库（动作标准库）
-├── packages/               # 共享工具包（e2e-link-checker）
 ├── scripts/                # 工程 scripts
 └── tests/                  # 测试
 ```
@@ -407,21 +406,15 @@ star-fit/
 PostgreSQL 16 + 后端 + 可选迁移/网关 profile）和 `deploy/AGENT_DEPLOY.md`
 （可交给任意 AI Agent 执行的自包含部署任务书）。
 
-> 该目录正在完善中（即将发布），落地前可先参考
-> [部署文档](docs-site/development/deployment.md) 了解架构与端口约定。
+> 该目录正在完善中（即将发布）。
 
 ---
 
 ## 📚 文档
 
-完整文档在 VitePress 文档站：**https://zenthos-z.github.io/star-fit/**（本地 `npm run docs:dev`）：
+文档站（VitePress，本地 `npm run docs:dev`）只保留设计哲学：
 
-- [项目简介](docs-site/getting-started/introduction.md) · [快速开始](docs-site/getting-started/quick-start.md) · [设计理念](docs-site/getting-started/design-philosophy.md)
-- [数据协议](docs-site/concepts/data-protocol.md) · [同步系统](docs-site/concepts/sync-system.md) · [AI 教练](docs-site/concepts/ai-coach.md) · [视频管理](docs-site/concepts/video-management.md)
-- [数据流](docs-site/architecture/data-flow.md) · [三态数据流](docs-site/architecture/three-state-data-flow.md)
-- [PostgreSQL Schema](docs-site/database/postgresql-schema.md) · [Repository 层](docs-site/database/repository-layer.md)
-- [UI 设计系统](docs-site/ui-guides/README.md)（颜色 / 字体 / 间距 / 动效 / 卡片 / 气泡）
-- [贡献指南](docs-site/development/contributing.md) · [目录规范](docs-site/development/directory-conventions.md) · [部署](docs-site/development/deployment.md)
+- [设计哲学](docs-site/getting-started/design-philosophy.md)
 - 历史文档（早期迁移时代，仅供参考）：[docs/archive/](docs/archive/)
 
 ---

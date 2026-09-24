@@ -10,18 +10,18 @@ export default defineConfig({
     exclude: [
       '**/node_modules/**',
       'backend/**',      // 后端测试归 backend 自己的 runner（tsx --test / jest）
-      'packages/**',     // e2e-link-checker 等子包有自己的 runner（jest / playwright）
+      'packages/**',     // 子包如有自己的 runner，防止 vitest 误捡
       'android/**',
       'dist/**',
     ],
-    setupFiles: ['./src/v2/__tests__/setup.ts'],
+    setupFiles: ['./src/__tests__/setup.ts'],
     css: true,
     coverage: {
       provider: 'v8',
       reporter: ['text', 'json', 'html', 'lcov'],
       exclude: [
         'node_modules/',
-        'src/v2/__tests__/',
+        'src/__tests__/',
         '**/*.test.{ts,tsx}',
         '**/*.spec.{ts,tsx}',
         'src/admin/',
@@ -36,7 +36,6 @@ export default defineConfig({
       { find: '@/storage', replacement: path.resolve(__dirname, 'src/storage') },
       { find: '@/utils', replacement: path.resolve(__dirname, 'src/utils') },
       { find: '@/constants', replacement: path.resolve(__dirname, 'src/constants.ts') },
-      { find: '@/v2', replacement: path.resolve(__dirname, 'src/v2') },
       { find: '@', replacement: path.resolve(__dirname, '.') },
       { find: 'shared/contracts', replacement: path.resolve(__dirname, 'shared/contracts') },
     ],

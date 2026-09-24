@@ -1,0 +1,423 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { WorkoutSession } from '../../types/protocol';
+import { extractWorkoutData } from './core/dataExtractorV2';
+import { generateShanShuiTemplate, generateBauhausTemplate, generateAcidTemplate, TemplateContext, VibeConfig } from './core/templateEngine';
+import { shanshuiConfig } from './styles/shanshuiConfig';
+import { bauhausConfig } from './styles/bauhausConfig';
+import { industrialConfig } from './styles/industrialConfig';
+import { liquidConfig } from './styles/liquidConfig';
+import { cyberConfig } from './styles/cyberConfig';
+import { punkConfig } from './styles/punkConfig';
+import { API_BASE, getHeaders } from '../../services/geminiService';
+import { setTabBarHidden } from '../../lib/nativeTabBar';
+import { transitions } from '../../lib/animations';
+import { haptic } from '../../lib/nativeHaptics';
+import { PosterResultViewer } from './PosterResultViewer';
+
+interface PosterPromptGeneratorV2Props {
+  session: WorkoutSession;
+  onClose: () => void;
+}
+
+const STYLE_OPTIONS = [
+  { id: 'shanshui', name: '青绿山水' },
+  { id: 'bauhaus', name: '包豪斯' },
+  { id: 'industrial', name: '工业重金属' },
+  { id: 'liquid', name: '超限流体' },
+  { id: 'cyber', name: '赛博霓虹' },
+  { id: 'punk', name: '复古朋克' },
+] as const;
+
+const ACID_STYLE_IDS = ['industrial', 'liquid', 'cyber', 'punk'];
+
+const VIBE_FIELDS: Array<{ key: keyof VibeConfig; label: string; placeholder: string }> = [
+  { key: 'slogans', label: '标语', placeholder: 'SYSTEM OVERLOAD, LEG DAY' },
+  { key: 'palette', label: '色彩方案', placeholder: 'Neon Orange vs Midnight Blue' },
+  { key: 'brandingStyle', label: '品牌质感', placeholder: 'Chrome Metallic 3D style' },
+];
+
+export const PosterPromptGeneratorV2: React.FC<PosterPromptGeneratorV2Props> = ({ session, onClose }) => {
+  const [selectedStyle, setSelectedStyle] = useState('shanshui');
+  const [vibeConfig, setVibeConfig] = useState<VibeConfig>({});
+  const [finalPrompt, setFinalPrompt] = useState('');
+  const [isGenerating, setIsGenerating] = useState(false);
+  const [copied, setCopied] = useState(false);
+  // 生成状态机：idle → generating → hasResult（可查看结果/重新生成）| 失败回 idle + 页内错误提示
+  const [posterDataUrl, setPosterDataUrl] = useState<string | null>(null);
+  const [showResult, setShowResult] = useState(false);
+  const [generateError, setGenerateError] = useState<string | null>(null);
+  // 持久化恢复：按 session 维度缓存生成结果，关闭页面后重开还能看到，无需重新生成。
+  // ★走 localStorage 同步读写（WKWebView 的 IndexedDB 不可靠，教训同 useLoginStatus——IDB 只当缓存，
+  //   关键状态用 localStorage 做权威；且 dataURL 体积大，避免 storageGet 的 IDB open 超时拖慢挂载）。
+  useEffect(() => {
+    let cancelled = false;
+    try {
+      const cached = localStorage.getItem(`starfit_poster:${session.id}`);
+      if (!cancelled && cached && cached.startsWith('data:image/')) {
+        setPosterDataUrl(cached);
+      }
+    } catch (e) {
+      console.warn('[Poster] cache read failed:', e);
+    }
+    return () => { cancelled = true; };
+     
+  }, [session.id]);
+
+  // iOS sheet 规范：全屏 sheet 呈现时盖住原生 tab bar，关闭恢复（同 SettlementV2）
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
+
+  const workoutData = extractWorkoutData(session);
+
+  // 海报昵称：所有风格共用。初值从 localStorage 恢复（上次输入），
+  // 也可在 UI 直接改；无输入时兜底 dataExtractor 的默认值。
+  const [posterNickname, setPosterNickname] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('starfit_poster_nickname');
+      return typeof saved === 'string' ? saved : '';
+    } catch {
+      return '';
+    }
+  });
+  const [nicknameError, setNicknameError] = useState(false);
+  const handleNicknameChange = (v: string) => {
+    setPosterNickname(v);
+    try {
+      localStorage.setItem('starfit_poster_nickname', v);
+    } catch (e) {
+      console.warn('[Poster] nickname persist failed:', e);
+    }
+  };
+
+  const generatePrompt = useCallback(() => {
+    // 署名完全自定义（用户个人标志不得硬编码在模板里）。留空时拦截并提示，不编造占位署名。
+    if (!posterNickname.trim()) {
+      setNicknameError(true);
+      return;
+    }
+    setNicknameError(false);
+    let context: TemplateContext;
+    let config: any;
+
+    // 昵称注入：所有风格模板都读 data.nickname（山水 User_ID / 包豪斯 Text_Content /
+    // Acid finalNickname 的兜底），覆盖写死值，保证"改一处全风格生效"。
+    const posterData: typeof workoutData = {
+      ...workoutData,
+      nickname: posterNickname.trim() || workoutData.nickname,
+    };
+
+    switch (selectedStyle) {
+      case 'shanshui':
+        config = shanshuiConfig;
+        context = { data: posterData, config };
+        setFinalPrompt(generateShanShuiTemplate(context));
+        break;
+      case 'bauhaus':
+        config = bauhausConfig;
+        context = { data: posterData, config };
+        setFinalPrompt(generateBauhausTemplate(context));
+        break;
+      case 'industrial':
+        config = industrialConfig;
+        context = { data: posterData, config, vibeConfig };
+        setFinalPrompt(generateAcidTemplate(context));
+        break;
+      case 'liquid':
+        config = liquidConfig;
+        context = { data: posterData, config, vibeConfig };
+        setFinalPrompt(generateAcidTemplate(context));
+        break;
+      case 'cyber':
+        config = cyberConfig;
+        context = { data: posterData, config, vibeConfig };
+        setFinalPrompt(generateAcidTemplate(context));
+        break;
+      case 'punk':
+        config = punkConfig;
+        context = { data: posterData, config, vibeConfig };
+        setFinalPrompt(generateAcidTemplate(context));
+        break;
+      default:
+        config = shanshuiConfig;
+        context = { data: posterData, config };
+        setFinalPrompt(generateShanShuiTemplate(context));
+    }
+  }, [selectedStyle, vibeConfig, workoutData, posterNickname]);
+
+  useEffect(() => {
+    generatePrompt();
+  }, [generatePrompt]);
+
+  const handleSelectStyle = (id: string) => {
+    if (id === selectedStyle) return;
+    haptic('light');
+    setSelectedStyle(id);
+  };
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(finalPrompt).then(() => {
+      haptic('success');
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+      console.error('Copy failed', err);
+      alert('复制失败，请手动复制');
+    });
+  };
+
+  // 真实链路：POST {API_BASE}/agent/image → { dataUrl }（10-60s，不设短超时）
+  // 成功 → 主钮变「查看生成结果」；失败 → 恢复原文案 + 页内错误提示（勿 alert 阻塞）。
+  // 已有结果后改风格/氛围参数再次点击 → 重新 POST，成功覆盖刷新结果。
+  const requestPoster = useCallback(async () => {
+    setIsGenerating(true);
+    setGenerateError(null);
+    try {
+      const isAcid = ACID_STYLE_IDS.includes(selectedStyle);
+      const res = await fetch(`${API_BASE}/agent/image`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify({
+          session,
+          templateKey: selectedStyle,
+          vibeOverride: isAcid ? vibeConfig : undefined,
+          // 所见即所得：界面显示的提示词就是生图用的提示词（后端优先用它，跳过自拼）
+          promptOverride: finalPrompt || undefined,
+        }),
+      });
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(typeof payload.error === 'string' ? payload.error : `生成失败（HTTP ${res.status}）`);
+      }
+      if (typeof payload.dataUrl !== 'string' || !payload.dataUrl.startsWith('data:image/')) {
+        throw new Error('生成结果格式异常');
+      }
+      setPosterDataUrl(payload.dataUrl);
+      // 持久化到 localStorage（session 维度），关闭页面后重开可恢复
+      try {
+        localStorage.setItem(`starfit_poster:${session.id}`, payload.dataUrl);
+      } catch (e) {
+        console.warn('[Poster] cache save failed:', e);
+      }
+      haptic('success');
+    } catch (error) {
+      console.error('Generate image error:', error);
+      setGenerateError(error instanceof Error ? error.message : '生成图片失败，请重试');
+    } finally {
+      setIsGenerating(false);
+    }
+  }, [session, selectedStyle, vibeConfig, finalPrompt]);
+
+  const handlePrimaryAction = () => {
+    if (posterDataUrl && !isGenerating) {
+      haptic('light');
+      setShowResult(true);
+    } else {
+      requestPoster();
+    }
+  };
+
+  const isAcidStyle = ACID_STYLE_IDS.includes(selectedStyle);
+
+  return (
+    <motion.div
+      initial={{ y: '100%' }}
+      animate={{ y: 0 }}
+      exit={{ y: '100%' }}
+      transition={transitions.springGentle}
+      className="fixed inset-0 z-[120] bg-[#FAFAFA] flex flex-col rounded-t-[40px] overflow-hidden"
+    >
+      {/* Header：返回钮左置（HIG），标题居中，整体避让状态栏安全区 */}
+      <div
+        className="shrink-0 grid grid-cols-[44px_1fr_44px] items-center px-[max(16px,env(safe-area-inset-left,0px))] pr-[max(16px,env(safe-area-inset-right,0px))]"
+        style={{ paddingTop: 'calc(env(safe-area-inset-top, 0px) + 12px)', paddingBottom: '8px' }}
+      >
+        <button
+          onClick={() => { haptic('light'); onClose(); }}
+          aria-label="返回"
+          className="w-11 h-11 rounded-full bg-white border border-gray-100 shadow-sm flex items-center justify-center text-gray-500 active:bg-gray-100 active:scale-95 transition-all"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+        <div className="text-center">
+          <h2 className="text-lg font-black text-gray-900 tracking-tighter">AI 海报</h2>
+          <p className="text-[11px] text-gray-400 mt-0.5">
+            {workoutData.date} · {workoutData.duration}
+          </p>
+        </div>
+        <div />
+      </div>
+
+      {/* 内容区：flex 撑满剩余高度，尽量一屏放下；提示词预览内部滚动兜底 */}
+      <div
+        className="flex-1 min-h-0 flex flex-col gap-3 overflow-y-auto px-[max(16px,env(safe-area-inset-left,0px))] pr-[max(16px,env(safe-area-inset-right,0px))]"
+        style={{
+          paddingTop: '8px',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 96px)',
+        }}
+      >
+        {/* 风格选择：单行横滑 chips，不占纵向空间 */}
+        <div className="shrink-0 bg-white rounded-[40px] p-3 shadow-sm border border-gray-50">
+          <div className="flex gap-2 overflow-x-auto pb-1 -mb-1" style={{ scrollbarWidth: 'none' }}>
+            {STYLE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                onClick={() => handleSelectStyle(option.id)}
+                className={`shrink-0 h-11 px-4 rounded-full text-[13px] font-semibold transition-all active:scale-95 ${
+                  selectedStyle === option.id
+                    ? 'bg-blue-500 text-white shadow-sm'
+                    : 'bg-gray-50 text-gray-500 active:bg-gray-100'
+                }`}
+              >
+                {option.name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* 海报昵称：所有风格通用（山水/包豪斯/Acid 模板都读 data.nickname） */}
+        <div className="shrink-0 bg-white rounded-[40px] p-5 shadow-sm border border-gray-50">
+          <div className="flex items-center gap-2.5 mb-4">
+            <span className="w-2 h-2 rounded-full border-2 border-blue-500" />
+            <span className="text-sm font-semibold text-gray-900">海报昵称</span>
+          </div>
+          <input
+            type="text"
+            value={posterNickname}
+            onChange={(e) => handleNicknameChange(e.target.value)}
+            placeholder="自定义海报署名（如：力量小站）"
+            className={`w-full bg-gray-50 border rounded-2xl px-3 py-2.5 text-[13px] font-medium text-gray-900 placeholder:text-gray-300 outline-none transition-all ${nicknameError ? 'border-red-300 bg-red-50' : 'border-gray-100 focus:border-blue-400 focus:bg-white'}`}
+          />
+          {nicknameError && (
+            <p className="mt-1.5 text-xs text-red-500">请先填写海报署名，生成时将作为海报上的标识文字</p>
+          )}
+        </div>
+
+        {/* 氛围参数：仅 acid 系风格需要，其余风格不渲染（免空卡片占位） */}
+        {isAcidStyle && (
+          <div className="shrink-0 bg-white rounded-[40px] p-5 shadow-sm border border-gray-50">
+            <div className="flex items-center gap-2.5 mb-4">
+              <span className="w-2 h-2 rounded-full border-2 border-blue-500" />
+              <span className="text-sm font-semibold text-gray-900">氛围参数</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              {VIBE_FIELDS.map((field) => (
+                <div key={String(field.key)} className={field.key === 'slogans' || field.key === 'palette' ? 'col-span-1' : 'col-span-1'}>
+                  <label className="block text-[11px] text-gray-400 font-medium mb-1.5">{field.label}</label>
+                  <input
+                    type="text"
+                    value={vibeConfig[field.key] || ''}
+                    onChange={(e) => setVibeConfig({ ...vibeConfig, [field.key]: e.target.value })}
+                    placeholder={field.placeholder}
+                    className="w-full bg-gray-50 border border-gray-100 rounded-2xl px-3 py-2.5 text-[13px] font-medium text-gray-900 placeholder:text-gray-300 outline-none focus:border-blue-400 focus:bg-white transition-all"
+                  />
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 提示词预览：占满剩余高度，内部滚动 */}
+        <div className="flex-1 min-h-[120px] flex flex-col bg-white rounded-[40px] p-5 shadow-sm border border-gray-50">
+          <div className="flex items-center gap-2.5 mb-3 shrink-0">
+            <span className="w-2 h-2 rounded-full border-2 border-blue-500" />
+            <span className="text-sm font-semibold text-gray-900">提示词</span>
+          </div>
+          <div className="flex-1 min-h-0 overflow-y-auto bg-gray-50 rounded-3xl p-4">
+            <pre className="whitespace-pre-wrap break-words text-[12px] leading-relaxed text-gray-600 font-mono">
+              {finalPrompt || '请选择风格生成提示词…'}
+            </pre>
+          </div>
+        </div>
+      </div>
+
+      {/* 底部操作栏：玻璃双钮（复制 = 浅玻璃 / 生成 = 深玻璃主行动），避让底部安全区 */}
+      <div
+        className="absolute left-0 right-0 flex justify-center gap-3 px-6"
+        style={{ bottom: 'calc(16px + env(safe-area-inset-bottom, 0px))' }}
+      >
+        <button
+          onClick={handleCopy}
+          className={`liquid-glass flex-1 h-[50px] font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform ${
+            copied ? 'text-green-600' : 'text-gray-900'
+          }`}
+        >
+          {copied ? (
+            <>
+              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+              </svg>
+              <span>已拷贝</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" />
+              </svg>
+              <span>复制提示词</span>
+            </>
+          )}
+        </button>
+
+        <button
+          onClick={handlePrimaryAction}
+          disabled={isGenerating}
+          className="liquid-glass-dark flex-1 h-[50px] text-white font-semibold text-[17px] rounded-full flex items-center justify-center gap-1.5 active:scale-[0.98] transition-transform disabled:opacity-60"
+        >
+          {isGenerating ? (
+            <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+          ) : posterDataUrl ? (
+            <>
+              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+              </svg>
+              <span>查看生成结果</span>
+            </>
+          ) : (
+            <>
+              <svg className="w-[18px] h-[18px]" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              <span>AI 生成海报</span>
+            </>
+          )}
+        </button>
+      </div>
+
+      {/* 页内错误提示（替代 alert 阻塞），悬浮于底部操作栏上方 */}
+      <AnimatePresence>
+        {generateError && !isGenerating && (
+          <motion.div
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 12 }}
+            transition={transitions.springGentle}
+            className="absolute left-0 right-0 flex justify-center px-6 pointer-events-none"
+            style={{ bottom: 'calc(78px + env(safe-area-inset-bottom, 0px))' }}
+          >
+            <div className="bg-red-500/10 text-red-500 text-[12px] font-medium px-4 py-2 rounded-full max-w-full truncate">
+              {generateError}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* 结果查看子页：同层级全屏 sheet，z-[130] 高于父层 z-[120] */}
+      <AnimatePresence>
+        {showResult && posterDataUrl && (
+          <PosterResultViewer
+            dataUrl={posterDataUrl}
+            isRegenerating={isGenerating}
+            onRegenerate={requestPoster}
+            onClose={() => setShowResult(false)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
+  );
+};

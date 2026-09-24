@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Sidebar } from '../components/layout/Sidebar';
 import { Header } from '../components/layout/Header';
 import { Dashboard } from '../components/dashboard/Dashboard';
-import { ActionList } from '../components/content/ActionList';
+import { ActionList } from '../components/content/ActionList/index';
 import { SettingsPage } from '../components/settings/SettingsPage';
 import { UserManagementPage } from '../components/user/UserManagementPage';
 import { Card } from '../components/ui/Card';
