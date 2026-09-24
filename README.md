@@ -352,13 +352,14 @@ open ios/App/App.xcworkspace   # Xcode 中选真机/模拟器运行
 
 ```
 star-fit/
-├── src/                    # 前端 React 源码
-│   ├── v2/                 #   V2 新架构（components/hooks/services/storage）
-│   ├── admin/v2/           #   管理控制台
-│   └── components/ai/      #   AI 对话 UI
-├── components/             # 过渡期旧组件
-├── services/               # 前端服务层
-├── storage/                # IndexedDB 适配
+├── src/                    # 前端 React 源码（唯一前端家园）
+│   ├── components/         #   UI 组件（execution/settlement/history/poster/profile…）
+│   ├── hooks/              #   业务逻辑 hooks（useAICoach 等）
+│   ├── services/           #   前端服务层（geminiService/syncService…）
+│   ├── storage/            #   IndexedDB 适配与 schema
+│   ├── types/              #   前端类型（legacy/protocol/bridge）
+│   ├── lib/ utils/ pages/  #   工具库与页面
+│   └── admin/              #   管理控制台（独立入口 admin.html）
 ├── backend/                # Fastify 后端
 │   └── src/
 │       ├── controllers/    #   API 控制器
@@ -368,13 +369,13 @@ star-fit/
 │       ├── db/postgresql/  #   schema、migrations、repository
 │       └── schemas/        #   Zod 数据校验
 ├── shared/contracts/       # 前后端数据契约（唯一来源）
-├── ios/                    # Capacitor iOS 壳（含手写 Swift 原生插件：LiquidGlass/AppPlugin）
+├── ios/                    # Capacitor iOS 壳（含手写 Swift 原生插件：LiquidGlass/AppPlugin + WatchApp）
 ├── android/                # Capacitor Android 壳
-├── docs-site/              # VitePress 文档站点
-├── docs/                   # 领域知识与分析资料
-├── registry/               # 固化知识库（动作标准库）
-├── scripts/                # 工程 scripts
-└── tests/                  # 测试
+├── docs-site/              # VitePress 文档站（仅保留设计哲学）
+├── docs/                   # 领域知识与历史档案（adr/archive/changelog/references）
+├── deploy/                 # 自部署引导包（docker-compose.prod + AGENT_DEPLOY）
+├── scripts/                # 工程脚本（lint 自定义规则/快照/隔离验证）
+└── fixtures/               # 测试夹具
 ```
 
 ---
@@ -425,7 +426,7 @@ PostgreSQL 16 + 后端 + 可选迁移/网关 profile）和 `deploy/AGENT_DEPLOY.
 
 1. 通过类型检查（`npm run typecheck`）
 2. 通过单元测试（`npm run test:run`）
-3. 更新相关文档（docs-site）
+3. 代码与 `README.md` 的项目结构描述保持一致（结构变更时同步更新）
 
 ---
 
