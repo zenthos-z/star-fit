@@ -5,7 +5,7 @@ import { WorkoutSession } from '../../types/protocol';
 import { APP_NAME } from '@/constants';
 import { toPng } from 'html-to-image';
 import { PosterPromptGeneratorV2 } from '../poster/PosterPromptGeneratorV2';
-import { convertSessionToWorkoutSession } from '../../utils/typeBridge';
+import { convertSessionToWorkoutSession } from '../../types/bridge';
 import { calculateExerciseVolume } from '../../lib/settlementSummary';
 import { buttonPress, tapScale, staggerContainer, staggerItem, transitions } from '../../lib/animations';
 import { setTabBarHidden } from '../../lib/nativeTabBar';
