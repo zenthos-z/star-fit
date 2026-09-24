@@ -1,9 +1,0 @@
-node_modules/
-dist/
-coverage/
-*.log
-.DS_Store
-*.tsbuildinfo
-playwright-report/
-test-results/
-.env.local
