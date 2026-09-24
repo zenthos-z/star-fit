@@ -11,7 +11,7 @@
  *   - 字段与 backend/src/controllers/sessionController.ts 的 Zod schema 对齐
  */
 
-import type { Exercise, ExerciseSet } from '@/types';
+import type { Exercise, ExerciseSet } from '@/src/types/legacy';
 
 /** 判断一组是否完成：兼容 completed 布尔与 protocol v2 的 status 字段 */
 export const isSetCompleted = (set: ExerciseSet): boolean =>

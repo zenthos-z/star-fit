@@ -1,6 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Session } from '../../../../types';
+import { Session } from '@/src/types/legacy';
 import { WorkoutSession } from '../../types/protocol';
 import { APP_NAME } from '@/constants';
 import { toPng } from 'html-to-image';

@@ -4,7 +4,7 @@
 // 语义：resistance/weight_only/reps_only = w×r；bodyweight = (bw+w)×r；
 // assisted = max(0, bw−|w|)×r（负助力容量只算真实负荷）；unilateral = w×r×2；
 // isometric = (w>0 ? w : bw兜底)×duration；cardio/outdoor = 0。
-import { Exercise } from '../../../types';
+import { Exercise } from '@/src/types/legacy';
 import { setVolume } from '../utils/workoutSummary';
 
 export interface SettlementSummary {

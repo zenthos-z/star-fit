@@ -10,7 +10,7 @@
 
 import React, { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import type { Session } from '../../../types';
+import type { Session } from '@/src/types/legacy';
 import { ProfileContainer } from '../components/profile/ProfileContainer';
 import { BasicInfoForm } from '../components/profile/BasicInfoForm';
 import { LoadAnchorsForm } from '../components/profile/LoadAnchorsForm';

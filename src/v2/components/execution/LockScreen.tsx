@@ -8,7 +8,7 @@ import { LOCK_MOTION } from './lockMotion';
 import { isWatchBridge, onWatchEvent, type WatchEvent } from '../../services/watchConnectivity';
 import { useLoadAnchors } from '../../hooks/useLoadAnchors';
 import { getUserId } from '@/services';
-import type { Exercise, ExerciseType } from '../../../../types';
+import type { Exercise, ExerciseType } from '@/src/types/legacy';
 
 /**
  * 胶囊内圆形长按钮（锁屏暂停控制条专用，2026-09-17）：

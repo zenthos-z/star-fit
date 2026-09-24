@@ -1,4 +1,4 @@
-import { Exercise, Session, AiConfig, AiScenario } from '@/types';
+import { Exercise, Session, AiConfig, AiScenario } from '@/src/types/legacy';
 import { MOCK_PLAN, DEFAULT_AI_CONFIG } from '@/constants';
 import { loadTutorialCache, saveTutorialCache, loadLoginCredentials } from '@/storage';
 

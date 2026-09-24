@@ -1,4 +1,4 @@
-import { AiConfig, AiScenario } from '@/types';
+import { AiConfig, AiScenario } from '@/src/types/legacy';
 
 export const APP_NAME = "Starfit";
 export const DEFAULT_REST_TIME = 60; // seconds

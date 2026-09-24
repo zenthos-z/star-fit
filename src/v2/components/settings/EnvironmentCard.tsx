@@ -10,7 +10,7 @@
 
 import React, { useRef } from 'react';
 import { API_BASE, getHeaders } from '../../../services/geminiService';
-import type { Session } from '../../../../types';
+import type { Session } from '@/src/types/legacy';
 
 // ============================================================================
 // Types

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { computeSettlementSummary, calculateExerciseVolume } from '../settlementSummary';
-import { Exercise, ExerciseType } from '../../../../types';
+import { Exercise, ExerciseType } from '@/src/types/legacy';
 
 const mkSet = (p: Partial<{ weight: number; reps: number; duration: number; completed: boolean; heartRate: number }>) => ({
   id: Math.random().toString(36).slice(2),

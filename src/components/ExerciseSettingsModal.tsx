@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { ExerciseSet, ExerciseType, Exercise } from '../../types';
+import { ExerciseSet, ExerciseType, Exercise } from '@/src/types/legacy';
 import { setVolume } from '../v2/utils/workoutSummary';
 import { ExerciseAction, LoadAnchors as LoadAnchorsType } from '../v2/types/protocol';
 import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '@/constants';

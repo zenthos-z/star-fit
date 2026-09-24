@@ -10,7 +10,7 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Session, Exercise } from '../../types';
+import { Session, Exercise } from '@/src/types/legacy';
 import { DEFAULT_BODYWEIGHT } from '@/constants';
 import SwipeableRow from './SwipeableRow';
 import { SyncService } from '@/services/syncService';

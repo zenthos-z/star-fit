@@ -19,7 +19,7 @@ import {
   buildWorkoutStats,
   formatExerciseEntry,
 } from './workoutSummary';
-import type { Exercise, ExerciseSet } from '@/types';
+import type { Exercise, ExerciseSet } from '@/src/types/legacy';
 
 const mkSet = (over: Partial<ExerciseSet> = {}): ExerciseSet => ({
   id: 'set-' + Math.random().toString(36).slice(2, 8),
