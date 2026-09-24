@@ -14,7 +14,7 @@
 
 import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { isNativeTabBar, hideTabBar } from '../src/lib/nativeTabBar';
+import { isNativeTabBar, hideTabBar } from '../lib/nativeTabBar';
 import {
   detectServer,
   checkServerHealth,

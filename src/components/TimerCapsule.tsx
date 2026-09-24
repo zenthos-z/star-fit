@@ -1,6 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { haptic } from '../src/lib/nativeHaptics';
+import { haptic } from '../lib/nativeHaptics';
 
 export interface StartMenuOption {
   key: string;

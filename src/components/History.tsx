@@ -10,27 +10,27 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Session, Exercise } from '../types';
+import { Session, Exercise } from '../../types';
 import { DEFAULT_BODYWEIGHT } from '@/constants';
 import SwipeableRow from './SwipeableRow';
 import { SyncService } from '@/services/syncService';
 import { storageSet } from '@/storage';
 import { API_BASE, setApiBase, getHeaders } from '@/services/geminiService';
-import { useLoginStatus } from '../src/hooks/useLoginStatus';
+import { useLoginStatus } from '../hooks/useLoginStatus';
 import { motion, AnimatePresence } from 'framer-motion';
-import { haptic } from '../src/lib/nativeHaptics';
-import { transitions } from '../src/v2/lib/animations';
+import { haptic } from '../lib/nativeHaptics';
+import { transitions } from '../v2/lib/animations';
 import {
   isNativeGlassMenu,
   showGlassMenu,
   hideGlassMenu,
   onGlassMenuSelect,
   GlassMenuItem,
-} from '../src/lib/nativeGlassMenu';
-import { isNativeTabBar, setTabBarHidden } from '../src/lib/nativeTabBar';
+} from '../lib/nativeGlassMenu';
+import { isNativeTabBar, setTabBarHidden } from '../lib/nativeTabBar';
 import { List } from 'react-window';
-import { setVolume } from '../src/v2/utils/workoutSummary';
-import { WatchDiagnosticsCard } from '../src/v2/components/settings/WatchStatusCard';
+import { setVolume } from '../v2/utils/workoutSummary';
+import { WatchDiagnosticsCard } from '../v2/components/settings/WatchStatusCard';
 // （DEFAULT_BODYWEIGHT 已不再使用：容量统一走 setVolume，自重兜底逻辑在其内部）
 
 // 容量口径统一（2026-09-16）：单组容量共用 workoutSummary.setVolume

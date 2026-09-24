@@ -3,8 +3,8 @@
 //      本组件只做安全区占位 + 事件接线；其他端：CSS 玻璃回落。
 import { useEffect, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { isNativeTabBar, showTabBar, setCurrentTab, hideTabBar, onTabSelect, getSelectedTab } from '../src/lib/nativeTabBar';
-import { haptic } from '../src/lib/nativeHaptics';
+import { isNativeTabBar, showTabBar, setCurrentTab, hideTabBar, onTabSelect, getSelectedTab } from '../lib/nativeTabBar';
+import { haptic } from '../lib/nativeHaptics';
 
 export type MainTab = 0 | 1 | 2;
 

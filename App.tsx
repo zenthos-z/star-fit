@@ -5,21 +5,21 @@ import { Exercise, ExerciseSet, ExerciseType, Session, AppRoute, AiConfig, AiSce
 import { navigationReducer, initialNavigation } from './src/v2/lib/navigation';
 import { computeSettlementSummary } from './src/v2/lib/settlementSummary';
 import { LoadAnchors } from './src/v2/types/protocol';
-import TimerCapsule from './components/TimerCapsule';
+import TimerCapsule from './src/components/TimerCapsule';
 import LockScreen from './src/v2/components/execution/LockScreen';
 import { ExerciseCardV2 } from './src/v2/components/execution/ExerciseCardV2';
 import ReorderMode from './src/v2/components/execution/ReorderMode';
 import SettlementV2 from './src/v2/components/settlement/SettlementV2';
-import History from './components/History';
+import History from './src/components/History';
 import { haptic } from './src/lib/nativeHaptics';
 import { startLiveActivity, pauseLiveActivity, endLiveActivity } from './src/lib/liveActivity';
-import TimeEditor from './components/TimeEditor';
-import MainTabBar, { MainTab } from './components/MainTabBar';
-import ExerciseSettingsModal from './components/ExerciseSettingsModal';
+import TimeEditor from './src/components/TimeEditor';
+import MainTabBar, { MainTab } from './src/components/MainTabBar';
+import ExerciseSettingsModal from './src/components/ExerciseSettingsModal';
 import { ExerciseAction } from './src/v2/types/protocol';
 
 import { ExerciseTutorialModal } from './src/v2/components/execution/ExerciseTutorialModal';
-import LoginV2 from './components/LoginV2';
+import LoginV2 from './src/components/LoginV2';
 import { AICoachOverlay } from './src/v2/components/execution/AICoachOverlay';
 import { SettingsPage } from './src/v2/pages';
 import { useAICoach } from './src/v2/hooks/useAICoach';

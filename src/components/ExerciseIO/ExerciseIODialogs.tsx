@@ -3,14 +3,14 @@ import {
   X, Download, FileUp, AlertTriangle, 
   CheckCircle, Loader2, FileArchive
 } from 'lucide-react';
-import { setTabBarHidden } from '../../src/lib/nativeTabBar';
+import { setTabBarHidden } from '../../lib/nativeTabBar';
 import {
   ExerciseLibraryIOService,
   PrecheckResponse, 
   ConflictStrategy, 
   ImportStatus, 
   ImportResult 
-} from '../../src/services/exerciseLibraryIOService';
+} from '../../services/exerciseLibraryIOService';
 
 export interface ExportDialogProps {
   open: boolean;
