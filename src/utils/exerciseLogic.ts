@@ -1,5 +1,5 @@
 
-import { ExerciseType } from '../types';
+import { ExerciseType } from '@/types';
 
 /**
  * Exercise Classification Logic Table

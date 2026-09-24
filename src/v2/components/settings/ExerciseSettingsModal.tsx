@@ -4,7 +4,7 @@ import { deviationBuffer } from '../../services/DeviationBuffer';
 import { DeviationWarningModal } from '../DeviationWarningModal';
 import { BatchOps, PatchOp } from '../../services/protocol/BatchOps';
 import { socketService } from '../../services/transport/WebSocketClient';
-import { EXERCISE_TYPES_CONFIG, RPE_ZONES } from '../../../../constants';
+import { EXERCISE_TYPES_CONFIG, RPE_ZONES } from '@/constants';
 import { predictMetrics } from '../../../services/geminiService';
 
 interface ExerciseSettingsModalProps {

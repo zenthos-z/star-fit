@@ -1,6 +1,6 @@
 import React from 'react';
 import { HeartPulse, Mountain } from 'lucide-react';
-import { EXERCISE_TYPES_CONFIG } from '../../constants';
+import { EXERCISE_TYPES_CONFIG } from '@/constants';
 
 /**
  * 获取运动类型的显示标签

@@ -29,11 +29,11 @@ import {
   SyncService,
   socketService,
   ExerciseLibraryService
-} from './services';
+} from '@/services';
 import { SuggestionService } from './src/services/suggestionService';
 import { App as CapacitorApp } from '@capacitor/app';
-import { eventTracking, TrackingEvent } from './services/eventTracking';
-import { DEFAULT_REST_TIME, RPE_COLORS, DEFAULT_AI_CONFIG } from './constants';
+import { eventTracking, TrackingEvent } from '@/services/eventTracking';
+import { DEFAULT_REST_TIME, RPE_COLORS, DEFAULT_AI_CONFIG } from '@/constants';
 import {
   saveHistory,
   loadHistory,
@@ -52,7 +52,7 @@ import {
   loadNextPlanMeta,
   clearNextPlan,
   migrateLegacyLoginData
-} from './storage';
+} from '@/storage';
 import type { PlanConsumeRecord } from './src/v2/components/execution/cards/PlanCard';
 import { isWatchBridge, onWatchEvent, syncHeartRateSamples, type WatchEvent } from './src/v2/services/watchConnectivity';
 import { watchHeartRateStore } from './src/v2/services/watchHeartRateStore';

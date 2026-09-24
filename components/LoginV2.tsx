@@ -20,14 +20,14 @@ import {
   checkServerHealth,
   formatServerUrl,
   parseServerInput
-} from '../services/serverDetector';
+} from '@/services/serverDetector';
 import {
   saveLoginCredentials,
   loadLoginCredentials,
   loadServerHistory,
   addServerToHistory
-} from '../storage';
-import { getAccessToken, setAccessToken } from '../services/geminiService';
+} from '@/storage';
+import { getAccessToken, setAccessToken } from '@/services/geminiService';
 import QRScanner from './QRScanner';
 
 interface LoginProps {

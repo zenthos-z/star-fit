@@ -16,7 +16,7 @@
 import { parseSSEChunk } from '../../../v2/services/agent/sseAgentClient';
 import type { AgentEvent } from 'shared/contracts';
 import { API_BASE } from '../services/geminiService';
-import { getAccessToken } from '../../../services/geminiService';
+import { getAccessToken } from '@/services/geminiService';
 
 export interface AdminChatRequest {
   /** 目标用户 UUID（Agent 的读写都以他为对象） */

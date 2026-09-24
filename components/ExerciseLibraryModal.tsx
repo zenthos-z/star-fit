@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Zap, WifiOff, RefreshCw, Search } from 'lucide-react';
 import { guessExerciseType } from '@/utils/exerciseLogic';
-import { ExerciseLibraryService } from '../services/exerciseLibraryService';
+import { ExerciseLibraryService } from '@/services/exerciseLibraryService';
 import { haptic } from '../src/lib/nativeHaptics';
 
 interface ExerciseLibraryModalProps {

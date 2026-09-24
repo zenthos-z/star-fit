@@ -15,7 +15,7 @@
 import { API_BASE, getHeaders, predictMetrics } from './geminiService';
 import { storageGet, storageSet } from '@/storage';
 import { Keys, type SuggestionCache, type SuggestionCacheEntry } from '@/storage/schemas';
-import { checkServerHealth } from '../../services/serverDetector';
+import { checkServerHealth } from '@/services/serverDetector';
 import {
   deriveSuggestion,
   normalizeSuggestionExerciseType,

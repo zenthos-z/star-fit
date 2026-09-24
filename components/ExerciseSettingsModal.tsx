@@ -3,12 +3,12 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { ExerciseSet, ExerciseType, Exercise } from '../types';
 import { setVolume } from '../src/v2/utils/workoutSummary';
 import { ExerciseAction, LoadAnchors as LoadAnchorsType } from '../src/v2/types/protocol';
-import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '../constants';
+import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '@/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { Timer, MapPin, Watch, Heart, Flame, Zap, Trophy, Gauge, Navigation } from 'lucide-react';
 import ExerciseLibraryModal from './ExerciseLibraryModal';
 import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } from '../src/services/suggestionService';
-import { guessCardioSubtype } from '../utils/exerciseLogic';
+import { guessCardioSubtype } from '@/utils/exerciseLogic';
 import { DeviationLogger } from '../src/v2/services/logging/DeviationLogger';
 import { setTabBarHidden } from '../src/lib/nativeTabBar';
 

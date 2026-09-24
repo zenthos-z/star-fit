@@ -31,10 +31,14 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, '.'),
-      'shared/contracts': path.resolve(__dirname, 'shared/contracts'),
-      '@/v2': path.resolve(__dirname, 'src/v2'),
-    },
+    alias: [
+      { find: '@/services', replacement: path.resolve(__dirname, 'src/services') },
+      { find: '@/storage', replacement: path.resolve(__dirname, 'src/storage') },
+      { find: '@/utils', replacement: path.resolve(__dirname, 'src/utils') },
+      { find: '@/constants', replacement: path.resolve(__dirname, 'src/constants.ts') },
+      { find: '@/v2', replacement: path.resolve(__dirname, 'src/v2') },
+      { find: '@', replacement: path.resolve(__dirname, '.') },
+      { find: 'shared/contracts', replacement: path.resolve(__dirname, 'shared/contracts') },
+    ],
   },
 });

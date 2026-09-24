@@ -11,11 +11,11 @@
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
 import { Session, Exercise } from '../types';
-import { DEFAULT_BODYWEIGHT } from '../constants';
+import { DEFAULT_BODYWEIGHT } from '@/constants';
 import SwipeableRow from './SwipeableRow';
-import { SyncService } from '../services/syncService';
-import { storageSet } from '../storage';
-import { API_BASE, setApiBase, getHeaders } from '../services/geminiService';
+import { SyncService } from '@/services/syncService';
+import { storageSet } from '@/storage';
+import { API_BASE, setApiBase, getHeaders } from '@/services/geminiService';
 import { useLoginStatus } from '../src/hooks/useLoginStatus';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '../src/lib/nativeHaptics';
@@ -435,13 +435,13 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
       console.log('[History] Starting Force Sync...');
 
       try {
-          const { API_BASE } = await import('../services/geminiService');
+          const { API_BASE } = await import('@/services/geminiService');
           console.log(`[History] API_BASE: ${API_BASE}`);
 
           const did = await SyncService.getDeviceId();
           console.log(`[History] DeviceID: ${did}`);
 
-          const { loadHistory } = await import('../storage/index');
+          const { loadHistory } = await import('@/storage');
           const allHistory = await loadHistory() || [];
           const ids = allHistory.map((s: any) => s.id);
           console.log(`[History] Found ${ids.length} sessions in history`);

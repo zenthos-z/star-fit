@@ -20,4 +20,4 @@ if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => {});
   });
 }
-import('./storage').then(m => m.requestPersist().catch(() => {}));
+import('@/storage').then(m => m.requestPersist().catch(() => {}));

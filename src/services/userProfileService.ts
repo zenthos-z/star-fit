@@ -12,7 +12,7 @@
  */
 
 import { API_BASE, getHeaders } from './geminiService';
-import { storageGet, storageSet } from '../../storage';
+import { storageGet, storageSet } from '@/storage';
 import { LoadAnchors } from '../v2/types/protocol';
 
 const USER_PROFILE_CACHE_KEY = (userId: string) => `user_profile_${userId}`;

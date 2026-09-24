@@ -28,10 +28,14 @@ export default defineConfig(({ mode }) => {
       'import.meta.env.VITE_PKG_VERSION': JSON.stringify(process.env.npm_package_version || '2.0.0'),
     },
     resolve: {
-      alias: {
-        '@': path.resolve(__dirname, '.'),
-        'shared/contracts': path.resolve(__dirname, 'shared/contracts'),
-      }
+      alias: [
+        { find: '@/services', replacement: path.resolve(__dirname, 'src/services') },
+        { find: '@/storage', replacement: path.resolve(__dirname, 'src/storage') },
+        { find: '@/utils', replacement: path.resolve(__dirname, 'src/utils') },
+        { find: '@/constants', replacement: path.resolve(__dirname, 'src/constants.ts') },
+        { find: '@', replacement: path.resolve(__dirname, '.') },
+        { find: 'shared/contracts', replacement: path.resolve(__dirname, 'shared/contracts') },
+      ]
     },
   };
 });

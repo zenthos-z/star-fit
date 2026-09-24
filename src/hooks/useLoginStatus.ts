@@ -3,7 +3,7 @@ import {
   loadLoginCredentials,
   saveLoginCredentials,
   clearLoginCredentials as clearStorageLoginCredentials
-} from '../../storage';
+} from '@/storage';
 
 export interface LoginStatusReturn {
   isLoggedIn: boolean;
