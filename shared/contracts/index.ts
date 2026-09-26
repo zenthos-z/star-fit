@@ -1258,3 +1258,46 @@ export {
   deriveSuggestion,
   computeContextFingerprint,
 } from './suggestions.js';
+
+// ============================================================================
+// Weekly Plan Contracts (周计划持久化实体 — issue #10)
+// ============================================================================
+
+export {
+  // Patterns
+  WEEK_ID_PATTERN,
+  PLAN_ENTRY_DATE_PATTERN,
+
+  // Constants
+  PLAN_ENTRY_STATUSES,
+  PLAN_ENTRY_STATUS_TRANSITIONS,
+
+  // Schemas
+  WeekIdSchema,
+  WeeklyPlanSplitSchema,
+  WeeklyPlanStatusSchema,
+  PlanEntryStatusSchema,
+  PlanLoadTypeSchema,
+  TargetLoadSchema,
+  WeeklyPlanSchema,
+  PlanEntrySchema,
+  WeeklyPlanWithEntriesSchema,
+  PlanEntryInputSchema,
+  CreateWeeklyPlanInputSchema,
+
+  // Types
+  type WeekId,
+  type WeeklyPlanSplit,
+  type WeeklyPlanStatus,
+  type PlanEntryStatus,
+  type PlanLoadType,
+  type TargetLoad,
+  type WeeklyPlan,
+  type PlanEntry,
+  type WeeklyPlanWithEntries,
+  type PlanEntryInput,
+  type CreateWeeklyPlanInput,
+
+  // Functions
+  canTransitionPlanEntryStatus,
+} from './weekly-plan.js';
