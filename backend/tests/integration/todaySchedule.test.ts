@@ -75,14 +75,14 @@ describeOrSkip("Today Schedule API path (real PG)", () => {
     );
     otherUserId = otherUser.rows[0].id;
     const squat = await adminPool.query(
-      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, tutorials)
-       VALUES ($1, $2, 'resistance', 'intermediate', '{}'::jsonb, '{}'::jsonb) RETURNING id`,
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, tutorials)
+       VALUES ($1, $2, 'resistance', 'intermediate', '{}'::jsonb) RETURNING id`,
       [`ts-squat-${now}`.slice(0, 24), `今日课表深蹲-${now}`],
     );
     squatId = squat.rows[0].id;
     const row = await adminPool.query(
-      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, tutorials)
-       VALUES ($1, $2, 'resistance', 'beginner', '{}'::jsonb, '{}'::jsonb) RETURNING id`,
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, tutorials)
+       VALUES ($1, $2, 'resistance', 'beginner', '{}'::jsonb) RETURNING id`,
       [`ts-row-${now}`.slice(0, 24), `今日课表划船-${now}`],
     );
     rowId = row.rows[0].id;

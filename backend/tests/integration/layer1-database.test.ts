@@ -79,12 +79,14 @@ describe("Layer 1: Database Foundation", () => {
   });
 
   describe("步骤1.2 & 1.3: 验证数据完整性和内容", () => {
-    it("exercises 表应为空库基线（002 清空存量 AI 数据，A3 重灌前）", async () => {
+    it("exercises 表应为 A3 精收区间（300-500，重灌后不再为空）", async () => {
       const result = await postgresClient.query(
         "SELECT COUNT(*) as count FROM exercises",
       );
       const count = parseInt(result.rows[0].count, 10);
-      expect(count).toBe(0);
+      // A3 导入管线（issue #11）已执行：空库基线断言退役，改为精收区间护栏
+      expect(count).toBeGreaterThanOrEqual(300);
+      expect(count).toBeLessThanOrEqual(500);
     });
 
     it("应该包含预期的基本动作", async () => {

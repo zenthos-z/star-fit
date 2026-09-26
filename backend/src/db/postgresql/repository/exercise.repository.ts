@@ -263,6 +263,124 @@ export class ExerciseRepository extends BaseRepository {
   }
 
   /**
+   * A3 导入管道写入入口：整体替换公共动作库（可重复执行）。
+   *
+   * 单事务内：先 DELETE 全部公共库行（owner_user_id IS NULL，用户自建动作
+   * 不动），再分块 INSERT ... ON CONFLICT (name) DO UPDATE（name 唯一约束
+   * 兜底幂等）。任一块失败整体回滚——导入要么完整生效要么不动库。
+   *
+   * 每条写入前经 ExerciseLibraryItemSchema 校验（失败即抛，不静默跳过）。
+   * 列清单与 mapItemRow 对齐（tutorials/tags_json/assets_json 走库默认值）。
+   *
+   * @returns written = 实际写入行数（新插 + 冲突更新）
+   */
+  async replaceAllPublicItems(
+    items: ExerciseLibraryItem[],
+  ): Promise<{ written: number }> {
+    // 先整批校验（任何一条不合法即抛，不写半批）
+    const validated = items.map((item) =>
+      validateOrThrow(
+        ExerciseLibraryItemSchema,
+        item,
+        "ExerciseRepository.replaceAllPublicItems",
+      ),
+    );
+
+    // 导入写入列（与 mapItemRow 读取清单对齐；省略 tutorials/tags_json/assets_json 走默认值）
+    const columns: Array<[string, string]> = [
+      // [列名, 值参数后缀 cast]
+      ["id", ""],
+      ["name", ""],
+      ["name_zh", ""],
+      ["exercise_type", "::public.exercise_type_enum"],
+      ["difficulty", "::public.difficulty_level"],
+      ["equipment", "::public.exercise_equipment"],
+      ["category", "::public.exercise_category"],
+      ["body_part", "::public.exercise_body_part"],
+      ["primary_muscles", "::text[]"],
+      ["secondary_muscles", "::text[]"],
+      ["force_type", "::public.exercise_force_type"],
+      ["mechanic", "::public.exercise_mechanic"],
+      ["instructions", "::text[]"],
+      ["form_cues", "::text[]"],
+      ["common_mistakes", "::text[]"],
+      ["breathing", ""],
+      ["aliases", "::text[]"],
+      ["instructions_zh", "::text[]"],
+      ["image_refs", "::text[]"],
+      ["video_urls", "::jsonb"],
+      ["poster_url", ""],
+      ["owner_user_id", "::uuid"],
+      ["content_html", ""],
+      ["modified_by", "::public.modified_by_type"],
+      ["modified_at", "::timestamptz"],
+      ["created_at", "::timestamptz"],
+      ["updated_at", "::timestamptz"],
+    ];
+
+    // 契约字段 → SQL 参数形态（jsonb stringify；timestamptz 原样 ISO 文本）
+    const toParam = (field: string, value: unknown): unknown =>
+      field === "video_urls"
+        ? value === null
+          ? null
+          : JSON.stringify(value)
+        : value;
+
+    const CHUNK = 50; // 27 列 × 50 行 = 1350 命名参数，远低于驱动上限
+    let written = 0;
+
+    await this.client.transaction(async (tx) => {
+      await tx.query("DELETE FROM exercises WHERE owner_user_id IS NULL", {});
+
+      for (let start = 0; start < validated.length; start += CHUNK) {
+        const chunk = validated.slice(start, start + CHUNK);
+        const tuples: string[] = [];
+        const params: Record<string, unknown> = {};
+
+        chunk.forEach((item, rowIdx) => {
+          const refs: string[] = [];
+          for (const [column, cast] of columns) {
+            const param = `${column}_${rowIdx}`;
+            refs.push(`$${param}${cast}`);
+            params[param] = toParam(
+              column,
+              (item as Record<string, unknown>)[column],
+            );
+          }
+          tuples.push(`(${refs.join(", ")})`);
+        });
+
+        // ON CONFLICT (name)：重名行按深化列整体刷新（id/name/created_at 保留原值）
+        const conflictSets = columns
+          .filter(([column]) => !["id", "name", "created_at"].includes(column))
+          .map(([column, cast]) => `${column} = EXCLUDED.${column}${cast}`)
+          .join(", ");
+
+        const result = await tx.query(
+          `INSERT INTO exercises (${columns.map(([c]) => c).join(", ")})
+           VALUES ${tuples.join(", ")}
+           ON CONFLICT (name) DO UPDATE SET ${conflictSets}`,
+          params,
+        );
+        written += result.rowCount ?? 0;
+      }
+    });
+
+    return { written };
+  }
+
+  /**
+   * 公共动作库行数（A3 导入后计数核对）。
+   */
+  async countPublicLibrary(): Promise<number> {
+    const row = await this.queryOne<{ count: string }>(
+      "SELECT count(*)::text AS count FROM exercises WHERE owner_user_id IS NULL",
+      {},
+    );
+    return Number(row?.count ?? "0");
+  }
+
+  /**
    * 更新深化列（白名单，含中文回写管道入口 name_zh / instructions_zh）。
    *
    * 只更新 ExerciseDetailUpdateSchema 允许的字段；同时刷新 modified_by /

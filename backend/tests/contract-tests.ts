@@ -22,7 +22,6 @@ import {
   WeekIdSchema,
   canTransitionPlanEntryStatus,
   PLAN_ENTRY_STATUS_TRANSITIONS,
-<<<<<<< HEAD
   EXERCISE_MUSCLES,
   EXERCISE_EQUIPMENT,
   EXERCISE_CATEGORIES,
@@ -35,11 +34,9 @@ import {
   ExerciseLibraryItemSchema,
   ExerciseVideoUrlsSchema,
   ExerciseDetailUpdateSchema,
-=======
   TodayScheduleResponseSchema,
   TodayScheduleEntrySchema,
   getIsoWeekId,
->>>>>>> 8a89553 (feat(schedule): E2 今日课表确定性 API + E3 Agent 调度改造（issue #1 + #2）)
   type PlanEntry,
   type WeeklyPlan,
 } from "../../shared/contracts/index.js";
@@ -439,6 +436,113 @@ describe("Contract Tests: Exercise Library", () => {
         `"${raw}" 映射到 "${mapped}" 不在词表内`,
       );
     }
+  });
+
+  test("all 76 lib3 secondaryMuscles raw values are covered by MUSCLE_ALIASES (anatomical synonyms or explicit null)", () => {
+    // 库3 free-exercise-db-with-videos 317 条 secondaryMuscles 实测全集（2026-09-26）。
+    // A3 数据纪律：每个源原值必须显式映射或显式 null，禁止静默丢值。
+    const LIB3_SECONDARY = [
+      "abdominals",
+      "achilles tendon",
+      "adductors",
+      "anconeus",
+      "ankle stabilizers",
+      "ankles",
+      "anterior deltoid",
+      "anterior deltoids",
+      "biceps",
+      "biceps brachii",
+      "brachialis",
+      "brachioradialis",
+      "calves",
+      "chest",
+      "core",
+      "core stabilizers",
+      "deltoids",
+      "erector spinae",
+      "flexor carpi radialis",
+      "flexor carpi ulnaris",
+      "forearms",
+      "gastrocnemius",
+      "glutes",
+      "gluteus maximus",
+      "gluteus medius",
+      "gluteus minimus",
+      "groin",
+      "hamstrings",
+      "hip abductors",
+      "hip flexors",
+      "iliopsoas",
+      "infraspinatus",
+      "intercostals",
+      "latissimus dorsi",
+      "lower abdominals",
+      "lower abs",
+      "lower back",
+      "lower trapezius",
+      "middle trapezius",
+      "obliques",
+      "pectoralis major",
+      "pectorals",
+      "peroneals",
+      "piriformis",
+      "posterior deltoid",
+      "posterior deltoids",
+      "quadratus lumborum",
+      "quadriceps",
+      "rear deltoids",
+      "rectus abdominis",
+      "rectus femoris",
+      "rhoboids",
+      "rhomboids",
+      "rotator cuff",
+      "scalenes",
+      "serratus anterior",
+      "shoulders",
+      "soleus",
+      "spinal erectors",
+      "tensor fasciae latae",
+      "teres major",
+      "tibialis anterior",
+      "tibialis posterior",
+      "transverse abdominis",
+      "trapezius",
+      "traps",
+      "triceps",
+      "triceps brachii",
+      "upper back",
+      "upper chest",
+      "upper pectorals",
+      "upper trapezius",
+      "varies by machine",
+      "varies by machine (legs, glutes, arms)",
+      "varies by movement",
+      "vastus medialis",
+    ];
+    assert.strictEqual(LIB3_SECONDARY.length, 76);
+
+    for (const raw of LIB3_SECONDARY) {
+      assert.ok(
+        raw in MUSCLE_ALIASES,
+        `库3 secondaryMuscles "${raw}" 缺映射（A3 数据纪律：显式映射或显式 null）`,
+      );
+    }
+    // 解剖学同义词抽查（桶归属的解剖依据见 MUSCLE_ALIASES 注释）
+    assert.strictEqual(MUSCLE_ALIASES["trapezius"], "traps");
+    assert.strictEqual(MUSCLE_ALIASES["gluteus maximus"], "glutes");
+    assert.strictEqual(MUSCLE_ALIASES["latissimus dorsi"], "lats");
+    assert.strictEqual(MUSCLE_ALIASES["biceps brachii"], "biceps");
+    assert.strictEqual(MUSCLE_ALIASES["brachialis"], "biceps");
+    assert.strictEqual(MUSCLE_ALIASES["teres major"], "lats");
+    assert.strictEqual(MUSCLE_ALIASES["rotator cuff"], "shoulders");
+    assert.strictEqual(MUSCLE_ALIASES["soleus"], "calves");
+    assert.strictEqual(MUSCLE_ALIASES["iliopsoas"], "quadriceps");
+    assert.strictEqual(MUSCLE_ALIASES["rhoboids"], "middle_back"); // 源拼写错误照录
+    // 含糊/非肌值显式 null
+    assert.strictEqual(MUSCLE_ALIASES["core"], null);
+    assert.strictEqual(MUSCLE_ALIASES["ankles"], null);
+    assert.strictEqual(MUSCLE_ALIASES["achilles tendon"], null);
+    assert.strictEqual(MUSCLE_ALIASES["varies by movement"], null);
   });
 
   test("every EQUIPMENT_ALIASES value lands inside the 15-equipment vocabulary", () => {

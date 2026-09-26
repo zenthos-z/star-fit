@@ -172,7 +172,8 @@ export type ExerciseMechanic = z.infer<typeof ExerciseMechanicSchema>;
 
 /**
  * 肌群映射：源原值 → 17 基准。
- * 分区：库1 17 原值 | 库3 39 target（任务书点名）。
+ * 分区：库1 17 原值 | 库3 39 target（任务书点名）| 库3 secondaryMuscles
+ * 解剖学同义词 39 值 + 含糊值 9 个 null（A3 实测，2026-09-26）。
  */
 export const MUSCLE_ALIASES: Readonly<Record<string, ExerciseMuscle | null>> = {
   // ---- 库1 free-exercise-db 17 原值（identity + 空格 → snake_case）----
@@ -221,6 +222,60 @@ export const MUSCLE_ALIASES: Readonly<Record<string, ExerciseMuscle | null>> = {
   'thoracic spine': 'middle_back', // 胸椎区域归中背
   'upper back': 'middle_back',
   'upper pectorals': 'chest',
+
+  // ---- 库3 secondaryMuscles 解剖学同义词（A3 实测 317 条的 70 个原值，2026-09-26）----
+  // target 轴之外，库3 secondaryMuscles 还携带大量解剖学全称/局部肌名。
+  // 同义词按下述解剖依据归并；含糊值（core/varies by.../肌腱关节）显式 null。
+  'trapezius': 'traps',                  // 斜方肌全称
+  'upper trapezius': 'traps',
+  'middle trapezius': 'traps',
+  'lower trapezius': 'traps',
+  'gluteus maximus': 'glutes',           // 臀大肌
+  'gluteus minimus': 'abductors',        // 臀小肌与臀中肌同司髋外展（gluteus medius 先例）
+  'tensor fasciae latae': 'abductors',   // 阔筋膜张肌为髋外展肌群成分
+  'piriformis': 'abductors',             // 梨状肌属髋外旋/外展肌群域
+  'hip abductors': 'abductors',
+  'iliopsoas': 'quadriceps',             // 髂腰肌=髋屈肌群（hip flexors → quadriceps 先例）
+  'rectus femoris': 'quadriceps',        // 股直肌
+  'vastus medialis': 'quadriceps',       // 股内侧肌
+  'soleus': 'calves',                    // 比目鱼肌
+  'gastrocnemius': 'calves',             // 腓肠肌
+  'tibialis anterior': 'calves',         // 胫骨前肌归小腿域（calves 粒度=小腿）
+  'tibialis posterior': 'calves',        // 胫骨后肌（小腿深层）
+  'biceps brachii': 'biceps',            // 肱二头肌全称
+  brachialis: 'biceps',                  // 肱肌（肘屈肌，功能归并肱二头肌域）
+  'triceps brachii': 'triceps',          // 肱三头肌全称
+  'anconeus': 'triceps',                 // 肘肌为肘伸肌辅助成分
+  'brachioradialis': 'forearms',         // 肱桡肌
+  'flexor carpi radialis': 'forearms',   // 桡侧腕屈肌
+  'flexor carpi ulnaris': 'forearms',    // 尺侧腕屈肌
+  'latissimus dorsi': 'lats',            // 背阔肌全称
+  'teres major': 'lats',                 // 大圆肌为背阔肌协同肌（"小背阔"）
+  'pectoralis major': 'chest',           // 胸大肌全称
+  'upper chest': 'chest',
+  'serratus anterior': 'shoulders',      // 前锯肌为肩胛稳定肌（shoulders 含肩袖口径先例）
+  'infraspinatus': 'shoulders',          // 冈下肌为肩袖成员（肩袖归 shoulders）
+  'rotator cuff': 'shoulders',           // 肩袖（contract 口径：shoulders 含肩袖）
+  'anterior deltoids': 'shoulders',      // 复数形态（单数 anterior deltoid 已列）
+  'posterior deltoids': 'shoulders',
+  'transverse abdominis': 'abdominals',  // 腹横肌归腹肌域
+  'lower abs': 'abdominals',
+  'lower abdominals': 'abdominals',
+  'quadratus lumborum': 'lower_back',    // 腰方肌为腰椎稳定肌
+  'scalenes': 'neck',                    // 斜角肌（颈前群）
+  'groin': 'adductors',                  // 腹股沟=内收肌群区
+  'rhoboids': 'middle_back',             // 源数据拼写错误（rhomboids），照录映射防丢数据
+
+  // ---- 库3 secondaryMuscles 含糊/非肌值（显式 null：非骨骼肌目标或无法归并）----
+  core: null,                 // "核心"跨腹/下背/臀，不强行归并
+  'core stabilizers': null,
+  intercostals: null,         // 肋间肌（呼吸肌，17 粒度无对应桶）
+  ankles: null,               // 关节非肌肉
+  'ankle stabilizers': null,
+  'achilles tendon': null,    // 肌腱非肌肉
+  'varies by movement': null, // 源数据"依动作而异"占位值
+  'varies by machine': null,
+  'varies by machine (legs, glutes, arms)': null,
 };
 
 /**
