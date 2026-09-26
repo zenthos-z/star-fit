@@ -7,10 +7,13 @@ import { buildSessionPayload } from '../utils/workoutSummary';
 // seam; this hook consumes the SSE stream and synthesizes renderable uiHint
 // cards, with no awareness of the backend agent implementation.
 import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/agent/sseAgentClient';
+import { resolveCoachPrefill } from '../utils/coachPrefill';
+import { todayDateKey } from '../utils/weeklyPlanView';
 import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
 import type { SurveySubmitRecord } from '../components/execution/cards/SurveyCard';
 import type { ProfileUpdateDecisionRecord } from '../components/execution/cards/ProfileUpdateConfirmCard';
-import type { AgentScenario, UiHintCard } from 'shared/contracts';
+import type { AgentScenario, UiHintCard, TodayScheduleResponse } from 'shared/contracts';
+import { parseJSONSafe } from 'shared/contracts';
 import {
   saveChatThreadList,
   loadChatThreadList,
@@ -18,6 +21,7 @@ import {
   loadChatMessages,
   deleteChatThread,
   migrateLegacyChatData,
+  loadHistory,
   ChatThread
 } from '@/storage';
 
@@ -134,6 +138,11 @@ export const useAICoach = (
 
   // [NEW] Context Attachment State
   const [attachedContext, setAttachedContext] = useState<any>(null);
+  // [B1 issue#5] 附件镜像 ref：openAiCoach 与 state set 同 tick 调用时闭包里
+  // 读不到新挂的附件（教学页「咨询教练」先 setAttachedContext 再 openAiCoach），
+  // 预填据此让位——带附件=用户带着具体问题来，不预填
+  const attachedContextRef = useRef<unknown>(null);
+  useEffect(() => { attachedContextRef.current = attachedContext; }, [attachedContext]);
 
   // [NEW] Store workout data for questionnaire upload
   const workoutDataRef = useRef<any>(null);
@@ -882,6 +891,45 @@ ${JSON.stringify(uploadData, null, 2)}`;
     )));
   }, []);
 
+  /**
+   * [B1 issue#5] 入口预填：手动打开 AI 教练（无附件）时按三场景预填输入框——
+   *   A 有周计划且今日有条目 → 今日计划摘要（E2 确定性课表 API 组装）
+   *   B 无计划新手（本地无训练记录 + 本周无计划）→ 引导预填
+   *   C 老用户无今日计划 → 轻预填
+   * 红线：纯前端确定性组装（scheduleService 已交付今日课表，AI 零参与）；
+   * 预填文本可编辑、不自动发送（只是 setChatMessage，发送权在用户）；
+   * 已有草稿 / 打开期间挂了附件 → 不覆盖。
+   */
+  const prefillCoachEntry = useCallback(async () => {
+    if (attachedContextRef.current) return;
+    try {
+      const res = await fetch(`${API_BASE}/schedule/today?date=${todayDateKey()}`, {
+        headers: getHeaders(),
+      });
+      // 形态防御：status 非三态之一视同课表不可得，交由路由走「不猜」分支
+      const raw = res.ok
+        ? parseJSONSafe<TodayScheduleResponse>(await res.text(), 'coachPrefill')
+        : null;
+      const schedule: TodayScheduleResponse | null =
+        raw && (raw.status === 'planned' || raw.status === 'rest_day' || raw.status === 'no_plan')
+          ? raw
+          : null;
+      // 新手判定的另一半：本地训练历史（不新增后端字段；读取失败按无记录处理）
+      let localHistory: unknown[] | null = null;
+      try {
+        localHistory = await loadHistory();
+      } catch { /* IDB 不可用 → 按无记录 */ }
+      const hasHistory = Array.isArray(localHistory) && localHistory.length > 0;
+
+      const text = resolveCoachPrefill(schedule, hasHistory);
+      if (!text) return;
+      // 函数式更新防竞态：fetch 期间用户已输入草稿 / 挂了附件 → 不覆盖
+      setChatMessage(prev => (prev.trim() || attachedContextRef.current ? prev : text));
+    } catch (err) {
+      console.warn('[useAICoach] entry prefill skipped:', err);
+    }
+  }, []);
+
   const openAiCoach = async (attachment?: any) => {
 
     console.log('[useAICoach] openAiCoach called with attachment:', attachment);
@@ -1039,6 +1087,8 @@ ${JSON.stringify(uploadData, null, 2)}`;
         return;
       }
     }
+    // [B1 issue#5] 手动打开（无附件）→ 按场景预填输入框（fire-and-forget，不阻塞开浮层）
+    void prefillCoachEntry();
     setIsAiOverlayOpen(true);
   };
 
