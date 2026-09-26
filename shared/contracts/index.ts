@@ -1259,3 +1259,24 @@ export {
   canTransitionPlanEntryStatus,
   getIsoWeekId,
 } from './weekly-plan.js';
+
+// ============================================================================
+// Schedule Summary Contracts (开始运动路由 summary — B2 / issue #22)
+// ============================================================================
+
+export {
+  // Constants
+  TODAY_STATUS_TO_SUMMARY,
+
+  // Schemas
+  ScheduleSummaryTodaySchema,
+  ScheduleUserStageSchema,
+  ScheduleOnboardingSchema,
+  ScheduleSummaryResponseSchema,
+
+  // Types
+  type ScheduleSummaryToday,
+  type ScheduleUserStage,
+  type ScheduleOnboarding,
+  type ScheduleSummaryResponse,
+} from './schedule-summary.js';

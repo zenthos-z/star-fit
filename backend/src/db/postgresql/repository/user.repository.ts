@@ -66,6 +66,23 @@ export class UserRepository extends BaseRepository {
   }
 
   /**
+   * 用户画像是否已建档（profile_static 为非空 JSONB）——B2 开始运动路由
+   * onboarding「无画像」判定读（issue #22）。列默认 '{}'::jsonb NOT NULL，
+   * 非空对象即视为已建档；用户行不存在视为未建档（返回 false）。
+   */
+  async hasProfileStatic(userId: string): Promise<boolean> {
+    const row = await this.queryOne<{ one: number }>(
+      `SELECT 1 AS one FROM users
+       WHERE id = $userId::uuid
+         AND profile_static IS NOT NULL
+         AND profile_static <> '{}'::jsonb
+       LIMIT 1`,
+      { userId },
+    );
+    return row !== null;
+  }
+
+  /**
    * Get user's dynamic profile
    *
    * @param userId - User ID (UUID)

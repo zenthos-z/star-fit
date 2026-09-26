@@ -562,6 +562,22 @@ export const SessionRepo = {
   },
 
   /**
+   * 用户是否有任何训练记录（sessions 表任一行）——B2 开始运动路由的
+   * user_stage「纯新手 vs 老手无计划」判定读（issue #22）。
+   * EXISTS 探针走 idx_sessions_user_id；只读，不写缓存。
+   * 注意：PostgresClient.queryOne 空结果返回 undefined（非 null），
+   * 用宽松等价同时覆盖 undefined / null 两种空值形态。
+   */
+  hasAnySessions: async (userId: string): Promise<boolean> => {
+    const client = SessionRepo.getClient();
+    const row = await client.queryOne<{ one: number }>(
+      "SELECT 1 AS one FROM sessions WHERE user_id = $userId::uuid LIMIT 1",
+      { userId },
+    );
+    return row != null;
+  },
+
+  /**
    * 读取用户最新一条 session 的 raw_json（batch4-4 收编：原 mcpTools
    * load_history 直连 SQL 与 qualityFactsResolver 同源查询，统一走本方法）。
    * 无 session 返回 null；JSONB 自动解析，历史字符串值容错 JSON.parse。
