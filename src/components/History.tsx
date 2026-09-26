@@ -10,12 +10,9 @@
  */
 
 import React, { useRef, useState, useEffect, useCallback } from 'react';
-import { Session, Exercise } from '@/src/types/legacy';
-import { DEFAULT_BODYWEIGHT } from '@/constants';
-import SwipeableRow from './SwipeableRow';
-import { SyncService } from '@/services/syncService';
-import { storageSet } from '@/storage';
-import { API_BASE, setApiBase, getHeaders } from '@/services/geminiService';
+import { Session } from '@/src/types/legacy';
+import { SessionCardItem } from './history/SessionCardItem';
+import { DiagnosticsSheet } from './settings/DiagnosticsSheet';
 import { useLoginStatus } from '../hooks/useLoginStatus';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '../lib/nativeHaptics';
@@ -27,23 +24,9 @@ import {
   onGlassMenuSelect,
   GlassMenuItem,
 } from '../lib/nativeGlassMenu';
-import { isNativeTabBar, setTabBarHidden } from '../lib/nativeTabBar';
+import { setTabBarHidden } from '../lib/nativeTabBar';
 import { List } from 'react-window';
-import { setVolume } from '../utils/workoutSummary';
-import { WatchDiagnosticsCard } from './settings/WatchStatusCard';
-// （DEFAULT_BODYWEIGHT 已不再使用：容量统一走 setVolume，自重兜底逻辑在其内部）
-
-// 容量口径统一（2026-09-16）：单组容量共用 workoutSummary.setVolume
-// （bodyweight 含体重、assisted 真实负荷、unilateral ×2、isometric 体重兜底），
-// 与结算页/落库传输层一致，不再各写一份 switch。
-const calculateVolume = (ex: Exercise) => {
-   let vol = 0;
-   ex.sets.forEach(set => {
-       if (!set.completed) return;
-       vol += setVolume(ex, set);
-   });
-   return vol;
-};
+// （容量计算已随 SessionCardItem 抽取：单组容量统一走 workoutSummary.setVolume）
 
 interface HistoryProps {
   sessions: Session[];
@@ -55,70 +38,14 @@ interface HistoryProps {
 }
 
 const SessionItem = ({ index, style, sessions, onSelect, onDelete }: { index: number; style: any; sessions: Session[]; onSelect: (s: Session) => void; onDelete: (sessionId: string) => void }) => {
-  const session = sessions[index];
-  const dateObj = new Date(session.startTime);
-  const dateStr = dateObj.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' });
-  const timeStr = dateObj.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
-  const duration = Math.floor((session.endTime! - session.startTime - session.pausedDuration) / 1000 / 60);
-  const totalVolume = session.exercises.reduce((acc, ex) => acc + calculateVolume(ex), 0);
-  const exerciseCount = session.exercises.length;
-  const exerciseNames = session.exercises.map(e => e.name).slice(0, 3).join(', ');
-
+  // C2（issue #6）：卡片视觉抽取为 SessionCardItem（与信息页「训练历史」区共用），本组件只做虚拟列表行包装
   return (
     <div style={{ ...style, paddingBottom: '16px', paddingLeft: '8px', paddingRight: '8px' }}>
-      <SwipeableRow
-        key={session.id}
-        className="rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
-        leftActions={[
-          {
-            label: '删除',
-            icon: <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5"><path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>,
-            color: 'bg-red-500',
-            onClick: () => onDelete(session.id)
-          }
-        ]}
-        rightActions={[]}
-      >
-        <div
-          onClick={() => onSelect(session)}
-          role="button"
-          aria-label={`${dateStr} 训练记录，${duration} 分钟`}
-          className="w-full bg-white p-5 text-left active:bg-gray-50 transition-all rounded-2xl rounded-tl-sm"
-        >
-          <div className="flex justify-between items-start mb-3">
-            <div className="flex flex-col gap-1">
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-star-primary shadow-[0_0_8px_rgba(24,24,27,0.2)]"></div>
-                <span className="text-sm font-black text-star-dark uppercase tracking-tight">{dateStr}</span>
-                <span className="text-[10px] font-mono text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded border border-gray-100">{timeStr}</span>
-              </div>
-              <p className="text-[11px] text-gray-400 font-medium truncate max-w-[240px] italic">
-                {exerciseNames}{session.exercises.length > 3 ? '...' : ''}
-              </p>
-            </div>
-            <div className="w-8 h-8 rounded-xl bg-gray-50 flex items-center justify-center text-gray-300 group-active:text-star-primary transition-colors" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
-              </svg>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-3 gap-2 pt-2.5 border-t border-gray-50">
-            <div className="flex flex-col">
-              <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest leading-none mb-1">时长</span>
-              <span className="text-sm font-mono font-black text-star-dark">{duration}<span className="text-[10px] ml-0.5 font-sans font-bold text-gray-400">分</span></span>
-            </div>
-            <div className="flex flex-col border-l border-gray-100 pl-3">
-              <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest leading-none mb-1">容量</span>
-              <span className="text-sm font-mono font-black text-star-dark">{totalVolume}<span className="text-[10px] ml-0.5 font-sans font-bold text-gray-400">kg</span></span>
-            </div>
-            <div className="flex flex-col border-l border-gray-100 pl-3">
-              <span className="text-[9px] text-gray-400 uppercase font-black tracking-widest leading-none mb-1">组数</span>
-              <span className="text-sm font-mono font-black text-star-dark">{session.exercises.reduce((acc, ex) => acc + ex.sets.filter(s => s.completed).length, 0)}</span>
-            </div>
-          </div>
-        </div>
-      </SwipeableRow>
+      <SessionCardItem
+        session={sessions[index]}
+        onSelect={onSelect}
+        onDelete={onDelete}
+      />
     </div>
   );
 };
@@ -240,7 +167,7 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
   const runActionRef = useRef<(index: number) => void>(() => {});
   runActionRef.current = runGlassMenuAction;
 
-  // Sync Debug State
+  // Sync Debug State（面板本体已抽取为 DiagnosticsSheet，与信息页共用）
   const [showDebug, setShowDebug] = useState(false);
   // iOS sheet 规范：诊断 sheet 呈现时盖住原生 tab bar，关闭恢复（引用计数，与全项目 sheet 一致）
   React.useEffect(() => {
@@ -248,232 +175,8 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
     setTabBarHidden(true);
     return () => setTabBarHidden(false);
   }, [showDebug]);
-  const [syncStatus, setSyncStatus] = useState('');
-  const [pingResult, setPingResult] = useState<any>(null);
-  const [netLogs, setNetLogs] = useState<string[]>([]);
-  const [deviceId, setDeviceId] = useState('');
-  const [userId, setUserId] = useState('');
-  const [loginName, setLoginName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const { logout } = useLoginStatus();
-
-  // Auto-capture console logs when debug is open
-  React.useEffect(() => {
-    if (!showDebug) return;
-
-    const originalLog = console.log;
-    const originalError = console.error;
-    const originalWarn = console.warn;
-
-    const logToNet = (type: string, ...args: any[]) => {
-        const msg = args.map(a => typeof a === 'object' ? JSON.stringify(a) : String(a)).join(' ');
-        setNetLogs(prev => [`[${type}] ${msg}`, ...prev].slice(0, 100));
-    };
-
-    console.log = (...args) => {
-        originalLog(...args);
-        logToNet('LOG', ...args);
-    };
-    console.error = (...args) => {
-        originalError(...args);
-        logToNet('ERROR', ...args);
-    };
-    console.warn = (...args) => {
-        originalWarn(...args);
-        logToNet('WARN', ...args);
-    };
-
-    return () => {
-        console.log = originalLog;
-        console.error = originalError;
-        console.warn = originalWarn;
-    };
-  }, [showDebug]);
-
-  React.useEffect(() => {
-    SyncService.getDeviceId().then(setDeviceId);
-    // Get current user ID from localStorage
-    const currentUserId = localStorage.getItem('starfit_user_id');
-    if (currentUserId) {
-      setUserId(currentUserId);
-    }
-    // 登录名解析（2026-09-20）：优先 localStorage（登录时写入）；自动登录（UUID 直连）
-    // 没写过 → 查 /admin/users 按 UUID 匹配 display_name，结果回写缓存。
-    const cachedName = localStorage.getItem('starfit_login_username');
-    if (cachedName) {
-      setLoginName(cachedName);
-    } else if (currentUserId) {
-      (async () => {
-        try {
-          const res = await fetch(`${API_BASE}/admin/users`, { headers: getHeaders() });
-          if (!res.ok) return;
-          const users = await res.json();
-          const match = Array.isArray(users)
-            ? users.find((u: any) => u.user_id === currentUserId || u.id === currentUserId)
-            : null;
-          const name = match?.display_name || match?.username;
-          if (name) {
-            localStorage.setItem('starfit_login_username', String(name));
-            setLoginName(String(name));
-          }
-        } catch { /* 后端不可达时保持空，显示占位提示 */ }
-      })();
-    }
-  }, []);
-
-  // --- Data Management Handlers ---
-
-  const handleExportJSON = () => {
-    if (sessions.length === 0) {
-        alert("暂无记录可导出");
-        return;
-    }
-    const dataStr = JSON.stringify(sessions, null, 2);
-    const blob = new Blob([dataStr], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `starfit_backup_${new Date().toISOString().slice(0,10)}.json`;
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    URL.revokeObjectURL(url);
-  };
-
-  const handleExportMarkdown = async () => {
-    if (sessions.length === 0) {
-        alert("暂无记录可导出");
-        return;
-    }
-
-    try {
-      const uid = localStorage.getItem('starfit_user_id');
-      if (!uid) {
-        alert("用户未登录，无法导出 Markdown 报告");
-        return;
-      }
-
-      const res = await fetch(`${API_BASE}/admin/users/${uid}/export-markdown`, {
-        headers: getHeaders()
-      });
-
-      if (!res.ok) {
-        const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `导出失败: ${res.status}`);
-      }
-
-      const data = await res.json();
-      const blob = new Blob([data.markdown], { type: 'text/markdown' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = `training_report_${uid.slice(0, 8)}_${new Date().toISOString().slice(0, 10)}.md`;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      URL.revokeObjectURL(url);
-    } catch (err) {
-      alert('导出报告失败: ' + (err as Error).message);
-    }
-  };
-
-  const handlePing = async () => {
-    setPingResult('Testing...');
-    const logs: string[] = [];
-    const log = (msg: string) => logs.push(`[${new Date().toLocaleTimeString()}] ${msg}`);
-
-    try {
-        // 2026-09-20 修复：原实现裸 fetch 不带鉴权头，后端开启鉴权时 /api/ping 必 401，
-        // 表现为"测试 ping 不正常"。统一走 getHeaders（与其他 API 一致），
-        // 并先探根级 /healthz（免令牌通道）定位是网络问题还是鉴权问题。
-        log(`GET /healthz (no-auth probe): ${API_BASE.replace('/api', '')}/healthz`);
-        const hzStart = Date.now();
-        const resHz = await fetch(`${API_BASE.replace('/api', '')}/healthz`, { mode: 'cors' });
-        const hzMs = Date.now() - hzStart;
-        log(resHz.ok ? `/healthz OK (${hzMs}ms)` : `/healthz Failed: ${resHz.status}`);
-
-        log(`GET /api/ping (authed): ${API_BASE}/ping`);
-        const start = Date.now();
-        const resGet = await fetch(`${API_BASE}/ping`, { mode: 'cors', headers: getHeaders({}, false) });
-        const end = Date.now();
-
-        if (resGet.ok) {
-            const data = await resGet.json();
-            log(`GET Success (${end-start}ms): ${JSON.stringify(data)}`);
-        } else {
-            log(`GET Failed: ${resGet.status} ${resGet.statusText}`);
-        }
-
-        // Also test POST (preflight + body)
-        log(`POST Test to: ${API_BASE}/sync/push`);
-        const postStart = Date.now();
-        const resPost = await fetch(`${API_BASE}/sync/push`, {
-            method: 'POST',
-            mode: 'cors',
-            headers: { ...getHeaders(), 'Content-Type': 'application/json' },
-            body: JSON.stringify({ deviceId: 'ping-test', sessions: [] })
-        });
-        const postEnd = Date.now();
-
-        if (resPost.ok) {
-            log(`POST Success (${postEnd-postStart}ms)`);
-            setPingResult(`Success (GET+POST)`);
-        } else {
-            const txt = await resPost.text();
-            log(`POST Failed: ${resPost.status} - ${txt.substring(0, 20)}`);
-            setPingResult(`POST Failed: ${resPost.status}`);
-        }
-    } catch (e: any) {
-        log(`ERROR: ${e.message}`);
-        setPingResult(`Error: ${e.message}`);
-    }
-    setNetLogs(prev => [...logs, ...prev]);
-  };
-
-  const handleForceSync = async () => {
-      setSyncStatus('正在同步...');
-      console.log('[History] Starting Force Sync...');
-
-      try {
-          const { API_BASE } = await import('@/services/geminiService');
-          console.log(`[History] API_BASE: ${API_BASE}`);
-
-          const did = await SyncService.getDeviceId();
-          console.log(`[History] DeviceID: ${did}`);
-
-          const { loadHistory } = await import('@/storage');
-          const allHistory = await loadHistory() || [];
-          const ids = allHistory.map((s: any) => s.id);
-          console.log(`[History] Found ${ids.length} sessions in history`);
-
-          await storageSet('STARFIT_SYNC_QUEUE', ids);
-          SyncService.queue = ids;
-
-          console.log('[History] Starting Push (via syncAll)...');
-          await SyncService.syncAll();
-          console.log('[History] Push Done. Starting Pull...');
-
-          await SyncService.pull();
-          console.log('[History] Pull Done.');
-
-          setSyncStatus(`同步完成`);
-          setTimeout(() => window.location.reload(), 1500); // Give time to read logs
-      } catch (e: any) {
-          console.error(`[History] Force Sync Error: ${e.message}`, e);
-          setSyncStatus(`失败: ${e.message}`);
-      }
-  };
-
-  const handleResetSyncState = async () => {
-      if(!window.confirm('确定要强制同步吗？')) return;
-      // Full sync is now the default - this just triggers a fresh pull
-      SyncService.pull().then(() => {
-          setSyncStatus('同步完成');
-          setTimeout(() => setSyncStatus(''), 2000);
-      }).catch(e => {
-          setSyncStatus(`同步失败: ${e.message}`);
-      });
-  };
 
   const handleLogout = async () => {
     if(!window.confirm('确定要注销登录吗？')) return;
@@ -559,165 +262,8 @@ const History: React.FC<HistoryProps> = ({ sessions, onSelect, onDelete, onOpenS
           )}
         </AnimatePresence>
 
-        {/* Sync Debug Panel — iOS sheet 形态：全屏遮罩 + 底部滑入（rounded-t-[40px] 全局统一）；
-            呈现时原生 tab bar 隐藏（见上方 useEffect），点遮罩关闭 */}
-        {showDebug && (
-            <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
-              transition={{ duration: 0.2 }}
-              className="fixed inset-0 z-[80] bg-black/50 backdrop-blur-sm"
-              onClick={() => setShowDebug(false)}
-            >
-            <div
-                className="fixed inset-x-0 bottom-0 z-[90] bg-gray-900 text-gray-200 p-4 rounded-t-[40px] shadow-2xl max-w-md mx-auto"
-                style={{ paddingBottom: 'calc(16px + var(--safe-bottom, 0px))', maxHeight: '85vh', overflowY: 'auto' }}
-                onClick={(e) => e.stopPropagation()}
-            >
-                <div className="flex justify-between items-center mb-3">
-                    <h3 className="font-mono text-sm font-bold text-star-primary">DIAGNOSTICS</h3>
-                    <button onClick={() => setShowDebug(false)} aria-label="关闭诊断" className="w-8 h-8 rounded-full bg-gray-800 flex items-center justify-center text-gray-400 active:scale-90">
-                        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                    </button>
-                </div>
-
-                {/* 0. Apple Watch 连接状态（实时，WCSession 真源；非 iOS 不渲染） */}
-                <WatchDiagnosticsCard />
-
-                {/* 1. Environment Info */}
-                <div className="bg-black/30 p-2 rounded mb-3 space-y-1">
-                    <div className="text-[10px] text-gray-400">API_BASE (Current)</div>
-                    <div className="font-mono text-xs text-green-400 break-all">
-                        {API_BASE}
-                    </div>
-                    {/* Manual Override Input */}
-                    <div className="flex gap-1 mt-2">
-                        <input
-                            id="manual-api-input"
-                            type="text"
-                            placeholder="Set Manual API URL (e.g. http://192.168.1.5:43111)"
-                            className="flex-1 bg-black/50 border border-gray-700 rounded px-2 py-1 text-[10px] text-white font-mono focus:border-star-primary outline-none"
-                            onKeyDown={(e) => {
-                                if(e.key === 'Enter') {
-                                    setApiBase(e.currentTarget.value);
-                                }
-                            }}
-                        />
-                        <button
-                            onClick={() => {
-                                const input = document.getElementById('manual-api-input') as HTMLInputElement;
-                                if (input && input.value) {
-                                    setApiBase(input.value);
-                                } else {
-                                    alert('Please enter a URL first');
-                                }
-                            }}
-                            className="bg-star-primary/80 hover:bg-star-primary text-white px-3 rounded text-[10px] font-bold transition-colors"
-                        >
-                            Save
-                        </button>
-                         <button
-                            onClick={() => {
-                                if(window.confirm('确定重置为自动检测的地址吗？')) {
-                                    localStorage.removeItem('STARFIT_API_BASE');
-                                    alert('已重置，应用即将重启。');
-                                    window.location.href = window.location.origin + window.location.pathname + '?r=' + Date.now();
-                                }
-                            }}
-                            className="bg-red-900/30 text-red-400 px-2 rounded text-[9px] border border-red-900 hover:bg-red-900/50"
-                        >
-                            Reset
-                        </button>
-                    </div>
-
-                    <div className="text-[10px] text-gray-400 mt-1">User Agent</div>
-                    <div className="font-mono text-[9px] text-gray-500 break-all leading-tight">
-                        {navigator.userAgent}
-                    </div>
-                </div>
-
-                {/* 2. Controls */}
-                <div className="grid grid-cols-2 gap-2 mb-3">
-                    <button
-                        onClick={handlePing}
-                        className="bg-blue-900/30 hover:bg-blue-900/50 text-blue-400 text-xs font-bold py-2 rounded border border-blue-800/50"
-                    >
-                        Test Connectivity (Ping)
-                    </button>
-                    <button
-                        onClick={handleForceSync}
-                        className="bg-star-primary/20 hover:bg-star-primary/30 text-star-primary text-xs font-bold py-2 rounded border border-star-primary/50"
-                    >
-                        Force Sync (Push+Pull)
-                    </button>
-                </div>
-
-                {/* 3. Results Area */}
-                <div className="space-y-2">
-                    {/* Sync Status Badge */}
-                    {syncStatus && (
-                        <div className="flex items-center gap-2 px-2 py-1 bg-black/40 rounded border border-gray-800">
-                            <div className={`w-2 h-2 rounded-full ${syncStatus.includes('失败') || syncStatus.includes('ERROR') ? 'bg-red-500 animate-pulse' : 'bg-green-500'}`}></div>
-                            <span className="text-[10px] font-mono text-gray-300">{syncStatus}</span>
-                        </div>
-                    )}
-
-                    {/* Ping Result */}
-                    {pingResult && (
-                        <div className={`p-2 rounded text-xs font-mono border ${pingResult.error ? 'bg-red-900/20 border-red-900' : 'bg-green-900/20 border-green-900'}`}>
-                            <div className="font-bold mb-1">{pingResult.error ? 'PING FAILED' : 'PING SUCCESS'}</div>
-                            <pre className="whitespace-pre-wrap break-all text-[10px] opacity-80">
-                                {JSON.stringify(pingResult, null, 2)}
-                            </pre>
-                        </div>
-                    )}
-
-                    {/* Sync Logs */}
-                    {netLogs.length > 0 && (
-                        <div className="bg-black/50 p-2 rounded text-[10px] font-mono text-gray-400 h-48 overflow-y-auto border border-gray-800">
-                            {netLogs.map((l, i) => (
-                                <div key={i} className={`border-b border-gray-900/50 py-0.5 ${l.includes('ERROR') ? 'text-red-400' : l.includes('SUCCESS') ? 'text-green-400' : ''}`}>
-                                    {l}
-                                </div>
-                            ))}
-                        </div>
-                    )}
-
-                    {/* Version Fingerprint（调试用：确认手机端是不是新包） */}
-                    <div className="bg-black/30 p-2 rounded mb-3 flex items-center justify-between">
-                        <div>
-                            <div className="text-[10px] text-gray-400">App Version</div>
-                            <div className="font-mono text-xs text-cyan-300">
-                                v{import.meta.env.VITE_PKG_VERSION ?? '?'} · build {import.meta.env.VITE_BUILD_TS ?? '?'}
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* User ID Display */}
-                    <div className="text-[10px] text-gray-500 mt-2 flex items-center gap-2">
-                        <span>UserID:</span>
-                        <code className="bg-black/50 px-1 rounded select-all text-yellow-300 font-mono">{userId || 'Not logged in'}</code>
-                    </div>
-
-                    <div className="text-[10px] text-gray-500 flex items-center gap-2">
-                        <span>登录名:</span>
-                        <code className="bg-black/50 px-1 rounded select-all text-green-300 font-mono">
-                            {loginName || '（解析中…后端不可达则空）'}
-                        </code>
-                    </div>
-
-                    <div className="text-[10px] text-gray-500 flex items-center gap-2">
-                        <span>DeviceID:</span>
-                        <code className="bg-black/50 px-1 rounded select-all text-gray-300 font-mono">{deviceId || 'Generating...'}</code>
-                    </div>
-                    <div className="flex justify-between items-center gap-2 mt-2">
-                        <button onClick={handleResetSyncState} className="text-[10px] text-red-500 underline">强制同步</button>
-                    </div>
-                </div>
-            </div>
-            </motion.div>
-        )}
+        {/* Sync Debug Panel — 本体已抽取为 DiagnosticsSheet（信息页共用，行为零改动） */}
+        <DiagnosticsSheet open={showDebug} onClose={() => setShowDebug(false)} />
 
         {/* List */}
         {sessions.length === 0 ? (

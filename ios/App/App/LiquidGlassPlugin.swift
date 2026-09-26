@@ -6,7 +6,7 @@ import Photos
 /**
  * LiquidGlassPlugin — 系统组件版导航（苹果官方 UI 效果和交互规范）。
  *
- * 常驻 Tab Bar（3 页签：历史/开始运动/AI Agent，默认中间）
+ * 常驻 Tab Bar（3 页签：信息/开始运动/AI Agent，默认中间）
  * 载体 = UIKit 原生 UITabBarController：视图背景全透明，只有 tabBar 本体（系统玻璃）。
  * WebView 缩短到 bar 上沿，内容滚动到底不被遮挡。
  *
@@ -116,7 +116,7 @@ public class LiquidGlassPlugin: CAPPlugin, CAPBridgedPlugin {
                 tabCtrl.delegate = self
                 if #available(iOS 18.0, *) {
                     // 官方姿势：iOS18+ 只用 tabs API。勿与 viewControllers 混用。
-                    // 3 个常规页签（历史/开始运动/AI Agent）——不再用 UISearchTab 圆钮
+                    // 3 个常规页签（信息/开始运动/AI Agent）——不再用 UISearchTab 圆钮
                     let tabs: [UITab] = items.map { item in
                         let vc = UIViewController()
                         vc.view.backgroundColor = .clear

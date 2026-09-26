@@ -9,6 +9,24 @@
  */
 
 import { z } from "zod";
+// weekly_plan 卡契约（单一真源 shared/contracts）：import 供本文件 UIHintSchema
+// 使用，re-export 保持本模块既有公共 API。
+import {
+  WeeklyPlanSetSchema,
+  WeeklyPlanExerciseSchema,
+  WeeklyPlanDaySchema,
+  WeeklyPlanCardDataSchema,
+} from "shared/contracts";
+export {
+  WeeklyPlanSetSchema,
+  WeeklyPlanExerciseSchema,
+  WeeklyPlanDaySchema,
+  WeeklyPlanCardDataSchema,
+  type WeeklyPlanSet,
+  type WeeklyPlanExercise,
+  type WeeklyPlanDay,
+  type WeeklyPlanCardData,
+} from "shared/contracts";
 
 // ============================================================================
 // Exercise Type Enum
@@ -385,6 +403,7 @@ export type AuditCompleteData = z.infer<typeof AuditCompleteDataSchema>;
 export const UIHintTypeEnum = z.enum([
   "survey_card",
   "plan_card",
+  "weekly_plan",
   "summary_card",
   "deviation_card",
   "audit_complete",
@@ -412,6 +431,12 @@ export const UIHintSchema = z.discriminatedUnion("type", [
     diff: PlanDiffSchema.optional(),
     /** 'next_day' = 用户要求制定「明天/第二天」的计划（2026-09-14 明日卡） */
     target: z.literal("next_day").optional(),
+  }),
+  // weekly_plan（对话周计划卡，issue #9 / D2）：整周展示层，数据真源仍是
+  // weekly_plan/plan_entries 持久实体（save_weekly_plan 落库后输出）
+  z.object({
+    type: z.literal("weekly_plan"),
+    data: WeeklyPlanCardDataSchema,
   }),
   // summary_card
   z.object({
@@ -478,6 +503,14 @@ export function getFallbackUIHint(type: UIHintType): UIHint {
     plan_card: {
       type: "plan_card",
       data: [],
+    },
+    weekly_plan: {
+      type: "weekly_plan",
+      data: {
+        week_label: "本周计划",
+        split_summary: "训练安排",
+        days: [],
+      },
     },
     summary_card: {
       type: "summary_card",

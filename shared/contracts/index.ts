@@ -1220,6 +1220,10 @@ export {
   TodayScheduleEntrySchema,
   TodayScheduleResponseSchema,
   FitnessLevelSchema,
+  WeeklyPlanSetSchema,
+  WeeklyPlanExerciseSchema,
+  WeeklyPlanDaySchema,
+  WeeklyPlanCardDataSchema,
 
   // Types
   type WeekId,
@@ -1237,6 +1241,10 @@ export {
   type TodayScheduleEntry,
   type TodayScheduleResponse,
   type FitnessLevel,
+  type WeeklyPlanSet,
+  type WeeklyPlanExercise,
+  type WeeklyPlanDay,
+  type WeeklyPlanCardData,
 
   // Functions
   canTransitionPlanEntryStatus,

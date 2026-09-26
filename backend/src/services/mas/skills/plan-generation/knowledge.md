@@ -288,7 +288,7 @@
 
 ```json
 {
-  "type": "plan",
+  "type": "plan_card",
   "title": "今日训练",
   "data": [
     {
@@ -318,11 +318,55 @@ plan 卡由 uiHint 校验回路（M5c）程序化校验：schema 不通过 → �
 
 校验要点：
 
-| 字段  | 要求                        |
-| ----- | --------------------------- |
-| type  | "plan"                      |
-| data  | ExercisePlan[]（≥1 个动作） |
-| title | 非空字符串                  |
+| 字段  | 要求                                              |
+| ----- | ------------------------------------------------- |
+| type  | "plan_card"（兼容期别名 "plan" 不再被校验器接受） |
+| data  | ExercisePlan[]（≥1 个动作）                       |
+| title | 非空字符串                                        |
+
+### 9.3 weekly_plan 卡（周计划对话展示层，2026-09-26 起）
+
+`save_weekly_plan` 落库成功后，**周计划请求一律改输出 weekly_plan 卡**（替代
+旧「plan 卡展示当日条目」的做法）；单日 / 明日计划继续用 plan_card，兼容期
+plan_card 仍被校验器接受。weekly_plan 卡展示**整周**：
+
+```json
+{
+  "type": "weekly_plan",
+  "data": {
+    "week_label": "第 2 周",
+    "phase_label": "力量块",
+    "split_summary": "推拉腿 · 每周 3 练 · 主项渐进 +1 档",
+    "days": [
+      {
+        "entry_date": "2026-09-21",
+        "split_label": "推",
+        "focus": "胸肩三头，4 动作",
+        "rest": false,
+        "exercises": [
+          {
+            "exercise_id": "V1StGXR8_Z5jdHi6",
+            "name": "杠铃深蹲",
+            "sets": [
+              { "set": 1, "weight": 60, "reps": 8 },
+              { "set": 2, "weight": 65, "reps": 6 }
+            ]
+          }
+        ]
+      },
+      { "entry_date": "2026-09-22", "rest": true, "exercises": [] }
+    ]
+  }
+}
+```
+
+要点：
+
+- `data` 是**对象**不是数组（与 plan_card 相反）；`days` 覆盖周一至周日整周
+- 每组参数可不同（第 1 组 60kg×8 / 第 2 组 65kg×6）——按组展开正是此卡的
+  意义；`exercise_id` 仍必须来自 list_exercises，禁止编造
+- **纯净新生成**：卡上没有进度/状态/执行率字段——那是执行层的职责
+- 休息日：`rest: true`、exercises 留空，前端弱化为灰行
 
 ### 9.4 explanation 编写指南
 

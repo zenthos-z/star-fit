@@ -54,6 +54,33 @@ const VALID_CARDS: Record<string, unknown> = {
       metrics: { rpe: 8 },
     },
   },
+  weekly_plan: {
+    type: "weekly_plan",
+    data: {
+      week_label: "第 2 周",
+      phase_label: "力量块",
+      split_summary: "推拉腿 · 每周 3 练 · 主项渐进 +1 档",
+      days: [
+        {
+          entry_date: "2026-09-21",
+          split_label: "推",
+          focus: "胸肩三头，4 动作",
+          rest: false,
+          exercises: [
+            {
+              exercise_id: "V1StGXR8_Z5jdHi6",
+              name: "杠铃深蹲",
+              sets: [
+                { set: 1, weight: 60, reps: 8 },
+                { set: 2, weight: 65, reps: 6 },
+              ],
+            },
+          ],
+        },
+        { entry_date: "2026-09-22", rest: true, exercises: [] },
+      ],
+    },
+  },
   deviation_card: {
     type: "deviation_card",
     data: {
@@ -147,6 +174,98 @@ describe("validateUiHint — B2 invalid cards rejected (P012 vacuity probe)", ()
     {
       name: "summary_card missing required summary",
       card: { type: "summary_card", data: { highlights: ["x"] } },
+    },
+    {
+      name: "weekly_plan data wrong shape (array, not object)",
+      card: { type: "weekly_plan", data: [{ week_label: "第 2 周" }] },
+    },
+    {
+      name: "weekly_plan missing required split_summary",
+      card: {
+        type: "weekly_plan",
+        data: {
+          week_label: "第 2 周",
+          days: [
+            {
+              entry_date: "2026-09-21",
+              rest: false,
+              exercises: [
+                {
+                  exercise_id: "V1StGXR8_Z5jdHi6",
+                  name: "杠铃深蹲",
+                  sets: [{ set: 1, weight: 60, reps: 8 }],
+                },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      name: "weekly_plan empty days array",
+      card: {
+        type: "weekly_plan",
+        data: { week_label: "第 2 周", split_summary: "推拉腿", days: [] },
+      },
+    },
+    {
+      name: "weekly_plan day with malformed entry_date",
+      card: {
+        type: "weekly_plan",
+        data: {
+          week_label: "第 2 周",
+          split_summary: "推拉腿",
+          days: [
+            {
+              entry_date: "2026-9-21",
+              rest: false,
+              exercises: [],
+            },
+          ],
+        },
+      },
+    },
+    {
+      name: "weekly_plan exercise with empty sets array",
+      card: {
+        type: "weekly_plan",
+        data: {
+          week_label: "第 2 周",
+          split_summary: "推拉腿",
+          days: [
+            {
+              entry_date: "2026-09-21",
+              rest: false,
+              exercises: [
+                { exercise_id: "V1StGXR8_Z5jdHi6", name: "杠铃深蹲", sets: [] },
+              ],
+            },
+          ],
+        },
+      },
+    },
+    {
+      name: "weekly_plan set with all params empty",
+      card: {
+        type: "weekly_plan",
+        data: {
+          week_label: "第 2 周",
+          split_summary: "推拉腿",
+          days: [
+            {
+              entry_date: "2026-09-21",
+              rest: false,
+              exercises: [
+                {
+                  exercise_id: "V1StGXR8_Z5jdHi6",
+                  name: "杠铃深蹲",
+                  sets: [{ set: 1 }],
+                },
+              ],
+            },
+          ],
+        },
+      },
     },
     {
       name: "deviation_card missing required reason",

@@ -374,3 +374,71 @@ export function getIsoWeekId(dateStr: string): WeekId {
     `${cal.getUTCFullYear()}-W${String(week).padStart(2, '0')}`,
   );
 }
+
+// ============================================================================
+// 周计划卡 (Weekly Plan Card) — uiHint weekly_plan 卡数据契约（issue #9 / D2）
+// ============================================================================
+
+/**
+ * 对话周计划卡（uiHint `type: "weekly_plan"` 的 data 契约）。
+ *
+ * 职责划分：weekly_plan/plan_entries 实体是数据真源（上方 Schema），
+ * 本卡是 AI 落库后输出的**对话展示层**——整周 × 动作 × 按组展开，
+ * 每组参数可独立（第1组 60kg×8 / 第2组 65kg×6）。
+ * 纯净新生成：无进度/状态/执行率字段（issue #8 定稿）。
+ * 后端校验回路（M5b）与本前端渲染共用本契约。
+ */
+
+/** 单组目标：weight/reps/duration 按动作类型至少给一项（或 note 说明）。 */
+export const WeeklyPlanSetSchema = z
+  .object({
+    set: z.number().int().positive(),
+    weight: z.number().optional(), // kg；assisted 沿用负值辅助约定
+    reps: z.number().int().positive().optional(),
+    duration: z.number().positive().optional(), // 秒（isometric/cardio）
+    note: z.string().optional(),
+  })
+  .superRefine((s, ctx) => {
+    const hasMetric =
+      s.weight !== undefined || s.reps !== undefined || s.duration !== undefined;
+    if (!hasMetric && !s.note) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `第 ${s.set} 组参数全空：weight/reps/duration 至少给一项（或 note 说明）`,
+        path: ['set'],
+      });
+    }
+  });
+
+export type WeeklyPlanSet = z.infer<typeof WeeklyPlanSetSchema>;
+
+/** 单日动作条目：exercise_id 为 NanoID（引用 exercises.id，对齐 plan_entries）。 */
+export const WeeklyPlanExerciseSchema = z.object({
+  exercise_id: z.string().min(12).max(24),
+  name: z.string().min(1),
+  sets: z.array(WeeklyPlanSetSchema).min(1),
+  note: z.string().optional(),
+});
+
+export type WeeklyPlanExercise = z.infer<typeof WeeklyPlanExerciseSchema>;
+
+/** 周计划卡的一天：rest=true 时 exercises 缺省为空（休息日弱化展示）。 */
+export const WeeklyPlanDaySchema = z.object({
+  entry_date: z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'entry_date 必须为 YYYY-MM-DD'),
+  split_label: z.string().optional(), // 分化日短标签（推/拉/腿/上/下…）
+  focus: z.string().optional(), // 肌群说明（胸肩三头…）
+  rest: z.boolean().default(false),
+  exercises: z.array(WeeklyPlanExerciseSchema).default([]),
+});
+
+export type WeeklyPlanDay = z.infer<typeof WeeklyPlanDaySchema>;
+
+/** weekly_plan 卡 data：展示文案 + 整周 days（≥1 天，覆盖周一至周日为宜）。 */
+export const WeeklyPlanCardDataSchema = z.object({
+  week_label: z.string().min(1), // 「第 2 周」
+  phase_label: z.string().optional(), // 「力量块」
+  split_summary: z.string().min(1), // 「推拉腿 · 每周 3 练 · 主项渐进 +1 档」
+  days: z.array(WeeklyPlanDaySchema).min(1),
+});
+
+export type WeeklyPlanCardData = z.infer<typeof WeeklyPlanCardDataSchema>;

@@ -16,7 +16,7 @@ export interface TabItem {
 }
 
 export const TABS: TabItem[] = [
-  { title: '历史', sfSymbol: 'clock.arrow.circlepath' },
+  { title: '信息', sfSymbol: 'info.circle' },
   { title: '开始运动', sfSymbol: 'figure.run' },
   { title: 'AI Agent', sfSymbol: 'sparkles' },
 ];
