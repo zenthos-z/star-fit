@@ -24,8 +24,10 @@ import {
   CreateWeeklyPlanInputSchema,
   WeeklyPlanSchema,
   PlanEntrySchema,
+  TodayScheduleEntrySchema,
   WeekIdSchema,
   PlanEntryStatusSchema,
+  PLAN_ENTRY_DATE_PATTERN,
   UUIDSchema,
   canTransitionPlanEntryStatus,
   type CreateWeeklyPlanInput,
@@ -33,6 +35,7 @@ import {
   type PlanEntry,
   type PlanEntryStatus,
   type WeeklyPlanWithEntries,
+  type TodayScheduleEntry,
 } from "../../../../../shared/dist/contracts/index.js";
 
 /** weekly_plans 原始行（pg 驱动形态：timestamptz → Date） */
@@ -113,6 +116,40 @@ function mapEntryRow(row: PlanEntryRow): PlanEntry {
       updated_at: row.updated_at.toISOString(),
     },
     "WeeklyPlanRepository.mapEntryRow",
+  );
+}
+
+/** 今日课表 join 行（plan_entries × exercises.name；numeric → string） */
+interface TodayEntryJoinRow {
+  entry_id: string;
+  exercise_id: string;
+  exercise_name: string;
+  target_sets: number;
+  target_load_type: string;
+  target_load_min: string;
+  target_load_max: string;
+  status: string;
+  sort_order: number;
+}
+
+/** 今日课表 join 行 → 契约形态（出库校验，失败即抛） */
+function mapTodayEntryRow(row: TodayEntryJoinRow): TodayScheduleEntry {
+  return validateOrThrow(
+    TodayScheduleEntrySchema,
+    {
+      entry_id: row.entry_id,
+      exercise_id: row.exercise_id,
+      exercise_name: row.exercise_name,
+      target_sets: row.target_sets,
+      target_load: {
+        type: row.target_load_type,
+        min: Number(row.target_load_min),
+        max: Number(row.target_load_max),
+      },
+      status: row.status,
+      sort_order: row.sort_order,
+    },
+    "WeeklyPlanRepository.mapTodayEntryRow",
   );
 }
 
@@ -250,6 +287,82 @@ export class WeeklyPlanRepository extends BaseRepository {
     );
 
     return { plan: mapPlanRow(planRow), entries: entryRows.map(mapEntryRow) };
+  }
+
+  /**
+   * 按用户 + 周标识查询周计划元数据（plan 行，不含条目）。
+   * E2 今日课表路径的轻量读取：只需判定「本周是否有计划」与分化，
+   * 不拉整周条目。未命中返回 null。
+   */
+  async getWeeklyPlanMetaByUserAndWeek(
+    userId: string,
+    weekId: string,
+  ): Promise<WeeklyPlan | null> {
+    if (!UUIDSchema.safeParse(userId).success) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `userId 必须为 UUID（当前: ${userId}）`,
+        { userId },
+      );
+    }
+    const weekIdCheck = WeekIdSchema.safeParse(weekId);
+    if (!weekIdCheck.success) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `weekId 必须为 ISO 周格式 YYYY-Www（当前: ${weekId}）`,
+        { weekId },
+      );
+    }
+
+    const planRow = await this.queryOne<WeeklyPlanRow>(
+      `SELECT id, user_id, week_id, split, status, created_at, updated_at
+       FROM weekly_plans
+       WHERE user_id = $userId::uuid AND week_id = $weekId`,
+      { userId, weekId },
+    );
+
+    return planRow ? mapPlanRow(planRow) : null;
+  }
+
+  /**
+   * 按用户 + 日历日查当日条目（JOIN exercises 取动作名）——E2「今天练什么」路径。
+   * 走 idx_plan_entries_user_date 索引（user_id, entry_date）；exercises.name
+   * 非空 + FK 级联（ON DELETE CASCADE）保证 INNER JOIN 不丢行、不null名。
+   * 返回按 sort_order 升序的展示形态（TodayScheduleEntry）。
+   */
+  async getTodayEntriesWithExercise(
+    userId: string,
+    entryDate: string,
+  ): Promise<TodayScheduleEntry[]> {
+    if (!UUIDSchema.safeParse(userId).success) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `userId 必须为 UUID（当前: ${userId}）`,
+        { userId },
+      );
+    }
+    if (!PLAN_ENTRY_DATE_PATTERN.test(entryDate)) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `entryDate 必须为 YYYY-MM-DD（当前: ${entryDate}）`,
+        { entryDate },
+      );
+    }
+
+    const rows = await this.queryMany<TodayEntryJoinRow>(
+      `SELECT
+         pe.id AS entry_id, pe.exercise_id, e.name AS exercise_name,
+         pe.target_sets,
+         pe.target_load_type, pe.target_load_min, pe.target_load_max,
+         pe.status, pe.sort_order
+       FROM plan_entries pe
+       JOIN exercises e ON e.id = pe.exercise_id
+       WHERE pe.user_id = $userId::uuid AND pe.entry_date = $entryDate::date
+       ORDER BY pe.sort_order ASC`,
+      { userId, entryDate },
+    );
+
+    return rows.map(mapTodayEntryRow);
   }
 
   /**

@@ -81,15 +81,17 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
     "00000000-0000-0000-0000-0000000000aa",
   );
 
-  it("builds exactly the seven named tools", () => {
+  it("builds exactly the eleven named tools", () => {
     const names = tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
       "create_exercise",
+      "get_current_plan",
       "get_exercise_detail",
       "get_hr_trend",
       "get_session_hr_curve",
       "list_exercises",
       "load_history",
+      "save_weekly_plan",
       "update_profile",
       "write_memory",
       "write_session",

@@ -3,6 +3,11 @@
 > Agent 为用户编排"每周 X 练"计划时的分化决策依据。
 > 分化只由两个变量决定：**每周可用天数**（画像 preferences）与**经验等级**（fitness_level）。
 > 永远不要给用户安排超出其可用天数的分化。
+>
+> **代码真源（1.1 起）**：本表已代码化为 Service 纯函数
+> `backend/src/services/schedule/progressionPolicy.ts` 的 `selectSplit()`
+> （含初学者 5-6 天的降级行与 ≥7 天封顶口径）。本文为解释性知识；
+> 决策以代码为准，冲突时以代码为准。
 
 ## 一、按每周天数选分化
 
