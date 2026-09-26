@@ -24,6 +24,18 @@ import {
   WeekIdSchema,
   canTransitionPlanEntryStatus,
   PLAN_ENTRY_STATUS_TRANSITIONS,
+  EXERCISE_MUSCLES,
+  EXERCISE_EQUIPMENT,
+  EXERCISE_CATEGORIES,
+  EXERCISE_BODY_PARTS,
+  MUSCLE_ALIASES,
+  EQUIPMENT_ALIASES,
+  normalizeMuscle,
+  normalizeEquipment,
+  normalizeDifficulty,
+  ExerciseLibraryItemSchema,
+  ExerciseVideoUrlsSchema,
+  ExerciseDetailUpdateSchema,
   type PlanEntry,
   type WeeklyPlan,
 } from "../../shared/contracts/index.js";
@@ -313,6 +325,275 @@ function buildCreateInput(overrides: Record<string, unknown> = {}) {
         target_load: { type: "percent_1rm", min: 70, max: 80 },
       },
     ],
+    ...overrides,
+  };
+}
+
+// ============================================================================
+// Contract Tests: Exercise Library（issue #4 深化 — 真源 exercise-library.ts）
+// ============================================================================
+
+describe("Contract Tests: Exercise Library", () => {
+  test("controlled vocabularies match the ratified sizes (17 muscles / 15 equipment / 7 categories / 10 body parts)", () => {
+    assert.strictEqual(EXERCISE_MUSCLES.length, 17);
+    assert.strictEqual(EXERCISE_EQUIPMENT.length, 15);
+    assert.strictEqual(EXERCISE_CATEGORIES.length, 7);
+    assert.strictEqual(EXERCISE_BODY_PARTS.length, 10);
+    // 词表内无重复（受控词表基本卫生）
+    for (const vocab of [
+      EXERCISE_MUSCLES,
+      EXERCISE_EQUIPMENT,
+      EXERCISE_CATEGORIES,
+      EXERCISE_BODY_PARTS,
+    ]) {
+      assert.strictEqual(new Set(vocab).size, vocab.length);
+    }
+  });
+
+  test("all 39 lib3 targets are covered by MUSCLE_ALIASES and map into the 17-muscle vocabulary or null", () => {
+    // 库3 free-exercise-db-with-videos 的 39 个 target 原值（实测全集，评估区 seed=42）
+    const LIB3_TARGETS = [
+      "abdominals",
+      "abductors",
+      "abs",
+      "adductors",
+      "anterior deltoid",
+      "biceps",
+      "calves",
+      "cardiovascular system",
+      "deltoids",
+      "delts",
+      "erector spinae",
+      "erectors",
+      "forearm extensors",
+      "forearms",
+      "full body",
+      "glutes",
+      "gluteus medius",
+      "hamstrings",
+      "hip flexors",
+      "lats",
+      "middle back",
+      "neck flexors",
+      "obliques",
+      "pectorals",
+      "peroneals",
+      "posterior deltoid",
+      "quadriceps",
+      "quads",
+      "rear deltoids",
+      "rectus abdominis",
+      "rhomboids",
+      "spinal erectors",
+      "spine",
+      "sternocleidomastoid",
+      "thoracic spine",
+      "traps",
+      "triceps",
+      "upper back",
+      "upper pectorals",
+    ];
+    assert.strictEqual(LIB3_TARGETS.length, 39);
+
+    for (const target of LIB3_TARGETS) {
+      assert.ok(
+        target in MUSCLE_ALIASES,
+        `库3 target "${target}" 缺映射（MUSCLE_ALIASES 必须全覆盖 39 个）`,
+      );
+      const mapped = MUSCLE_ALIASES[target];
+      if (mapped !== null) {
+        assert.ok(
+          (EXERCISE_MUSCLES as readonly string[]).includes(mapped),
+          `库3 target "${target}" 映射到 "${mapped}" 不在 17 基准词表内`,
+        );
+      }
+    }
+    // 非肌群目标（有氧/全身）映射 null，不强行归并到骨骼肌
+    assert.strictEqual(MUSCLE_ALIASES["cardiovascular system"], null);
+    assert.strictEqual(MUSCLE_ALIASES["full body"], null);
+  });
+
+  test("every MUSCLE_ALIASES value lands inside the 17-muscle vocabulary or is null", () => {
+    for (const [raw, mapped] of Object.entries(MUSCLE_ALIASES)) {
+      if (mapped === null) continue;
+      assert.ok(
+        (EXERCISE_MUSCLES as readonly string[]).includes(mapped),
+        `"${raw}" 映射到 "${mapped}" 不在词表内`,
+      );
+    }
+  });
+
+  test("every EQUIPMENT_ALIASES value lands inside the 15-equipment vocabulary", () => {
+    for (const [raw, mapped] of Object.entries(EQUIPMENT_ALIASES)) {
+      assert.ok(
+        (EXERCISE_EQUIPMENT as readonly string[]).includes(mapped),
+        `"${raw}" 映射到 "${mapped}" 不在器材词表内`,
+      );
+    }
+    // 任务口径：源 null/'body only'/'body weight'/None → bodyweight
+    assert.strictEqual(EQUIPMENT_ALIASES["body only"], "bodyweight");
+    assert.strictEqual(EQUIPMENT_ALIASES["body weight"], "bodyweight");
+    assert.strictEqual(EQUIPMENT_ALIASES["None"], "bodyweight");
+  });
+
+  test("normalize functions: trim + case-insensitive fallback + null for unknown", () => {
+    // 归一命中
+    assert.strictEqual(normalizeMuscle("lower back"), "lower_back");
+    assert.strictEqual(normalizeMuscle("三头"), "triceps");
+    assert.strictEqual(normalizeMuscle("cardiovascular system"), null);
+    assert.strictEqual(normalizeEquipment("e-z curl bar"), "barbell");
+    assert.strictEqual(normalizeEquipment("拉力器"), "cable");
+    // trim / 大小写兜底
+    assert.strictEqual(normalizeMuscle(" Chest "), "chest");
+    assert.strictEqual(normalizeEquipment("Barbell"), "barbell");
+    // 未知原值 → null（调用方记日志，不静默映射）
+    assert.strictEqual(normalizeMuscle("未知肌群"), null);
+    assert.strictEqual(normalizeEquipment("flux-capacitor"), null);
+    // 难度：库1 expert → advanced，其余原样
+    assert.strictEqual(normalizeDifficulty("expert"), "advanced");
+    assert.strictEqual(normalizeDifficulty("intermediate"), "intermediate");
+  });
+
+  test("ExerciseLibraryItemSchema accepts a fully-populated lib3-style item", () => {
+    const result = ExerciseLibraryItemSchema.safeParse(buildLibraryItem());
+    assert.strictEqual(result.success, true);
+  });
+
+  test("ExerciseLibraryItemSchema tolerates legacy rows: null teaching columns, empty muscle arrays, loose attributes", () => {
+    // 回填后的存量行形态：新教学列全 null、attributes 无结构化 targets 也允许
+    const legacy = ExerciseLibraryItemSchema.safeParse({
+      ...buildLibraryItem(),
+      equipment: null,
+      category: null,
+      body_part: null,
+      primary_muscles: [],
+      secondary_muscles: [],
+      force_type: null,
+      mechanic: null,
+      instructions: null,
+      form_cues: null,
+      common_mistakes: null,
+      breathing: null,
+      aliases: null,
+      image_refs: null,
+      video_urls: null,
+      poster_url: null,
+      name_zh: null,
+      instructions_zh: null,
+      attributes: { custom: true },
+    });
+    assert.strictEqual(legacy.success, true);
+  });
+
+  test("ExerciseLibraryItemSchema rejects out-of-vocabulary values", () => {
+    for (const [field, bad] of [
+      ["equipment", "flux-capacitor"],
+      ["category", "yoga"],
+      ["body_part", "tail"],
+      ["force_type", "twist"],
+      ["mechanic", "hybrid"],
+      ["primary_muscles", ["中下胸"]], // 中文词表值不再进结构化列（须先归一）
+      ["secondary_muscles", ["brachialis"]],
+    ] as const) {
+      const result = ExerciseLibraryItemSchema.safeParse({
+        ...buildLibraryItem(),
+        [field]: bad,
+      });
+      assert.strictEqual(
+        result.success,
+        false,
+        `${field}="${JSON.stringify(bad)}" 应被词表拒绝`,
+      );
+    }
+  });
+
+  test("ExerciseVideoUrlsSchema requires well-formed URLs", () => {
+    assert.strictEqual(
+      ExerciseVideoUrlsSchema.safeParse({
+        male: "https://cdn.example.com/male/squat.mp4",
+        female: "https://cdn.example.com/female/squat.mp4",
+      }).success,
+      true,
+    );
+    assert.strictEqual(
+      ExerciseVideoUrlsSchema.safeParse({ male: "not-a-url" }).success,
+      false,
+    );
+    // 空对象/单版本合法（库3 部分动作只有单性别视频）
+    assert.strictEqual(ExerciseVideoUrlsSchema.safeParse({}).success, true);
+    assert.strictEqual(
+      ExerciseVideoUrlsSchema.safeParse({ female: "https://x.example/f.mp4" })
+        .success,
+      true,
+    );
+  });
+
+  test("ExerciseDetailUpdateSchema rejects empty patches and accepts whitelisted fields", () => {
+    assert.strictEqual(
+      ExerciseDetailUpdateSchema.safeParse({}).success,
+      false,
+      "空 patch 应被拒绝（至少一个字段）",
+    );
+    // 中文回写管道入口
+    const zhPatch = ExerciseDetailUpdateSchema.safeParse({
+      name_zh: "杠铃深蹲",
+      instructions_zh: ["站立，双脚与肩同宽", "下蹲至大腿平行", "站起还原"],
+    });
+    assert.strictEqual(zhPatch.success, true);
+    // 结构化字段可整体置空（null = 清空）
+    assert.strictEqual(
+      ExerciseDetailUpdateSchema.safeParse({ poster_url: null }).success,
+      true,
+    );
+    // 词表外值拒绝
+    assert.strictEqual(
+      ExerciseDetailUpdateSchema.safeParse({ equipment: "magic" }).success,
+      false,
+    );
+  });
+});
+
+/** 构造合法的库3风格深化行样本（全部新列填充） */
+function buildLibraryItem(overrides: Record<string, unknown> = {}) {
+  return {
+    id: "test-exercise-0001",
+    name: "Barbell Squat",
+    name_zh: "杠铃深蹲",
+    exercise_type: "resistance",
+    difficulty: "beginner",
+    equipment: "barbell",
+    category: "strength",
+    body_part: "upper_legs",
+    primary_muscles: ["quadriceps"],
+    secondary_muscles: ["glutes", "hamstrings"],
+    force_type: "push",
+    mechanic: "compound",
+    instructions: [
+      "Position the bar on your upper traps.",
+      "Descend until thighs are parallel to the floor.",
+      "Drive through the heels to stand.",
+    ],
+    form_cues: ["Keep chest up", "Knees track over toes"],
+    common_mistakes: ["Knees caving in", "Lifting heels"],
+    breathing: "Inhale at the top, brace, exhale on the way up.",
+    aliases: ["back squat", "low-bar squat"],
+    instructions_zh: null,
+    image_refs: [
+      "/exercises/Barbell_Squat/0.jpg",
+      "/exercises/Barbell_Squat/1.jpg",
+    ],
+    video_urls: {
+      male: "https://cdn.example.com/exercise-videos/male/barbell-squat.mp4",
+      female:
+        "https://cdn.example.com/exercise-videos/female/barbell-squat.mp4",
+    },
+    poster_url:
+      "https://cdn.example.com/exercise-posters/male/barbell-squat.jpg",
+    attributes: { pattern: "squat", impact_level: { knee: 6 } },
+    modified_by: "system",
+    modified_at: "2026-09-26T08:00:00.000Z",
+    created_at: "2026-09-26T08:00:00.000Z",
+    updated_at: "2026-09-26T08:00:00.000Z",
     ...overrides,
   };
 }

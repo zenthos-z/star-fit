@@ -20,6 +20,10 @@ export {
   WeeklyPlanRepository,
   createWeeklyPlanRepository,
 } from "./weeklyPlan.repository.js";
+export {
+  ExerciseRepository,
+  createExerciseRepository,
+} from "./exercise.repository.js";
 
 // Re-export types for convenience
 export type {

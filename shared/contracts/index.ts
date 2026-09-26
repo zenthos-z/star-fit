@@ -888,137 +888,75 @@ export const UsernameUpdateResponseSchema = z.object({
 export type UsernameUpdateResponse = z.infer<typeof UsernameUpdateResponseSchema>;
 
 // ============================================================================
-// Exercise Schemas (New for Exercise Library Management)
+// Exercise Library Contracts (动作库深化 — issue #4)
 // ============================================================================
+// Exercise 全部契约（存量 Schema + 受控词表 + 三源归一映射表 + 深化行契约）
+// 已迁至 exercise-library.ts（单一真源整理，本文件原名 re-export 零破坏）。
 
-/**
- * Muscle Target Options - Complete muscle partition list
- */
-export type MuscleTarget =
-  | '上胸' | '中下胸'
-  | '前束' | '中束' | '后束'
-  | '二头' | '三头' | '小臂'
-  | '背部' | '下背' | '斜方肌'
-  | '腹肌' | '侧腹'
-  | '股四' | '腘绳' | '小腿'
-  | '上臀部' | '下臀部';
+export {
+  // 受控词表
+  EXERCISE_MUSCLES,
+  EXERCISE_EQUIPMENT,
+  EXERCISE_CATEGORIES,
+  EXERCISE_BODY_PARTS,
+  EXERCISE_FORCE_TYPES,
+  EXERCISE_MECHANICS,
 
-/**
- * Exercise Targets Schema
- * Defines primary and secondary target muscles
- */
-export const ExerciseTargetsSchema = z.object({
-  primary: z.array(z.string()),
-  secondary: z.array(z.string()).optional(),
-});
+  // 归一映射表（纯数据）
+  MUSCLE_ALIASES,
+  EQUIPMENT_ALIASES,
+  DIFFICULTY_ALIASES,
+  CATEGORY_ALIASES,
+  BODY_PART_ALIASES,
 
-export type ExerciseTargets = z.infer<typeof ExerciseTargetsSchema>;
+  // 归一函数（纯函数）
+  normalizeMuscle,
+  normalizeEquipment,
+  normalizeDifficulty,
 
-/**
- * Exercise Attributes Schema
- * Contains all exercise attributes stored in the attributes JSONB field
- */
-export const ExerciseAttributesSchema = z.object({
-  targets: ExerciseTargetsSchema,
-  equipment_required: z.array(z.string()),
-  impact_level: z.record(z.string(), z.number()).optional(),
-  pattern: z.enum(['push', 'pull', 'squat', 'hinge', 'lunge', 'rotation']).optional(),
-  movement_plane: z.enum(['sagittal', 'frontal', 'transverse']).optional(),
-  stabilizers: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-});
+  // 资产引用
+  ExerciseVideoUrlsSchema,
 
-export type ExerciseAttributes = z.infer<typeof ExerciseAttributesSchema>;
+  // 存量契约（自本文件迁出，原名保留）
+  ExerciseTargetsSchema,
+  ExerciseAttributesSchema,
+  ExerciseTypeEnum,
+  EXERCISE_TYPE_VALUES,
+  DifficultyLevelEnum,
+  ModifiedByEnum,
+  ExerciseSchema,
 
-/**
- * Exercise Type Enum
- */
-export const ExerciseTypeEnum = z.enum([
-  'resistance',
-  'unilateral',
-  'bodyweight',
-  'assisted',
-  'isometric',
-  'cardio',
-  'flexibility',
-  'heavy_weight',
-  'rep_training',
-  'outdoor',
-]);
+  // 深化契约（issue #4 新增）
+  ExerciseMuscleSchema,
+  ExerciseEquipmentSchema,
+  ExerciseCategorySchema,
+  ExerciseBodyPartSchema,
+  ExerciseForceTypeSchema,
+  ExerciseMechanicSchema,
+  ExerciseLibraryItemSchema,
+  ExerciseDetailUpdateSchema,
+  ExerciseSearchFilterSchema,
 
-export type ExerciseType = z.infer<typeof ExerciseTypeEnum>;
-
-/**
- * Exercise Type Values - Unified constant for exercise types
- * Used across the codebase to ensure consistency
- */
-export const EXERCISE_TYPE_VALUES = [
-  'resistance',    // 抗阻力训练
-  'unilateral',    // 单侧训练
-  'bodyweight',    // 自重训练
-  'assisted',      // 辅助训练
-  'isometric',     // 等长收缩
-  'cardio',        // 有氧训练
-  'flexibility',   // 柔韧性训练
-  'heavy_weight',  // 大重量训练
-  'rep_training',  // 次数训练
-  'outdoor'        // 户外运动
-] as const;
-
-/**
- * Difficulty Level Enum
- */
-export const DifficultyLevelEnum = z.enum([
-  'beginner',
-  'intermediate',
-  'advanced',
-]);
-
-export type DifficultyLevel = z.infer<typeof DifficultyLevelEnum>;
-
-/**
- * Modified By Enum
- */
-export const ModifiedByEnum = z.enum([
-  'admin',
-  'system',
-  'mas',
-  'user',
-]);
-
-export type ModifiedBy = z.infer<typeof ModifiedByEnum>;
-
-/**
- * Exercise Schema
- * Core contract for exercise library data
- */
-export const ExerciseSchema = z.object({
-  id: z.string().min(12).max(24), // NanoID format (14 chars by default, 12-24 allowed)
-  name: z.string(),
-  exercise_type: ExerciseTypeEnum,
-  attributes: ExerciseAttributesSchema,
-  difficulty: DifficultyLevelEnum,
-  content_html: z.string().optional(),
-  tutorials: z.record(z.string(), z.any()).optional(),
-  tags_json: z.any().optional(),
-  assets_json: z.any().optional(),
-  modified_by: ModifiedByEnum.optional(),
-  modified_at: z.any().optional(),
-  created_at: z.any().optional(),
-  updated_at: z.any().optional(),
-});
-
-export type Exercise = z.infer<typeof ExerciseSchema>;
-
-/**
- * Exercise With Extracted Attributes
- * Same as Exercise but with targets and equipment_required at top level
- * for backward compatibility with frontend code
- */
-export type ExerciseWithExtractedAttributes = Exercise & {
-  targets: string; // JSON stringified ExerciseTargets
-  equipment_required: string; // JSON stringified string[]
-};
+  // Types
+  type ExerciseMuscle,
+  type ExerciseEquipment,
+  type ExerciseCategory,
+  type ExerciseBodyPart,
+  type ExerciseForceType,
+  type ExerciseMechanic,
+  type ExerciseVideoUrls,
+  type MuscleTarget,
+  type ExerciseTargets,
+  type ExerciseAttributes,
+  type ExerciseType,
+  type DifficultyLevel,
+  type ModifiedBy,
+  type Exercise,
+  type ExerciseWithExtractedAttributes,
+  type ExerciseLibraryItem,
+  type ExerciseDetailUpdate,
+  type ExerciseSearchFilter,
+} from './exercise-library.js';
 
 // ============================================================================
 // MAS Context Types
