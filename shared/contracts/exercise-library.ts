@@ -20,6 +20,10 @@
  *  3. Zod Schema
  *     - ExerciseLibraryItemSchema exercises 完整行契约（002 深化后唯一行真源；
  *       旧 attributes JSONB 列及其中文口径契约已随 002 返工退役）
+ *
+ *  4. instructions_zh 结构化中文教学约定（A6 翻译管道，issue #19）
+ *     - INSTRUCTIONS_ZH_SECTIONS 段头标记 + buildInstructionsZh / parseInstructionsZh
+ *     - 列类型不变（text[]），四段（步骤/要领/常见错误/呼吸）以段头编码
  *     - ExerciseDetailUpdateSchema 深化列更新输入（白名单）
  *
  * 数据源拍板（issue #3 评估报告 2026-09-26，口径以 issue #4 任务书为准）：
@@ -574,7 +578,7 @@ export const ExerciseLibraryItemSchema = z.object({
   common_mistakes: z.array(z.string()).nullable(),    // 常见错误（库3 commonMistakes，独家）
   breathing: z.string().nullable(),                   // 呼吸法（库3 breathing，独家）
   aliases: z.array(z.string()).nullable(),            // 别名（库3 aliases，均 5.0 个）
-  instructions_zh: z.array(z.string()).nullable(),    // 中文步骤预留（与 instructions 平行）
+  instructions_zh: z.array(z.string()).nullable(),    // 结构化中文教学（A6 约定，见 InstructionsZhSections；纯步骤数组为兼容旧形态）
 
   // ---- 资产引用（002 新列；存 URL 不落文件）----
   image_refs: z.array(z.string()).nullable(),         // 图片引用（库1 jpg 路径/海报 URL）
@@ -594,6 +598,94 @@ export const ExerciseLibraryItemSchema = z.object({
 });
 
 export type ExerciseLibraryItem = z.infer<typeof ExerciseLibraryItemSchema>;
+
+// ============================================================================
+// instructions_zh 结构化中文教学 (A6 翻译管道约定 — issue #19)
+// ============================================================================
+// instructions_zh 列（text[]）承载 steps/form_cues/common_mistakes/breathing 四段
+// 中文译文：以段头标记元素分段，段头为独立数组元素，段内容为标记后的连续元素。
+// 空段整体省略（不出现「只有段头没有内容」的形态）；数组顺序 = 展示顺序。
+// 纯步骤数组（无任何段头）为兼容旧形态，按 steps 全量解释（parse 返回 null，
+// 调用方自行回退——见 buildInstructionsZh/parseInstructionsZh）。
+//
+// 编码示例：
+//   ['【步骤】', '仰卧于平凳…', '…',
+//    '【要领】', '肩胛后收下沉…', …,
+//    '【常见错误】', '避免耸肩借力…', …,
+//    '【呼吸】', '下放吸气，上推呼气。']
+
+/** 段头标记（唯一合法值；段头元素本身不携带其他内容） */
+export const INSTRUCTIONS_ZH_SECTIONS = {
+  steps: '【步骤】',
+  cues: '【要领】',
+  mistakes: '【常见错误】',
+  breathing: '【呼吸】',
+} as const;
+
+/** 四段中文教学的结构化形态（翻译管道产出 / tutorialAssembler 消费） */
+export const InstructionsZhSectionsSchema = z.object({
+  steps: z.array(z.string()).default([]),
+  cues: z.array(z.string()).default([]),
+  mistakes: z.array(z.string()).default([]),
+  breathing: z.string().nullable().default(null),
+});
+
+export type InstructionsZhSections = z.infer<typeof InstructionsZhSectionsSchema>;
+
+/** 四段 → instructions_zh 编码（空段省略；全空返回空数组） */
+export function buildInstructionsZh(sections: InstructionsZhSections): string[] {
+  const out: string[] = [];
+  if (sections.steps.length > 0)
+    out.push(INSTRUCTIONS_ZH_SECTIONS.steps, ...sections.steps);
+  if (sections.cues.length > 0)
+    out.push(INSTRUCTIONS_ZH_SECTIONS.cues, ...sections.cues);
+  if (sections.mistakes.length > 0)
+    out.push(INSTRUCTIONS_ZH_SECTIONS.mistakes, ...sections.mistakes);
+  if (sections.breathing && sections.breathing.trim() !== '')
+    out.push(INSTRUCTIONS_ZH_SECTIONS.breathing, sections.breathing.trim());
+  return out;
+}
+
+/**
+ * instructions_zh → 四段解析。
+ * @returns 结构化四段（至少一段非空）；null = 无段头标记（兼容旧纯步骤形态，
+ *   调用方应将原数组整体视为 steps）或输入为空
+ */
+export function parseInstructionsZh(
+  value: string[] | null | undefined,
+): InstructionsZhSections | null {
+  if (!Array.isArray(value) || value.length === 0) return null;
+  const headers = Object.values(INSTRUCTIONS_ZH_SECTIONS);
+  if (!value.some((el) => headers.includes(el as never))) return null;
+
+  const sections = InstructionsZhSectionsSchema.parse({
+    steps: [],
+    cues: [],
+    mistakes: [],
+    breathing: null,
+  });
+  let current: keyof typeof sections | null = null;
+  for (const el of value) {
+    if (el === INSTRUCTIONS_ZH_SECTIONS.steps) current = 'steps';
+    else if (el === INSTRUCTIONS_ZH_SECTIONS.cues) current = 'cues';
+    else if (el === INSTRUCTIONS_ZH_SECTIONS.mistakes) current = 'mistakes';
+    else if (el === INSTRUCTIONS_ZH_SECTIONS.breathing) current = 'breathing';
+    else if (current === 'breathing') {
+      sections.breathing =
+        sections.breathing === null ? el : `${sections.breathing}${el}`;
+    } else if (current === null) {
+      continue; // 段头前的游离元素（异常形态，忽略——build 不会产出）
+    } else {
+      sections[current].push(el);
+    }
+  }
+  const hasAny =
+    sections.steps.length > 0 ||
+    sections.cues.length > 0 ||
+    sections.mistakes.length > 0 ||
+    (sections.breathing !== null && sections.breathing.trim() !== '');
+  return hasAny ? sections : null;
+}
 
 // ============================================================================
 // 深化列更新输入 (Repository Update Input)

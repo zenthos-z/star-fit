@@ -177,3 +177,61 @@ describe("assembleTutorialMd", () => {
     expect(md).toContain("weird");
   });
 });
+
+describe("assembleTutorialMd × A6 结构化 instructions_zh（issue #19）", () => {
+  const STRUCTURED_ZH = [
+    "【步骤】",
+    "仰卧于平凳，双眼位于杠铃正下方，双脚踩实地面。",
+    "握距略宽于肩，伸臂起杠至胸部上方。",
+    "【要领】",
+    "双脚蹬地稳定下肢，肩胛后收下沉。",
+    "【常见错误】",
+    "避免臀部离凳借力——保持贴凳，下肢只负责稳定。",
+    "【呼吸】",
+    "下放时吸气，上推时呼气。",
+  ];
+
+  it("四段齐备 → 步骤/要领/错误/呼吸逐段中文优先，英文源不出现", () => {
+    const md = assembleTutorialMd({
+      ...FULL_ROW,
+      instructions_zh: STRUCTURED_ZH,
+    })!;
+    expect(md).toContain("1. 仰卧于平凳");
+    expect(md).toContain("2. 握距略宽于肩");
+    expect(md).toContain("- 双脚蹬地稳定下肢");
+    expect(md).toContain("- 避免臀部离凳借力");
+    expect(md).toContain("呼吸：下放时吸气，上推时呼气。");
+    expect(md).not.toContain("Lie flat");
+    expect(md).not.toContain("Inhale while lowering");
+    expect(md).not.toContain("Bouncing the bar");
+  });
+
+  it("段头不进入编号（步骤仅编号一次）", () => {
+    const md = assembleTutorialMd({
+      ...FULL_ROW,
+      instructions_zh: STRUCTURED_ZH,
+    })!;
+    expect(md).not.toMatch(/\d+\. 【/);
+  });
+
+  it("部分段落缺失 → 该段回退英文源（中文缺失不吞段）", () => {
+    const md = assembleTutorialMd({
+      ...FULL_ROW,
+      instructions_zh: ["【步骤】", "中文第一步。"],
+    })!;
+    expect(md).toContain("1. 中文第一步。");
+    // cues/mistakes/breathing 回退英文
+    expect(md).toContain("- Keep shoulder blades retracted");
+    expect(md).toContain("- Bouncing the bar off the chest.");
+    expect(md).toContain("呼吸：Inhale while lowering");
+  });
+
+  it("纯步骤数组（无段头）兼容旧形态：整体视为中文步骤", () => {
+    const md = assembleTutorialMd({
+      ...FULL_ROW,
+      instructions_zh: ["平躺在凳上", "握距略宽于肩"],
+    })!;
+    expect(md).toContain("1. 平躺在凳上");
+    expect(md).not.toContain("Lie flat");
+  });
+});

@@ -1,0 +1,3129 @@
+{
+  "meta": {
+    "version": "1.0.0",
+    "created": "2026-09-26",
+    "issue": 19,
+    "purpose": "A6 动作库 354 条中文翻译的术语锚定表。翻译管道将其注入 system prompt 锁定全文一致性；同一名词全网统一。",
+    "translation_principles": [
+      "中文健身社区/健美教科书通行译名优先（Keep/薄荷动作库、健美教材、CrossFit/壮汉中文圈口径），非字面直译",
+      "译名含器械前缀时保留全称（如「绳索高位下拉」而非「下拉」）",
+      "同一英文术语在名称与正文中的译法必须一致",
+      "source 三档：通行=社区/教科书有定名；直译=无通行译名、按专业语义直译；存疑=译名不唯一或不常见，需人工复核，不强行定名"
+    ],
+    "review_note": "存疑条目集中在壮汉/小众/普拉提与个别源库名称模糊项，已在 review 报告中单列。"
+  },
+  "sections": {
+    "movement_patterns": [
+      {
+        "en": "Squat",
+        "zh": "深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Back Squat",
+        "zh": "后深蹲",
+        "source": "通行",
+        "note": "与「前深蹲」相对；口语常省略「后」"
+      },
+      {
+        "en": "Front Squat",
+        "zh": "前深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Goblet Squat",
+        "zh": "高脚杯深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Sumo Squat",
+        "zh": "相扑深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Hack Squat",
+        "zh": "哈克深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Pistol Squat",
+        "zh": "单腿手枪深蹲",
+        "source": "通行",
+        "note": "口语亦称手枪深蹲"
+      },
+      {
+        "en": "Sissy Squat",
+        "zh": "西斯深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Split Squat",
+        "zh": "分腿蹲",
+        "source": "通行",
+        "note": "与弓步蹲区分：分腿蹲为原位下蹲"
+      },
+      {
+        "en": "Lunge",
+        "zh": "弓步蹲",
+        "source": "通行",
+        "note": "亦称箭步蹲"
+      },
+      {
+        "en": "Side Lunge",
+        "zh": "侧弓步",
+        "source": "通行"
+      },
+      {
+        "en": "Deadlift",
+        "zh": "硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Romanian Deadlift",
+        "zh": "罗马尼亚硬拉",
+        "source": "通行",
+        "note": "禁止字面直译；口语简称 RDL"
+      },
+      {
+        "en": "Face Pull",
+        "zh": "面拉",
+        "source": "通行"
+      },
+      {
+        "en": "Stiff Leg Deadlift",
+        "zh": "直腿硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Straight Leg Deadlift",
+        "zh": "直腿硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Bench Press",
+        "zh": "卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Flat Bench Press",
+        "zh": "平板卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Incline Bench Press",
+        "zh": "上斜卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Decline Bench Press",
+        "zh": "下斜卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Close Grip Bench Press",
+        "zh": "窄距卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Press",
+        "zh": "推举",
+        "source": "通行"
+      },
+      {
+        "en": "Shoulder Press",
+        "zh": "肩推举",
+        "source": "通行"
+      },
+      {
+        "en": "Overhead Press",
+        "zh": "过顶推举",
+        "source": "通行"
+      },
+      {
+        "en": "Military Press",
+        "zh": "军事推举",
+        "source": "通行",
+        "note": "站姿实力推举，口语简称军推"
+      },
+      {
+        "en": "Arnold Press",
+        "zh": "阿诺德推举",
+        "source": "通行"
+      },
+      {
+        "en": "Behind-the-Neck Press",
+        "zh": "颈后推举",
+        "source": "通行"
+      },
+      {
+        "en": "Clean",
+        "zh": "高翻",
+        "source": "通行",
+        "note": "举重「翻举」，社区通行高翻"
+      },
+      {
+        "en": "Clean and Press",
+        "zh": "高翻推举",
+        "source": "通行"
+      },
+      {
+        "en": "Thruster",
+        "zh": "火箭推",
+        "source": "通行",
+        "note": "CrossFit 通行译名：深蹲接推举"
+      },
+      {
+        "en": "Row",
+        "zh": "划船",
+        "source": "通行"
+      },
+      {
+        "en": "Bent-Over Row",
+        "zh": "俯身划船",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Row",
+        "zh": "坐姿划船",
+        "source": "通行"
+      },
+      {
+        "en": "High Row",
+        "zh": "高位划船",
+        "source": "通行"
+      },
+      {
+        "en": "T-Bar Row",
+        "zh": "T杠划船",
+        "source": "通行"
+      },
+      {
+        "en": "Inverted Row",
+        "zh": "反向划船",
+        "source": "通行",
+        "note": "自重划船；口语亦称澳式划船"
+      },
+      {
+        "en": "Upright Row",
+        "zh": "直立划船",
+        "source": "通行",
+        "note": "提肘划船"
+      },
+      {
+        "en": "Lying Row",
+        "zh": "仰卧划船",
+        "source": "通行"
+      },
+      {
+        "en": "Pull-Up",
+        "zh": "引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Chin-Up",
+        "zh": "反手引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Commando Pull-Up",
+        "zh": "指挥官引体向上",
+        "source": "通行",
+        "note": "街健圈定名；交错握侧身拉"
+      },
+      {
+        "en": "Pulldown",
+        "zh": "下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Lat Pulldown",
+        "zh": "高位下拉",
+        "source": "通行",
+        "note": "背阔肌下拉；通行简称高位下拉"
+      },
+      {
+        "en": "Straight Arm Pulldown",
+        "zh": "直臂下压",
+        "source": "通行"
+      },
+      {
+        "en": "Pushdown",
+        "zh": "下压",
+        "source": "通行"
+      },
+      {
+        "en": "Triceps Pushdown",
+        "zh": "三头下压",
+        "source": "通行"
+      },
+      {
+        "en": "Pull Through",
+        "zh": "跨拉",
+        "source": "通行",
+        "note": "绳索过胯拉；亦称过胯拉"
+      },
+      {
+        "en": "Fly",
+        "zh": "飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse Fly",
+        "zh": "反向飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Crossover",
+        "zh": "绳索十字夹胸",
+        "source": "通行"
+      },
+      {
+        "en": "Pec Deck Fly",
+        "zh": "蝴蝶机夹胸",
+        "source": "通行"
+      },
+      {
+        "en": "Dip",
+        "zh": "双杠臂屈伸",
+        "source": "通行",
+        "note": "双杠语境；凳上/平行杠"
+      },
+      {
+        "en": "Chest Dip",
+        "zh": "双杠臂屈伸（前倾练胸）",
+        "source": "通行"
+      },
+      {
+        "en": "Triceps Dip",
+        "zh": "双杠臂屈伸（直体练三头）",
+        "source": "通行"
+      },
+      {
+        "en": "Push-Up",
+        "zh": "俯卧撑",
+        "source": "通行"
+      },
+      {
+        "en": "Close-Grip Push-Up",
+        "zh": "窄距俯卧撑",
+        "source": "通行",
+        "note": "即钻石俯卧撑"
+      },
+      {
+        "en": "Curl",
+        "zh": "弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Hammer Curl",
+        "zh": "锤式弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Preacher Curl",
+        "zh": "牧师凳弯举",
+        "source": "通行",
+        "note": "亦称斯科特弯举"
+      },
+      {
+        "en": "Concentration Curl",
+        "zh": "集中弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Zottman Curl",
+        "zh": "佐特曼弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Drag Curl",
+        "zh": "贴身弯举",
+        "source": "通行",
+        "note": "杠铃贴身拖拽；亦译拖拽弯举"
+      },
+      {
+        "en": "Wrist Curl",
+        "zh": "腕弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse Wrist Curl",
+        "zh": "反向腕弯举",
+        "source": "通行",
+        "note": "练腕伸肌群"
+      },
+      {
+        "en": "Triceps Extension",
+        "zh": "臂屈伸（三头）",
+        "source": "通行",
+        "note": "肘伸动作统称臂屈伸"
+      },
+      {
+        "en": "Skull Crusher",
+        "zh": "仰卧臂屈伸",
+        "source": "通行",
+        "note": "别称碎颅式；权威口径仰卧臂屈伸"
+      },
+      {
+        "en": "Overhead Triceps Extension",
+        "zh": "颈后臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Lying Triceps Extension",
+        "zh": "仰卧臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Kickback",
+        "zh": "俯身臂屈伸（三头）／后踢腿（臀）",
+        "source": "通行",
+        "note": "按目标肌群二选一：三头=俯身臂屈伸，臀=后踢腿"
+      },
+      {
+        "en": "Leg Extension",
+        "zh": "腿屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Leg Curl",
+        "zh": "腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Leg Press",
+        "zh": "腿举",
+        "source": "通行"
+      },
+      {
+        "en": "Calf Raise",
+        "zh": "提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Donkey Calf Raise",
+        "zh": "驴式提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Calf Press",
+        "zh": "踵压（腿举机提踵）",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Abduction",
+        "zh": "髋外展",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Adduction",
+        "zh": "髋内收",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Extension",
+        "zh": "髋伸展",
+        "source": "通行"
+      },
+      {
+        "en": "Glute Bridge",
+        "zh": "臀桥",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Bridge",
+        "zh": "臀桥",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Thrust",
+        "zh": "臀推",
+        "source": "通行"
+      },
+      {
+        "en": "Hyperextension",
+        "zh": "山羊挺身",
+        "source": "通行",
+        "note": "亦称背伸展/罗马椅挺身"
+      },
+      {
+        "en": "Back Extension",
+        "zh": "背伸展（山羊挺身）",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse Hyperextension",
+        "zh": "反向山羊挺身",
+        "source": "通行"
+      },
+      {
+        "en": "Shrug",
+        "zh": "耸肩",
+        "source": "通行"
+      },
+      {
+        "en": "Front Raise",
+        "zh": "前平举",
+        "source": "通行"
+      },
+      {
+        "en": "Lateral Raise",
+        "zh": "侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Rear Lateral Raise",
+        "zh": "俯身侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Rear Delt Raise",
+        "zh": "后束平举（反向飞鸟）",
+        "source": "通行"
+      },
+      {
+        "en": "Rear Delt Row",
+        "zh": "后束划船",
+        "source": "通行"
+      },
+      {
+        "en": "Iron Cross",
+        "zh": "铁十字",
+        "source": "通行"
+      },
+      {
+        "en": "Leg Raise",
+        "zh": "举腿",
+        "source": "通行"
+      },
+      {
+        "en": "Lying Leg Raise",
+        "zh": "仰卧举腿",
+        "source": "通行"
+      },
+      {
+        "en": "Hanging Leg Raise",
+        "zh": "悬垂举腿",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Raise",
+        "zh": "抬髋",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Lift",
+        "zh": "抬髋",
+        "source": "通行"
+      },
+      {
+        "en": "Crunch",
+        "zh": "卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse Crunch",
+        "zh": "反向卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Sit-Up",
+        "zh": "仰卧起坐",
+        "source": "通行"
+      },
+      {
+        "en": "V-Up",
+        "zh": "V字两头起",
+        "source": "通行"
+      },
+      {
+        "en": "Jackknife",
+        "zh": "折刀两头起",
+        "source": "通行"
+      },
+      {
+        "en": "Scissor Kick",
+        "zh": "剪刀腿",
+        "source": "通行"
+      },
+      {
+        "en": "Russian Twist",
+        "zh": "俄罗斯转体",
+        "source": "通行"
+      },
+      {
+        "en": "Twist",
+        "zh": "转体",
+        "source": "通行"
+      },
+      {
+        "en": "Plank",
+        "zh": "平板支撑",
+        "source": "通行"
+      },
+      {
+        "en": "Side Plank",
+        "zh": "侧平板支撑",
+        "source": "通行"
+      },
+      {
+        "en": "Torso Rotation",
+        "zh": "躯干转体",
+        "source": "通行"
+      },
+      {
+        "en": "Rollout",
+        "zh": "健腹轮推拉",
+        "source": "通行",
+        "note": "ab wheel rollout"
+      },
+      {
+        "en": "Step-Up",
+        "zh": "登箱",
+        "source": "通行"
+      },
+      {
+        "en": "Burpee",
+        "zh": "波比跳",
+        "source": "通行"
+      },
+      {
+        "en": "Jumping Jack",
+        "zh": "开合跳",
+        "source": "通行"
+      },
+      {
+        "en": "Jump Rope",
+        "zh": "跳绳",
+        "source": "通行"
+      },
+      {
+        "en": "Box Jump",
+        "zh": "跳箱",
+        "source": "通行"
+      },
+      {
+        "en": "Sprint",
+        "zh": "冲刺",
+        "source": "通行"
+      },
+      {
+        "en": "Slam",
+        "zh": "砸地（药球）",
+        "source": "通行",
+        "note": "med ball slam 药球砸地"
+      },
+      {
+        "en": "Chest Throw",
+        "zh": "胸前抛球",
+        "source": "通行"
+      },
+      {
+        "en": "Bent Press",
+        "zh": "单臂弯身推举",
+        "source": "通行",
+        "note": "旧式举重动作；半通行，另译弯身推举"
+      },
+      {
+        "en": "Windmill",
+        "zh": "风车",
+        "source": "通行",
+        "note": "壶铃风车"
+      },
+      {
+        "en": "Halo",
+        "zh": "绕头",
+        "source": "通行",
+        "note": "壶铃绕头环绕"
+      },
+      {
+        "en": "Figure 8",
+        "zh": "8字绕环",
+        "source": "通行"
+      },
+      {
+        "en": "Farmer's Walk",
+        "zh": "农夫行走",
+        "source": "通行"
+      },
+      {
+        "en": "Yoke Walk",
+        "zh": "轭架行走",
+        "source": "通行",
+        "note": "壮汉项目定名"
+      },
+      {
+        "en": "Atlas Stones",
+        "zh": "阿特拉斯石球",
+        "source": "通行",
+        "note": "壮汉项目定名"
+      },
+      {
+        "en": "Sledgehammer Swing",
+        "zh": "大锤抡击",
+        "source": "通行"
+      },
+      {
+        "en": "Landmine 180",
+        "zh": "地雷管180°转体",
+        "source": "通行"
+      },
+      {
+        "en": "Car Deadlift",
+        "zh": "车架硬拉",
+        "source": "通行",
+        "note": "壮汉圈亦称汽车硬拉"
+      },
+      {
+        "en": "Axle Deadlift",
+        "zh": "轴杠硬拉",
+        "source": "通行",
+        "note": "粗轴杠铃"
+      },
+      {
+        "en": "Multiple Response",
+        "zh": "连续反应（多次反应跳）",
+        "source": "通行",
+        "note": "增强式训练术语：落地即再跳"
+      },
+      {
+        "en": "Single Response",
+        "zh": "单次反应",
+        "source": "通行",
+        "note": "增强式训练术语：落地缓冲停稳"
+      }
+    ],
+    "equipment": [
+      {
+        "en": "Barbell",
+        "zh": "杠铃",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell",
+        "zh": "哑铃",
+        "source": "通行"
+      },
+      {
+        "en": "Kettlebell",
+        "zh": "壶铃",
+        "source": "通行"
+      },
+      {
+        "en": "Cable",
+        "zh": "绳索",
+        "source": "通行",
+        "note": "拉力器/钢索统一译绳索"
+      },
+      {
+        "en": "Band / Resistance Band",
+        "zh": "弹力带",
+        "source": "通行"
+      },
+      {
+        "en": "Bench",
+        "zh": "训练凳（平凳）",
+        "source": "通行",
+        "note": "平凳/上斜凳统称"
+      },
+      {
+        "en": "Lever",
+        "zh": "器械（Lever 版）",
+        "source": "通行",
+        "note": "源库 Lever 前缀 = 器械版动作，译名加「器械」前缀"
+      },
+      {
+        "en": "Machine",
+        "zh": "器械",
+        "source": "通行"
+      },
+      {
+        "en": "Smith Machine",
+        "zh": "史密斯机",
+        "source": "通行"
+      },
+      {
+        "en": "EZ Bar",
+        "zh": "EZ杠（曲杆）",
+        "source": "通行"
+      },
+      {
+        "en": "Cambered Bar",
+        "zh": "驼形杠",
+        "source": "直译",
+        "note": "拱形杠铃；社区无统一定名"
+      },
+      {
+        "en": "Axle Bar",
+        "zh": "轴杠",
+        "source": "通行"
+      },
+      {
+        "en": "Rope",
+        "zh": "绳索",
+        "source": "通行",
+        "note": "附件绳索把柄"
+      },
+      {
+        "en": "Strap",
+        "zh": "悬吊带",
+        "source": "通行",
+        "note": "TRX 类悬吊训练带；拉伸语境=拉伸带"
+      },
+      {
+        "en": "Ring",
+        "zh": "吊环",
+        "source": "通行"
+      },
+      {
+        "en": "Plate",
+        "zh": "杠铃片",
+        "source": "通行"
+      },
+      {
+        "en": "Medicine Ball",
+        "zh": "药球",
+        "source": "通行"
+      },
+      {
+        "en": "Stability Ball",
+        "zh": "瑞士球",
+        "source": "通行",
+        "note": "亦称稳定球/健身球，统一瑞士球"
+      },
+      {
+        "en": "Exercise Ball",
+        "zh": "瑞士球",
+        "source": "通行"
+      },
+      {
+        "en": "Physioball",
+        "zh": "瑞士球",
+        "source": "通行"
+      },
+      {
+        "en": "Sled",
+        "zh": "腿举机（倒蹬机）",
+        "source": "通行",
+        "note": "45° sled = 45°腿举机"
+      },
+      {
+        "en": "Landmine",
+        "zh": "地雷管",
+        "source": "通行"
+      },
+      {
+        "en": "T-Bar",
+        "zh": "T杠",
+        "source": "通行"
+      },
+      {
+        "en": "V-Bar / V-Grip",
+        "zh": "V柄",
+        "source": "通行"
+      },
+      {
+        "en": "Pec Deck",
+        "zh": "蝴蝶机",
+        "source": "通行"
+      },
+      {
+        "en": "Elliptical Trainer",
+        "zh": "椭圆机",
+        "source": "通行"
+      },
+      {
+        "en": "Stationary Bike",
+        "zh": "动感单车",
+        "source": "通行",
+        "note": "固定自行车"
+      },
+      {
+        "en": "Treadmill",
+        "zh": "跑步机",
+        "source": "通行"
+      },
+      {
+        "en": "Battling Ropes",
+        "zh": "战绳",
+        "source": "通行"
+      },
+      {
+        "en": "Sledgehammer",
+        "zh": "大锤",
+        "source": "通行"
+      },
+      {
+        "en": "Yoke",
+        "zh": "轭架",
+        "source": "通行"
+      },
+      {
+        "en": "Pull-Up Bar",
+        "zh": "单杠",
+        "source": "通行"
+      },
+      {
+        "en": "Parallel Bars",
+        "zh": "双杠",
+        "source": "通行"
+      },
+      {
+        "en": "Ab Roller / Ab Wheel",
+        "zh": "健腹轮",
+        "source": "通行"
+      },
+      {
+        "en": "Box",
+        "zh": "跳箱",
+        "source": "通行"
+      },
+      {
+        "en": "Rickshaw",
+        "zh": "行走架",
+        "source": "存疑",
+        "note": "壮汉 Rickshaw Carry 专架；无通行定名，亦译黄包车架"
+      },
+      {
+        "en": "High Pulley",
+        "zh": "高位滑轮",
+        "source": "通行"
+      },
+      {
+        "en": "Pulley",
+        "zh": "滑轮",
+        "source": "通行"
+      },
+      {
+        "en": "Rack",
+        "zh": "深蹲架",
+        "source": "通行"
+      }
+    ],
+    "grip_stance": [
+      {
+        "en": "Close Grip / Close-Grip",
+        "zh": "窄距（窄握）",
+        "source": "通行"
+      },
+      {
+        "en": "Wide Grip / Wide-Grip",
+        "zh": "宽握",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse Grip",
+        "zh": "反握",
+        "source": "通行"
+      },
+      {
+        "en": "Underhand",
+        "zh": "反握（旋后）",
+        "source": "通行"
+      },
+      {
+        "en": "Overhand",
+        "zh": "正握（旋前）",
+        "source": "通行"
+      },
+      {
+        "en": "Pronated Grip / Pronate-grip",
+        "zh": "正握",
+        "source": "通行"
+      },
+      {
+        "en": "Supinated Grip",
+        "zh": "反握",
+        "source": "通行"
+      },
+      {
+        "en": "Neutral Grip",
+        "zh": "对握",
+        "source": "通行"
+      },
+      {
+        "en": "Hammer Grip",
+        "zh": "锤式握",
+        "source": "通行"
+      },
+      {
+        "en": "Parallel Grip",
+        "zh": "对握",
+        "source": "通行"
+      },
+      {
+        "en": "Shoulder-Width",
+        "zh": "与肩同宽",
+        "source": "通行"
+      },
+      {
+        "en": "Alternating",
+        "zh": "交替",
+        "source": "通行"
+      },
+      {
+        "en": "One Arm / Single Arm",
+        "zh": "单臂",
+        "source": "通行"
+      },
+      {
+        "en": "One Leg / Single Leg",
+        "zh": "单腿",
+        "source": "通行"
+      },
+      {
+        "en": "Mixed Grip",
+        "zh": "正反握",
+        "source": "通行"
+      }
+    ],
+    "position": [
+      {
+        "en": "Standing",
+        "zh": "站姿（站立）",
+        "source": "通行"
+      },
+      {
+        "en": "Seated",
+        "zh": "坐姿",
+        "source": "通行"
+      },
+      {
+        "en": "Lying / Supine",
+        "zh": "仰卧",
+        "source": "通行"
+      },
+      {
+        "en": "Prone",
+        "zh": "俯卧",
+        "source": "通行"
+      },
+      {
+        "en": "Bent-Over / Bent Over",
+        "zh": "俯身",
+        "source": "通行"
+      },
+      {
+        "en": "Kneeling",
+        "zh": "跪姿",
+        "source": "通行"
+      },
+      {
+        "en": "Incline",
+        "zh": "上斜",
+        "source": "通行"
+      },
+      {
+        "en": "Decline",
+        "zh": "下斜",
+        "source": "通行"
+      },
+      {
+        "en": "Flat",
+        "zh": "平板（平凳）",
+        "source": "通行"
+      },
+      {
+        "en": "Overhead",
+        "zh": "过顶（颈后）",
+        "source": "通行",
+        "note": "overhead triceps extension 语境译颈后"
+      },
+      {
+        "en": "Behind-the-Back",
+        "zh": "背后",
+        "source": "通行"
+      },
+      {
+        "en": "Cross Body",
+        "zh": "体前交叉",
+        "source": "通行"
+      },
+      {
+        "en": "Straight Arm",
+        "zh": "直臂",
+        "source": "通行"
+      },
+      {
+        "en": "Straight-Back",
+        "zh": "直背",
+        "source": "通行"
+      },
+      {
+        "en": "Suspended",
+        "zh": "悬吊",
+        "source": "通行"
+      },
+      {
+        "en": "Rear Foot Elevated",
+        "zh": "后脚抬高",
+        "source": "通行",
+        "note": "保加利亚分腿蹲式"
+      },
+      {
+        "en": "Bent Knee",
+        "zh": "屈膝",
+        "source": "通行"
+      },
+      {
+        "en": "Straight Leg",
+        "zh": "直腿",
+        "source": "通行"
+      },
+      {
+        "en": "Bent Position",
+        "zh": "俯身位",
+        "source": "通行"
+      },
+      {
+        "en": "Arms Straight",
+        "zh": "直臂",
+        "source": "通行"
+      }
+    ],
+    "muscles_anatomy": [
+      {
+        "en": "Lats / Latissimus Dorsi",
+        "zh": "背阔肌",
+        "source": "通行"
+      },
+      {
+        "en": "Traps / Trapezius",
+        "zh": "斜方肌",
+        "source": "通行"
+      },
+      {
+        "en": "Chest / Pectorals / Pecs",
+        "zh": "胸部（胸大肌／胸肌）",
+        "source": "通行"
+      },
+      {
+        "en": "Deltoids / Delts",
+        "zh": "三角肌",
+        "source": "通行"
+      },
+      {
+        "en": "Rear Delts / Posterior Deltoid",
+        "zh": "三角肌后束",
+        "source": "通行"
+      },
+      {
+        "en": "Biceps",
+        "zh": "肱二头肌",
+        "source": "通行"
+      },
+      {
+        "en": "Triceps",
+        "zh": "肱三头肌",
+        "source": "通行"
+      },
+      {
+        "en": "Forearms",
+        "zh": "前臂",
+        "source": "通行"
+      },
+      {
+        "en": "Quadriceps / Quads",
+        "zh": "股四头肌",
+        "source": "通行"
+      },
+      {
+        "en": "Hamstrings",
+        "zh": "腘绳肌",
+        "source": "通行"
+      },
+      {
+        "en": "Glutes / Gluteus Maximus",
+        "zh": "臀大肌（臀部）",
+        "source": "通行"
+      },
+      {
+        "en": "Calves / Gastrocnemius",
+        "zh": "小腿三头肌（小腿／腓肠肌）",
+        "source": "通行"
+      },
+      {
+        "en": "Soleus",
+        "zh": "比目鱼肌",
+        "source": "通行"
+      },
+      {
+        "en": "Peroneals",
+        "zh": "腓骨肌",
+        "source": "通行"
+      },
+      {
+        "en": "Core",
+        "zh": "核心",
+        "source": "通行"
+      },
+      {
+        "en": "Abs / Abdominals",
+        "zh": "腹肌（腹直肌）",
+        "source": "通行"
+      },
+      {
+        "en": "Obliques",
+        "zh": "腹斜肌",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Flexors",
+        "zh": "髋屈肌",
+        "source": "通行"
+      },
+      {
+        "en": "Adductors",
+        "zh": "内收肌群",
+        "source": "通行"
+      },
+      {
+        "en": "Abductors",
+        "zh": "外展肌群",
+        "source": "通行"
+      },
+      {
+        "en": "Erector Spinae",
+        "zh": "竖脊肌",
+        "source": "通行"
+      },
+      {
+        "en": "Scapula / Shoulder Blades",
+        "zh": "肩胛骨",
+        "source": "通行"
+      },
+      {
+        "en": "Spine",
+        "zh": "脊柱",
+        "source": "通行"
+      },
+      {
+        "en": "Thoracic Spine",
+        "zh": "胸椎",
+        "source": "通行"
+      },
+      {
+        "en": "Lumbar Spine",
+        "zh": "腰椎",
+        "source": "通行"
+      },
+      {
+        "en": "Pelvis",
+        "zh": "骨盆",
+        "source": "通行"
+      },
+      {
+        "en": "Sternum",
+        "zh": "胸骨",
+        "source": "通行"
+      },
+      {
+        "en": "Groin",
+        "zh": "腹股沟",
+        "source": "通行"
+      },
+      {
+        "en": "Hamstring",
+        "zh": "腘绳肌",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Hinge",
+        "zh": "髋屈伸（髋铰链）",
+        "source": "通行"
+      }
+    ],
+    "coaching_terms": [
+      {
+        "en": "Brace Your Core",
+        "zh": "收紧核心",
+        "source": "通行"
+      },
+      {
+        "en": "Shoulder Blades Down and Back",
+        "zh": "肩胛骨后缩下沉",
+        "source": "通行"
+      },
+      {
+        "en": "Neutral Spine",
+        "zh": "脊柱中立位",
+        "source": "通行"
+      },
+      {
+        "en": "Range of Motion / ROM",
+        "zh": "动作行程（活动幅度）",
+        "source": "通行"
+      },
+      {
+        "en": "Full Extension / Lockout",
+        "zh": "完全伸直（锁定）",
+        "source": "通行"
+      },
+      {
+        "en": "Unrack",
+        "zh": "起杠",
+        "source": "通行"
+      },
+      {
+        "en": "Rerack",
+        "zh": "归架",
+        "source": "通行"
+      },
+      {
+        "en": "Rep",
+        "zh": "次",
+        "source": "通行"
+      },
+      {
+        "en": "Set",
+        "zh": "组",
+        "source": "通行"
+      },
+      {
+        "en": "Squeeze",
+        "zh": "收紧（挤压）",
+        "source": "通行"
+      },
+      {
+        "en": "Drive Through Heels",
+        "zh": "脚跟发力蹬地",
+        "source": "通行"
+      },
+      {
+        "en": "Chest Up",
+        "zh": "挺胸",
+        "source": "通行"
+      },
+      {
+        "en": "Exhale on Effort",
+        "zh": "发力时呼气",
+        "source": "通行"
+      },
+      {
+        "en": "Under Control",
+        "zh": "有控制地",
+        "source": "通行"
+      },
+      {
+        "en": "Tempo",
+        "zh": "节奏",
+        "source": "通行"
+      },
+      {
+        "en": "Stance",
+        "zh": "站距",
+        "source": "通行"
+      },
+      {
+        "en": "Attachment",
+        "zh": "握把附件",
+        "source": "通行"
+      }
+    ],
+    "stretching_yoga_pilates": [
+      {
+        "en": "Stretch",
+        "zh": "拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Dynamic Stretch",
+        "zh": "动态拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Bridge Pose (Setu Bandhasana)",
+        "zh": "桥式（Setu Bandhasana）",
+        "source": "通行"
+      },
+      {
+        "en": "Butterfly Pose",
+        "zh": "蝴蝶式（束角式）",
+        "source": "通行"
+      },
+      {
+        "en": "Boat Stretch",
+        "zh": "船式拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Wide Angle Pose",
+        "zh": "广角式（坐角式）",
+        "source": "通行"
+      },
+      {
+        "en": "Pilates Hundred",
+        "zh": "普拉提百次拍击",
+        "source": "通行"
+      },
+      {
+        "en": "Pilates Corkscrew",
+        "zh": "普拉提螺旋钻",
+        "source": "通行"
+      },
+      {
+        "en": "Runner's Stretch",
+        "zh": "跑者拉伸",
+        "source": "通行",
+        "note": "弓步前压腘绳肌"
+      },
+      {
+        "en": "Spine Stretch",
+        "zh": "脊柱拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Wrist Circles",
+        "zh": "手腕环绕",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Circles",
+        "zh": "髋部环绕",
+        "source": "通行"
+      },
+      {
+        "en": "Plyometric",
+        "zh": "增强式（爆发力）",
+        "source": "通行"
+      },
+      {
+        "en": "Cardio",
+        "zh": "有氧",
+        "source": "通行"
+      }
+    ],
+    "full_name_overrides": [
+      {
+        "en": "45 Degree Hyperextension",
+        "zh": "45°山羊挺身",
+        "source": "通行"
+      },
+      {
+        "en": "45-Degree Bicycle Twisting Crunch",
+        "zh": "45°自行车转体卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Ab Roller",
+        "zh": "健腹轮卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "All Fours Groin Stretch",
+        "zh": "四点跪撑腹股沟拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Band Pull Through",
+        "zh": "弹力带跨拉",
+        "source": "通行"
+      },
+      {
+        "en": "Band Standing Lift",
+        "zh": "弹力带站姿提拉",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Seated Behind-The-Neck Press",
+        "zh": "坐姿杠铃颈后推举",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Standing Back Wrist Curl",
+        "zh": "站姿杠铃背后腕弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Bench Crunch",
+        "zh": "凳上卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Bench Dips",
+        "zh": "凳上臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Bench Pull-Up",
+        "zh": "卧凳引体",
+        "source": "存疑",
+        "note": "源库名称语义模糊（凳上低位引体/仰卧划船类），按直译处理待人工复核"
+      },
+      {
+        "en": "Bench Sprint",
+        "zh": "凳上冲刺跑",
+        "source": "存疑",
+        "note": "仰卧凳上快速交替摆腿类动作，无通行译名"
+      },
+      {
+        "en": "Bent Knee Lying Twist on Stability Ball",
+        "zh": "瑞士球屈膝仰卧转体",
+        "source": "通行"
+      },
+      {
+        "en": "Box Jump (Multiple Response)",
+        "zh": "跳箱（连续反应跳）",
+        "source": "通行"
+      },
+      {
+        "en": "Box Skip",
+        "zh": "跳箱交替踏步",
+        "source": "存疑",
+        "note": "源库指跳箱快速交替踏跳，无通行译名"
+      },
+      {
+        "en": "Calf Stretch with Rope",
+        "zh": "绳索辅助小腿拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Calf Stretch with Strap",
+        "zh": "拉伸带辅助小腿拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Cambered Bar Lying Row",
+        "zh": "驼形杠仰卧划船",
+        "source": "直译",
+        "note": "驼形杠=拱形弯杠"
+      },
+      {
+        "en": "Cardio Exercise",
+        "zh": "有氧运动",
+        "source": "通行"
+      },
+      {
+        "en": "Cardio Machine Exercise",
+        "zh": "有氧器械练习",
+        "source": "通行"
+      },
+      {
+        "en": "Cardio Machine Workouts",
+        "zh": "有氧器械训练",
+        "source": "通行"
+      },
+      {
+        "en": "Chest Dips",
+        "zh": "双杠臂屈伸（前倾练胸）",
+        "source": "通行"
+      },
+      {
+        "en": "Chest Lift with Rotation",
+        "zh": "转体胸部抬起",
+        "source": "通行"
+      },
+      {
+        "en": "Chest Push (single response)",
+        "zh": "胸前推抛（单次反应）",
+        "source": "直译",
+        "note": "增强式双人抛球训练"
+      },
+      {
+        "en": "Chin-to-Chest Stretch",
+        "zh": "低头贴胸拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Chin-ups (narrow parallel grip)",
+        "zh": "窄对握引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Close Grip Chin-Up",
+        "zh": "窄握反手引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Close Feet Leg Press",
+        "zh": "窄足距腿举",
+        "source": "通行"
+      },
+      {
+        "en": "Commando Pull-Up",
+        "zh": "指挥官引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Crossover Kneeling Hip Flexor Stretch",
+        "zh": "交叉跪姿髋屈肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Deep Push-Up",
+        "zh": "深度俯卧撑",
+        "source": "通行",
+        "note": "加大下降幅度"
+      },
+      {
+        "en": "Dumbbell Iron Cross",
+        "zh": "哑铃铁十字",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Palm Rotational Bent Over Row",
+        "zh": "哑铃俯身转掌划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Preacher Curl Over Exercise Ball",
+        "zh": "瑞士球托臂弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Seated Kickback",
+        "zh": "坐姿哑铃后踢（三头）",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Seated Neutral Wrist Curl",
+        "zh": "坐姿对握腕弯举",
+        "source": "通行"
+      },
+      {
+        "en": "EZ Bar Biceps Curl",
+        "zh": "EZ杠弯举",
+        "source": "通行"
+      },
+      {
+        "en": "EZ Bar Lying Triceps Extension",
+        "zh": "EZ杠仰卧臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "EZ Barbell Anti Gravity Press",
+        "zh": "EZ杠反重力推举",
+        "source": "存疑",
+        "note": "小众自重动作，无通行译名，直译"
+      },
+      {
+        "en": "Feet and Ankles Rotation Stretch",
+        "zh": "足踝环绕活动",
+        "source": "通行"
+      },
+      {
+        "en": "Feet and Ankles Stretch",
+        "zh": "足踝拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Flat Bench Cable Fly",
+        "zh": "平凳绳索飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Flexion Leg Sit-Up Stretch",
+        "zh": "屈腿仰卧起坐拉伸",
+        "source": "直译",
+        "note": "源库命名含糊"
+      },
+      {
+        "en": "Front Toe Touch Stretch",
+        "zh": "体前屈脚尖触碰拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Hanging Leg Hip Raise",
+        "zh": "悬垂举腿抬髋",
+        "source": "通行"
+      },
+      {
+        "en": "Hanging Straight Leg Raise",
+        "zh": "悬垂直腿举",
+        "source": "通行"
+      },
+      {
+        "en": "Incline Leg Hip Raise",
+        "zh": "上斜举腿抬髋",
+        "source": "通行"
+      },
+      {
+        "en": "Inverted Row Between Chairs",
+        "zh": "椅间反向划船",
+        "source": "通行"
+      },
+      {
+        "en": "Inverted Row With Straps",
+        "zh": "悬吊带反向划船",
+        "source": "通行"
+      },
+      {
+        "en": "Iron Cross Stretch",
+        "zh": "铁十字拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Jackknife Floor",
+        "zh": "地面折刀两头起",
+        "source": "通行"
+      },
+      {
+        "en": "Jackknife Split Crunch",
+        "zh": "分腿折刀卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Jump Step-Up",
+        "zh": "跳跃登箱",
+        "source": "通行"
+      },
+      {
+        "en": "Kettlebell Deadlift",
+        "zh": "壶铃硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Kettlebell Figure 8",
+        "zh": "壶铃8字绕环",
+        "source": "通行"
+      },
+      {
+        "en": "Kettlebell Halo",
+        "zh": "壶铃绕头",
+        "source": "通行"
+      },
+      {
+        "en": "Kettlebell Pistol Squat",
+        "zh": "壶铃单腿手枪深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Kettlebell Thruster",
+        "zh": "壶铃火箭推",
+        "source": "通行"
+      },
+      {
+        "en": "Kettlebell Windmill",
+        "zh": "壶铃风车",
+        "source": "通行"
+      },
+      {
+        "en": "Kneeling High Pulley Row",
+        "zh": "跪姿高位滑轮划船",
+        "source": "通行"
+      },
+      {
+        "en": "Landmine 180",
+        "zh": "地雷管180°转体",
+        "source": "通行"
+      },
+      {
+        "en": "Leg Raise Crunch",
+        "zh": "举腿卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Leg Raise with Hip Lift",
+        "zh": "举腿抬髋",
+        "source": "通行"
+      },
+      {
+        "en": "Lunge Pass Through",
+        "zh": "弓步转体穿手",
+        "source": "直译",
+        "note": "热身动作：弓步+转体伸手穿过"
+      },
+      {
+        "en": "Lying Hip Lift on Stability Ball",
+        "zh": "瑞士球仰卧抬髋",
+        "source": "通行"
+      },
+      {
+        "en": "Lying Quadriceps Stretch",
+        "zh": "仰卧股四头肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Lying Scissor Kick",
+        "zh": "仰卧剪刀腿",
+        "source": "通行"
+      },
+      {
+        "en": "Lying Straight Leg Raise",
+        "zh": "仰卧直腿举",
+        "source": "通行"
+      },
+      {
+        "en": "Medicine Ball Full Twist",
+        "zh": "药球大幅转体",
+        "source": "通行"
+      },
+      {
+        "en": "Medicine Ball Wall Sit-Up",
+        "zh": "药球贴墙仰卧起坐",
+        "source": "通行"
+      },
+      {
+        "en": "Middle Back Stretch",
+        "zh": "中背拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Neck Side Stretch",
+        "zh": "颈部侧向拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Old School Reverse Extensions",
+        "zh": "老派反向伸展",
+        "source": "存疑",
+        "note": "源库小众动作，无通行译名"
+      },
+      {
+        "en": "One-Arm Medicine Ball Slam",
+        "zh": "单臂药球砸地",
+        "source": "通行"
+      },
+      {
+        "en": "Otis-Up",
+        "zh": "奥蒂斯起坐",
+        "source": "存疑",
+        "note": "小众腹肌动作（腿固定仰卧起坐变式），无通行译名"
+      },
+      {
+        "en": "Overhead Slam",
+        "zh": "药球过顶砸地",
+        "source": "通行"
+      },
+      {
+        "en": "Peroneals Stretch",
+        "zh": "腓骨肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Physioball Hip Bridge",
+        "zh": "瑞士球臀桥",
+        "source": "通行"
+      },
+      {
+        "en": "Plate Twist",
+        "zh": "杠铃片转体",
+        "source": "通行"
+      },
+      {
+        "en": "Plyometric Side Lunge Stretch",
+        "zh": "增强式侧弓步拉伸",
+        "source": "直译",
+        "note": "源库命名组合少见"
+      },
+      {
+        "en": "Push-Ups With Feet On An Exercise Ball",
+        "zh": "足垫瑞士球俯卧撑",
+        "source": "通行"
+      },
+      {
+        "en": "Rear Decline Bridge",
+        "zh": "下斜仰卧桥",
+        "source": "直译",
+        "note": "肩背支撑桥式，无通行定名"
+      },
+      {
+        "en": "Rear Deltoid Stretch",
+        "zh": "三角肌后束拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Rear Foot Elevated Hip Flexor Stretch",
+        "zh": "后脚抬高髋屈肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Resistance Band High Fly",
+        "zh": "弹力带高位飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse Dip Stretch",
+        "zh": "撑臂反向拉伸",
+        "source": "直译",
+        "note": "双杠撑直臂拉伸三头"
+      },
+      {
+        "en": "Reverse Grip Machine Lat Pulldown",
+        "zh": "反握器械高位下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse Grip Pull-Up",
+        "zh": "反握引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Reverse-Grip Cable Lat Pulldown",
+        "zh": "反握绳索高位下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Rickshaw Carry",
+        "zh": "行走架提拉行走",
+        "source": "存疑",
+        "note": "壮汉专架搬运，无通行定名；直译黄包车行走亦见"
+      },
+      {
+        "en": "Ring High Row",
+        "zh": "吊环高位划船",
+        "source": "通行"
+      },
+      {
+        "en": "Rotational Push-Up",
+        "zh": "转体俯卧撑",
+        "source": "通行"
+      },
+      {
+        "en": "Runner's Stretch",
+        "zh": "跑者拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Russian Twist on Stability Ball (Arms Straight)",
+        "zh": "瑞士球俄罗斯转体（直臂）",
+        "source": "通行"
+      },
+      {
+        "en": "Scapula Dips",
+        "zh": "肩胛双杠撑",
+        "source": "直译",
+        "note": "双杠沉肩撑（肩胛臂屈伸）"
+      },
+      {
+        "en": "Seated Alternating Dumbbell Curl",
+        "zh": "坐姿交替哑铃弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Bent Over Back Stretch",
+        "zh": "坐姿俯身背部拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Boat Stretch",
+        "zh": "坐姿船式拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Cable Row (V-Grip)",
+        "zh": "坐姿绳索划船（V柄）",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Cable Row (Wide-Grip)",
+        "zh": "坐姿绳索划船（宽握）",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Calf Stretch",
+        "zh": "坐姿小腿拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Dumbbell Shoulder Press",
+        "zh": "坐姿哑铃肩推举",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Lower Back Stretch",
+        "zh": "坐姿下背拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Shoulder Flexor, Depressor, Retractor Stretch",
+        "zh": "坐姿肩前屈/下沉/后缩肌群拉伸",
+        "source": "直译",
+        "note": "解剖学列表式命名"
+      },
+      {
+        "en": "Seated Straight Arm Twist",
+        "zh": "坐姿直臂转体",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Twist Stretch (Straight Arm)",
+        "zh": "坐姿直臂转体拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Twist on Stability Ball",
+        "zh": "瑞士球坐姿转体",
+        "source": "通行"
+      },
+      {
+        "en": "Seated Wide Angle Pose Sequence",
+        "zh": "坐角式组合序列",
+        "source": "通行"
+      },
+      {
+        "en": "Shoulder-Width Pull-Up",
+        "zh": "与肩同宽引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Side Bend Stretch",
+        "zh": "体侧拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Side Bend on Stability Ball",
+        "zh": "瑞士球体侧屈",
+        "source": "通行"
+      },
+      {
+        "en": "Side Wrist Pull Stretch",
+        "zh": "侧向拉腕拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Single Dumbbell Stiff-Leg Deadlift",
+        "zh": "单哑铃直腿硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Single Leg Stretch (Bent Knee)",
+        "zh": "单腿屈膝拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Single Straight Leg Stretch",
+        "zh": "单直腿拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Single-Leg High Box Squat",
+        "zh": "单腿高箱深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Sled 45 Degree Calf Press",
+        "zh": "45°腿举机踵压",
+        "source": "通行"
+      },
+      {
+        "en": "Sled 45 Degree Wide Leg Press",
+        "zh": "45°腿举机宽距腿举",
+        "source": "通行"
+      },
+      {
+        "en": "Sled Hack Squat",
+        "zh": "腿举机哈克深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Sledgehammer Swings",
+        "zh": "大锤抡击",
+        "source": "通行"
+      },
+      {
+        "en": "Smith Chair Squat",
+        "zh": "史密斯椅式深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Smith Machine Calf Raise",
+        "zh": "史密斯机提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Smith Machine Deadlift",
+        "zh": "史密斯机硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Smith Machine Leg Press",
+        "zh": "史密斯机腿举",
+        "source": "直译",
+        "note": "史密斯架内仰卧蹬腿变式"
+      },
+      {
+        "en": "Smith Seated Shoulder Press",
+        "zh": "史密斯机坐姿肩推举",
+        "source": "通行"
+      },
+      {
+        "en": "Spell Caster",
+        "zh": "战绳画咒甩绳",
+        "source": "存疑",
+        "note": "战绳绕环类动作，无通行译名，意译+直译标注"
+      },
+      {
+        "en": "Spine Stretch",
+        "zh": "脊柱前屈拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Squats - With Bands",
+        "zh": "弹力带深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Stability Ball Leg Curl",
+        "zh": "瑞士球腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Stability Ball Leg Elevated Crunch",
+        "zh": "腿垫瑞士球卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Stairs Calf Stretch",
+        "zh": "台阶小腿拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Adductor Stretch",
+        "zh": "站姿内收肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Back Rotation Stretch",
+        "zh": "站姿背部转体拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Bench Calf Stretch",
+        "zh": "站姿凳上小腿拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Hamstring Stretch",
+        "zh": "站姿腘绳肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Hip Flexor and Abdominal Stretch",
+        "zh": "站姿髋屈肌与腹肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Knee Raise Stretch",
+        "zh": "站姿提膝拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Lateral Stretch",
+        "zh": "站姿体侧拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Quadriceps Stretch",
+        "zh": "站姿股四头肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Reach Up Back Rotation Stretch",
+        "zh": "站姿上举转体拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Side Bend Stretch (Bent Arm)",
+        "zh": "站姿屈臂体侧拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Standing Wheel Rollout",
+        "zh": "站姿健腹轮",
+        "source": "通行"
+      },
+      {
+        "en": "Stationary Bike",
+        "zh": "动感单车",
+        "source": "通行"
+      },
+      {
+        "en": "Straight-Leg Up Crunch",
+        "zh": "直腿卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Supine Chest Throw",
+        "zh": "仰卧胸前抛球",
+        "source": "通行"
+      },
+      {
+        "en": "Suspended Split Squat",
+        "zh": "悬吊分腿蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Triceps Dips",
+        "zh": "双杠臂屈伸（直体练三头）",
+        "source": "通行"
+      },
+      {
+        "en": "Twisting Crunch",
+        "zh": "转体卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "V-Up",
+        "zh": "V字两头起",
+        "source": "通行"
+      },
+      {
+        "en": "Vertical Leg Raise (on parallel bars)",
+        "zh": "双杠垂直举腿",
+        "source": "通行"
+      },
+      {
+        "en": "Walk Wave Machine",
+        "zh": "波浪漫步机",
+        "source": "存疑",
+        "note": "源库指椭圆/漫步机类有氧器械，无通行译名"
+      },
+      {
+        "en": "Weighted Ball Hyperextension",
+        "zh": "抱球负重山羊挺身",
+        "source": "直译",
+        "note": "负重（药球）山羊挺身"
+      },
+      {
+        "en": "Weighted Crunches",
+        "zh": "负重卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Weighted Leg Extension Crunch",
+        "zh": "负重举腿卷腹",
+        "source": "直译"
+      },
+      {
+        "en": "Weighted Lying Twist",
+        "zh": "负重仰卧转体",
+        "source": "通行"
+      },
+      {
+        "en": "Weighted Sissy Squat",
+        "zh": "负重西斯深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Weighted Squat",
+        "zh": "负重深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Weighted Standing Curl",
+        "zh": "站姿负重弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Wrist Circles",
+        "zh": "手腕环绕",
+        "source": "通行"
+      },
+      {
+        "en": "Yoke Walk",
+        "zh": "轭架行走",
+        "source": "通行"
+      },
+      {
+        "en": "Band One-Leg Kickback (Bent Position)",
+        "zh": "弹力带单腿后踢（俯身位）",
+        "source": "通行",
+        "note": "臀部后踢腿语境"
+      },
+      {
+        "en": "Band Resisted Decline Sit-Up",
+        "zh": "弹力带抗阻下斜仰卧起坐",
+        "source": "通行"
+      },
+      {
+        "en": "Band Shoulder Warm-Up Stretch",
+        "zh": "弹力带肩部热身拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Band Standing Rear Delt Row",
+        "zh": "弹力带站姿后束划船",
+        "source": "通行"
+      },
+      {
+        "en": "Band Straight-Back Seated Row",
+        "zh": "弹力带直背坐姿划船",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Deadlifts",
+        "zh": "绳索硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Kneeling Crunch",
+        "zh": "跪姿绳索卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Rear Delt Row (with rope)",
+        "zh": "绳索后束划船（绳柄）",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Rope Overhead Triceps Extension",
+        "zh": "绳索颈后臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Rope Triceps Pushdown",
+        "zh": "绳索三头下压",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Seated High Row (V-bar)",
+        "zh": "坐姿绳索高位划船（V柄）",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Standing Fly",
+        "zh": "站姿绳索飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Standing Inner Curl",
+        "zh": "站姿绳索内旋弯举",
+        "source": "直译",
+        "note": "inner curl 指体侧内收位弯举"
+      },
+      {
+        "en": "Cable Standing Lift",
+        "zh": "站姿绳索提拉",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Standing One Arm Triceps Extension",
+        "zh": "站姿单臂绳索臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Twist (up-down)",
+        "zh": "绳索上下转体",
+        "source": "通行"
+      },
+      {
+        "en": "Cable One-Arm Twisting Seated Row",
+        "zh": "坐姿单臂转体绳索划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Fly On Exercise Ball",
+        "zh": "瑞士球哑铃飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Hammer Grip Incline Bench Row",
+        "zh": "哑铃对握上斜划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Fly On Exercise Ball",
+        "zh": "瑞士球上斜哑铃飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Hammer Curl",
+        "zh": "哑铃上斜锤式弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Hammer Press",
+        "zh": "哑铃上斜对握卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Rear Lateral Raise",
+        "zh": "哑铃上斜俯身侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Lying Alternate Extension",
+        "zh": "哑铃仰卧交替臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Lying Hammer Press",
+        "zh": "哑铃仰卧对握推",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell One Arm Zottman Preacher Curl",
+        "zh": "单臂佐特曼牧师凳弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Over Bench Wrist Curl",
+        "zh": "哑铃跨凳腕弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Pronate-grip Triceps Extension",
+        "zh": "哑铃正握臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Prone Incline Curl",
+        "zh": "哑铃俯卧上斜弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Rear Delt Row",
+        "zh": "哑铃后束划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Seated Front Raise",
+        "zh": "坐姿哑铃前平举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Seated Lateral Raise",
+        "zh": "坐姿哑铃侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Seated Triceps Extension",
+        "zh": "坐姿哑铃臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Hyperextensions (Back Extensions)",
+        "zh": "山羊挺身（背伸展）",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Back Extension",
+        "zh": "器械山羊挺身",
+        "source": "通行"
+      },
+      {
+        "en": "Lever High Row",
+        "zh": "器械高位划船",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Horizontal Leg Press",
+        "zh": "器械水平腿举",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Incline Hammer Chest Press",
+        "zh": "器械上斜对握推胸",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Kneeling Leg Curl",
+        "zh": "器械跪姿腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Lateral Raise",
+        "zh": "器械侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Leg Extension",
+        "zh": "器械腿屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Lying Chest Press",
+        "zh": "器械卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Lying Leg Curl",
+        "zh": "器械俯卧腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Preacher Curl",
+        "zh": "器械牧师凳弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Reverse Hyperextension",
+        "zh": "器械反向山羊挺身",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Reverse T-Bar Row",
+        "zh": "器械反向T杠划船",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Seated Calf Raise",
+        "zh": "器械坐姿提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Seated Crunch",
+        "zh": "器械坐姿卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Seated Dip",
+        "zh": "器械双臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Seated Hip Abduction",
+        "zh": "器械坐姿髋外展",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Seated Hip Adduction",
+        "zh": "器械坐姿髋内收",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Seated Leg Curl",
+        "zh": "器械坐姿腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Seated Reverse Fly",
+        "zh": "器械坐姿反向飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Shrug",
+        "zh": "器械耸肩",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Standing Calf Raise",
+        "zh": "器械站姿提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Standing Hip Extension",
+        "zh": "器械站姿髋伸展",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Standing Rear Kick",
+        "zh": "器械站姿后踢腿",
+        "source": "通行"
+      },
+      {
+        "en": "Lever T-Bar Row",
+        "zh": "器械T杠划船",
+        "source": "通行"
+      },
+      {
+        "en": "Lever Triceps Extension",
+        "zh": "器械臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Pull-Up / Chin-Up",
+        "zh": "引体向上（正手/反手）",
+        "source": "通行"
+      },
+      {
+        "en": "Pull-Up (Wide Grip)",
+        "zh": "宽握引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Wide Grip Cable Lat Pulldown",
+        "zh": "宽握绳索高位下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Glute Bridge",
+        "zh": "臀桥",
+        "source": "通行"
+      },
+      {
+        "en": "Goblet Squat",
+        "zh": "高脚杯深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Front Plank",
+        "zh": "正面平板支撑",
+        "source": "通行"
+      },
+      {
+        "en": "Exercise Ball Crunch",
+        "zh": "瑞士球卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Exercise Ball Sit-Up",
+        "zh": "瑞士球仰卧起坐",
+        "source": "通行"
+      },
+      {
+        "en": "Exercise Ball Spinal Stretch",
+        "zh": "瑞士球脊柱拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Elliptical Trainer",
+        "zh": "椭圆机",
+        "source": "通行"
+      },
+      {
+        "en": "Running",
+        "zh": "跑步",
+        "source": "通行"
+      },
+      {
+        "en": "Treadmill Running",
+        "zh": "跑步机跑步",
+        "source": "通行"
+      },
+      {
+        "en": "Jumping Jack",
+        "zh": "开合跳",
+        "source": "通行"
+      },
+      {
+        "en": "Burpee",
+        "zh": "波比跳",
+        "source": "通行"
+      },
+      {
+        "en": "Jump Rope",
+        "zh": "跳绳",
+        "source": "通行"
+      },
+      {
+        "en": "Squat",
+        "zh": "徒手深蹲",
+        "source": "通行",
+        "note": "库内纯「Squat」行为自重深蹲"
+      },
+      {
+        "en": "Barbell Back Squat",
+        "zh": "杠铃后深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Bench Press",
+        "zh": "平板杠铃卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Clean And Press",
+        "zh": "杠铃高翻推举",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Close Grip Bench Press",
+        "zh": "杠铃窄距卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Curl",
+        "zh": "杠铃弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Decline Bench Press",
+        "zh": "杠铃下斜卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Drag Curl",
+        "zh": "杠铃贴身弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Front Raise",
+        "zh": "杠铃前平举",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Front Squat",
+        "zh": "杠铃前深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Incline Bench Press",
+        "zh": "杠铃上斜卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Lunge",
+        "zh": "杠铃弓步蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Prone Incline Curl",
+        "zh": "杠铃俯卧上斜弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Rear Delt Raise",
+        "zh": "杠铃俯身反向飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Shrug",
+        "zh": "杠铃耸肩",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Straight Leg Deadlift",
+        "zh": "杠铃直腿硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Underhand Bent-Over Row",
+        "zh": "杠铃反握俯身划船",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Wide-Grip Upright Row",
+        "zh": "杠铃宽握直立划船",
+        "source": "通行"
+      },
+      {
+        "en": "Battling Ropes",
+        "zh": "战绳",
+        "source": "通行"
+      },
+      {
+        "en": "Bent Press",
+        "zh": "单臂弯身推举",
+        "source": "通行"
+      },
+      {
+        "en": "Butterfly Yoga Pose",
+        "zh": "蝴蝶式（束角式）",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Close Grip Lat Pulldown",
+        "zh": "窄握绳索高位下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Crossover Reverse Fly",
+        "zh": "绳索十字反向飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Lateral Raise",
+        "zh": "绳索侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Lying Triceps Extension",
+        "zh": "绳索仰卧臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Cable One Arm Curl",
+        "zh": "单臂绳索弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Cable One Arm Front Raise",
+        "zh": "单臂绳索前平举",
+        "source": "通行"
+      },
+      {
+        "en": "Cable One Arm Lateral Pulldown",
+        "zh": "单臂绳索高位下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Cable One Arm Lateral Raise",
+        "zh": "单臂绳索侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Pulldown",
+        "zh": "绳索高位下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Standing Crunch",
+        "zh": "站姿绳索卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Straight Arm Pulldown",
+        "zh": "绳索直臂下压",
+        "source": "通行"
+      },
+      {
+        "en": "Cable Triceps Pushdown",
+        "zh": "绳索三头下压",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Alternating Shoulder Press",
+        "zh": "哑铃交替肩推举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Behind-the-Back Wrist Curl",
+        "zh": "哑铃背后腕弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Bent-Over Row",
+        "zh": "哑铃俯身划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Biceps Curl",
+        "zh": "哑铃弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Close-Grip Press",
+        "zh": "哑铃窄距卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Concentration Curl",
+        "zh": "哑铃集中弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Cross Body Hammer Curl",
+        "zh": "哑铃体前交叉锤式弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Deadlift",
+        "zh": "哑铃硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Fly",
+        "zh": "哑铃飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Front Raise",
+        "zh": "哑铃前平举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Goblet Squat",
+        "zh": "哑铃高脚杯深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Bench Press",
+        "zh": "哑铃上斜卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Biceps Curl",
+        "zh": "哑铃上斜弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Curl",
+        "zh": "哑铃上斜弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Fly",
+        "zh": "哑铃上斜飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Row",
+        "zh": "哑铃上斜划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Shrug",
+        "zh": "哑铃上斜耸肩",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Incline Triceps Extension",
+        "zh": "哑铃上斜臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Kickback",
+        "zh": "哑铃俯身臂屈伸",
+        "source": "通行",
+        "note": "三头语境"
+      },
+      {
+        "en": "Dumbbell Lateral Raise",
+        "zh": "哑铃侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Lunge",
+        "zh": "哑铃弓步蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Lying Leg Curl",
+        "zh": "哑铃俯卧腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Lying Rear Delt Row",
+        "zh": "哑铃仰卧后束划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Lying Triceps Extension",
+        "zh": "哑铃仰卧臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell One Arm Lateral Raise",
+        "zh": "单臂哑铃侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell One-Arm Triceps Extension",
+        "zh": "单臂哑铃臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Seated Calf Raise",
+        "zh": "坐姿哑铃提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Seated Preacher Curl",
+        "zh": "坐姿哑铃牧师凳弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Shrug",
+        "zh": "哑铃耸肩",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Side Bend",
+        "zh": "哑铃体侧屈",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Single Leg Calf Raise",
+        "zh": "哑铃单腿提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Single Leg Squat",
+        "zh": "哑铃单腿深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Squat",
+        "zh": "哑铃深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Standing Calf Raise",
+        "zh": "站姿哑铃提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Stiff Leg Deadlift",
+        "zh": "哑铃直腿硬拉",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Sumo Squat",
+        "zh": "哑铃相扑深蹲",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Upright Row",
+        "zh": "哑铃直立划船",
+        "source": "通行"
+      },
+      {
+        "en": "Dynamic Chest Stretch",
+        "zh": "动态胸肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Decline Dumbbell Bench Press",
+        "zh": "下斜哑铃卧推",
+        "source": "通行"
+      },
+      {
+        "en": "Decline Dumbbell Fly",
+        "zh": "下斜哑铃飞鸟",
+        "source": "通行"
+      },
+      {
+        "en": "Donkey Calf Raise",
+        "zh": "驴式提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Floor Crunch",
+        "zh": "地面卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Circles Stretch",
+        "zh": "髋部环绕活动",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Extension Stretch",
+        "zh": "髋伸展拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Hip Flexor and Quadriceps Stretch",
+        "zh": "髋屈肌与股四头肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Incline Push-Up",
+        "zh": "上斜俯卧撑",
+        "source": "通行"
+      },
+      {
+        "en": "Kneeling Back Rotation Stretch",
+        "zh": "跪姿背部转体拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Kneeling Lat Stretch",
+        "zh": "跪姿背阔肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Kneeling Triceps Stretch",
+        "zh": "跪姿肱三头肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Overhead Chest Stretch",
+        "zh": "过顶胸肌拉伸",
+        "source": "通行"
+      },
+      {
+        "en": "Pull Through",
+        "zh": "跨拉",
+        "source": "通行"
+      },
+      {
+        "en": "Push-Up",
+        "zh": "俯卧撑",
+        "source": "通行"
+      },
+      {
+        "en": "Sit-Up",
+        "zh": "仰卧起坐",
+        "source": "通行"
+      },
+      {
+        "en": "Supine Dumbbell Biceps Curl",
+        "zh": "仰卧哑铃弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Torso Rotation",
+        "zh": "躯干转体",
+        "source": "通行"
+      },
+      {
+        "en": "Backward Medicine Ball Throw",
+        "zh": "药球后抛",
+        "source": "通行"
+      },
+      {
+        "en": "Band Assisted Pull-up",
+        "zh": "弹力带辅助引体向上",
+        "source": "通行"
+      },
+      {
+        "en": "Band Bent-Over Rear Lateral Raise",
+        "zh": "弹力带俯身侧平举",
+        "source": "通行"
+      },
+      {
+        "en": "Band Hip Abduction",
+        "zh": "弹力带髋外展",
+        "source": "通行"
+      },
+      {
+        "en": "Band Hip Adduction",
+        "zh": "弹力带髋内收",
+        "source": "通行"
+      },
+      {
+        "en": "Band Kneeling One Arm Pulldown",
+        "zh": "跪姿单臂弹力带下拉",
+        "source": "通行"
+      },
+      {
+        "en": "Band One Arm Front Raise",
+        "zh": "单臂弹力带前平举",
+        "source": "通行"
+      },
+      {
+        "en": "Band Overhead Triceps Extension",
+        "zh": "弹力带颈后臂屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Band Prone Leg Curl",
+        "zh": "俯卧弹力带腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Band Seated Leg Extension",
+        "zh": "坐姿弹力带腿屈伸",
+        "source": "通行"
+      },
+      {
+        "en": "Band Seated Row",
+        "zh": "坐姿弹力带划船",
+        "source": "通行"
+      },
+      {
+        "en": "Band Side Bend",
+        "zh": "弹力带体侧屈",
+        "source": "通行"
+      },
+      {
+        "en": "Band Standing Calf Raise",
+        "zh": "站姿弹力带提踵",
+        "source": "通行"
+      },
+      {
+        "en": "Band Standing Crunch",
+        "zh": "站姿弹力带卷腹",
+        "source": "通行"
+      },
+      {
+        "en": "Band Standing Leg Curl",
+        "zh": "站姿弹力带腿弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Band Triceps Pushdown",
+        "zh": "弹力带三头下压",
+        "source": "通行"
+      },
+      {
+        "en": "Barbell Reverse Wrist Curl",
+        "zh": "杠铃反向腕弯举",
+        "source": "通行"
+      },
+      {
+        "en": "Dumbbell Arnold Press",
+        "zh": "哑铃阿诺德推举",
+        "source": "通行"
+      },
+      {
+        "en": "Lying Leg Raise",
+        "zh": "仰卧举腿",
+        "source": "通行"
+      }
+    ]
+  }
+}

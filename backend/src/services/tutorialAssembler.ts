@@ -21,6 +21,7 @@ import {
   FORCE_TYPE_LABELS_ZH,
   MECHANIC_LABELS_ZH,
   MUSCLE_LABELS_ZH,
+  parseInstructionsZh,
   type ExerciseMuscle,
 } from "../../../shared/dist/contracts/index.js";
 
@@ -59,11 +60,13 @@ export function hasStructuredTutorialData(row: TutorialSourceRow): boolean {
 }
 
 /** 词表值 → 中文标签（未知值原样返回，不炸不造） */
-function label<T extends string>(
+function label(
   map: Readonly<Record<string, string>>,
   value: string | null | undefined,
 ): string | null {
-  if (!value) return null;
+  if (!value) {
+    return null;
+  }
   return map[value] ?? value;
 }
 
@@ -84,14 +87,23 @@ function numberedList(items: string[]): string {
  * 全部教学字段为空时返回 null（调用方走 AI 兜底）。
  */
 export function assembleTutorialMd(row: TutorialSourceRow): string | null {
-  if (!hasStructuredTutorialData(row)) return null;
+  if (!hasStructuredTutorialData(row)) {
+    return null;
+  }
 
-  const steps =
-    (row.instructions_zh?.length ? row.instructions_zh : row.instructions) ??
-    [];
-  const cues = row.form_cues ?? [];
-  const mistakes = row.common_mistakes ?? [];
-  const breathing = row.breathing?.trim() || null;
+  // A6 结构化中文教学（instructions_zh 段头编码）：逐段中文优先，缺段回退英文源；
+  // 纯步骤数组（无段头，兼容旧形态）整体按中文步骤解释。
+  const zh = parseInstructionsZh(row.instructions_zh);
+  const steps = zh?.steps.length
+    ? zh.steps
+    : row.instructions_zh?.length
+      ? row.instructions_zh
+      : (row.instructions ?? []);
+  const cues = zh?.cues.length ? zh.cues : (row.form_cues ?? []);
+  const mistakes = zh?.mistakes.length
+    ? zh.mistakes
+    : (row.common_mistakes ?? []);
+  const breathing = zh?.breathing?.trim() || row.breathing?.trim() || null;
   const primary = row.primary_muscles ?? [];
   const secondary = row.secondary_muscles ?? [];
 
@@ -125,9 +137,13 @@ export function assembleTutorialMd(row: TutorialSourceRow): string | null {
 
   // ---- 二、发力心法（要领提示 + 力向） ----
   const cueLines: string[] = [];
-  if (cues.length > 0) cueLines.push(bulletList(cues));
+  if (cues.length > 0) {
+    cueLines.push(bulletList(cues));
+  }
   const force = label(FORCE_TYPE_LABELS_ZH, row.force_type);
-  if (force) cueLines.push(`力向：${force}。`);
+  if (force) {
+    cueLines.push(`力向：${force}。`);
+  }
   if (cueLines.length > 0) {
     sections.push(`## 发力心法\n\n${cueLines.join("\n\n")}`);
   }
@@ -139,14 +155,19 @@ export function assembleTutorialMd(row: TutorialSourceRow): string | null {
 
   // ---- 四、注意事项（呼吸法 + 器材 + 难度基准） ----
   const cautionLines: string[] = [];
-  if (breathing) cautionLines.push(`呼吸：${breathing}`);
+  if (breathing) {
+    cautionLines.push(`呼吸：${breathing}`);
+  }
   const equipment = label(EQUIPMENT_LABELS_ZH, row.equipment);
-  if (equipment)
+  if (equipment) {
     cautionLines.push(
       `器材：${equipment}。开始前确认器材稳固、动作行程内无障碍。`,
     );
+  }
   const difficultyLine = difficultyCaution(row.difficulty);
-  if (difficultyLine) cautionLines.push(difficultyLine);
+  if (difficultyLine) {
+    cautionLines.push(difficultyLine);
+  }
   if (cautionLines.length > 0) {
     sections.push(`## 注意事项\n\n${cautionLines.join("\n\n")}`);
   }
