@@ -653,6 +653,7 @@ const App: React.FC = () => {
       setChatMessage,
       chatHistory,
       isLoading,
+      entryPlaceholder,
       handleChatSubmit,
       handleConfirmPlan: handleAiConfirmPlan,
       markPlanConsumed,
@@ -1604,6 +1605,8 @@ const App: React.FC = () => {
                 }}
                 sessionStatus={session.status}
                 sessionSessionId={session.id}
+                // [B1 二次返工] 预填只在入口首屏（会话尚无消息）呈现——会话中途一律不复活
+                entryPlaceholder={chatHistory.length === 0 ? entryPlaceholder : ''}
                 // [NEW] Thread management props
                 threads={threads}
                 currentThreadId={currentThreadId}

@@ -271,6 +271,9 @@ interface AICoachOverlayProps {
   sessionStatus: 'idle' | 'active' | 'paused' | 'finished';
   sessionSessionId?: string; // [NEW] Session ID for progress tracking
   isTransitioning?: boolean;
+  /** [B1 issue#5] 入口预填 placeholder（三场景建议文案；空串=回退默认「给教练发消息」）。
+   *  仅在空闲态生效——聆听/分析/计划模式的状态文案优先。样式沿用现有 placeholder-gray-400。 */
+  entryPlaceholder?: string;
   // [NEW] Thread management props
   threads?: ChatThread[];
   currentThreadId?: string;
@@ -310,6 +313,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   sessionStatus,
   sessionSessionId,
   isTransitioning = false,
+  entryPlaceholder,
   // [NEW] Thread management
   threads = [],
   currentThreadId = '',
@@ -554,6 +558,10 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
 
   const isAnalyzing = chatHistory.some(msg => msg._isAnalyzing);
   const isBusy = isLoading || isAnalyzing;
+  // [B1 issue#5 二次返工] 预填态直发：输入框为空但预填 placeholder 激活时，
+  // 发送 = 直接发送预填文案本身（用户看一眼就能发，不必手打）。
+  // 走 handleChatSubmit 的 directMessage 通道，正式输入（chatMessage）路径不变。
+  const prefillSendable = !chatMessage.trim() && !!entryPlaceholder.trim();
   // 提交统一入口：语音识别未停止时先停掉（取最终文本已在输入框，
   // 复位 listening 态与轮询，防止录音资源挂着 + 写保护残留）
   const submitMessage = () => {
@@ -562,6 +570,10 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
       userEditedRef.current = false;
       setIsListening(false);
       void stopSpeechInput();
+    }
+    if (prefillSendable) {
+      handleChatSubmit(undefined, entryPlaceholder);
+      return;
     }
     handleChatSubmit();
   };
@@ -1094,7 +1106,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                     ? "正在分析本次训练…"
                     : isPlanMode
                       ? "描述你想调整的内容…"
-                      : "给教练发消息"
+                      : (entryPlaceholder || "给教练发消息")
               }
               disabled={isBusy}
               className="flex-1 resize-none bg-transparent outline-none text-[16px] leading-[1.4] py-1.5 max-h-24 text-gray-900 placeholder-gray-400 custom-scrollbar"
@@ -1132,9 +1144,10 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                 </svg>
               </button>
             )}
-            {/* 发送按钮：仅有文字时出现（空输入时由灰色麦克风接管，
-                不再渲染发送键的麦克风 fallback——否则默认进来两个麦克风图标，2026-09-17） */}
-            {chatMessage.trim() && (
+            {/* 发送按钮：有文字时出现；[B1 二次返工] 预填态（空输入 + 预填激活，
+                且非聆听中）同样出现——点发送即直发预填文案。空输入且无预填时由灰色麦克风接管，
+                不再渲染发送键的麦克风 fallback（否则默认进来两个麦克风图标，2026-09-17） */}
+            {(chatMessage.trim() || (!isListening && prefillSendable)) && (
               <button
                 type="submit"
                 disabled={isBusy}

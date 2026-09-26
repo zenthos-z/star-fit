@@ -7,10 +7,13 @@ import { buildSessionPayload } from '../utils/workoutSummary';
 // seam; this hook consumes the SSE stream and synthesizes renderable uiHint
 // cards, with no awareness of the backend agent implementation.
 import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/agent/sseAgentClient';
+import { resolveCoachPrefill } from '../utils/coachPrefill';
+import { todayDateKey } from '../utils/weeklyPlanView';
 import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
 import type { SurveySubmitRecord } from '../components/execution/cards/SurveyCard';
 import type { ProfileUpdateDecisionRecord } from '../components/execution/cards/ProfileUpdateConfirmCard';
-import type { AgentScenario, UiHintCard } from 'shared/contracts';
+import type { AgentScenario, UiHintCard, TodayScheduleResponse } from 'shared/contracts';
+import { parseJSONSafe } from 'shared/contracts';
 import {
   saveChatThreadList,
   loadChatThreadList,
@@ -18,6 +21,7 @@ import {
   loadChatMessages,
   deleteChatThread,
   migrateLegacyChatData,
+  loadHistory,
   ChatThread
 } from '@/storage';
 
@@ -126,6 +130,13 @@ export const useAICoach = (
   const [chatMessage, setChatMessage] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // [B1 issue#5 返工] 入口预填 = placeholder 语义（2026-09-26 PR #27 打回）：
+  // 建议文案走输入框 placeholder（原生浅灰、可被输入天然替换），不进正式值、不可发送。
+  // 用户一旦输入任何内容即清空（下方 effect），发送亦清空——预填只服务「入口时刻」。
+  const [entryPlaceholder, setEntryPlaceholder] = useState('');
+  // [B1 二次返工] chatHistory 镜像 ref：预填守门用（useCallback([]) 里读不到最新历史，
+  // 同 attachedContextRef 模式）——会话中途（已有消息）预填不复活
+  const chatHistoryRef = useRef(chatHistory);
 
   // [NEW] Thread Management State
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -134,6 +145,12 @@ export const useAICoach = (
 
   // [NEW] Context Attachment State
   const [attachedContext, setAttachedContext] = useState<any>(null);
+  // [B1 issue#5] 附件镜像 ref：openAiCoach 与 state set 同 tick 调用时闭包里
+  // 读不到新挂的附件（教学页「咨询教练」先 setAttachedContext 再 openAiCoach），
+  // 预填据此让位——带附件=用户带着具体问题来，不预填
+  const attachedContextRef = useRef<unknown>(null);
+  useEffect(() => { attachedContextRef.current = attachedContext; }, [attachedContext]);
+  useEffect(() => { chatHistoryRef.current = chatHistory; }, [chatHistory]);
 
   // [NEW] Store workout data for questionnaire upload
   const workoutDataRef = useRef<any>(null);
@@ -199,6 +216,8 @@ export const useAICoach = (
     setChatHistory([]);
     // 新对话 = 干净输入区：清掉上一线程残留的附件 chip，否则空「上下文附件」跨线程飘着
     setAttachedContext(null);
+    // [B1 二次返工] 同理清预填 placeholder：预填只在打开入口时注入，切/建新话题不复活
+    setEntryPlaceholder('');
 
     // Save to storage
     await saveChatThreadList(limitedThreads);
@@ -428,6 +447,9 @@ export const useAICoach = (
 
     const userMsg = messageToUse.trim();
     console.log('[handleChatSubmit] Sending message:', userMsg);
+
+    // [B1 返工] 用户已实际发起对话 → 入口预填 placeholder 退场，不再回来
+    setEntryPlaceholder('');
 
     // Handle survey data upload from SurveyCard
     if (userMsg.startsWith('[UPLOAD_SURVEY_DATA]:')) {
@@ -882,6 +904,64 @@ ${JSON.stringify(uploadData, null, 2)}`;
     )));
   }, []);
 
+  /**
+   * [B1 issue#5 返工] 入口预填（placeholder 语义）：手动打开 AI 教练时按三场景
+   * 把建议文案写入输入框 placeholder——
+   *   A 有周计划且今日有条目 → 今日计划摘要（E2 确定性课表 API 组装）
+   *   B 无计划新手（本地无训练记录 + 本周无计划）→ 引导预填
+   *   C 老用户无今日计划 → 轻预填
+   * 红线：纯前端确定性组装（scheduleService 已交付今日课表，AI 零参与）；
+   * 只动 placeholder 不动 chatMessage（正式值），用户输入天然替换之；
+   * 挂附件的入口（教学页「咨询教练」）= 带着具体问题来 → 让位并清残留；
+   * 会话中途（当前线程已有消息）不复活——预填只在打开入口、会话未开始时注入。
+   */
+  const prefillCoachEntry = useCallback(async () => {
+    // 一检（同步，省一次无效 fetch）：带附件 / 会话已开始 → 不注入
+    if (attachedContextRef.current) {
+      setEntryPlaceholder('');
+      return;
+    }
+    if (chatHistoryRef.current.length > 0) return;
+    try {
+      const res = await fetch(`${API_BASE}/schedule/today?date=${todayDateKey()}`, {
+        headers: getHeaders(),
+      });
+      // 形态防御：status 非三态之一视同课表不可得，交由路由走「不猜」分支
+      const raw = res.ok
+        ? parseJSONSafe<TodayScheduleResponse>(await res.text(), 'coachPrefill')
+        : null;
+      const schedule: TodayScheduleResponse | null =
+        raw && (raw.status === 'planned' || raw.status === 'rest_day' || raw.status === 'no_plan')
+          ? raw
+          : null;
+      // 新手判定的另一半：本地训练历史（不新增后端字段；读取失败按无记录处理）
+      let localHistory: unknown[] | null = null;
+      try {
+        localHistory = await loadHistory();
+      } catch { /* IDB 不可用 → 按无记录 */ }
+      const hasHistory = Array.isArray(localHistory) && localHistory.length > 0;
+
+      const text = resolveCoachPrefill(schedule, hasHistory);
+      // 二检（防 fetch 窗口内竞态）：
+      // 附件（教学页同 tick 先 setAttachedContext）→ 让位并清残留，不盖问题场景；
+      // 会话已开始（窗口期内发出消息）→ 不复活
+      if (attachedContextRef.current) {
+        setEntryPlaceholder('');
+        return;
+      }
+      if (chatHistoryRef.current.length > 0) return;
+      setEntryPlaceholder(text);
+    } catch (err) {
+      console.warn('[useAICoach] entry prefill skipped:', err);
+    }
+  }, []);
+
+  // [B1 返工] 用户一旦输入任何内容 → 预填清除（原生 placeholder 的「可替换」
+  // 只在输入非空期间成立；这里把它变成一次性：输入过就不再回来）
+  useEffect(() => {
+    if (chatMessage.trim()) setEntryPlaceholder('');
+  }, [chatMessage]);
+
   const openAiCoach = async (attachment?: any) => {
 
     console.log('[useAICoach] openAiCoach called with attachment:', attachment);
@@ -892,6 +972,10 @@ ${JSON.stringify(uploadData, null, 2)}`;
       console.log('[useAICoach] Already opening overlay with workout complete, skipping duplicate call');
       return;
     }
+
+    // [B1 issue#5] 入口预填 placeholder（fire-and-forget，不阻塞开浮层）：
+    // 无附件=手动进入按场景预填；带附件（workout_complete/教学页）=让位并清残留
+    void prefillCoachEntry();
 
     if (attachment) {
       // workout_complete / workout_summary 是内部触发（训练结束自动分析），
@@ -1137,6 +1221,8 @@ ${JSON.stringify(uploadData, null, 2)}`;
     chatHistory,
     setChatHistory,
     isLoading,
+    // [B1 issue#5 返工] 入口预填 placeholder（AICoachOverlay 输入框展示用）
+    entryPlaceholder,
     handleChatSubmit,
     handleConfirmPlan,
     markPlanConsumed,
