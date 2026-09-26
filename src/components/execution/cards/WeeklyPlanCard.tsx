@@ -6,11 +6,15 @@
  * 无进度/状态/执行率语义（issue #8 定稿）。
  * 点击训练日 → 当日详情子页（PlanDayDetailPage，与信息页共用）。
  *
- * 视觉依据 docs/design/mockups/d1-weekly-plan-ui.html；配色统一 tailwind
- * 项目色板（orange-600 主分化 / star-accent 交互蓝）。
+ * 视觉同源（PR#17 返工）：直接复用聊天卡统一外壳 ChatCardShell /
+ * ChatCardHeader（star-dark 头 + 蓝点标识 + gray-50 条目块 + star-accent
+ * 交互），与 PlanCard 等八张既有卡片同一色板；排印按 iosTypeScale
+ * （design-tokens.ts）。
  */
 import React, { useState } from 'react';
 import type { WeeklyPlanCardData } from 'shared/contracts';
+import { ChatCardShell } from './ChatCardShell';
+import { ChatCardHeader } from './ChatCardHeader';
 import { haptic } from '../../../lib/nativeHaptics';
 import {
   weeklyCardRows,
@@ -38,26 +42,21 @@ export const WeeklyPlanCard: React.FC<WeeklyPlanCardProps> = ({ uiHint }) => {
 
   return (
     <>
-      <div className="w-full overflow-hidden rounded-[20px] bg-white shadow-[0_8px_26px_rgba(24,24,27,0.06)]">
-        {/* 卡头：本周上下文（周次/阶段 + 一行分化概要） */}
-        <div className="border-b border-gray-100 px-4 pb-3 pt-3.5">
-          <div className="text-[15px] font-bold text-gray-900">
-            本周计划 ·{' '}
-            <span className="text-orange-600">{data.week_label}</span>
-            {data.phase_label ? ` · ${data.phase_label}` : ''}
-          </div>
-          <div className="mt-0.5 text-[11.5px] text-gray-400">{data.split_summary}</div>
-        </div>
+      <ChatCardShell testId="weekly-plan-card">
+        <ChatCardHeader
+          title={`本周计划 · ${data.week_label}${data.phase_label ? ` · ${data.phase_label}` : ''}`}
+          subtitle={data.split_summary}
+        />
 
         {/* 7 天纵向数列：训练日可点进当日详情，休息日弱化灰行 */}
-        <div className="flex flex-col gap-0.5 px-2 pb-2 pt-1">
+        <div className="flex flex-col gap-2 p-4">
           {rows.map((row) => {
             const dow = dowFullLabel(row.entryDate);
             if (row.rest) {
               return (
-                <div key={row.entryDate} className="flex items-center gap-2.5 rounded-2xl px-3 py-2.5">
-                  <span className="w-9 shrink-0 text-[13.5px] font-medium text-gray-300">{dow}</span>
-                  <span className="text-xs text-gray-300">休息恢复</span>
+                <div key={row.entryDate} className="flex items-center gap-2.5 px-1 py-1.5">
+                  <span className="w-9 shrink-0 text-[15px] font-normal text-gray-400">{dow}</span>
+                  <span className="text-[13px] text-gray-400">休息恢复</span>
                 </div>
               );
             }
@@ -71,19 +70,19 @@ export const WeeklyPlanCard: React.FC<WeeklyPlanCardProps> = ({ uiHint }) => {
                   haptic('light');
                   setDetail(row);
                 }}
-                className="flex w-full items-center gap-2.5 rounded-2xl bg-gray-50 px-3 py-2.5 text-left shadow-[inset_0_0_0_1px_rgba(24,24,27,0.045)] transition-colors active:bg-gray-100"
+                className="flex w-full items-center gap-2.5 rounded-2xl border border-gray-100 bg-gray-50 p-3 text-left transition-colors active:bg-gray-100"
               >
-                <span className="w-9 shrink-0 text-[13.5px] font-bold text-gray-900">{dow}</span>
+                <span className="w-9 shrink-0 text-[15px] font-semibold text-gray-900">{dow}</span>
                 {row.splitTag && (
-                  <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-orange-600 text-[11.5px] font-bold text-white">
-                    {row.splitTag.slice(0, 1)}
+                  <span className="shrink-0 rounded-full border border-gray-100 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
+                    {row.splitTag}
                   </span>
                 )}
                 <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[13px] text-gray-700">
+                  <span className="block truncate text-[13px] font-medium text-gray-900">
                     {row.focus ?? `${exerciseNameLine(row.exercises)}，${row.exercises.length} 动作`}
                   </span>
-                  <span className="block truncate text-[11px] text-gray-400">
+                  <span className="mt-0.5 block truncate text-[12px] text-gray-500">
                     {exerciseNameLine(row.exercises)}
                   </span>
                 </span>
@@ -94,7 +93,7 @@ export const WeeklyPlanCard: React.FC<WeeklyPlanCardProps> = ({ uiHint }) => {
             );
           })}
         </div>
-      </div>
+      </ChatCardShell>
 
       {/* 当日详情子页：与信息页二级页共用（push 层 z-[130]，盖聊天浮层） */}
       <PlanDayDetailPage detail={detail} onClose={() => setDetail(null)} />

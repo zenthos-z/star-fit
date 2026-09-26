@@ -1,8 +1,10 @@
 /**
  * InfoPage — 信息页（C1+C2 / issue #6 + #7，tab 0 新落点）。
  *
- * 结构（docs/design/mockups/d1-weekly-plan-ui.html 区块 2 定稿）：
- *   上 = 本周计划：横向 7 天条（训练日橙高亮 / 休息日灰）+ 选中日概览 +
+ * 结构（docs/design/mockups/d1-weekly-plan-ui.html 区块 2 定稿；配色/排印按
+ * PR#17 返工与 App 现有卡片同源——白卡 gray-100 边 + star-accent 交互，
+ * 禁 mockup 橙色；字阶 iosTypeScale）：
+ *   上 = 本周计划：横向 7 天条（训练日深墨+块底加深 / 休息日灰）+ 选中日概览 +
  *        查看当日详情入口（进 PlanDayDetailPage 二级页，与 D2 周计划卡共用）
  *   下 = 训练历史：现有历史卡样式原样迁移（SessionCardItem），无进度条
  *
@@ -142,11 +144,11 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
           <PageActionsMenu items={MENU_ITEMS} onSelect={runMenuAction} />
         </div>
 
-        {/* ── 上半：本周计划 ─────────────────────────────── */}
-        <div className="rounded-[24px] bg-white p-4 shadow-[0_8px_26px_rgba(24,24,27,0.06)]">
+        {/* ── 上半：本周计划（卡壳同 ChatCardShell：白底 24px 圆角 gray-100 边） ── */}
+        <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
           <div className="flex items-baseline gap-2 pb-3">
-            <span className="text-base font-bold text-gray-900">本周计划</span>
-            <span className="ml-auto text-[11.5px] text-gray-400">
+            <span className="text-[17px] font-semibold tracking-tight text-gray-900">本周计划</span>
+            <span className="ml-auto text-[12px] text-gray-400">
               {loading ? '' : metaLine || '暂无计划'}
             </span>
           </div>
@@ -163,15 +165,15 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
               <button
                 type="button"
                 onClick={refresh}
-                className="mt-3 rounded-full bg-star-accent/10 px-4 py-2 text-[13px] font-semibold text-star-accent active:scale-95 transition-all"
+                className="mt-3 h-11 rounded-full bg-star-accent/10 px-5 text-[15px] font-semibold text-star-accent active:scale-95 transition-all"
               >
                 重新加载
               </button>
             </div>
           ) : hasNoPlan ? (
             <div className="py-6 text-center">
-              <p className="text-[15px] font-semibold text-gray-500">本周还没有训练计划</p>
-              <p className="pt-1 text-xs text-gray-400">让 AI 教练根据你的状态排一份周计划</p>
+              <p className="text-[15px] font-semibold text-gray-900">本周还没有训练计划</p>
+              <p className="pt-1 text-[13px] text-gray-500">让 AI 教练根据你的状态排一份周计划</p>
               {onOpenAiCoach && (
                 <button
                   type="button"
@@ -179,7 +181,7 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
                     haptic('medium');
                     onOpenAiCoach();
                   }}
-                  className="mt-3 rounded-full bg-star-accent px-5 py-2 text-[13px] font-semibold text-white shadow-[0_4px_12px_rgba(59,130,246,0.35)] active:scale-95 transition-all"
+                  className="mt-3 h-11 rounded-full bg-star-accent px-5 text-[15px] font-semibold text-white transition-all active:scale-95"
                 >
                   去找 AI 教练
                 </button>
@@ -194,23 +196,23 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
                 onSelect={setSelectedDate}
               />
 
-              {/* 选中日概览 + 详情入口 */}
+              {/* 选中日概览 + 详情入口（块样式同 PlanCard 条目：gray-50 + gray-100 边） */}
               {selectedResp && (
-                <div className="mt-3 rounded-[18px] bg-gray-50 p-3 shadow-[inset_0_0_0_1px_rgba(24,24,27,0.045)]">
+                <div className="mt-3 rounded-2xl border border-gray-100 bg-gray-50 p-3">
                   {selectedIsTrain ? (
                     <>
                       <div className="mb-1.5 flex items-center gap-2">
-                        <span className="text-sm font-bold text-gray-900">{dowFullLabel(selectedDate)}</span>
+                        <span className="text-[15px] font-semibold text-gray-900">{dowFullLabel(selectedDate)}</span>
                         {split && (
-                          <span className="rounded-full bg-orange-50 px-2 py-0.5 text-[10.5px] font-bold text-orange-600">
+                          <span className="rounded-full border border-gray-100 bg-white px-2 py-0.5 text-[10px] font-medium text-gray-500">
                             {splitLabelZh(split)}
                           </span>
                         )}
-                        <span className="ml-auto text-[11px] text-gray-400">
+                        <span className="ml-auto text-[12px] text-gray-400">
                           {dayVolumeSummary(todayScheduleDayToVM(selectedResp).exercises)}
                         </span>
                       </div>
-                      <p className="text-[12.5px] leading-relaxed text-gray-600">
+                      <p className="text-[13px] leading-relaxed text-gray-500">
                         {exerciseNameLine(todayScheduleDayToVM(selectedResp).exercises)}
                       </p>
                       <button
@@ -221,7 +223,7 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
                           haptic('light');
                           setDetail(todayScheduleDayToVM(selectedResp, metaLine));
                         }}
-                        className="mt-2.5 flex w-full items-center justify-center gap-1.5 rounded-[14px] bg-star-accent/10 py-2.5 text-[13px] font-semibold text-star-accent transition-colors active:bg-star-accent/20"
+                        className="mt-2.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-star-accent text-[15px] font-semibold text-white transition-all active:scale-95"
                       >
                         查看当日详情
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
@@ -231,8 +233,8 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
                     </>
                   ) : (
                     <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-400">{dowFullLabel(selectedDate)}</span>
-                      <span className="text-xs text-gray-400">
+                      <span className="text-[15px] font-semibold text-gray-400">{dowFullLabel(selectedDate)}</span>
+                      <span className="text-[13px] text-gray-400">
                         {selectedResp?.status === 'rest_day' ? '休息恢复' : '暂无安排'}
                       </span>
                     </div>
@@ -244,7 +246,7 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
         </div>
 
         {/* ── 下半：训练历史（现有历史卡样式原样迁移，无进度条） ── */}
-        <div className="pt-5 text-xl font-extrabold text-star-dark">训练历史</div>
+        <div className="pt-5 text-[17px] font-semibold text-star-dark">训练历史</div>
         {sessions.length === 0 ? (
           <div className="flex flex-1 flex-col items-center justify-center py-16 text-center opacity-50" role="status">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-gray-200 text-gray-400" aria-hidden="true">

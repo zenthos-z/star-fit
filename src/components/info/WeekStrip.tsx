@@ -1,8 +1,11 @@
 /**
  * WeekStrip — 本周横向 7 天条（C2 信息页上半，issue #6）。
  *
- * 视觉依据 docs/design/mockups/d1-weekly-plan-ui.html 定稿：
- * 训练日橙色底高亮 / 休息日灰，选中日蓝环 + 蓝字；无进度/状态语义。
+ * 配色同源（PR#17 返工）：与其他卡片同一灰阶体系（gray-50/gray-100 块、
+ * gray-900 主文、gray-400 弱化）+ star-accent 仅用于选中态（蓝环+蓝字，
+ * 对齐 ChatCardHeader 蓝点/star-accent 交互），不引入新色相。
+ * 训练日/休息日层级靠字重与墨色表达：训练日深墨+块底加深，休息日灰。
+ * 排印按 iosTypeScale：dow/mark = Caption 12，日号 = Subhead 15 semibold。
  */
 import React from 'react';
 import { haptic } from '../../lib/nativeHaptics';
@@ -12,7 +15,7 @@ export interface WeekStripDay {
   date: string;
   /** 训练日（有当日条目） */
   isTrainDay: boolean;
-  /** 格内标注：训练日=分化短标签（推/拉/腿…），休息日显示「休」 */
+  /** 格内标注：训练日=组数（如 4组），休息日显示「休」 */
   mark: string;
 }
 
@@ -39,24 +42,24 @@ export const WeekStrip: React.FC<WeekStripProps> = ({ days, selectedDate, todayD
             onSelect(d.date);
           }}
           className={[
-            'flex flex-col items-center gap-0.5 rounded-[14px] py-2 transition-colors',
-            d.isTrainDay ? 'bg-orange-50' : 'bg-gray-100',
-            selected ? 'bg-white ring-2 ring-inset ring-star-accent' : '',
+            'flex flex-col items-center gap-0.5 rounded-2xl py-2 transition-colors border',
+            d.isTrainDay ? 'border-gray-100 bg-gray-100' : 'border-gray-100 bg-gray-50',
+            selected ? 'border-transparent bg-white ring-2 ring-inset ring-star-accent' : '',
           ].join(' ')}
         >
-          <span className={`text-[10.5px] leading-none ${selected ? 'text-star-accent' : 'text-gray-400'}`}>
+          <span className={`text-[12px] leading-none ${selected ? 'text-star-accent' : 'text-gray-400'}`}>
             {dowShortLabel(d.date)}
           </span>
-          <span className={`text-[15px] font-bold leading-tight ${selected ? 'text-star-accent' : 'text-gray-600'}`}>
+          <span className={`text-[15px] font-semibold leading-tight ${selected ? 'text-star-accent' : d.isTrainDay ? 'text-gray-900' : 'text-gray-400'}`}>
             {dayNumber(d.date)}
           </span>
-          <span className={`mt-0.5 min-h-[11px] text-[10px] font-bold leading-none ${d.isTrainDay ? 'text-orange-600' : 'font-medium text-gray-300'}`}>
+          <span className={`mt-0.5 min-h-[12px] text-[12px] leading-none ${d.isTrainDay ? 'font-medium text-gray-500' : 'text-gray-300'}`}>
             {d.mark}
           </span>
-          {/* 今日角标：格底小圆点（不抢选中环的层级） */}
+          {/* 今日角标：格底小圆点（不抢选中环的层级，色同 ChatCardHeader 蓝点） */}
           <span
             aria-hidden="true"
-            className={`h-1 w-1 rounded-full ${isToday && !selected ? 'bg-star-accent/60' : 'bg-transparent'}`}
+            className={`h-1 w-1 rounded-full ${isToday && !selected ? 'bg-blue-500/60' : 'bg-transparent'}`}
           />
         </button>
       );
