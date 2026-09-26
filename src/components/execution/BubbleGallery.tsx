@@ -28,6 +28,27 @@ const GALLERY_MESSAGES: Partial<ChatMessage>[] = [
   { role: 'ai', text: 'AI 回复气泡长这样，全宽灰底。支持 **Markdown** 与公式 $E=mc^2$。' },
   wrapUiHint('plan_card', MOCK_PLAN, { diff: { added: ['Running 户外跑'], modified: [] } }),
   wrapUiHint('plan_card', MOCK_PLAN.map(e => ({ ...e })), { context: 'post_finish' }),
+  wrapUiHint('weekly_plan', {
+    week_label: '第 2 周',
+    phase_label: '力量块',
+    split_summary: '推拉腿 · 每周 3 练 · 主项渐进 +1 档',
+    days: [
+      {
+        entry_date: '2026-09-21', split_label: '推', focus: '胸肩三头，4 动作', rest: false,
+        exercises: [
+          { exercise_id: 'V1StGXR8_Z5jdHi6', name: '平板杠铃卧推', sets: [{ set: 1, weight: 60, reps: 8 }, { set: 2, weight: 65, reps: 6 }] },
+          { exercise_id: 'a1b2c3d4e5f6', name: '坐姿肩推', sets: [{ set: 1, weight: 20, reps: 10 }, { set: 2, weight: 20, reps: 10 }] },
+        ],
+      },
+      { entry_date: '2026-09-22', rest: true, exercises: [] },
+      {
+        entry_date: '2026-09-23', split_label: '拉', focus: '背二头，4 动作', rest: false,
+        exercises: [
+          { exercise_id: 'b2c3d4e5f6a1', name: '杠铃划船', sets: [{ set: 1, weight: 55, reps: 8 }] },
+        ],
+      },
+    ],
+  }),
   wrapUiHint('survey_card', {
     title: '练后调研（多题）',
     subtitle: '约需 1 分钟',

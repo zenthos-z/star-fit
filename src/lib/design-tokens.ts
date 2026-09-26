@@ -455,3 +455,30 @@ export type PrimitiveTokens = typeof primitives;
 export type SemanticTokens = typeof semantic;
 export type AnimationTokens = typeof animation;
 export type ComponentTokens = typeof component;
+
+// ============================================
+// Apple HIG Type Scale（iOS 字阶 · 2026-09-26 PR#17 返工补充）
+// ============================================
+// 现有组件未沉淀字号 token，按 Apple HIG iOS 字阶比例建立（Web 层映射为
+// tailwind 任意值字号）。使用方：周计划卡 / 信息页新区块（PR#17）。
+// 既有页面锚点佐证：Large Title 34 = History.tsx / design-spec-ios §1；
+// 导航栏居中小标题 17 semibold 同源。
+
+export const iosTypeScale = {
+  /** Large Title 34 · 页面大标题（History/Info 顶部） */
+  largeTitle: { fontSize: '34px', fontWeight: 700 },
+  /** Title 28 · 二级页大标题（当日详情） */
+  title: { fontSize: '28px', fontWeight: 700 },
+  /** Headline 17 semibold · 卡片标题 / 列表行主文 / 导航栏标题 */
+  headline: { fontSize: '17px', fontWeight: 600 },
+  /** Body 17 · 正文 */
+  body: { fontSize: '17px', fontWeight: 400 },
+  /** Subhead 15 · 次级标题 / 行标签 / 按钮文字（对齐 ChatPrimaryButton 15px semibold） */
+  subhead: { fontSize: '15px', fontWeight: 600 },
+  /** Footnote 13 · 说明行 / 次要描述 */
+  footnote: { fontSize: '13px', fontWeight: 400 },
+  /** Caption 12 · meta / 徽标 / 最小可读文字 */
+  caption: { fontSize: '12px', fontWeight: 400 },
+  /** Unit 10 · 数值单位小字（design-spec-ios §5 既有约定，字号例外项） */
+  unit: { fontSize: '10px', fontWeight: 500 },
+} as const;

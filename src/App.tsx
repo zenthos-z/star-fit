@@ -10,7 +10,7 @@ import LockScreen from './components/execution/LockScreen';
 import { ExerciseCardV2 } from './components/execution/ExerciseCardV2';
 import ReorderMode from './components/execution/ReorderMode';
 import SettlementV2 from './components/settlement/SettlementV2';
-import History from './components/History';
+import InfoPage from './components/info/InfoPage';
 import { haptic } from './lib/nativeHaptics';
 import { startLiveActivity, pauseLiveActivity, endLiveActivity } from './lib/liveActivity';
 import TimeEditor from './components/TimeEditor';
@@ -1531,13 +1531,19 @@ const App: React.FC = () => {
             className="fixed inset-0 z-[60] bg-white overflow-hidden"
           >
             {currentRoute === AppRoute.HISTORY && !viewHistorySession && (
-              <History
-                key="history"
+              // C1+C2（issue #6 + #7）：tab 0 页面由「运动记录」升级为「信息」——
+              // 上=本周计划横条（确定性课表 API），下=训练历史（历史卡样式原样迁移）
+              <InfoPage
+                key="info"
                 sessions={history}
-                onClose={() => dispatchNav({ type: 'HOME' })}
                 onSelect={(s) => dispatchNav({ type: 'OPEN_HISTORY_DETAIL', sessionId: s.id })}
                 onDelete={handleDeleteSession}
                 onOpenSettings={() => dispatchNav({ type: 'OPEN_SETTINGS' })}
+                onOpenAiCoach={openAiCoach}
+                onLogout={async () => {
+                  await logout();
+                  window.location.reload();
+                }}
               />
             )}
 

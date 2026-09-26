@@ -7,6 +7,7 @@ import { RunningCard } from './plugins/RunningCard';
 const OutdoorExerciseCardV2 = React.lazy(() => import('./plugins/OutdoorExerciseCardV2').then(m => ({ default: m.OutdoorExerciseCardV2 })));
 import { IsometricCard } from './plugins/IsometricCard';
 import { PlanCard } from './cards/PlanCard';
+import { WeeklyPlanCard } from './cards/WeeklyPlanCard';
 import { SummaryCard } from './cards/SummaryCard';
 import { SurveyCard } from './cards/SurveyCard';
 import { SurveySuccessCard } from './cards/SurveySuccessCard';
@@ -60,6 +61,7 @@ const PluginRegistry: Record<string, React.FC<any>> = {
 
   // AI Coach 卡片 - 统一为新标准（小写 + 下划线）
   'plan_card': PlanCard,
+  'weekly_plan': WeeklyPlanCard,
   'survey_card': SurveyCard,
   'summary_card': SummaryCard,
   'survey_success': SurveySuccessCard,

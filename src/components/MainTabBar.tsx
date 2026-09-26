@@ -1,4 +1,4 @@
-// MainTabBar — 底部导航：3 页签（历史 / 开始运动 / AI Agent）。
+// MainTabBar — 底部导航：3 页签（信息 / 开始运动 / AI Agent）。
 // iOS：原生系统 Tab Bar（Liquid Glass 官方视觉+交互）覆盖 WebView 底部，
 //      本组件只做安全区占位 + 事件接线；其他端：CSS 玻璃回落。
 import { useEffect, useRef, useCallback } from 'react';
@@ -16,7 +16,8 @@ interface MainTabBarProps {
 }
 
 const TAB_META = [
-  { title: '历史', icon: 'M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z' },
+  // 信息页签图标：圆环 + i（information），描边风格与另两个页签一致（round cap/join，strokeWidth 2）
+  { title: '信息', icon: 'M21 12a9 9 0 11-18 0 9 9 0 0118 0zM12 11.2v5.3M12 7.5v.1' },
   { title: '开始运动', icon: 'M13 10V3L4 14h7v7l9-11h-7z' },
   { title: 'AI Agent', icon: 'M12 3l1.9 5.7L19.6 10l-5.7 1.9L12 17.6l-1.9-5.7L4.4 10l5.7-1.9L12 3z' },
 ] as const;

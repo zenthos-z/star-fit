@@ -7,20 +7,21 @@
  * producer (no IO) so it can be unit-tested and injected into any scenario's
  * systemPrompt assembly.
  *
- * The seven allowed `type` values match the migrated canonical schema
+ * The allowed `type` values match the migrated canonical schema
  * (`./schemas/uiHintSchemas.js`):
- * plan_card, summary_card, survey_card, deviation_card, audit_complete,
+ * plan_card, weekly_plan, summary_card, survey_card, deviation_card,
  * audit_complete, profile_update_confirm.
  *
  * Note: `survey_card` is now allowed for workout_complete scenario (v3 amendment).
  */
 
 /**
- * The six card types the agent is allowed to emit. Kept as a runtime
+ * The card types the agent is allowed to emit. Kept as a runtime
  * constant so tests and consumers stay in sync with the skill text.
  */
 export const ALLOWED_UIHINT_TYPES = [
   "plan_card",
+  "weekly_plan", // 2026-09: conversational weekly plan card (issue #9 / D2)
   "summary_card",
   "survey_card", // v3: now allowed for workout_complete
   "deviation_card",
@@ -86,6 +87,25 @@ export function loadUiHintFormatSkill(): string {
     "  1. Call `list_exercises` to get the exercise library (includes `exercise_type`)",
     "  2. For each exercise, match its `exercise_type` to the requirements above",
     "  3. If unsure, read `exercise-type-guide/knowledge-index.md`",
+    "- `weekly_plan` — a WHOLE-WEEK plan card (use it instead of plan_card after",
+    "  `save_weekly_plan` succeeds — the weekly plan display layer). `data` is an",
+    "  OBJECT (not an array): `week_label` (non-empty string, e.g. 第 2 周),",
+    "  optional `phase_label` (e.g. 力量块), `split_summary` (non-empty one-line",
+    "  summary, e.g. 推拉腿 · 每周 3 练 · 主项渐进 +1 档), `days` (array, 1+ items;",
+    "  cover the whole week Mon-Sun when possible). Each day:",
+    "  - `entry_date` (YYYY-MM-DD, calendar day, no timezone)",
+    "  - optional `split_label` (short split tag: 推 / 拉 / 腿 / 上 / 下 …)",
+    "  - optional `focus` (muscle-group description, e.g. 胸肩三头)",
+    "  - `rest` (boolean, default false — rest days weaken to a gray row)",
+    "  - `exercises` (array, default []): each is { exercise_id (from",
+    "    list_exercises, NEVER invented), name, sets (array, 1+ items), optional",
+    "    note }. Each set: { set (1-based number), optional weight (kg; assisted",
+    "    stays NEGATIVE), optional reps, optional duration (seconds), optional",
+    "    note }. Per-set params may differ (第1组 60kg×8 / 第2组 65kg×6) — that",
+    "    is the point of per-set expansion; a set with all of",
+    "    weight/reps/duration/note empty is rejected.",
+    "  NO progress / status / completion-rate fields exist on this card — it is",
+    "  a freshly generated plan, not an execution report.",
     "- `summary_card` — workout/session summary. `data`: `summary` (non-empty",
     "  string), optional `title`, `highlights` (string[]), `metrics` (record of",
     "  string|number).",
@@ -135,9 +155,10 @@ export function loadUiHintFormatSkill(): string {
     "  user confirmation.",
     "",
     "### Common shape rules",
-    "- `type` is REQUIRED and must be one of the SIX values above (whitelist).",
+    "- `type` is REQUIRED and must be one of the values above (whitelist).",
     "- `data` shape MUST match its type (discriminated by `type`).",
     "- For `plan_card`, `data` MUST be a JSON array, never an object/map.",
+    "- For `weekly_plan`, `data` MUST be a JSON OBJECT (days inside it is an array).",
     "- For `survey_card`, `questions` MUST be an array (1-3 questions max).",
     "- For `profile_update_confirm`, `proposals` MUST be an array (1+ items).",
     "- ALWAYS wrap the card in a ```json fenced block (the fence is the primary",

@@ -56,9 +56,10 @@ version: "4.0.0"
 
 ### plan 卡（对话展示层）
 
-落库成功后，仍按既有格式在回复正文输出 plan 卡（```json 围栏包裹的
-uiHint JSON，type: "plan"，见 knowledge.md 第九节）展示**当日**条目——
-plan 卡是对话展示，weekly_plan/plan_entries 是数据真源，两者并存。
+落库成功后，在回复正文输出 **weekly_plan 卡**（```json 围栏包裹的
+uiHint JSON，type: "weekly_plan"，见 knowledge.md §9.3）展示**整周**——
+weekly_plan 卡是对话展示，weekly_plan/plan_entries 是数据真源，两者并存。
+单日 / 明日计划仍用 plan_card；兼容期 plan_card 亦被校验器接受。
 
 ## 使用方式
 
@@ -78,7 +79,7 @@ program-progression 技能（分化决策表 + 容量知识 → 一周编排）
   ↓
 save_weekly_plan（split + 全周条目，原子落库）
   ↓
-输出 plan 卡（今日部分）+ 简短说明
+输出 weekly_plan 卡（整周展示，§9.3）+ 简短说明
 ```
 
 ### 缺勤顺延（Agent 只解释，不执行）
