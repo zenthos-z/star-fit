@@ -16,6 +16,10 @@ export {
   HeartRateRepository,
   createHeartRateRepository,
 } from "./heartRate.repository.js";
+export {
+  WeeklyPlanRepository,
+  createWeeklyPlanRepository,
+} from "./weeklyPlan.repository.js";
 
 // Re-export types for convenience
 export type {
