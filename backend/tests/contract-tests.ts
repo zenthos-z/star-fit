@@ -36,6 +36,8 @@ import {
   ExerciseDetailUpdateSchema,
   TodayScheduleResponseSchema,
   TodayScheduleEntrySchema,
+  ScheduleSummaryResponseSchema,
+  TODAY_STATUS_TO_SUMMARY,
   getIsoWeekId,
   type PlanEntry,
   type WeeklyPlan,
@@ -1100,5 +1102,207 @@ describe("Contract Tests: Today Schedule & ISO Week", () => {
       }).success,
       false,
     );
+  });
+});
+
+// ============================================================================
+// Contract Tests: Schedule Summary（真源 shared/contracts/schedule-summary.ts — B2 / issue #22）
+// ============================================================================
+
+describe("Contract Tests: Schedule Summary (start-workout routing)", () => {
+  const SS_ENTRY = {
+    entry_id: "3f2b1a00-0000-4000-8000-000000000002",
+    exercise_id: "test-exercise-0001",
+    exercise_name: "杠铃深蹲",
+    target_sets: 4,
+    target_load: { type: "percent_1rm", min: 70, max: 80 },
+    status: "planned",
+    sort_order: 0,
+  };
+
+  test("ScheduleSummaryResponse accepts the canonical routing shapes", () => {
+    // 计划用户 + 今日有课（B1 预填数据源形态）
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: true,
+        today: "scheduled",
+        today_entries: [SS_ENTRY],
+        user_stage: "planner",
+        onboarding: "done",
+      }).success,
+      true,
+    );
+    // 计划用户 + 休息日
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: true,
+        today: "rest",
+        today_entries: [],
+        user_stage: "planner",
+        onboarding: "done",
+      }).success,
+      true,
+    );
+    // 计划用户新周未排（has_plan 与本周口径解耦的合法形态）
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: true,
+        today: "none",
+        today_entries: [],
+        user_stage: "planner",
+        onboarding: "done",
+      }).success,
+      true,
+    );
+    // 老手无计划
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: false,
+        today: "none",
+        today_entries: [],
+        user_stage: "veteran_no_plan",
+        onboarding: "done",
+      }).success,
+      true,
+    );
+    // 纯新手首次使用（onboarding=needed 的唯一合法宿主）
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: false,
+        today: "none",
+        today_entries: [],
+        user_stage: "newcomer",
+        onboarding: "needed",
+      }).success,
+      true,
+    );
+  });
+
+  test("today 形态互锁：none/scheduled/rest 与条目数组不允许矛盾", () => {
+    // none 带条目 → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: false,
+        today: "none",
+        today_entries: [SS_ENTRY],
+        user_stage: "newcomer",
+        onboarding: "needed",
+      }).success,
+      false,
+    );
+    // scheduled 空条目 → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: true,
+        today: "scheduled",
+        today_entries: [],
+        user_stage: "planner",
+        onboarding: "done",
+      }).success,
+      false,
+    );
+    // rest 带条目 → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: true,
+        today: "rest",
+        today_entries: [SS_ENTRY],
+        user_stage: "planner",
+        onboarding: "done",
+      }).success,
+      false,
+    );
+  });
+
+  test("user_stage ⟷ has_plan 同源锁定（矛盾组合拒收）", () => {
+    const base = { today: "none", today_entries: [], onboarding: "done" };
+    // planner 但无计划 → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        ...base,
+        has_plan: false,
+        user_stage: "planner",
+      }).success,
+      false,
+    );
+    // newcomer 但有计划 → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        ...base,
+        has_plan: true,
+        user_stage: "newcomer",
+      }).success,
+      false,
+    );
+    // veteran_no_plan 但有计划 → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        ...base,
+        has_plan: true,
+        user_stage: "veteran_no_plan",
+      }).success,
+      false,
+    );
+  });
+
+  test("onboarding=needed 仅限纯新手形态；未知枚举值拒收", () => {
+    // needed 但 stage 非 newcomer → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: false,
+        today: "none",
+        today_entries: [],
+        user_stage: "veteran_no_plan",
+        onboarding: "needed",
+      }).success,
+      false,
+    );
+    // needed 但有计划 → 拒
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        has_plan: true,
+        today: "none",
+        today_entries: [],
+        user_stage: "planner",
+        onboarding: "needed",
+      }).success,
+      false,
+    );
+    // 未知 today / user_stage / onboarding 枚举 → 拒
+    const ok = {
+      has_plan: false,
+      today_entries: [],
+      user_stage: "newcomer",
+      onboarding: "needed",
+    };
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({ ...ok, today: "maybe" })
+        .success,
+      false,
+    );
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        ...ok,
+        today: "none",
+        user_stage: "admin",
+      }).success,
+      false,
+    );
+    assert.strictEqual(
+      ScheduleSummaryResponseSchema.safeParse({
+        ...ok,
+        today: "none",
+        onboarding: "pending",
+      }).success,
+      false,
+    );
+  });
+
+  test("TODAY_STATUS_TO_SUMMARY maps the full E2 status domain (no dead keys)", () => {
+    assert.deepStrictEqual(TODAY_STATUS_TO_SUMMARY, {
+      planned: "scheduled",
+      rest_day: "rest",
+      no_plan: "none",
+    });
   });
 });

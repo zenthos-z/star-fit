@@ -290,6 +290,28 @@ export class WeeklyPlanRepository extends BaseRepository {
   }
 
   /**
+   * 用户是否持有任一周计划（任意周、任意状态）——B2 开始运动路由的
+   * has_plan / user_stage「计划用户」判定读。EXISTS 探针走
+   * (user_id, week_id) 唯一索引前缀，不拉行数据。
+   */
+  async hasAnyWeeklyPlan(userId: string): Promise<boolean> {
+    if (!UUIDSchema.safeParse(userId).success) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `userId 必须为 UUID（当前: ${userId}）`,
+        { userId },
+      );
+    }
+    const row = await this.queryOne<{ one: number }>(
+      `SELECT 1 AS one FROM weekly_plans
+       WHERE user_id = $userId::uuid
+       LIMIT 1`,
+      { userId },
+    );
+    return row !== null;
+  }
+
+  /**
    * 按用户 + 周标识查询周计划元数据（plan 行，不含条目）。
    * E2 今日课表路径的轻量读取：只需判定「本周是否有计划」与分化，
    * 不拉整周条目。未命中返回 null。
