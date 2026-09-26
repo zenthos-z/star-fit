@@ -39,6 +39,8 @@ export interface ExerciseLibraryMeta {
 export interface Exercise {
   id: string;
   name: string;
+  /** 中文名称（A6 翻译管道回填；公共库行必有，用户自建/旧缓存可空） */
+  name_zh?: string | null;
   exercise_type: 'resistance' | 'unilateral' | 'bodyweight' | 'assisted' | 'isometric' | 'cardio' | 'flexibility';
   targets: {
     primary: string[];

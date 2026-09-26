@@ -4,6 +4,8 @@ import { Attachment } from '../FloatingAttachment';
 import { haptic } from '../../../lib/nativeHaptics';
 import { db } from '../../../storage/db';
 import { CardHeader } from './CardHeader';
+import { resolveExerciseDisplayName } from '../../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../../hooks/useExerciseLibraryIndex';
 
 interface CardioCardProps {
   exercise: ExerciseAction;
@@ -24,6 +26,7 @@ export const CardioCard: React.FC<CardioCardProps> = ({
   onUpdate,
   addAttachment
 }) => {
+  const libraryIndex = useExerciseLibraryIndex();
   const [hrFeatures, setHrFeatures] = useState<any>(null);
   const [gpsStatus, setGpsStatus] = useState<'searching' | 'locked' | 'error'>('locked');
   const [currentPace, setCurrentPace] = useState<string>('5\'30"');
@@ -194,7 +197,10 @@ export const CardioCard: React.FC<CardioCardProps> = ({
   return (
     <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
       <CardHeader
-        name={exercise.metadata?.name || '有氧运动'}
+        name={resolveExerciseDisplayName(exercise.metadata?.name, {
+          library: libraryIndex,
+          libraryId: exercise.metadata?.libraryId,
+        }) || '有氧运动'}
         type={exercise.type}
         className="mb-6"
         rightExtra={

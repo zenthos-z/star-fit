@@ -203,9 +203,13 @@ export function dayVolumeSummary(exercises: PlanDayExerciseVM[]): string | undef
   return `${exCount} 动作 · ${setCount} 组`;
 }
 
-/** 动作名简列：「杠铃深蹲 · 罗马尼亚硬拉 · 腿举 · 坐姿腿弯举」 */
-export function exerciseNameLine(exercises: PlanDayExerciseVM[]): string {
-  return exercises.map((e) => e.name).join(' · ');
+/** 动作名简列：「杠铃深蹲 · 罗马尼亚硬拉 · 腿举 · 坐姿腿弯举」
+ * resolveName：可选展示名解析（A6 中文优先——存量英文名 → name_zh） */
+export function exerciseNameLine(
+  exercises: PlanDayExerciseVM[],
+  resolveName?: (name: string) => string,
+): string {
+  return exercises.map((e) => (resolveName ? resolveName(e.name) : e.name)).join(' · ');
 }
 
 /**

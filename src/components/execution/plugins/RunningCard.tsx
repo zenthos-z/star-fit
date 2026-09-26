@@ -4,6 +4,8 @@ import { Play, Pause, RotateCcw, CheckCircle2, Heart, Timer, MapPin, Watch, Squa
 import { motion, AnimatePresence } from 'framer-motion';
 import { transitions } from '../../../lib/animations';
 import { CardHeader } from './CardHeader';
+import { resolveExerciseDisplayName } from '../../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../../hooks/useExerciseLibraryIndex';
 import { haptic } from '../../../lib/nativeHaptics';
 import { useSyncExternalStore } from 'react';
 import { watchHeartRateStore } from '../../../services/watchHeartRateStore';
@@ -37,7 +39,12 @@ const MODE_CONFIG = {
 
 export const RunningCard: React.FC<RunningCardProps> = ({ exercise, isPaused, onUpdate }) => {
   const metadata = exercise.metadata || {};
-  const exerciseName = metadata.name || '有氧运动';
+  const libraryIndex = useExerciseLibraryIndex();
+  // A6 中文优先：存量英文名经库索引解析 name_zh
+  const exerciseName = resolveExerciseDisplayName(metadata.name, {
+    library: libraryIndex,
+    libraryId: metadata.libraryId,
+  }) || '有氧运动';
   const cardioSubtype = metadata.cardioSubtype || 'GENERAL';
 
   // 已移除执行界面参考值展示与锚点读取

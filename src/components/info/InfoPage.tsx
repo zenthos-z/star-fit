@@ -33,6 +33,8 @@ import {
   todayScheduleDayToVM,
   type PlanDayDetailVM,
 } from '../../utils/weeklyPlanView';
+import { resolveExerciseDisplayName } from '../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../hooks/useExerciseLibraryIndex';
 
 export interface InfoPageProps {
   sessions: Session[];
@@ -54,6 +56,7 @@ const MENU_ITEMS: GlassMenuItem[] = [
 ];
 
 const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpenSettings, onOpenAiCoach, onLogout }) => {
+  const libraryIndex = useExerciseLibraryIndex();
   const [isScrolled, setIsScrolled] = useState(false);
   const [showDebug, setShowDebug] = useState(false);
   const [detail, setDetail] = useState<PlanDayDetailVM | null>(null);

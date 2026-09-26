@@ -945,6 +945,12 @@ export {
   ExerciseDetailUpdateSchema,
   ExerciseSearchFilterSchema,
 
+  // instructions_zh 结构化中文教学（A6 翻译管道，issue #19）
+  INSTRUCTIONS_ZH_SECTIONS,
+  InstructionsZhSectionsSchema,
+  buildInstructionsZh,
+  parseInstructionsZh,
+
   // Types
   type ExerciseMuscle,
   type ExerciseEquipment,
@@ -959,6 +965,7 @@ export {
   type ExerciseLibraryItem,
   type ExerciseDetailUpdate,
   type ExerciseSearchFilter,
+  type InstructionsZhSections,
 } from './exercise-library.js';
 
 // ============================================================================

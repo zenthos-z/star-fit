@@ -11,6 +11,8 @@ import { loadActiveTrack, saveActiveTrack, clearActiveTrack } from '../../../sto
 import { FollowModeController, LocationMarker } from './MapFollowController';
 import { MapErrorBoundary } from './MapErrorBoundary';
 import { CardHeader } from './CardHeader';
+import { resolveExerciseDisplayName } from '../../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../../hooks/useExerciseLibraryIndex';
 import { transitions } from '../../../lib/animations';
 import { haptic } from '../../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../../lib/nativeTabBar';
@@ -27,7 +29,12 @@ const smoothSpring = transitions.springSmooth;
 
 const OutdoorExerciseCardV2Content: React.FC<OutdoorExerciseCardV2Props> = ({ exercise, isPaused, onUpdate }) => {
   const metadata = exercise.metadata || {};
-  const exerciseName = metadata.name || '户外运动';
+  const libraryIndex = useExerciseLibraryIndex();
+  // A6 中文优先：存量英文名经库索引解析 name_zh
+  const exerciseName = resolveExerciseDisplayName(metadata.name, {
+    library: libraryIndex,
+    libraryId: metadata.libraryId,
+  }) || '户外运动';
   const targetHeartRateZone = metadata.targetHeartRateZone || '2';
   
   const currentSet = exercise.sets[0] || { index: 0, status: 'PLANNED', duration: 0, distance: 0 };

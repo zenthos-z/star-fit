@@ -16,10 +16,13 @@ import type { WeeklyPlanCardData } from 'shared/contracts';
 import { ChatCardShell } from './ChatCardShell';
 import { ChatCardHeader } from './ChatCardHeader';
 import { haptic } from '../../../lib/nativeHaptics';
+import { resolveExerciseDisplayName } from '../../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../../hooks/useExerciseLibraryIndex';
 import {
   weeklyCardRows,
   dowFullLabel,
   exerciseNameLine,
+
   type PlanDayDetailVM,
 } from '../../../utils/weeklyPlanView';
 import { PlanDayDetailPage } from '../../info/PlanDayDetailPage';
@@ -36,6 +39,7 @@ const ChevronRight = () => (
 );
 
 export const WeeklyPlanCard: React.FC<WeeklyPlanCardProps> = ({ uiHint }) => {
+  const libraryIndex = useExerciseLibraryIndex();
   const data = uiHint.data;
   const rows = React.useMemo(() => weeklyCardRows(data), [data]);
   const [detail, setDetail] = useState<PlanDayDetailVM | null>(null);
@@ -80,7 +84,7 @@ export const WeeklyPlanCard: React.FC<WeeklyPlanCardProps> = ({ uiHint }) => {
                 )}
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[13px] font-medium text-gray-900">
-                    {row.focus ?? `${exerciseNameLine(row.exercises)}，${row.exercises.length} 动作`}
+                    {row.focus ?? `${exerciseNameLine(row.exercises, (n) => resolveExerciseDisplayName(n, { library: libraryIndex }))}，${row.exercises.length} 动作`}
                   </span>
                   <span className="mt-0.5 block truncate text-[12px] text-gray-500">
                     {exerciseNameLine(row.exercises)}

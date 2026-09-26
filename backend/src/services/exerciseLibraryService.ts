@@ -82,7 +82,7 @@ export interface Exercise {
   updated_at?: string; // ISO 8601 UTC timestamp
   // ---- A2/A3 深化教学列（SELECT * 原样返回；A4 教程组装消费）----
   instructions?: string[] | null; // 步骤（库3 steps 口径）
-  instructions_zh?: string[] | null; // 步骤中文回写（管道入口，暂可空）
+  instructions_zh?: string[] | null; // 结构化中文教学（A6 约定：步骤/要领/常见错误/呼吸四段段头编码，见 shared/contracts）
   form_cues?: string[] | null; // 要领提示
   common_mistakes?: string[] | null; // 常见错误
   breathing?: string | null; // 呼吸法
@@ -166,7 +166,7 @@ export const ExerciseLibraryService = {
     const client = this.getClient();
     const row = await client.queryOne<Exercise>(
       `
-      SELECT * FROM exercises WHERE name = $name
+      SELECT * FROM exercises WHERE name = $name OR name_zh = $name
     `,
       { name },
     );

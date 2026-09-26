@@ -35,3 +35,6 @@ export type { ChatMessage } from './useAICoach';
 export { useAttachments } from './useAttachments';
 export { useGeolocation } from './useGeolocation';
 export { useLongPress } from './useLongPress';
+
+// 动作库索引（A6 中文优先展示，issue #19）
+export { useExerciseLibraryIndex } from './useExerciseLibraryIndex';
