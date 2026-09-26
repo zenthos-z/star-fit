@@ -29,7 +29,7 @@ type NativeState = 'probing' | 'active' | 'fallback';
  * MuscleMapSection — 肌群可视化区（A4，issue #12 定案）。
  *
  * iOS：MuscleMap 人体图（front/back 双视图）由原生层渲染、覆盖在占位容器上，
- * 纯色高亮——主发力高饱和橙红、次发力同色系低饱和（配色见 lib/muscleMap）。
+ * 纯色高亮——主发力=项目强调色高饱和、次发力=同色系低饱和（配色见 lib/muscleMap）。
  * 容器滚动经捕获阶段监听 + rAF 节流重报 rect；出视口或 sheet 拖拽时隐藏。
  * 非 iOS / 桥未就绪（probing → fallback）→ 收起占位，仅渲染肌群胶囊（降级）。
  * 胶囊图例常驻（图例语义，与定稿参考布局一致）。

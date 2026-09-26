@@ -1473,7 +1473,7 @@ const App: React.FC = () => {
           <MainTabBar
               tab={mainTab}
               onSelect={handleTabSelect}
-              hidden={(currentRoute as AppRoute) === AppRoute.SETTLEMENT || isAiOverlayOpen}
+              hidden={(currentRoute as AppRoute) === AppRoute.SETTLEMENT || isAiOverlayOpen || Boolean(tutorialExerciseId)}
           />
         </div>
       </motion.div>

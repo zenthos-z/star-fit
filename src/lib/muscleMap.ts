@@ -5,8 +5,8 @@
  * - 17 基准肌群（shared/contracts 受控词表）→ MuscleMap 36 肌群枚举（rawValue
  *   slug）映射表；iOS 原生 MuscleMapPlugin 据此高亮（github.com/melihcolpan/
  *   MuscleMap，MIT）
- * - 肌群胶囊与人体图的高亮配色（项目色板 orange 系，纯色非渐变：
- *   主发力高饱和橙红、次发力同色系低饱和——issue #12 用户拍板）
+ * - 肌群胶囊与人体图的高亮配色（项目 accent 色系派生，纯色非渐变：
+ *   主发力=强调色高饱和、次发力=同色系低饱和——PR #18 返工定案）
  *
  * 词表真源 = shared/contracts EXERCISE_MUSCLES；本表仅做可视化近似映射，
  * 不回写库。非骨骼肌区域（无 mapping）返回空数组，仅显示胶囊。
@@ -80,18 +80,23 @@ export function muscleLabelZh(muscle: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// 配色（issue #12 定案：纯色填充、按刺激贡献度分级；色值取项目色板 orange 系）
+// 配色（PR #18 返工：橙色系违规 → 项目 accent 色系派生）
+// 规则不变：纯色非渐变、主发力高饱和/次发力同色系低饱和；
+// 色相服从 App 全局调性（design-spec：蓝色只留交互/强调）。
+// 实际用色依据（现有组件实测）：
+//   主强调 = star-accent #3B82F6（bg-blue-500 主按钮/选中态同源）
+//   低饱和蓝 = bg-blue-100 + text-blue-700（ExerciseSettingsModal 选中 chip 同语言）
 // ---------------------------------------------------------------------------
 
-/** 主发力：高饱和橙红（Tailwind orange-600 #EA580C） */
-export const MUSCLE_PRIMARY_COLOR = '#EA580C';
-/** 次发力：同色系低饱和（Tailwind orange-400 #FB923C） */
-export const MUSCLE_SECONDARY_COLOR = '#FB923C';
+/** 主发力：项目强调色高饱和（star-accent #3B82F6 = Tailwind blue-500） */
+export const MUSCLE_PRIMARY_COLOR = '#3B82F6';
+/** 次发力：同色系低饱和（Tailwind blue-300 #93C5FD，人体图填充用） */
+export const MUSCLE_SECONDARY_COLOR = '#93C5FD';
 /** 次发力在人体图上的叠加透明度（贡献度低于主发力，视觉让位） */
 export const MUSCLE_SECONDARY_OPACITY = 0.55;
 
-/** 胶囊样式（纯色底；主=橙红底白字，次=同色系低饱和底白字） */
+/** 胶囊样式（纯色底；主=强调色底白字，次=同色系低饱和底深蓝字，对齐全局 chip 语言） */
 export const MUSCLE_PRIMARY_CHIP_CLASS =
-  'bg-orange-600 text-white';
+  'bg-blue-500 text-white';
 export const MUSCLE_SECONDARY_CHIP_CLASS =
-  'bg-orange-400 text-white';
+  'bg-blue-100 text-blue-700';

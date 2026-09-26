@@ -50,10 +50,12 @@ describe('toMuscleMapSlugs', () => {
   });
 });
 
-describe('配色常量（issue #12 定案：纯色、orange 系）', () => {
-  it('主发力高饱和橙红 / 次发力同色系低饱和，均为合法十六进制纯色', () => {
+describe('配色常量（PR #18 返工定案：纯色、项目 accent 色系派生）', () => {
+  it('主发力=项目强调色高饱和 / 次发力同色系低饱和，均为合法十六进制纯色', () => {
     expect(MUSCLE_PRIMARY_COLOR).toMatch(/^#[0-9A-F]{6}$/i);
     expect(MUSCLE_SECONDARY_COLOR).toMatch(/^#[0-9A-F]{6}$/i);
+    // 主发力=项目强调色真值（star-accent #3B82F6 = Tailwind blue-500）
+    expect(MUSCLE_PRIMARY_COLOR.toUpperCase()).toBe('#3B82F6');
     // 主发力饱和度高于次发力（同色相系）
     const sat = (hex: string) => {
       const r = parseInt(hex.slice(1, 3), 16) / 255;

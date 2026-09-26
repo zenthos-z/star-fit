@@ -677,7 +677,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
         {/* Footer — 次要灰胶囊 + 主操作蓝胶囊（统一 rounded-full） */}
         <div
           className="flex-shrink-0 px-5 pt-3 bg-white border-t border-gray-100"
-          style={{ paddingBottom: 'calc(var(--safe-bottom) + 12px)' }}
+          style={{ paddingBottom: 'calc(var(--safe-bottom, 0px) + 12px)' }}
         >
           {hasVideo() ? (
             <div className="grid grid-cols-2 gap-3">
