@@ -9,7 +9,7 @@ import json
 p = 'ios/App/App/capacitor.config.json'
 d = json.load(open(p))
 lst = d.get('packageClassList', [])
-for name in ('LiquidGlassPlugin', 'LiveActivityPlugin', 'SpeechRecognitionPlugin', 'WatchConnectivityPlugin'):
+for name in ('LiquidGlassPlugin', 'LiveActivityPlugin', 'SpeechRecognitionPlugin', 'WatchConnectivityPlugin', 'MuscleMapPlugin'):
     if name not in lst:
         lst.append(name)
 # saveImage 方法挂在 LiquidGlassPlugin 上，无需新增类；此注释仅提示 saveImage 依赖本插件的注册

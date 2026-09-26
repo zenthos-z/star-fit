@@ -80,6 +80,14 @@ export interface Exercise {
   modified_at?: string | null; // ISO 8601 UTC timestamp
   created_at?: string;
   updated_at?: string; // ISO 8601 UTC timestamp
+  // ---- A2/A3 深化教学列（SELECT * 原样返回；A4 教程组装消费）----
+  instructions?: string[] | null; // 步骤（库3 steps 口径）
+  instructions_zh?: string[] | null; // 步骤中文回写（管道入口，暂可空）
+  form_cues?: string[] | null; // 要领提示
+  common_mistakes?: string[] | null; // 常见错误
+  breathing?: string | null; // 呼吸法
+  video_urls?: { male?: string; female?: string } | null; // 演示视频
+  poster_url?: string | null; // 首选海报
 }
 
 export interface ExerciseUpdate {

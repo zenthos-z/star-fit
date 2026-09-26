@@ -1,5 +1,5 @@
 {
-  "originHash" : "b332440c5a94a68f79ffefba4e69dfe5c2b52463e10bdbf26b495acb73700cd8",
+  "originHash" : "944f9533013cad146093a014ff6d26ccfaa7139b5adcbfa8e8f9d3663307c1c5",
   "pins" : [
     {
       "identity" : "capacitor-swift-pm",
@@ -17,6 +17,15 @@
       "state" : {
         "revision" : "00c3dfdd6267f80db299d9c5a0bad522156b6cbc",
         "version" : "2.0.0"
+      }
+    },
+    {
+      "identity" : "musclemap",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/melihcolpan/MuscleMap.git",
+      "state" : {
+        "revision" : "7dc03071e03052e8bd4f6351e9176994cd28aa7d",
+        "version" : "1.6.4"
       }
     }
   ],

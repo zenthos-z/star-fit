@@ -1,34 +1,17 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { Button } from '../../ui/Button';
-import type { ExerciseMuscle } from 'shared/contracts';
+import { MUSCLE_LABELS_ZH, type ExerciseMuscle } from 'shared/contracts';
 
 /**
  * 肌群受控词表：值 = 17 基准英文词表（shared/contracts 单一真源，直存库），
- * 显示 = 中文 label。002 迁移后 DB CHECK 只接受英文词表值。
+ * 显示 = 中文 label（MUSCLE_LABELS_ZH，A4 起与教学 sheet/教程组装共用真源）。
+ * 002 迁移后 DB CHECK 只接受英文词表值。
  */
 export type MuscleTarget = ExerciseMuscle;
 
 /** 17 基准肌群 → 中文显示名 */
-const MUSCLE_LABELS: Record<MuscleTarget, string> = {
-    abdominals: '腹肌',
-    abductors: '髋外展肌',
-    adductors: '髋内收肌',
-    biceps: '肱二头肌',
-    calves: '小腿',
-    chest: '胸部',
-    forearms: '前臂',
-    glutes: '臀部',
-    hamstrings: '腘绳肌',
-    lats: '背阔肌',
-    lower_back: '下背',
-    middle_back: '中背',
-    neck: '颈部',
-    quadriceps: '股四头肌',
-    shoulders: '肩部',
-    traps: '斜方肌',
-    triceps: '肱三头肌',
-};
+const MUSCLE_LABELS: Record<MuscleTarget, string> = MUSCLE_LABELS_ZH;
 
 interface MuscleSelectorDialogProps {
     isOpen: boolean;

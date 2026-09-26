@@ -89,6 +89,11 @@ import {
   deleteLoadAnchor,
 } from "./controllers/userProfileController.js";
 import { generateTextUnified } from "./services/llm.js";
+import {
+  assembleTutorialMd,
+  type TutorialSource,
+} from "./services/tutorialAssembler.js";
+import { ExerciseLibraryService } from "./services/exerciseLibraryService.js";
 import { getPostgresClient } from "./db/postgresql/client/postgres-client.js";
 import { getUserId } from "./utils/requestUtils.js";
 import {
@@ -115,6 +120,49 @@ import { WebSocketProgressBroadcaster } from "./services/channelBroadcaster.js";
 import { MissingUserIdError } from "./utils/requestUtils.js";
 
 const ACCESS_LOG = path.join(process.cwd(), "access.log");
+
+/**
+ * A4 教程数据源切换（issue #12）：tutor.generate_tutorial 的库优先解析。
+ * exerciseId 形态：UUID | `fit://library/exercise/{name}` URI | 纯名称。
+ * 依次尝试 id / name 查库；命中且教学字段非空 → 五段 Markdown（模板渲染），
+ * 返回 null = 库内无该动作或教学字段全空，调用方走 AI 兜底。
+ */
+async function resolveLibraryTutorialExercise(
+  exerciseId: string,
+  exerciseName: string,
+): Promise<{ content_md: string; exerciseName: string } | null> {
+  const LIBRARY_URI_PREFIX = "fit://library/exercise/";
+  const stripScheme = (v: string): string =>
+    v.startsWith(LIBRARY_URI_PREFIX) ? v.slice(LIBRARY_URI_PREFIX.length) : v;
+  const rawId = stripScheme(exerciseId);
+  const rawName = stripScheme(exerciseName || exerciseId);
+
+  try {
+    // ① id 精确查（UUID/NaNoid 命中即同一动作，无教学数据也不再用 name 重查）
+    if (rawId) {
+      const row = await ExerciseLibraryService.getById(rawId);
+      if (row) {
+        const md = assembleTutorialMd(row);
+        return md ? { content_md: md, exerciseName: row.name } : null;
+      }
+    }
+    // ② 名称查（fit:// URI 剥前缀后的动作名，或前端展示名）
+    if (rawName) {
+      const row = await ExerciseLibraryService.getByName(rawName);
+      if (row) {
+        const md = assembleTutorialMd(row);
+        return md ? { content_md: md, exerciseName: row.name } : null;
+      }
+    }
+  } catch (err) {
+    // 库查询故障不应阻断教程生成 —— 落 AI 兜底
+    console.warn(
+      "[tutor] library lookup failed, falling back to AI generation:",
+      err,
+    );
+  }
+  return null;
+}
 
 const server = Fastify({
   logger: {
@@ -369,8 +417,47 @@ const start = async () => {
                     const name = exerciseName || exerciseId || "动作";
                     const fallback =
                       lang === "zh"
-                        ? `# ${name}\n\n> ⚠️ AI 生成失败\n\n抱歉，暂时无法生成该动作的详细教程。这可能是由于网络连接问题或服务繁忙。\n\n请检查网络连接，或稍后点击下方的 **重新生成教程** 按钮重试。`
-                        : `# ${name}\n\n> ⚠️ Generation Failed\n\nSorry, we cannot generate the tutorial at the moment. This may be due to network issues.\n\nPlease check your connection or try clicking the **Regenerate** button below.`;
+                        ? `# ${name}\n\n> 生成失败\n\n抱歉，暂时无法生成该动作的详细教程。这可能是由于网络连接问题或服务繁忙。\n\n请检查网络连接，或稍后点击下方的 **重新生成教程** 按钮重试。`
+                        : `# ${name}\n\n> Generation Failed\n\nSorry, we cannot generate the tutorial at the moment. This may be due to network issues.\n\nPlease check your connection or try clicking the **Regenerate** button below.`;
+
+                    // ---- A4 教程数据源切换：库内有结构化教学数据 → 直接组装五段
+                    // Markdown 回包（模板渲染，不走 LLM）。库内无该动作或教学字段
+                    // 全空时才落到下方 AI 生成兜底（issue #12 + #8 附加改造）。
+                    const libraryHit = await resolveLibraryTutorialExercise(
+                      exerciseId,
+                      exerciseName,
+                    );
+                    if (libraryHit) {
+                      const libraryPayload = {
+                        exerciseId: exerciseId || exerciseName,
+                        content_md: libraryHit.content_md,
+                        source: "library" as TutorialSource,
+                        isFinal: true,
+                      };
+                      try {
+                        socket.send(
+                          JSON.stringify({
+                            type: "tutor.tutorial_result",
+                            data: libraryPayload,
+                            payload: libraryPayload,
+                            ts: Date.now(),
+                          }),
+                        );
+                      } catch {}
+                      wsService.broadcast(userId, {
+                        type: "tutor.tutorial_result",
+                        data: libraryPayload,
+                      });
+                      req.log.info(
+                        {
+                          exerciseId,
+                          exerciseName: libraryHit.exerciseName,
+                          contentLength: libraryHit.content_md.length,
+                        },
+                        "tutorial_library_served",
+                      );
+                      break;
+                    }
 
                     const aiPromise = (async () => {
                       const systemPrompt =
@@ -378,33 +465,36 @@ const start = async () => {
                       const userPrompt = `请为动作 "${exerciseName || exerciseId}" 生成一份非常详细的健身教程。要求：
 
 ## 内容结构
-必须包含以下四个部分，每个部分都要有详细说明：
+必须包含以下五个部分，每个部分都要有详细说明：
 
-### 🎯 动作作用
+### 动作作用
 - 详细说明这个动作主要锻炼哪些肌肉群
 - 说明动作对身体的益处（如增强力量、改善体态、提高运动表现等）
 - 说明动作的适用人群和训练目标
 
-### 💪 发力心法
+### 发力心法
 - 详细讲解动作的发力顺序和发力技巧
 - 描述正确的姿势细节（如身体角度、关节位置、肌肉发力感等）
 - 说明如何找到正确的发力感觉
-- 讲解呼吸配合（如发力时呼气、放松时吸气）
 
-### ⚠️ 注意事项
+### 步骤
+- 将动作拆解为有序的步骤，按执行顺序编号列出
+- 每一步说明起始姿态、动作过程与结束位置
+
+### 注意事项
 - 列出训练前的准备工作（如热身、器械检查等）
 - 说明动作过程中的关键要点
-- 说明训练后的放松和恢复建议
+- 讲解呼吸配合（如发力时呼气、放松时吸气）
 - 说明训练频率、组数、次数的建议
 
-### ❌ 容易做错的地方
+### 常见错误
 - 列出常见的错误动作并说明错误原因
 - 说明错误动作可能导致的问题或受伤风险
 - 提供纠正方法
 
 ## 格式要求
-- 使用清晰的 Markdown 结构，使用二级标题（##）区分四个主要部分
-- 适当使用 emoji 表情增强可读性（参考上面的 emoji 使用）
+- 使用清晰的 Markdown 结构，使用二级标题（##）区分五个主要部分
+- 禁止使用 emoji 作为段落或列表图标，段落标识一律用标题层级与文字
 - 使用适当的空行和间距，确保内容易读
 - 使用项目符号（-）列出要点，每个要点要详细说明
 - 每个部分的文字要充实，不要过于简略
@@ -440,7 +530,7 @@ const start = async () => {
                     const tutorialPayload = {
                       exerciseId: exerciseId || exerciseName,
                       content_md: firstMarkdown || fallback,
-                      source: firstMarkdown ? "ai" : "internal",
+                      source: "ai_generated" as TutorialSource,
                       isFinal: true,
                     };
 

@@ -28,6 +28,8 @@
 		C0DE00000000000000000B04 /* WorkoutActivity.swift in Sources */ = {isa = PBXBuildFile; fileRef = C0DE00000000000000000A01 /* WorkoutActivity.swift */; };
 		C6FFEEEACE4E46B29307312B /* (null) in Sources */ = {isa = PBXBuildFile; };
 		FC5A7EE5BDA149BA89619B93 /* (null) in Sources */ = {isa = PBXBuildFile; };
+		A4B4C4D4E5F6071800000001 /* MuscleMapPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B4C4D4E5F6071800000000 /* MuscleMapPlugin.swift */; };
+		A4B4C4D4E5F6071800000003 /* MuscleMap in Frameworks */ = {isa = PBXBuildFile; productRef = A4B4C4D4E5F6071800000002 /* MuscleMap */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -102,6 +104,7 @@
 		C0DE00000000000000000C04 /* StarfitWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StarfitWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		EA0000000000000000000002 /* StarfitWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = StarfitWatch.app; path = "$(BUILD_DIR)/$(CONFIGURATION)-watchos/StarfitWatch.app"; sourceTree = "<group>"; };
 		EA0000000000000000000003 /* StarfitWatch.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = StarfitWatch.xcodeproj; path = ../WatchApp/StarfitWatch.xcodeproj; sourceTree = SOURCE_ROOT; };
+		A4B4C4D4E5F6071800000000 /* MuscleMapPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuscleMapPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -110,6 +113,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				4D22ABE92AF431CB00220026 /* CapApp-SPM in Frameworks */,
+				A4B4C4D4E5F6071800000003 /* MuscleMap in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -153,6 +157,7 @@
 				2FAD9762203C412B000D30F8 /* config.xml */,
 				50B271D01FEDC1A000F3C39B /* public */,
 				A1B2C3D4E5F6071809000000 /* LiveActivityPlugin.swift */,
+				A4B4C4D4E5F6071800000000 /* MuscleMapPlugin.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -206,6 +211,7 @@
 			name = App;
 			packageProductDependencies = (
 				4D22ABE82AF431CB00220026 /* CapApp-SPM */,
+				A4B4C4D4E5F6071800000002 /* MuscleMap */,
 			);
 			productName = App;
 			productReference = 504EC3041FED79650016851F /* App.app */;
@@ -263,6 +269,7 @@
 			mainGroup = 504EC2FB1FED79650016851F;
 			packageReferences = (
 				D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */,
+				A4B4C4D4E5F6071800000004 /* XCRemoteSwiftPackageReference "musclemap" */,
 			);
 			productRefGroup = 504EC3051FED79650016851F /* Products */;
 			projectDirPath = "";
@@ -315,6 +322,7 @@
 				F2E1D0C9B8A7F6E5D4C3B2A1 /* LiquidGlassMenuSection.swift in Sources */,
 				9A2B3C4D5E6F7A8B9C0D1E2F /* LiquidGlassPanelSection.swift in Sources */,
 				A1B2C3D4E5F6071809000001 /* LiveActivityPlugin.swift in Sources */,
+				A4B4C4D4E5F6071800000001 /* MuscleMapPlugin.swift in Sources */,
 				C0DE00000000000000000B04 /* WorkoutActivity.swift in Sources */,
 				FC5A7EE5BDA149BA89619B93 /* (null) in Sources */,
 				C6FFEEEACE4E46B29307312B /* (null) in Sources */,
@@ -414,7 +422,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = YES;
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
@@ -465,7 +473,7 @@
 				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
 				GCC_WARN_UNUSED_FUNCTION = YES;
 				GCC_WARN_UNUSED_VARIABLE = YES;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				MTL_ENABLE_DEBUG_INFO = NO;
 				SDKROOT = iphoneos;
 				SWIFT_COMPILATION_MODE = wholemodule;
@@ -483,7 +491,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DDB99LS5NK;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -506,7 +514,7 @@
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = DDB99LS5NK;
 				INFOPLIST_FILE = App/Info.plist;
-				IPHONEOS_DEPLOYMENT_TARGET = 15.0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -606,6 +614,17 @@
 		};
 /* End XCConfigurationList section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		A4B4C4D4E5F6071800000004 /* XCRemoteSwiftPackageReference "musclemap" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/melihcolpan/MuscleMap.git";
+			requirement = {
+				kind = upToNextMajorVersion;
+				minimumVersion = 1.6.4;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCLocalSwiftPackageReference section */
 		D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */ = {
 			isa = XCLocalSwiftPackageReference;
@@ -618,6 +637,11 @@
 			isa = XCSwiftPackageProductDependency;
 			package = D4C12C0A2AAA248700AAC8A2 /* XCLocalSwiftPackageReference "CapApp-SPM" */;
 			productName = "CapApp-SPM";
+		};
+		A4B4C4D4E5F6071800000002 /* MuscleMap */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = A4B4C4D4E5F6071800000004 /* XCRemoteSwiftPackageReference "musclemap" */;
+			productName = MuscleMap;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};

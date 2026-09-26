@@ -160,6 +160,93 @@ export const ExerciseMechanicSchema = z.enum(EXERCISE_MECHANICS);
 export type ExerciseMechanic = z.infer<typeof ExerciseMechanicSchema>;
 
 // ============================================================================
+// 中文显示名 (Display Labels — 纯数据)
+// ============================================================================
+// 值域 = 上述受控词表（键类型即词表类型，编译期防漏）。
+// 消费方：A4 教程五段组装（backend）/ 肌群胶囊与 MuscleMap 图例（frontend）。
+// 词表英文值直存库，展示层一律经本表转中文——前后端单一真源。
+
+export const MUSCLE_LABELS_ZH: Readonly<Record<ExerciseMuscle, string>> = {
+  abdominals: '腹肌',
+  abductors: '髋外展肌',
+  adductors: '髋内收肌',
+  biceps: '肱二头肌',
+  calves: '小腿',
+  chest: '胸部',
+  forearms: '前臂',
+  glutes: '臀部',
+  hamstrings: '腘绳肌',
+  lats: '背阔肌',
+  lower_back: '下背',
+  middle_back: '中背',
+  neck: '颈部',
+  quadriceps: '股四头肌',
+  shoulders: '肩部',
+  traps: '斜方肌',
+  triceps: '肱三头肌',
+};
+
+export const EQUIPMENT_LABELS_ZH: Readonly<Record<ExerciseEquipment, string>> = {
+  bodyweight: '徒手',
+  barbell: '杠铃',
+  dumbbell: '哑铃',
+  kettlebell: '壶铃',
+  cable: '绳索',
+  machine: '器械',
+  band: '弹力带',
+  bench: '训练凳',
+  rack: '深蹲架',
+  pull_up_bar: '单杠',
+  stability_ball: '稳定球',
+  medicine_ball: '药球',
+  foam_roller: '泡沫轴',
+  weighted: '负重',
+  other: '其他',
+};
+
+export const CATEGORY_LABELS_ZH: Readonly<Record<ExerciseCategory, string>> = {
+  strength: '力量训练',
+  cardio: '有氧训练',
+  stretching: '拉伸',
+  plyometrics: '增强式训练',
+  powerlifting: '力量举',
+  strongman: '壮汉训练',
+  olympic_weightlifting: '奥举',
+};
+
+export const BODY_PART_LABELS_ZH: Readonly<Record<ExerciseBodyPart, string>> = {
+  back: '背部',
+  cardio: '心肺',
+  chest: '胸部',
+  hips: '髋部',
+  lower_arms: '前臂',
+  lower_legs: '小腿',
+  shoulders: '肩部',
+  upper_arms: '上臂',
+  upper_legs: '大腿',
+  waist: '腰腹',
+};
+
+export const FORCE_TYPE_LABELS_ZH: Readonly<Record<ExerciseForceType, string>> = {
+  push: '推',
+  pull: '拉',
+  static: '静力保持',
+};
+
+export const MECHANIC_LABELS_ZH: Readonly<Record<ExerciseMechanic, string>> = {
+  compound: '复合动作',
+  isolation: '孤立动作',
+};
+
+export const DIFFICULTY_LABELS_ZH: Readonly<
+  Record<'beginner' | 'intermediate' | 'advanced', string>
+> = {
+  beginner: '初级',
+  intermediate: '中级',
+  advanced: '高级',
+};
+
+// ============================================================================
 // 归一映射表 (Normalization Mappings — 纯数据)
 // ============================================================================
 // 映射真源：本表是导入源原值 → 受控词表的唯一对照，A3 导入管道
