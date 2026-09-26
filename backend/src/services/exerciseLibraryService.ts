@@ -13,57 +13,79 @@
  * @version 3.0.0 - PostgreSQL Migration
  */
 
-import { getPostgresClient, type PostgresClient } from '../db/postgresql/client/postgres-client.js';
-import { getNowISO } from '../utils/timestamp.js';
+import {
+  getPostgresClient,
+  type PostgresClient,
+} from "../db/postgresql/client/postgres-client.js";
+import { getNowISO } from "../utils/timestamp.js";
+import {
+  EXERCISE_MUSCLES,
+  EXERCISE_EQUIPMENT,
+} from "../../../shared/dist/contracts/index.js";
+
+/**
+ * 写入输入：结构化列字段 + API 视图形态的 targets/equipment_required
+ *（controller 提交 {primary,secondary} / 数组，Service 拆列存储）
+ */
+export type ExerciseWriteInput = Partial<Exercise> & {
+  targets?: string | { primary?: unknown; secondary?: unknown };
+  equipment_required?: string | string[];
+};
 
 // ============================================
 // 类型定义
 // ============================================
 
 /**
- * 肌肉目标选项 - 完整的肌肉分区列表
- */
-export type MuscleTarget =
-  | '上胸' | '中下胸'
-  | '前束' | '中束' | '后束'
-  | '二头' | '三头' | '小臂'
-  | '背部' | '下背' | '斜方肌'
-  | '腹肌' | '侧腹'
-  | '股四' | '腘绳' | '小腿'
-  | '上臀部' | '下臀部';
-
-/**
- * 动作目标结构
+ * 动作目标结构（API 视图形态：值域为 17 基准肌群英文词表）
+ * 存储已拆列：primary_muscles / secondary_muscles（002 深化）
  */
 export interface ExerciseTargets {
-  primary: MuscleTarget[];      // 主要目标（至少1个）
-  secondary?: MuscleTarget[];   // 次要目标（可选）
+  primary: string[]; // 主要目标（17 基准肌群，如 ["chest"]）
+  secondary?: string[]; // 次要目标（可选）
 }
 
+/**
+ * exercises 行（002 深化后的结构化列子集；SELECT * 直接映射）
+ */
 export interface Exercise {
   id: string;
   name: string;
-  exercise_type: 'resistance' | 'unilateral' | 'bodyweight' | 'assisted' | 'isometric' | 'cardio' | 'flexibility' | 'heavy_weight' | 'rep_training' | 'outdoor';
-  targets: string; // JSON stringified ExerciseTargets
-  equipment_required: string; // JSON stringified string[]
-  attributes: string; // JSON stringified ExerciseAttributes (DB JSONB column)
-  difficulty: 'beginner' | 'intermediate' | 'advanced';
-  content_html?: string;
-  tutorials?: string; // JSON stringified record (optional, DB JSONB column)
+  name_zh?: string | null;
+  exercise_type:
+    | "resistance"
+    | "unilateral"
+    | "bodyweight"
+    | "assisted"
+    | "isometric"
+    | "cardio"
+    | "flexibility"
+    | "heavy_weight"
+    | "rep_training"
+    | "outdoor";
+  difficulty: "beginner" | "intermediate" | "advanced";
+  equipment?: string | null; // 15 器材大类（单值）
+  category?: string | null; // 7 训练类目
+  body_part?: string | null; // 10 身体区域
+  primary_muscles?: string[] | null; // 17 基准肌群
+  secondary_muscles?: string[] | null;
+  force_type?: string | null;
+  mechanic?: string | null;
+  owner_user_id?: string | null; // 自定义动作归属（NULL = 公共库）
+  content_html?: string | null;
+  tutorials?: string | Record<string, unknown> | null; // JSONB record
   assets_json?: string; // { cover, video }
   tags_json?: string;
-  modified_by: 'admin' | 'system' | 'mas';
-  modified_at: string; // ISO 8601 UTC timestamp
+  modified_by?: "admin" | "system" | "mas" | null;
+  modified_at?: string | null; // ISO 8601 UTC timestamp
+  created_at?: string;
   updated_at?: string; // ISO 8601 UTC timestamp
-  protocol_version?: string;
-  version?: number;
-  metadata_json?: string;
 }
 
 export interface ExerciseUpdate {
   exerciseId: string;
-  data: Partial<Omit<Exercise, 'id' | 'updated_at'>>;
-  modifiedBy: 'admin' | 'system';
+  data: ExerciseWriteInput;
+  modifiedBy: "admin" | "system";
   changeReason?: string;
 }
 
@@ -84,10 +106,13 @@ export const ExerciseLibraryService = {
    */
   async getAllExercises(): Promise<Exercise[]> {
     const client = this.getClient();
-    const rows = await client.queryMany<Exercise>(`
+    const rows = await client.queryMany<Exercise>(
+      `
       SELECT * FROM exercises
       ORDER BY name
-    `, {});
+    `,
+      {},
+    );
 
     return rows;
   },
@@ -95,14 +120,18 @@ export const ExerciseLibraryService = {
   /**
    * 按目标肌肉筛选动作
    */
-  async getByTarget(target: MuscleTarget): Promise<Exercise[]> {
+  async getByTarget(target: string): Promise<Exercise[]> {
     const client = this.getClient();
-    // PostgreSQL JSONB query for targets
-    const rows = await client.queryMany<Exercise>(`
+    // 结构化列查询：命中 primary 或 secondary（17 基准肌群词表值）
+    const rows = await client.queryMany<Exercise>(
+      `
       SELECT * FROM exercises
-      WHERE attributes::jsonb->'targets'::jsonb->'primary'::text LIKE $targetPattern
+      WHERE $target::text = ANY(primary_muscles)
+         OR $target::text = ANY(secondary_muscles)
       ORDER BY name
-    `, { targetPattern: `%"${target}"%` });
+    `,
+      { target },
+    );
 
     return rows;
   },
@@ -112,9 +141,12 @@ export const ExerciseLibraryService = {
    */
   async getById(id: string): Promise<Exercise | null> {
     const client = this.getClient();
-    const row = await client.queryOne<Exercise>(`
+    const row = await client.queryOne<Exercise>(
+      `
       SELECT * FROM exercises WHERE id = $id
-    `, { id });
+    `,
+      { id },
+    );
 
     return row || null;
   },
@@ -124,9 +156,12 @@ export const ExerciseLibraryService = {
    */
   async getByName(name: string): Promise<Exercise | null> {
     const client = this.getClient();
-    const row = await client.queryOne<Exercise>(`
+    const row = await client.queryOne<Exercise>(
+      `
       SELECT * FROM exercises WHERE name = $name
-    `, { name });
+    `,
+      { name },
+    );
 
     return row || null;
   },
@@ -134,13 +169,18 @@ export const ExerciseLibraryService = {
   /**
    * 按难度获取动作
    */
-  async getByDifficulty(difficulty: 'beginner' | 'intermediate' | 'advanced'): Promise<Exercise[]> {
+  async getByDifficulty(
+    difficulty: "beginner" | "intermediate" | "advanced",
+  ): Promise<Exercise[]> {
     const client = this.getClient();
-    const rows = await client.queryMany<Exercise>(`
+    const rows = await client.queryMany<Exercise>(
+      `
       SELECT * FROM exercises
       WHERE difficulty = $difficulty
       ORDER BY name
-    `, { difficulty });
+    `,
+      { difficulty },
+    );
 
     return rows;
   },
@@ -150,11 +190,15 @@ export const ExerciseLibraryService = {
    */
   async getByEquipment(equipment: string): Promise<Exercise[]> {
     const client = this.getClient();
-    const rows = await client.queryMany<Exercise>(`
+    // 结构化列查询：equipment 单值枚举（15 大类词表值）
+    const rows = await client.queryMany<Exercise>(
+      `
       SELECT * FROM exercises
-      WHERE attributes->'equipment_required'::text LIKE $equipmentPattern
+      WHERE equipment = $equipment::public.exercise_equipment
       ORDER BY name
-    `, { equipmentPattern: `%"${equipment}"%` });
+    `,
+      { equipment },
+    );
 
     return rows;
   },
@@ -174,9 +218,16 @@ export const ExerciseLibraryService = {
       throw new Error(`Exercise not found: ${update.exerciseId}`);
     }
 
-    // 分离顶级字段和 attributes 字段
-    const topLevelFields = ['id', 'name', 'exercise_type', 'difficulty', 'content_html', 'tutorials', 'assets_json'];
-    const attributesFields: Record<string, any> = {};
+    // 顶级字段直写；targets/equipment_required（API 视图形态）拆列存储
+    const topLevelFields = [
+      "id",
+      "name",
+      "exercise_type",
+      "difficulty",
+      "content_html",
+      "tutorials",
+      "assets_json",
+    ];
     const regularUpdates: string[] = [];
     const params: Record<string, any> = {};
 
@@ -186,35 +237,30 @@ export const ExerciseLibraryService = {
       if (topLevelFields.includes(key)) {
         regularUpdates.push(`${key} = $${key}`);
         params[key] = value;
-      } else {
-        // 这些字段存储在 attributes JSONB 中
-        attributesFields[key] = value;
+      } else if (key === "targets") {
+        // targets {primary, secondary} → primary_muscles / secondary_muscles 两列
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        regularUpdates.push(`primary_muscles = $primaryMuscles::text[]`);
+        regularUpdates.push(`secondary_muscles = $secondaryMuscles::text[]`);
+        params.primaryMuscles = Array.isArray(parsed.primary)
+          ? parsed.primary
+          : [];
+        params.secondaryMuscles = Array.isArray(parsed.secondary)
+          ? parsed.secondary
+          : [];
+      } else if (key === "equipment_required") {
+        // equipment_required 数组（API 兼容形态）→ equipment 单值枚举（取首个）
+        const parsed = typeof value === "string" ? JSON.parse(value) : value;
+        const first =
+          Array.isArray(parsed) && parsed.length > 0 ? String(parsed[0]) : null;
+        regularUpdates.push(
+          `equipment = $equipment::public.exercise_equipment`,
+        );
+        params.equipment = first ?? "bodyweight";
       }
     });
 
-    // 构建 attributes 更新（使用 jsonb_set）
-    let attributesUpdate = '';
-    const attrParams: Record<string, any> = {};
-    let attrIndex = 1;
-
-    if (Object.keys(attributesFields).length > 0) {
-      let currentAttributes = 'attributes';
-
-      for (const [key, value] of Object.entries(attributesFields)) {
-        const paramName = `attrValue${attrIndex}`;
-        attrParams[paramName] = value;
-        // 构建嵌套的 jsonb_set 调用
-        currentAttributes = `jsonb_set(${currentAttributes}, '{${key}}', $${paramName}::jsonb)`;
-        attrIndex++;
-      }
-
-      attributesUpdate = `, attributes = ${currentAttributes}`;
-    }
-
-    // 合并所有参数
-    Object.assign(params, attrParams);
-
-    if (regularUpdates.length === 0 && Object.keys(attributesFields).length === 0) {
+    if (regularUpdates.length === 0) {
       return; // 没有需要更新的字段
     }
 
@@ -224,64 +270,92 @@ export const ExerciseLibraryService = {
     params.updatedAt = timestamp;
     params.exerciseId = update.exerciseId;
 
-    const updateParts = [...regularUpdates, 'modified_by = $modifiedBy', 'modified_at = $modifiedAt', 'updated_at = $updatedAt'];
+    const updateParts = [
+      ...regularUpdates,
+      "modified_by = $modifiedBy",
+      "modified_at = $modifiedAt",
+      "updated_at = $updatedAt",
+    ];
 
-    await client.query(`
+    await client.query(
+      `
       UPDATE exercises
-      SET ${updateParts.join(', ')}${attributesUpdate}
+      SET ${updateParts.join(", ")}
       WHERE id = $exerciseId
-    `, params);
+    `,
+      params,
+    );
   },
 
   /**
    * 新增动作（管理员使用）
    */
-  async createExercise(data: Exercise, createdBy: string): Promise<void> {
+  async createExercise(
+    data: ExerciseWriteInput,
+    createdBy: string,
+  ): Promise<void> {
     const client = this.getClient();
 
     // 验证数据
     const validated = this.validateExercise(data);
 
-    // 构建完整的 attributes 对象（包含 targets 和 equipment_required）
-    const attributes: Record<string, any> = {};
-
+    // targets {primary, secondary} / equipment_required 数组（API 视图形态）拆列存储
+    let primaryMuscles: string[] = [];
+    let secondaryMuscles: string[] = [];
     if (validated.targets) {
       try {
-        attributes.targets = typeof validated.targets === 'string'
-          ? JSON.parse(validated.targets)
-          : validated.targets;
+        const parsed =
+          typeof validated.targets === "string"
+            ? JSON.parse(validated.targets)
+            : validated.targets;
+        primaryMuscles = Array.isArray(parsed.primary) ? parsed.primary : [];
+        secondaryMuscles = Array.isArray(parsed.secondary)
+          ? parsed.secondary
+          : [];
       } catch {
-        attributes.targets = { primary: [], secondary: [] };
+        primaryMuscles = [];
+        secondaryMuscles = [];
       }
     }
 
+    let equipment: string = "bodyweight";
     if (validated.equipment_required) {
       try {
-        attributes.equipment_required = typeof validated.equipment_required === 'string'
-          ? JSON.parse(validated.equipment_required)
-          : validated.equipment_required;
+        const parsed =
+          typeof validated.equipment_required === "string"
+            ? JSON.parse(validated.equipment_required)
+            : validated.equipment_required;
+        equipment =
+          Array.isArray(parsed) && parsed.length > 0
+            ? String(parsed[0])
+            : "bodyweight";
       } catch {
-        attributes.equipment_required = [];
+        equipment = "bodyweight";
       }
     }
 
-    await client.query(`
+    await client.query(
+      `
       INSERT INTO exercises
-      (id, name, exercise_type, difficulty, attributes, content_html, tutorials, assets_json, modified_by, modified_at, updated_at)
-      VALUES ($id, $name, $exerciseType, $difficulty, $attributes, $contentHtml, $tutorials, $assetsJson, $modifiedBy, $modifiedAt, $updatedAt)
-    `, {
-      id: validated.id,
-      name: validated.name,
-      exerciseType: validated.exercise_type || 'resistance',
-      difficulty: validated.difficulty || 'beginner',
-      attributes: JSON.stringify(attributes),
-      contentHtml: validated.content_html || '',
-      tutorials: validated.tutorials || '{}',
-      assetsJson: validated.assets_json || '{}',
-      modifiedBy: createdBy,
-      modifiedAt: getNowISO(),
-      updatedAt: getNowISO()
-    });
+      (id, name, exercise_type, difficulty, primary_muscles, secondary_muscles, equipment, content_html, tutorials, assets_json, modified_by, modified_at, updated_at)
+      VALUES ($id, $name, $exerciseType, $difficulty, $primaryMuscles::text[], $secondaryMuscles::text[], $equipment::public.exercise_equipment, $contentHtml, $tutorials, $assetsJson, $modifiedBy, $modifiedAt, $updatedAt)
+    `,
+      {
+        id: validated.id,
+        name: validated.name,
+        exerciseType: validated.exercise_type || "resistance",
+        difficulty: validated.difficulty || "beginner",
+        primaryMuscles,
+        secondaryMuscles,
+        equipment,
+        contentHtml: validated.content_html || "",
+        tutorials: validated.tutorials || "{}",
+        assetsJson: validated.assets_json || "{}",
+        modifiedBy: createdBy,
+        modifiedAt: getNowISO(),
+        updatedAt: getNowISO(),
+      },
+    );
   },
 
   /**
@@ -290,9 +364,12 @@ export const ExerciseLibraryService = {
   async deleteExercise(id: string): Promise<void> {
     const client = this.getClient();
 
-    const result = await client.query(`
+    const result = await client.query(
+      `
       DELETE FROM exercises WHERE id = $id
-    `, { id });
+    `,
+      { id },
+    );
 
     if (result.rowCount === 0) {
       throw new Error(`Exercise not found: ${id}`);
@@ -302,31 +379,46 @@ export const ExerciseLibraryService = {
   /**
    * 数据验证
    */
-  validateExercise(data: Partial<Exercise>): Partial<Exercise> {
-    const validated: Partial<Exercise> = {};
+  validateExercise(data: ExerciseWriteInput): ExerciseWriteInput {
+    const validated: ExerciseWriteInput = {};
 
     if (data.id !== undefined) {
-      if (typeof data.id !== 'string') {
-        throw new Error('Exercise id must be a string');
+      if (typeof data.id !== "string") {
+        throw new Error("Exercise id must be a string");
       }
       const trimmed = data.id.trim();
-      if (!trimmed || trimmed === 'null' || trimmed === 'undefined') {
-        throw new Error('Exercise id is required and must be a non-empty string');
+      if (!trimmed || trimmed === "null" || trimmed === "undefined") {
+        throw new Error(
+          "Exercise id is required and must be a non-empty string",
+        );
       }
       validated.id = trimmed;
     }
 
     // 必填字段验证
     if (data.name !== undefined) {
-      if (typeof data.name !== 'string' || data.name.trim().length === 0) {
-        throw new Error('Exercise name is required and must be a non-empty string');
+      if (typeof data.name !== "string" || data.name.trim().length === 0) {
+        throw new Error(
+          "Exercise name is required and must be a non-empty string",
+        );
       }
       validated.name = data.name.trim();
     }
 
     // 枚举字段验证
     if (data.exercise_type !== undefined) {
-      const validTypes = ['resistance', 'unilateral', 'bodyweight', 'assisted', 'isometric', 'cardio', 'flexibility', 'heavy_weight', 'rep_training', 'outdoor'];
+      const validTypes = [
+        "resistance",
+        "unilateral",
+        "bodyweight",
+        "assisted",
+        "isometric",
+        "cardio",
+        "flexibility",
+        "heavy_weight",
+        "rep_training",
+        "outdoor",
+      ];
       if (!validTypes.includes(data.exercise_type)) {
         throw new Error(`Invalid exercise_type: ${data.exercise_type}`);
       }
@@ -334,7 +426,7 @@ export const ExerciseLibraryService = {
     }
 
     if (data.difficulty !== undefined) {
-      const validDifficulties = ['beginner', 'intermediate', 'advanced'];
+      const validDifficulties = ["beginner", "intermediate", "advanced"];
       if (!validDifficulties.includes(data.difficulty)) {
         throw new Error(`Invalid difficulty: ${data.difficulty}`);
       }
@@ -348,22 +440,38 @@ export const ExerciseLibraryService = {
       try {
         // 处理两种情况：targets 可能是字符串或对象
         let parsed;
-        if (typeof data.targets === 'string') {
+        if (typeof data.targets === "string") {
           parsed = JSON.parse(data.targets);
-        } else if (typeof data.targets === 'object' && data.targets !== null) {
+        } else if (typeof data.targets === "object" && data.targets !== null) {
           parsed = data.targets;
         } else {
-          throw new Error('targets must be a valid JSON object');
+          throw new Error("targets must be a valid JSON object");
         }
 
         // 验证结构：必须有 primary 数组
         if (!parsed.primary || !Array.isArray(parsed.primary)) {
-          throw new Error('targets must contain primary array');
+          throw new Error("targets must contain primary array");
         }
 
-        validated.targets = typeof data.targets === 'string' ? data.targets : JSON.stringify(data.targets);
+        // 值域校验：17 基准肌群英文词表（DB CHECK 兜底，应用层前置拦截给出友好错误）
+        const vocab = EXERCISE_MUSCLES as readonly string[];
+        for (const m of [
+          ...parsed.primary,
+          ...(Array.isArray(parsed.secondary) ? parsed.secondary : []),
+        ]) {
+          if (typeof m !== "string" || !vocab.includes(m)) {
+            throw new Error(
+              `Invalid muscle value: ${String(m)}. Must be one of: ${vocab.join(", ")}`,
+            );
+          }
+        }
+
+        validated.targets =
+          typeof data.targets === "string"
+            ? data.targets
+            : JSON.stringify(data.targets);
       } catch (e) {
-        throw new Error('Invalid targets JSON format');
+        throw new Error("Invalid targets JSON format");
       }
     }
 
@@ -371,44 +479,61 @@ export const ExerciseLibraryService = {
       try {
         // 处理两种情况：equipment_required 可能是字符串或数组
         let parsed;
-        if (typeof data.equipment_required === 'string') {
+        if (typeof data.equipment_required === "string") {
           parsed = JSON.parse(data.equipment_required);
         } else if (Array.isArray(data.equipment_required)) {
           parsed = data.equipment_required;
         } else {
-          throw new Error('equipment_required must be a valid JSON array');
+          throw new Error("equipment_required must be a valid JSON array");
         }
 
         if (!Array.isArray(parsed)) {
-          throw new Error('equipment_required must be an array');
+          throw new Error("equipment_required must be an array");
         }
-        validated.equipment_required = typeof data.equipment_required === 'string' ? data.equipment_required : JSON.stringify(data.equipment_required);
+
+        // 值域校验：15 器材大类（取首个落 equipment 单值列）
+        const eqVocab = EXERCISE_EQUIPMENT as readonly string[];
+        for (const e of parsed) {
+          if (typeof e !== "string" || !eqVocab.includes(e)) {
+            throw new Error(
+              `Invalid equipment value: ${String(e)}. Must be one of: ${eqVocab.join(", ")}`,
+            );
+          }
+        }
+        validated.equipment_required =
+          typeof data.equipment_required === "string"
+            ? data.equipment_required
+            : JSON.stringify(data.equipment_required);
       } catch (e) {
-        throw new Error('Invalid equipment_required JSON format');
+        throw new Error("Invalid equipment_required JSON format");
       }
     }
 
     // 其他可选字段
     if (data.tags_json !== undefined) validated.tags_json = data.tags_json;
-    if (data.content_html !== undefined) validated.content_html = data.content_html;
-    if (data.assets_json !== undefined) validated.assets_json = data.assets_json;
+    if (data.content_html !== undefined)
+      validated.content_html = data.content_html;
+    if (data.assets_json !== undefined)
+      validated.assets_json = data.assets_json;
     if (data.tutorials !== undefined) {
       // tutorials 为 JSONB 列：接受对象（序列化）或已序列化字符串，结构非法则拒
-      if (typeof data.tutorials === 'string') {
+      if (typeof data.tutorials === "string") {
         try {
           JSON.parse(data.tutorials);
           validated.tutorials = data.tutorials;
         } catch {
-          throw new Error('Invalid tutorials JSON format');
+          throw new Error("Invalid tutorials JSON format");
         }
-      } else if (typeof data.tutorials === 'object' && data.tutorials !== null) {
+      } else if (
+        typeof data.tutorials === "object" &&
+        data.tutorials !== null
+      ) {
         validated.tutorials = JSON.stringify(data.tutorials);
       }
     }
 
     return validated;
   },
-
 
   /**
    * 获取动作库统计信息
@@ -419,24 +544,33 @@ export const ExerciseLibraryService = {
   }> {
     const client = this.getClient();
 
-    const totalRow = await client.queryOne<{ count: string }>('SELECT COUNT(*) as count FROM exercises', {});
+    const totalRow = await client.queryOne<{ count: string }>(
+      "SELECT COUNT(*) as count FROM exercises",
+      {},
+    );
 
-    const byDifficultyRows = await client.queryMany<{ difficulty: string; count: string }>(`
+    const byDifficultyRows = await client.queryMany<{
+      difficulty: string;
+      count: string;
+    }>(
+      `
       SELECT difficulty, COUNT(*) as count
       FROM exercises
       GROUP BY difficulty
-    `, {});
+    `,
+      {},
+    );
 
     const byDifficulty: Record<string, number> = {};
-    byDifficultyRows.forEach(row => {
+    byDifficultyRows.forEach((row) => {
       byDifficulty[row.difficulty] = parseInt(row.count);
     });
 
     return {
-      total: parseInt(totalRow?.count || '0'),
-      byDifficulty
+      total: parseInt(totalRow?.count || "0"),
+      byDifficulty,
     };
-  }
+  },
 };
 
 // ============================================
@@ -449,21 +583,29 @@ export const ExerciseLibraryService = {
  */
 export function parseTargets(json: unknown): ExerciseTargets {
   // 如果是对象，直接使用
-  if (json && typeof json === 'object' && !Array.isArray(json)) {
-    const primary = Array.isArray((json as any).primary) ? (json as any).primary : [];
-    const secondary = Array.isArray((json as any).secondary) ? (json as any).secondary : undefined;
+  if (json && typeof json === "object" && !Array.isArray(json)) {
+    const primary = Array.isArray((json as any).primary)
+      ? (json as any).primary
+      : [];
+    const secondary = Array.isArray((json as any).secondary)
+      ? (json as any).secondary
+      : undefined;
     return { primary, secondary };
   }
 
   // 如果是字符串，解析 JSON
-  if (typeof json !== 'string' || json.trim() === '') {
+  if (typeof json !== "string" || json.trim() === "") {
     return { primary: [] };
   }
   try {
     const parsed = JSON.parse(json);
-    if (!parsed || typeof parsed !== 'object') return { primary: [] };
-    const primary = Array.isArray((parsed as any).primary) ? (parsed as any).primary : [];
-    const secondary = Array.isArray((parsed as any).secondary) ? (parsed as any).secondary : undefined;
+    if (!parsed || typeof parsed !== "object") return { primary: [] };
+    const primary = Array.isArray((parsed as any).primary)
+      ? (parsed as any).primary
+      : [];
+    const secondary = Array.isArray((parsed as any).secondary)
+      ? (parsed as any).secondary
+      : undefined;
     return { primary, secondary };
   } catch (e) {
     return { primary: [] };
@@ -481,7 +623,7 @@ export function parseEquipmentRequired(json: unknown): string[] {
   }
 
   // 如果是字符串，解析 JSON
-  if (typeof json !== 'string' || json.trim() === '') return [];
+  if (typeof json !== "string" || json.trim() === "") return [];
   try {
     const parsed = JSON.parse(json);
     return Array.isArray(parsed) ? parsed : [];

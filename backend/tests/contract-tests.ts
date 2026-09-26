@@ -1,10 +1,9 @@
 /**
  * Contract Tests: Exercises API & Video Protocol
  *
- * 批次3改造（2026-09-22）：删除本地手抄的 ExerciseSchema / VideoAssetSchema 镜像
- * （旧 L7-60 本地 z.object，契约改动后测试照样绿——失去镜像意义），改为直接断言
- * 真源契约：
- *  - ExerciseSchema       → shared/contracts（数据契约唯一定义源，NA-003 红线）
+ * 批次3改造（2026-09-22）：删除本地手抄的镜像 Schema，改为直接断言真源契约。
+ * 002 返工（2026-09-26）：attributes 列退役，Exercise 契约真源切换为
+ *  - ExerciseLibraryItemSchema → shared/contracts/exercise-library.ts（唯一行真源）
  *  - VideoAssetSchema     → backend/src/schemas/videoSchema.ts
  *    （shared/contracts 无视频资产导出；后端视频资产真源即此文件，
  *     视频处理链路 videoProcessingService.ts 亦从这里导入）
@@ -14,7 +13,6 @@
  */
 import { test, describe } from "node:test";
 import { strict as assert } from "node:assert";
-import { ExerciseSchema } from "../../shared/contracts/index.js";
 import { VideoAssetSchema } from "../src/schemas/videoSchema.js";
 import {
   CreateWeeklyPlanInputSchema,
@@ -51,15 +49,30 @@ function buildExercise(overrides: Record<string, unknown> = {}) {
   return {
     id: NANO_ID,
     name: "Test Exercise",
+    name_zh: null,
     exercise_type: "resistance",
     difficulty: "beginner",
-    attributes: {
-      targets: {
-        primary: ["中下胸"],
-        secondary: ["三头"],
-      },
-      equipment_required: ["杠铃", "卧推凳"],
-    },
+    equipment: "barbell",
+    category: "strength",
+    body_part: "chest",
+    primary_muscles: ["chest"],
+    secondary_muscles: ["triceps"],
+    force_type: "push",
+    mechanic: "compound",
+    instructions: ["Lower the bar.", "Press up."],
+    form_cues: null,
+    common_mistakes: null,
+    breathing: null,
+    aliases: null,
+    instructions_zh: null,
+    image_refs: null,
+    video_urls: null,
+    poster_url: null,
+    owner_user_id: null,
+    content_html: null,
+    tutorials: null,
+    created_at: "2026-09-26T08:00:00.000Z",
+    updated_at: "2026-09-26T08:00:00.000Z",
     ...overrides,
   };
 }
@@ -90,29 +103,31 @@ function buildVideo(overrides: Record<string, unknown> = {}) {
 }
 
 // ============================================================================
-// Contract Tests: Exercises API（真源 shared/contracts ExerciseSchema）
+// Contract Tests: Exercises API（真源 shared/contracts ExerciseLibraryItemSchema）
 // ============================================================================
 
 describe("Contract Tests: Exercises API", () => {
   test("exercise response has valid structure", () => {
-    const result = ExerciseSchema.safeParse(buildExercise());
+    const result = ExerciseLibraryItemSchema.safeParse(buildExercise());
     assert.strictEqual(result.success, true);
     if (result.success) {
-      assert.ok(result.data.attributes.targets.primary.length > 0);
-      assert.ok(Array.isArray(result.data.attributes.equipment_required));
+      assert.ok(result.data.primary_muscles.length > 0);
+      assert.ok(typeof result.data.equipment === "string");
     }
   });
 
   test("exercise id is NanoID-shaped (12-24 chars, no whitespace)", () => {
     // 合法：21 位默认 NanoID
-    const ok = ExerciseSchema.safeParse(
+    const ok = ExerciseLibraryItemSchema.safeParse(
       buildExercise({ id: "123456789012345678901" }),
     );
     assert.strictEqual(ok.success, true);
 
     // 非法：过短 / 含空白 —— 真契约必须拦截
     for (const bad of ["", "  ", "\t", "short"]) {
-      const result = ExerciseSchema.safeParse(buildExercise({ id: bad }));
+      const result = ExerciseLibraryItemSchema.safeParse(
+        buildExercise({ id: bad }),
+      );
       assert.strictEqual(
         result.success,
         false,
@@ -128,11 +143,15 @@ describe("Contract Tests: Exercises API", () => {
   });
 
   test("exercise name must be a string (real contract: no min-length)", () => {
-    // 真契约 name: z.string()——不强制非空（旧镜像的 .min(1) 是手抄件，不是真约束）
-    const emptyOk = ExerciseSchema.safeParse(buildExercise({ name: "" }));
+    // 真契约 name: z.string()——不强制非空
+    const emptyOk = ExerciseLibraryItemSchema.safeParse(
+      buildExercise({ name: "" }),
+    );
     assert.strictEqual(emptyOk.success, true);
 
-    const nonString = ExerciseSchema.safeParse(buildExercise({ name: 123 }));
+    const nonString = ExerciseLibraryItemSchema.safeParse(
+      buildExercise({ name: 123 }),
+    );
     assert.strictEqual(nonString.success, false);
     if (!nonString.success) {
       assert.ok(nonString.error.issues.some((i) => i.path.includes("name")));
@@ -140,7 +159,7 @@ describe("Contract Tests: Exercises API", () => {
   });
 
   test("exercise_type must be a known enum value", () => {
-    const result = ExerciseSchema.safeParse(
+    const result = ExerciseLibraryItemSchema.safeParse(
       buildExercise({ exercise_type: "yoga" }),
     );
     assert.strictEqual(result.success, false);
@@ -152,7 +171,7 @@ describe("Contract Tests: Exercises API", () => {
   });
 
   test("difficulty must be a known enum value", () => {
-    const result = ExerciseSchema.safeParse(
+    const result = ExerciseLibraryItemSchema.safeParse(
       buildExercise({ difficulty: "extreme" }),
     );
     assert.strictEqual(result.success, false);
@@ -161,28 +180,21 @@ describe("Contract Tests: Exercises API", () => {
     }
   });
 
-  test("attributes is required and validates equipment_required as array", () => {
-    const missing = ExerciseSchema.safeParse(
-      buildExercise({ attributes: undefined }),
+  test("owner_user_id accepts uuid or null (HC-2 user binding column)", () => {
+    assert.strictEqual(
+      ExerciseLibraryItemSchema.safeParse(
+        buildExercise({
+          owner_user_id: "2205fb26-33f6-4eb2-8f05-cbe372226a0e",
+        }),
+      ).success,
+      true,
     );
-    assert.strictEqual(missing.success, false);
-
-    const badEquip = ExerciseSchema.safeParse(
-      buildExercise({
-        attributes: {
-          targets: { primary: ["胸"] },
-          equipment_required: "barbell",
-        },
-      }),
+    assert.strictEqual(
+      ExerciseLibraryItemSchema.safeParse(
+        buildExercise({ owner_user_id: "not-a-uuid" }),
+      ).success,
+      false,
     );
-    assert.strictEqual(badEquip.success, false);
-    if (!badEquip.success) {
-      assert.ok(
-        badEquip.error.issues.some((i) =>
-          i.path.includes("equipment_required"),
-        ),
-      );
-    }
   });
 });
 
@@ -437,17 +449,17 @@ describe("Contract Tests: Exercise Library", () => {
   });
 
   test("normalize functions: trim + case-insensitive fallback + null for unknown", () => {
-    // 归一命中
+    // 归一命中（库1/库3 原值；中文兼容映射已随 002 返工移除——A3 数据全走英文词表）
     assert.strictEqual(normalizeMuscle("lower back"), "lower_back");
-    assert.strictEqual(normalizeMuscle("三头"), "triceps");
+    assert.strictEqual(normalizeMuscle("rectus abdominis"), "abdominals");
     assert.strictEqual(normalizeMuscle("cardiovascular system"), null);
     assert.strictEqual(normalizeEquipment("e-z curl bar"), "barbell");
-    assert.strictEqual(normalizeEquipment("拉力器"), "cable");
+    assert.strictEqual(normalizeEquipment("leverage machine"), "machine");
     // trim / 大小写兜底
     assert.strictEqual(normalizeMuscle(" Chest "), "chest");
     assert.strictEqual(normalizeEquipment("Barbell"), "barbell");
     // 未知原值 → null（调用方记日志，不静默映射）
-    assert.strictEqual(normalizeMuscle("未知肌群"), null);
+    assert.strictEqual(normalizeMuscle("some-unknown-muscle"), null);
     assert.strictEqual(normalizeEquipment("flux-capacitor"), null);
     // 难度：库1 expert → advanced，其余原样
     assert.strictEqual(normalizeDifficulty("expert"), "advanced");
@@ -459,7 +471,7 @@ describe("Contract Tests: Exercise Library", () => {
     assert.strictEqual(result.success, true);
   });
 
-  test("ExerciseLibraryItemSchema tolerates legacy rows: null teaching columns, empty muscle arrays, loose attributes", () => {
+  test("ExerciseLibraryItemSchema tolerates legacy rows: null teaching columns, empty muscle arrays", () => {
     // 回填后的存量行形态：新教学列全 null、attributes 无结构化 targets 也允许
     const legacy = ExerciseLibraryItemSchema.safeParse({
       ...buildLibraryItem(),
@@ -480,7 +492,7 @@ describe("Contract Tests: Exercise Library", () => {
       poster_url: null,
       name_zh: null,
       instructions_zh: null,
-      attributes: { custom: true },
+      owner_user_id: null,
     });
     assert.strictEqual(legacy.success, true);
   });
@@ -589,7 +601,7 @@ function buildLibraryItem(overrides: Record<string, unknown> = {}) {
     },
     poster_url:
       "https://cdn.example.com/exercise-posters/male/barbell-squat.jpg",
-    attributes: { pattern: "squat", impact_level: { knee: 6 } },
+    owner_user_id: null,
     modified_by: "system",
     modified_at: "2026-09-26T08:00:00.000Z",
     created_at: "2026-09-26T08:00:00.000Z",

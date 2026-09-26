@@ -47,10 +47,10 @@ describeOrSkip("ExerciseRepository (real PG, migration 002)", () => {
     adminPool = new pg.Pool({ connectionString });
     // 测试行：直接落新列（迁移 002 后的完整形态），attributes 兜底位留空对象
     await adminPool.query(
-      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, tutorials,
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, tutorials,
          equipment, category, body_part, primary_muscles, secondary_muscles,
          force_type, mechanic, instructions, video_urls)
-       VALUES ($1, $2, 'resistance', 'intermediate', '{}'::jsonb, '{}'::jsonb,
+       VALUES ($1, $2, 'resistance', 'intermediate', '{}'::jsonb,
          'barbell'::public.exercise_equipment,
          'strength'::public.exercise_category,
          'upper_legs'::public.exercise_body_part,

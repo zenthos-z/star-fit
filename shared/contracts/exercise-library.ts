@@ -6,20 +6,20 @@
  *
  *  1. 受控词表（controlled vocabularies）
  *     - EXERCISE_MUSCLES     17 基准肌群（库1 free-exercise-db 枚举为基准，snake_case 化）
- *     - EXERCISE_EQUIPMENT   15 器材大类（库1 13 值 + 库3 13 值 + 存量中文 10 值归一）
+ *     - EXERCISE_EQUIPMENT   15 器材大类（库1 13 值 + 库3 13 值归一）
  *     - EXERCISE_CATEGORIES  7 训练类目（库1 category 归一）
  *     - EXERCISE_BODY_PARTS  10 身体区域（库3 free-exercise-db-with-videos bodyPart 归一）
  *     - EXERCISE_FORCE_TYPES / EXERCISE_MECHANICS（库1 force/mechanic 归一）
  *
- *  2. 归一映射表（纯数据）
- *     - MUSCLE_ALIASES      三源肌群原值 → 17 基准（值 null = 非肌群目标，不映射）
- *     - EQUIPMENT_ALIASES   三源器材原值 → 15 大类
+ *  2. 归一映射表（纯数据，A3 导入管道唯一消费方）
+ *     - MUSCLE_ALIASES      双源肌群原值 → 17 基准（值 null = 非肌群目标，不映射）
+ *     - EQUIPMENT_ALIASES   双源器材原值 → 15 大类
  *     - DIFFICULTY_ALIASES  库1 expert → advanced
  *     - CATEGORY_ALIASES / BODY_PART_ALIASES 源值空格 → snake_case
  *
  *  3. Zod Schema
- *     - ExerciseLibraryItemSchema 深化后的 exercises 完整行契约（新列全部可空，
- *       存量行回填前后均可通过）
+ *     - ExerciseLibraryItemSchema exercises 完整行契约（002 深化后唯一行真源；
+ *       旧 attributes JSONB 列及其中文口径契约已随 002 返工退役）
  *     - ExerciseDetailUpdateSchema 深化列更新输入（白名单）
  *
  * 数据源拍板（issue #3 评估报告 2026-09-26，口径以 issue #4 任务书为准）：
@@ -162,15 +162,17 @@ export type ExerciseMechanic = z.infer<typeof ExerciseMechanicSchema>;
 // ============================================================================
 // 归一映射表 (Normalization Mappings — 纯数据)
 // ============================================================================
-// 映射真源：本表是三源原值 → 受控词表的唯一对照。迁移 002 的 SQL 回填
-// 内联了同一映射（注释互指）；如增改值，两处必须同步，契约测试锁定全等。
+// 映射真源：本表是导入源原值 → 受控词表的唯一对照，A3 导入管道
+//（TS 侧，经 normalizeMuscle / normalizeEquipment）唯一消费方。
 //
 // 值语义：string = 映射到的基准值；null = 非肌群目标（cardiovascular system /
 // full body 等不是骨骼肌，primary_muscles 归一为空数组，检索走 body_part）。
+// 注：存量 attributes 中文值兼容映射已随 002 返工移除（存量 AI 数据整体清空，
+// A3 重灌数据一律走本表归一后入库）。
 
 /**
  * 肌群映射：源原值 → 17 基准。
- * 分区：库1 17 原值 | 库3 39 target（任务书点名）| 存量中文脏值 | 18 中文词表值。
+ * 分区：库1 17 原值 | 库3 39 target（任务书点名）。
  */
 export const MUSCLE_ALIASES: Readonly<Record<string, ExerciseMuscle | null>> = {
   // ---- 库1 free-exercise-db 17 原值（identity + 空格 → snake_case）----
@@ -219,46 +221,11 @@ export const MUSCLE_ALIASES: Readonly<Record<string, ExerciseMuscle | null>> = {
   'thoracic spine': 'middle_back', // 胸椎区域归中背
   'upper back': 'middle_back',
   'upper pectorals': 'chest',
-
-  // ---- 存量 exercises.attributes 中文脏值（25 条实测 distinct 全集）----
-  ROTATOR_CUFF: 'shoulders', // 肩袖归肩域
-  三角肌: 'shoulders',
-  上胸: 'chest',
-  下胸: 'chest',
-  中下胸: 'chest',
-  中束: 'shoulders',
-  二头: 'biceps',
-  三头: 'triceps',
-  前束: 'shoulders',
-  前肩: 'shoulders',
-  前臂: 'forearms',
-  后束: 'shoulders',
-  后肩: 'shoulders',
-  后链: 'hamstrings', // 后链（posterior chain）主链条归腘绳
-  核心: 'abdominals',
-  股四: 'quadriceps',
-  肩膀: 'shoulders',
-  背部厚度: 'middle_back', // 划船系厚度训练归中背
-  背阔: 'lats',
-  背阔肌: 'lats',
-  腘绳: 'hamstrings',
-  腹肌: 'abdominals',
-  臀大: 'glutes',
-
-  // ---- 18 中文词表值（MuscleTarget 全集兜底，存量/中文管道兼容）----
-  小臂: 'forearms',
-  小腿: 'calves',
-  侧腹: 'abdominals',
-  上臀部: 'glutes',
-  下臀部: 'glutes',
-  下背: 'lower_back',
-  斜方肌: 'traps',
-  背部: 'lats', // 泛背语义归背阔肌（宽度训练主域）
 };
 
 /**
  * 器材映射：源原值 → 15 大类。
- * 分区：库1 13 值 | 库3 13 值 | 存量中文 10 值。
+ * 分区：库1 13 值 | 库3 13 值。
  * 源 null / None / 'body only' / 'body weight' / 空器材数组 → bodyweight。
  */
 export const EQUIPMENT_ALIASES: Readonly<Record<string, ExerciseEquipment>> = {
@@ -288,18 +255,6 @@ export const EQUIPMENT_ALIASES: Readonly<Record<string, ExerciseEquipment>> = {
   'smith machine': 'machine',
   'stability ball': 'stability_ball',
   weighted: 'weighted',
-
-  // ---- 存量 exercises.attributes 中文 10 值 ----
-  杠铃: 'barbell',
-  哑铃: 'dumbbell',
-  拉力器: 'cable',
-  卧推凳: 'bench',
-  上斜凳: 'bench',
-  腿举机: 'machine',
-  腿弯举机: 'machine',
-  深蹲架: 'rack',
-  单杠: 'pull_up_bar',
-  双杠: 'pull_up_bar', // 双杠（dip station）归自重固定架
 };
 
 /**
@@ -374,51 +329,8 @@ export const ExerciseVideoUrlsSchema = z.object({
 export type ExerciseVideoUrls = z.infer<typeof ExerciseVideoUrlsSchema>;
 
 // ============================================================================
-// 既有 Exercise 契约（自 index.ts 迁入，单一真源整理）
+// 枚举与通用 Schema（exercises 表既有口径，自 index.ts 迁入）
 // ============================================================================
-
-/**
- * 肌肉目标选项 - 完整的肌肉分区列表
- * @deprecated 存量中文口径。新数据一律用 17 基准肌群（EXERCISE_MUSCLES）。
- */
-export type MuscleTarget =
-  | '上胸' | '中下胸'
-  | '前束' | '中束' | '后束'
-  | '二头' | '三头' | '小臂'
-  | '背部' | '下背' | '斜方肌'
-  | '腹肌' | '侧腹'
-  | '股四' | '腘绳' | '小腿'
-  | '上臀部' | '下臀部';
-
-/**
- * Exercise Targets Schema（存量中文形态）
- * Defines primary and secondary target muscles
- * @deprecated 存量中文口径。新数据用 primary_muscles / secondary_muscles 列。
- */
-export const ExerciseTargetsSchema = z.object({
-  primary: z.array(z.string()),
-  secondary: z.array(z.string()).optional(),
-});
-
-export type ExerciseTargets = z.infer<typeof ExerciseTargetsSchema>;
-
-/**
- * Exercise Attributes Schema
- * attributes JSONB 兜底扩展位的结构化视图（存量动作）。
- * 深化列拆出后本结构继续有效：attributes 保留为兜底扩展位，
- * equipment/muscles 等结构化值以新列为准。
- */
-export const ExerciseAttributesSchema = z.object({
-  targets: ExerciseTargetsSchema,
-  equipment_required: z.array(z.string()),
-  impact_level: z.record(z.string(), z.number()).optional(),
-  pattern: z.enum(['push', 'pull', 'squat', 'hinge', 'lunge', 'rotation']).optional(),
-  movement_plane: z.enum(['sagittal', 'frontal', 'transverse']).optional(),
-  stabilizers: z.array(z.string()).optional(),
-  tags: z.array(z.string()).optional(),
-});
-
-export type ExerciseAttributes = z.infer<typeof ExerciseAttributesSchema>;
 
 /**
  * Exercise Type Enum
@@ -478,57 +390,29 @@ export const ModifiedByEnum = z.enum([
 
 export type ModifiedBy = z.infer<typeof ModifiedByEnum>;
 
-/**
- * Exercise Schema（存量视图 — MAS/Admin 旧链路消费）
- * 深化后的完整行契约见 ExerciseLibraryItemSchema。
- */
-export const ExerciseSchema = z.object({
-  id: z.string().min(12).max(24), // NanoID format (14 chars by default, 12-24 allowed)
-  name: z.string(),
-  exercise_type: ExerciseTypeEnum,
-  attributes: ExerciseAttributesSchema,
-  difficulty: DifficultyLevelEnum,
-  content_html: z.string().optional(),
-  tutorials: z.record(z.string(), z.any()).optional(),
-  tags_json: z.any().optional(),
-  assets_json: z.any().optional(),
-  modified_by: ModifiedByEnum.optional(),
-  modified_at: z.any().optional(),
-  created_at: z.any().optional(),
-  updated_at: z.any().optional(),
-});
-
-export type Exercise = z.infer<typeof ExerciseSchema>;
-
-/**
- * Exercise With Extracted Attributes
- * Same as Exercise but with targets and equipment_required at top level
- * for backward compatibility with frontend code
- */
-export type ExerciseWithExtractedAttributes = Exercise & {
-  targets: string; // JSON stringified ExerciseTargets
-  equipment_required: string; // JSON stringified string[]
-};
-
 // ============================================================================
-// 深化行契约 (ExerciseLibraryItem — issue #4 新列)
+// 深化行契约 (ExerciseLibraryItem — issue #4 唯一行真源)
 // ============================================================================
 
 /**
- * 深化后的 exercises 完整行契约（含 002 迁移新增 16 列）。
+ * exercises 完整行契约（002 深化后的唯一行形态）。
  *
- * 新列语义：
+ * 旧 attributes JSONB 列已随 002 移除（新列完全接管）；
+ * MuscleTarget / ExerciseTargetsSchema / ExerciseAttributesSchema /
+ * ExerciseSchema 等存量中文口径契约一并退役。
+ *
+ * 列语义：
  *  - 结构化分类列：可空（null = 未归一/源数据无此维度）；primary/secondary_muscles
  *    为 NOT NULL 数组（缺省 []，非肌群目标动作如纯有氧允许空数组）
  *  - 教学内容列：可空数组/文本（源库无此字段时 null，非空数组）
  *  - 资产引用列：只存 URL/路径引用，不落文件本体
  *  - 中文预留列：name_zh / instructions_zh 可空，AI 翻译管道后填
- *  - attributes 兜底扩展位保留（宽松 record：新导入动作无中文 targets 结构）
+ *  - owner_user_id：自定义动作的用户绑定（NULL = 公共库行）
  */
 export const ExerciseLibraryItemSchema = z.object({
-  id: z.string().min(12).max(24), // NanoID（对齐 ExerciseSchema.id）
+  id: z.string().min(12).max(24), // NanoID（12-24 字符）
   name: z.string(),               // 源库规范名（英文为主）
-  name_zh: z.string().nullable(), // 中文预留（AI 翻译管道后填；存量中文动作可回填）
+  name_zh: z.string().nullable(), // 中文预留（AI 翻译管道后填）
 
   exercise_type: ExerciseTypeEnum,
   difficulty: DifficultyLevelEnum,
@@ -555,8 +439,8 @@ export const ExerciseLibraryItemSchema = z.object({
   video_urls: ExerciseVideoUrlsSchema.nullable(),     // 演示视频 male/female URL
   poster_url: z.string().nullable(),                  // 首选海报 URL
 
-  // ---- 兜底扩展位 + 系统列（既有列，形态不变）----
-  attributes: z.record(z.string(), z.unknown()),      // JSONB 兜底（宽松：新导入动作无中文 targets）
+  // ---- 归属 + 系统列 ----
+  owner_user_id: z.string().uuid().nullable(),        // 自定义动作归属（NULL = 公共库）
   content_html: z.string().nullable().optional(),
   tutorials: z.record(z.string(), z.unknown()).nullable().optional(),
   tags_json: z.unknown().nullable().optional(),

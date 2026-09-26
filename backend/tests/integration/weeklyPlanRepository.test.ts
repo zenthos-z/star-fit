@@ -75,8 +75,8 @@ describeOrSkip("WeeklyPlanRepository (real PG)", () => {
     );
     otherUserId = otherUser.rows[0].id;
     const exercise = await adminPool.query(
-      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, tutorials)
-       VALUES ($1, $2, 'resistance', 'beginner', '{}'::jsonb, '{}'::jsonb) RETURNING id`,
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, tutorials)
+       VALUES ($1, $2, 'resistance', 'beginner', '{}'::jsonb) RETURNING id`,
       [`wp-test-exercise-${now}`.slice(0, 24), `weekly-plan-test-bench-${now}`],
     );
     exerciseId = exercise.rows[0].id;

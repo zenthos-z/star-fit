@@ -13,9 +13,8 @@
  *  - 出库后：ExerciseLibraryItemSchema 经 validateOrThrow（失败即抛）
  *  - JSONB：video_urls 解析一律 parseJSONSafe（失败告警不静默）
  *
- * 注意：存量写入方（mcpTools 自定义动作 / seed 脚本）仍走 attributes 旧路径，
- * 新列为默认空值——接入本 Repository 是后续收敛工作（见 verifyExerciseBackfill
- * 脚本的漂移报告）。
+ * 002 返工后 exercises 无 attributes 列（新列完全接管）；A3 导入管道与
+ * 中文回写管道经本 Repository / Service 层写入结构化列。
  */
 
 import { PostgresClient } from "../client/postgres-client.js";
@@ -58,7 +57,7 @@ interface ExerciseRow {
   image_refs: string[] | null;
   video_urls: Record<string, unknown> | null;
   poster_url: string | null;
-  attributes: Record<string, unknown> | null;
+  owner_user_id: string | null;
   content_html: string | null;
   tutorials: Record<string, unknown> | null;
   tags_json: unknown;
@@ -76,8 +75,8 @@ const ITEM_SELECT_SQL = `
     equipment, category, body_part,
     primary_muscles, secondary_muscles, force_type, mechanic,
     instructions, form_cues, common_mistakes, breathing, aliases, instructions_zh,
-    image_refs, video_urls, poster_url,
-    attributes, content_html, tutorials, tags_json, assets_json,
+    image_refs, video_urls, poster_url, owner_user_id,
+    content_html, tutorials, tags_json, assets_json,
     modified_by, modified_at, created_at, updated_at
   FROM exercises
 `;
@@ -115,7 +114,7 @@ function mapItemRow(row: ExerciseRow): ExerciseLibraryItem {
       video_urls:
         videoUrls && Object.keys(videoUrls).length > 0 ? videoUrls : null,
       poster_url: row.poster_url,
-      attributes: row.attributes ?? {},
+      owner_user_id: row.owner_user_id,
       content_html: row.content_html,
       tutorials: row.tutorials ?? undefined,
       tags_json: row.tags_json,
@@ -323,8 +322,8 @@ export class ExerciseRepository extends BaseRepository {
          equipment, category, body_part,
          primary_muscles, secondary_muscles, force_type, mechanic,
          instructions, form_cues, common_mistakes, breathing, aliases, instructions_zh,
-         image_refs, video_urls, poster_url,
-         attributes, content_html, tutorials, tags_json, assets_json,
+         image_refs, video_urls, poster_url, owner_user_id,
+         content_html, tutorials, tags_json, assets_json,
          modified_by, modified_at, created_at, updated_at`,
       params,
     );

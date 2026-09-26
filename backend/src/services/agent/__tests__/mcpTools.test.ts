@@ -52,11 +52,13 @@ const TEST_DB_URL =
 
 const EXERCISE_ID = "r3-test-squat";
 const EXERCISE_ID_ATTR = "r3-test-dbrow";
-const ATTRS = {
-  targets: { primary: ["quads", "glutes"], secondary: ["hamstrings"] },
-  equipment_required: ["dumbbell"],
-  impact_level: { knee: 7, back: 4 },
-  pattern: "squat",
+/** 深化列测试值（002 结构化列；17 肌群 / 15 器材英文词表） */
+const DETAIL_COLS = {
+  primary_muscles: ["quadriceps", "glutes"],
+  secondary_muscles: ["hamstrings"],
+  equipment: "dumbbell",
+  mechanic: "compound",
+  force_type: "push",
 };
 
 /** Minimal valid session payload accepted by write_session's schema. */
@@ -259,17 +261,29 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
         diff: "intermediate",
       },
     );
-    // A fully-attributed exercise for the filter / detail tests.
+    // A fully-classified exercise for the filter / detail tests (structured columns).
     await client.query(
-      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes)
-       VALUES ($id, $name, $type::exercise_type_enum, $diff::difficulty_level, $attrs::jsonb)
-       ON CONFLICT (id) DO UPDATE SET attributes = EXCLUDED.attributes`,
+      `INSERT INTO exercises (id, name, exercise_type, difficulty,
+         primary_muscles, secondary_muscles, equipment, mechanic, force_type)
+       VALUES ($id, $name, $type::exercise_type_enum, $diff::difficulty_level,
+         $pm::text[], $sm::text[], $eq::public.exercise_equipment,
+         $mech::public.exercise_mechanic, $ft::public.exercise_force_type)
+       ON CONFLICT (id) DO UPDATE SET
+         primary_muscles = EXCLUDED.primary_muscles,
+         secondary_muscles = EXCLUDED.secondary_muscles,
+         equipment = EXCLUDED.equipment,
+         mechanic = EXCLUDED.mechanic,
+         force_type = EXCLUDED.force_type`,
       {
         id: EXERCISE_ID_ATTR,
         name: "R3 DB Row",
         type: "resistance",
         diff: "intermediate",
-        attrs: JSON.stringify(ATTRS),
+        pm: DETAIL_COLS.primary_muscles,
+        sm: DETAIL_COLS.secondary_muscles,
+        eq: DETAIL_COLS.equipment,
+        mech: DETAIL_COLS.mechanic,
+        ft: DETAIL_COLS.force_type,
       },
     );
   }
@@ -455,17 +469,14 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     assert.ok(attr, "seeded ATTR exercise present");
     // The whole library is loaded into context; the `description` one-liner must
     // carry the constraint-relevant fields so the agent can filter in-context:
-    // movement pattern, required equipment, and notable joint impact (knee=7 >= 5).
+    // mechanic/force, muscles, and equipment.
     const d = attr!.description;
-    assert.ok(d.includes("squat"), "description carries pattern:squat");
+    assert.ok(d.includes("compound"), "description carries mechanic:compound");
+    assert.ok(d.includes("quadriceps"), "description carries primary muscle");
     assert.ok(d.includes("dumbbell"), "description carries equipment:dumbbell");
-    assert.ok(
-      d.includes("knee:7"),
-      "description carries notable knee impact (>=5)",
-    );
   });
 
-  it("B4 read: get_exercise_detail returns full attributes (real PG)", async (t) => {
+  it("B4 read: get_exercise_detail returns structured columns (real PG)", async (t) => {
     if (!pgAvailable) {
       t.skip("PG unreachable");
       return;
@@ -477,14 +488,18 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
       found: boolean;
       exercise?: {
         id: string;
-        attributes: { pattern?: string; equipment_required?: string[] };
+        equipment?: string | null;
+        primary_muscles?: string[];
+        mechanic?: string | null;
       };
     };
     assert.equal(parsed.found, true);
-    assert.equal(parsed.exercise?.attributes.pattern, "squat");
-    assert.deepEqual(parsed.exercise?.attributes.equipment_required, [
-      "dumbbell",
+    assert.equal(parsed.exercise?.equipment, "dumbbell");
+    assert.deepEqual(parsed.exercise?.primary_muscles, [
+      "quadriceps",
+      "glutes",
     ]);
+    assert.equal(parsed.exercise?.mechanic, "compound");
   });
 
   it("B2 write: update_profile merges structured recovery_state into profile_dynamic (real PG)", async (t) => {
@@ -533,8 +548,8 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     const out = (await ce.invoke({
       name: uniqueName,
       exercise_type: "resistance",
-      targets_primary: ["背阔肌"],
-      equipment_required: ["哑铃"],
+      targets_primary: ["lats"],
+      equipment: "dumbbell",
       description: "test custom exercise",
       tutorial_md: "### 动作作用\n测试教程",
     } as never)) as string;
@@ -551,21 +566,16 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     );
     assert.equal(parsed.visibility, "user_only");
 
-    // Real read-back: row exists with owner binding inside attributes and the
-    // tutorial landed in content_html (same slot the frontend modal renders).
+    // Real read-back: row exists with owner binding on the owner_user_id column
+    // and the tutorial landed in content_html (same slot the frontend modal renders).
     const eq = new ExerciseQueryLike(client);
     const row = await eq.findByIdFull(parsed.id);
     assert.ok(row, "created row readable via ExerciseQuery");
-    const attrs = row!.attributes as {
-      owner_user_id?: string;
-      custom?: boolean;
-    };
     assert.equal(
-      attrs.owner_user_id,
+      row!.owner_user_id,
       userA,
-      "attributes.owner_user_id binds the calling user",
+      "owner_user_id column binds the calling user",
     );
-    assert.equal(attrs.custom, true);
     assert.ok(
       String(row!.content_html).includes("### 动作作用"),
       "tutorial persisted into content_html",
@@ -606,11 +616,11 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
 class ExerciseQueryLike extends UserScopedWriteRepository {
   async findByIdFull(id: string): Promise<{
     name: string;
-    attributes: unknown;
+    owner_user_id: string | null;
     content_html: string | null;
   } | null> {
     return this.queryOne(
-      `SELECT name, attributes, content_html FROM exercises WHERE id = $id`,
+      `SELECT name, owner_user_id, content_html FROM exercises WHERE id = $id`,
       { id },
     );
   }

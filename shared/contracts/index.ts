@@ -890,8 +890,10 @@ export type UsernameUpdateResponse = z.infer<typeof UsernameUpdateResponseSchema
 // ============================================================================
 // Exercise Library Contracts (动作库深化 — issue #4)
 // ============================================================================
-// Exercise 全部契约（存量 Schema + 受控词表 + 三源归一映射表 + 深化行契约）
-// 已迁至 exercise-library.ts（单一真源整理，本文件原名 re-export 零破坏）。
+// Exercise 全部契约（受控词表 + 双源归一映射表 + 行契约）真源在
+// exercise-library.ts。旧 attributes 中文口径契约（MuscleTarget /
+// ExerciseTargetsSchema / ExerciseAttributesSchema / ExerciseSchema /
+// ExerciseWithExtractedAttributes）已随 002 返工（attributes 列移除）退役。
 
 export {
   // 受控词表
@@ -917,16 +919,13 @@ export {
   // 资产引用
   ExerciseVideoUrlsSchema,
 
-  // 存量契约（自本文件迁出，原名保留）
-  ExerciseTargetsSchema,
-  ExerciseAttributesSchema,
+  // 既有枚举（exercises 表口径）
   ExerciseTypeEnum,
   EXERCISE_TYPE_VALUES,
   DifficultyLevelEnum,
   ModifiedByEnum,
-  ExerciseSchema,
 
-  // 深化契约（issue #4 新增）
+  // 深化契约（issue #4）
   ExerciseMuscleSchema,
   ExerciseEquipmentSchema,
   ExerciseCategorySchema,
@@ -945,14 +944,9 @@ export {
   type ExerciseForceType,
   type ExerciseMechanic,
   type ExerciseVideoUrls,
-  type MuscleTarget,
-  type ExerciseTargets,
-  type ExerciseAttributes,
   type ExerciseType,
   type DifficultyLevel,
   type ModifiedBy,
-  type Exercise,
-  type ExerciseWithExtractedAttributes,
   type ExerciseLibraryItem,
   type ExerciseDetailUpdate,
   type ExerciseSearchFilter,

@@ -24,11 +24,6 @@ import {
 } from "../db/postgresql/client/postgres-client.js";
 import { CacheService } from "./cacheService.js";
 import { getNowISO } from "../utils/timestamp.js";
-import { parseJSONSafe } from "../types/validation.js";
-import {
-  parseTargets,
-  parseEquipmentRequired,
-} from "./exerciseLibraryService.js";
 
 // ============================================
 // Types
@@ -92,13 +87,29 @@ export const KnowledgeRepo = {
     tags_json?: string;
   }): Promise<void> => {
     const client = KnowledgeRepo.getClient();
+    // targets JSON 字符串（{primary, secondary}，17 基准肌群英文词表）拆列存储
+    let primaryMuscles: string[] = [];
+    let secondaryMuscles: string[] = [];
+    if (ex.targets) {
+      try {
+        const parsed = JSON.parse(ex.targets);
+        primaryMuscles = Array.isArray(parsed?.primary) ? parsed.primary : [];
+        secondaryMuscles = Array.isArray(parsed?.secondary)
+          ? parsed.secondary
+          : [];
+      } catch {
+        primaryMuscles = [];
+        secondaryMuscles = [];
+      }
+    }
     await client.query(
-      `INSERT INTO exercises (id, name, exercise_type, attributes, content_html, tutorials, tags_json, assets_json, updated_at)
-       VALUES ($id, $name, $exerciseType, $attributes, $contentHtml, $tutorials, $tagsJson, $assetsJson, $updatedAt)
+      `INSERT INTO exercises (id, name, exercise_type, primary_muscles, secondary_muscles, content_html, tutorials, tags_json, assets_json, updated_at)
+       VALUES ($id, $name, $exerciseType, $primaryMuscles::text[], $secondaryMuscles::text[], $contentHtml, $tutorials, $tagsJson, $assetsJson, $updatedAt)
        ON CONFLICT (id) DO UPDATE SET
          name = EXCLUDED.name,
          exercise_type = EXCLUDED.exercise_type,
-         attributes = EXCLUDED.attributes,
+         primary_muscles = EXCLUDED.primary_muscles,
+         secondary_muscles = EXCLUDED.secondary_muscles,
          content_html = EXCLUDED.content_html,
          tutorials = EXCLUDED.tutorials,
          tags_json = EXCLUDED.tags_json,
@@ -108,10 +119,8 @@ export const KnowledgeRepo = {
         id: ex.id,
         name: ex.name,
         exerciseType: ex.exercise_type,
-        // Map targets string to attributes JSONB structure
-        attributes: JSON.stringify({
-          targets: ex.targets ? JSON.parse(ex.targets) : {},
-        }),
+        primaryMuscles,
+        secondaryMuscles,
         contentHtml: ex.content_html || null,
         // Map assets_json string to tutorials JSONB structure
         tutorials: ex.assets_json || "{}",
@@ -138,23 +147,18 @@ export const KnowledgeRepo = {
       "SELECT * FROM exercises WHERE updated_at > $since ORDER BY updated_at DESC",
       { since: sinceDate },
     );
-    // 与 exerciseController.getAllExercises 同款：从 attributes JSONB 提取
-    // targets/equipment_required 平铺到顶层。sync/pull 通道若不提取，
-    // 前端动作库缓存会缺分组依据（targets），导致打开动作库全部落入「其他」分组。
-    return rows.map((ex) => {
-      const attributes =
-        parseJSONSafe<Record<string, any>>(
-          ex.attributes,
-          "exercise attributes",
-        ) || {};
-      return {
-        ...ex,
-        targets: parseTargets(attributes.targets),
-        equipment_required: parseEquipmentRequired(
-          attributes.equipment_required,
-        ),
-      };
-    });
+    // 与 exerciseController.getAllExercises 同款：结构化列平铺到顶层
+    // targets/equipment_required 视图键（17 肌群英文词表值）。sync/pull 通道若
+    // 不提取，前端动作库缓存会缺分组依据（targets），导致打开动作库全部落入
+    // 「其他」分组。
+    return rows.map((ex) => ({
+      ...ex,
+      targets: {
+        primary: ex.primary_muscles ?? [],
+        secondary: ex.secondary_muscles ?? [],
+      },
+      equipment_required: JSON.stringify(ex.equipment ? [ex.equipment] : []),
+    }));
   },
 
   getAllExercises: async (): Promise<any[]> => {
@@ -286,10 +290,10 @@ export const ConfigRepo = {
       key: string;
       value_json: any;
       updated_at: string;
-    }>(
-      "SELECT * FROM app_configs WHERE user_id = $userId AND key = $key",
-      { userId, key },
-    );
+    }>("SELECT * FROM app_configs WHERE user_id = $userId AND key = $key", {
+      userId,
+      key,
+    });
     return row || null;
   },
 

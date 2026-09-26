@@ -22,8 +22,6 @@
     "test:workflow:postgres": "TEST_DB_TYPE=postgres jest tests/integration/completeUserWorkflow",
     "docking:scan": "tsx src/scripts/docking/scanContracts.ts",
     "docking:probes": "tsx src/scripts/docking/runProbes.ts",
-    "db:seed": "tsx src/scripts/seedExercises.ts",
-    "db:init-exercises": "npm run db:seed",
     "lint": "eslint src --ext .ts",
     "lint:fix": "eslint src --ext .ts --fix",
     "lint:data-format": "node ../scripts/lint/check-data-format.mjs",
