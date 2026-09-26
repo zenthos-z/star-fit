@@ -9,14 +9,14 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (9)
+ * ## Tool set (11)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, description}].
  *                                 The library is small enough to fit in context, so the agent
  *                                 picks actions itself. `description`
  *                                 carries pattern/targets/equipment/impact so the agent can
  *                                 respect the user equipment + injuries in-context.
- * - `get_exercise_detail` (read)  full record of one exercise (structured columns, tutorials, content)
+ * - `get_exercise_detail` (read)  full record of one exercise (attributes, tutorials, content)
  * - `write_session`       (write) append a completed session to history_summary
  * - `write_memory`        (write) keyed free-text memory note under profile_dynamic.memories
  * - `update_profile`      (write) structured update of profile_dynamic
@@ -24,13 +24,22 @@
  *                                 + profile_static.psychological
  *                                 (neurotype / risk_preference / accountability)
  * - `create_exercise`     (write) insert a USER-BOUND custom exercise into the
- *                                 library. User-binding rides in the dedicated
- *                                 `owner_user_id` column (HC-2 user binding,
- *                                 promoted from the retired attributes JSONB in
- *                                 migration 002) — the row stays invisible to other
+ *                                 library. User-binding rides in
+ *                                 `attributes.owner_user_id` (HC-2: no schema
+ *                                 change) — the row stays invisible to other
  *                                 users' queries and the admin console filters
  *                                 can adopt it later. A NanoID is generated
  *                                 server-side (never LLM-supplied).
+ * - `get_current_plan`    (read)  the user's persisted weekly plan (E3: plans
+ *                                 are entities, reuse-by-default — one per user
+ *                                 per week; week_id defaults to the CURRENT
+ *                                 week resolved server-side, the agent never
+ *                                 does calendar math).
+ * - `save_weekly_plan`    (write) persist a weekly plan (weekly_plans +
+ *                                 plan_entries, atomic, via
+ *                                 WeeklyPlanRepository — B1 honoured). Refuses
+ *                                 to overwrite an existing week
+ *                                 (already_exists) — weekly-once semantics.
  *
  * ## Red lines honoured
  * - **Repository boundary (B1)**: tools reach data ONLY through the Repository
@@ -86,10 +95,14 @@ import {
 import { getPostgresClient } from "../../db/postgresql/index.js";
 import { mergeHistorySources } from "./historyMerger.js";
 import { generateExerciseNanoId } from "../../utils/nanoid.js";
+import { createWeeklyPlanRepository } from "../../db/postgresql/repository/weeklyPlan.repository.js";
+import { ServiceError, ServiceErrorCode } from "../errors/ServiceError.js";
 import {
-  EXERCISE_MUSCLES,
-  EXERCISE_EQUIPMENT,
-} from "../../../../shared/dist/contracts/index.js";
+  WEEK_ID_PATTERN,
+  PLAN_ENTRY_DATE_PATTERN,
+  getIsoWeekId,
+} from "shared/contracts";
+import { utcToday } from "../schedule/scheduleService.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -98,39 +111,22 @@ import {
 /** The PostgresClient type, derived from the accessor to avoid an extra import. */
 type DbClient = ReturnType<typeof getPostgresClient>;
 
-/** One exercises row for the list tool (structured columns are synthesized into a description). */
+/** One exercises row for the list tool (raw attributes are synthesized into a description). */
 interface ExerciseListRow {
   id: string;
   name: string;
   exercise_type: string | null;
   difficulty: string | null;
-  primary_muscles: string[] | null;
-  secondary_muscles: string[] | null;
-  equipment: string | null;
-  force_type: string | null;
-  mechanic: string | null;
+  attributes: Record<string, unknown> | null;
 }
 
 /** Full exercise row for the detail tool. */
 interface ExerciseDetailRow {
   id: string;
   name: string;
-  name_zh: string | null;
   exercise_type: string | null;
   difficulty: string | null;
-  equipment: string | null;
-  category: string | null;
-  body_part: string | null;
-  primary_muscles: string[] | null;
-  secondary_muscles: string[] | null;
-  force_type: string | null;
-  mechanic: string | null;
-  instructions: string[] | null;
-  form_cues: string[] | null;
-  common_mistakes: string[] | null;
-  breathing: string | null;
-  aliases: string[] | null;
-  owner_user_id: string | null;
+  attributes: unknown;
   tutorials: unknown;
   content_html: string | null;
 }
@@ -358,27 +354,22 @@ export class UserScopedWriteRepository extends BaseRepository {
  */
 export class ExerciseQuery extends BaseRepository {
   /**
-   * Return the whole exercise library (id/name/type/difficulty + structured
-   * classification columns). The library is small enough to fit in the model
-   * context, so the agent filters and picks actions in-context — no SQL filtering.
+   * Return the whole exercise library (id/name/type/difficulty/attributes). The
+   * library is small enough to fit in the model context, so the agent filters
+   * and picks actions in-context — no SQL filtering.
    */
   async listAll(): Promise<ExerciseListRow[]> {
     return this.queryMany<ExerciseListRow>(
-      `SELECT id, name, exercise_type, difficulty,
-              primary_muscles, secondary_muscles, equipment, force_type, mechanic
+      `SELECT id, name, exercise_type, difficulty, attributes
          FROM exercises
          ORDER BY name`,
     );
   }
 
-  /** Full record for one exercise by id (structured columns, tutorials, content_html). */
+  /** Full record for one exercise by id (attributes, tutorials, content_html). */
   async findByIdFull(id: string): Promise<ExerciseDetailRow | null> {
     return this.queryOne<ExerciseDetailRow>(
-      `SELECT id, name, name_zh, exercise_type, difficulty,
-              equipment, category, body_part,
-              primary_muscles, secondary_muscles, force_type, mechanic,
-              instructions, form_cues, common_mistakes, breathing, aliases,
-              owner_user_id, tutorials, content_html
+      `SELECT id, name, exercise_type, difficulty, attributes, tutorials, content_html
          FROM exercises
         WHERE id = $id`,
       { id },
@@ -399,40 +390,26 @@ export class ExerciseQuery extends BaseRepository {
   }
 
   /**
-   * Insert a user-bound custom exercise. Ownership rides the dedicated
-   * `owner_user_id` column (promoted from the retired attributes JSONB in
-   * migration 002 — HC-2 user binding).
+   * Insert a user-bound custom exercise. Ownership rides inside the
+   * attributes JSONB (`owner_user_id`) — HC-2: no schema change, the existing
+   * table serves per-user customs with zero migration.
    */
   async insertUserExercise(row: {
     id: string;
     name: string;
     exercise_type: string;
-    ownerUserId: string;
-    primaryMuscles: string[];
-    secondaryMuscles: string[];
-    equipment: string | null;
+    attributes: Record<string, unknown>;
     content_html: string | null;
     modified_by: string;
   }): Promise<void> {
     await this.execute(
-      `INSERT INTO exercises (
-         id, name, exercise_type, difficulty, owner_user_id,
-         primary_muscles, secondary_muscles, equipment,
-         content_html, modified_by, updated_at
-       )
-       VALUES (
-         $id, $name, $exerciseType, 'beginner', $ownerUserId::uuid,
-         $primaryMuscles::text[], $secondaryMuscles::text[], $equipment::public.exercise_equipment,
-         $contentHtml, $modifiedBy, NOW()
-       )`,
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, content_html, modified_by, updated_at)
+       VALUES ($id, $name, $exerciseType, 'beginner', $attributes, $contentHtml, $modifiedBy, NOW())`,
       {
         id: row.id,
         name: row.name,
         exerciseType: row.exercise_type,
-        ownerUserId: row.ownerUserId,
-        primaryMuscles: row.primaryMuscles,
-        secondaryMuscles: row.secondaryMuscles,
-        equipment: row.equipment,
+        attributes: JSON.stringify(row.attributes),
         contentHtml: row.content_html,
         modifiedBy: row.modified_by,
       },
@@ -484,7 +461,7 @@ const getExerciseDetailSchema = z
     id: z.string().min(1).max(24).describe("Exact exercise id."),
   })
   .describe(
-    "Fetch the full record of one exercise (structured classification columns, tutorials, content_html). Read-only.",
+    "Fetch the full record of one exercise (attributes, tutorials, content_html). Read-only.",
   );
 
 const getSessionHrCurveSchema = z
@@ -595,24 +572,16 @@ const createExerciseSchema = z
         "One of: resistance | unilateral | bodyweight | assisted | isometric | cardio | flexibility | heavy_weight | rep_training | outdoor. Pick by how the movement is measured (assisted uses NEGATIVE assistance weight).",
       ),
     targets_primary: z
-      .array(z.enum(EXERCISE_MUSCLES))
+      .array(z.string().max(40))
       .max(6)
       .optional()
-      .describe(
-        `Primary muscle groups from the 17-muscle vocabulary: ${EXERCISE_MUSCLES.join(" | ")}.`,
-      ),
-    targets_secondary: z
-      .array(z.enum(EXERCISE_MUSCLES))
-      .max(6)
+      .describe('Primary muscle groups, e.g. ["背阔肌", "斜方肌"].'),
+    equipment_required: z
+      .array(z.string().max(40))
+      .max(8)
       .optional()
       .describe(
-        "Secondary muscle groups (same 17-muscle vocabulary as targets_primary).",
-      ),
-    equipment: z
-      .enum(EXERCISE_EQUIPMENT)
-      .optional()
-      .describe(
-        `Single primary equipment category: ${EXERCISE_EQUIPMENT.join(" | ")}. Omit or use bodyweight when none needed.`,
+        'Equipment needed, e.g. ["哑铃", "平凳"]. Empty for bodyweight.',
       ),
     description: z
       .string()
@@ -631,7 +600,7 @@ const createExerciseSchema = z
   })
   .passthrough()
   .describe(
-    "Create a NEW user-bound exercise when the library has no suitable match. The exercise is visible ONLY to the calling user (bound via the server-side owner_user_id column). The id is generated server-side and returned — use it in plan cards. Check list_exercises FIRST; do not create a near-duplicate of an existing exercise.",
+    "Create a NEW user-bound exercise when the library has no suitable match. The exercise is visible ONLY to the calling user (bound via attributes.owner_user_id server-side). The id is generated server-side and returned — use it in plan cards. Check list_exercises FIRST; do not create a near-duplicate of an existing exercise.",
   );
 
 const updateProfileSchema = z
@@ -704,6 +673,96 @@ const updateProfileSchema = z
 export type SessionInput = z.infer<typeof writeSessionSchema>;
 export type MemoryInput = z.infer<typeof writeMemorySchema>;
 export type ProfileUpdateInput = z.infer<typeof updateProfileSchema>;
+
+// ---------------------------------------------------------------------------
+// Weekly plan tool schemas (E3: 计划为持久化实体，每周一次语义)
+// ---------------------------------------------------------------------------
+
+const getCurrentPlanSchema = z
+  .object({
+    week_id: z
+      .string()
+      .regex(WEEK_ID_PATTERN, "ISO week YYYY-Www (e.g. 2026-W40)")
+      .optional()
+      .describe(
+        "ISO week id YYYY-Www. OMIT it to read the CURRENT week " +
+          "(resolved server-side — never compute calendar math yourself).",
+      ),
+  })
+  .describe(
+    "Read the user's persisted weekly plan (weekly_plans + plan_entries). " +
+      "Read-only, scoped to the calling user. ALWAYS call this BEFORE generating " +
+      "a weekly plan: plans are persisted entities with reuse-by-default semantics " +
+      "(one plan per user per week) — if a plan already exists for the week, " +
+      "REUSE it and adjust entries on request instead of regenerating.",
+  );
+
+const weeklyPlanEntryInputSchema = z.object({
+  entry_date: z
+    .string()
+    .regex(PLAN_ENTRY_DATE_PATTERN, "Calendar day YYYY-MM-DD")
+    .describe("Calendar day YYYY-MM-DD this entry belongs to (no timezone)."),
+  exercise_id: z
+    .string()
+    .min(12)
+    .max(24)
+    .describe("Exercise id from list_exercises (NEVER invented)."),
+  target_sets: z
+    .number()
+    .int()
+    .positive()
+    .describe("Target set count for the day (positive integer)."),
+  target_load: z
+    .object({
+      type: z.enum(["rpe", "percent_1rm"]),
+      min: z.number(),
+      max: z.number(),
+    })
+    .describe(
+      "Target load range [min, max]: RPE 0-10 when type=rpe, %1RM (0,100] " +
+        "when type=percent_1rm. min must be <= max.",
+    ),
+  sort_order: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe("Order within the same day (default 0)."),
+});
+
+const saveWeeklyPlanSchema = z
+  .object({
+    week_id: z
+      .string()
+      .regex(WEEK_ID_PATTERN, "ISO week YYYY-Www (e.g. 2026-W40)")
+      .optional()
+      .describe(
+        "ISO week id. OMIT it to target the CURRENT week (resolved " +
+          "server-side — never compute calendar math yourself).",
+      ),
+    split: z
+      .enum(["full_body", "upper_lower", "push_pull_legs", "hybrid", "custom"])
+      .describe(
+        "Weekly split. Derive it from the user's weekly available days + level " +
+          "per the program-progression split-selection decision table.",
+      ),
+    entries: z
+      .array(weeklyPlanEntryInputSchema)
+      .min(1)
+      .max(200)
+      .describe(
+        "All plan entries for the week (one row per exercise per day). " +
+          "Dates must cover the user's training days of that week.",
+      ),
+  })
+  .describe(
+    "Persist a weekly plan as an entity (weekly_plans + plan_entries, written " +
+      "through the WeeklyPlanRepository in one atomic transaction). Call " +
+      "get_current_plan FIRST: one plan per user per week — if the week already " +
+      "has a plan the tool REFUSES to overwrite (returns already_exists); adjust " +
+      "existing entries conversationally instead of saving a new plan. The " +
+      "server stamps user_id server-side; the agent cannot target another user.",
+  );
 
 // ---------------------------------------------------------------------------
 // Scoped write helpers (exposed so B2/B3 can drive the guard with real PG)
@@ -897,7 +956,7 @@ export function buildMcpToolsWith(
   const getExerciseDetail = new DynamicStructuredTool({
     name: "get_exercise_detail",
     description:
-      "Fetch the full record of one exercise by id (equipment/muscles/mechanic classification, instructions, tutorials, content_html). " +
+      "Fetch the full record of one exercise by id (attributes incl. equipment/targets/impact, tutorials, content_html). " +
       "Read-only. Optional drill-down after list_exercises when you need a candidate tutorials/content_html " +
       "or to confirm impact_level on an injured joint.",
     schema: getExerciseDetailSchema,
@@ -1006,19 +1065,21 @@ export function buildMcpToolsWith(
         });
       }
 
-      // Server-side NanoID (never LLM-supplied) + user binding via the
-      // dedicated owner_user_id column (migrated off the retired attributes
-      // JSONB in 002).
+      // Server-side NanoID (never LLM-supplied) + user binding in attributes.
       const id = generateExerciseNanoId();
+      const attributes: Record<string, unknown> = {
+        owner_user_id: userId,
+        custom: true,
+        created_via: "agent",
+        targets: { primary: input.targets_primary ?? [] },
+        equipment_required: input.equipment_required ?? [],
+      };
 
       await exerciseQuery.insertUserExercise({
         id,
         name: input.name,
         exercise_type: input.exercise_type,
-        ownerUserId: userId,
-        primaryMuscles: input.targets_primary ?? [],
-        secondaryMuscles: input.targets_secondary ?? [],
-        equipment: input.equipment ?? null,
+        attributes,
         // Tutorial persisted into content_html so ExerciseTutorialModal renders
         // it with the same priority as coach/admin-generated tutorials
         // (content_html is the top slot in the modal's source priority).
@@ -1087,6 +1148,107 @@ export function buildMcpToolsWith(
     },
   });
 
+  const getCurrentPlan = new DynamicStructuredTool({
+    name: "get_current_plan",
+    description:
+      "Read the user's persisted weekly plan (plan + all entries). Read-only, scoped to the calling user. " +
+      "ALWAYS call BEFORE generating a weekly plan — plans are persisted entities with reuse-by-default " +
+      "semantics (one per user per week); when a plan exists, reuse and adjust it, never regenerate.",
+    schema: getCurrentPlanSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const weekId = input.week_id ?? getIsoWeekId(utcToday());
+      const planRepo = createWeeklyPlanRepository(client);
+      const result = await planRepo.getWeeklyPlanByUserAndWeek(userId, weekId);
+      if (!result) {
+        return JSON.stringify({
+          found: false,
+          week_id: weekId,
+          message:
+            "No plan for this week yet. Generate one (load_history → list_exercises → " +
+            "save_weekly_plan) respecting the user's weekly days, equipment and injuries.",
+        });
+      }
+      return JSON.stringify({
+        found: true,
+        plan: result.plan,
+        entries: result.entries,
+        message:
+          "Plan for this week already exists (reuse-by-default). Adjust entries " +
+          "conversationally on request; do NOT regenerate the week.",
+      });
+    },
+  });
+
+  const saveWeeklyPlan = new DynamicStructuredTool({
+    name: "save_weekly_plan",
+    description:
+      "Persist the weekly plan as an entity (atomic: plan + all entries, via WeeklyPlanRepository). " +
+      "Call get_current_plan FIRST — one plan per user per week; an existing plan is NEVER overwritten " +
+      "(already_exists). Missing-entry adjustments afterwards happen conversationally, not by re-saving.",
+    schema: saveWeeklyPlanSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const weekId = input.week_id ?? getIsoWeekId(utcToday());
+      const planRepo = createWeeklyPlanRepository(client);
+      try {
+        const result = await planRepo.createWeeklyPlan({
+          user_id: userId,
+          week_id: weekId,
+          split: input.split,
+          status: "active" as const, // 新周计划立即生效
+          entries: input.entries.map((e) => ({
+            entry_date: e.entry_date,
+            exercise_id: e.exercise_id,
+            target_sets: e.target_sets,
+            target_load: e.target_load,
+            status: "planned" as const, // 新计划条目一律初始 planned
+            sort_order: e.sort_order ?? 0,
+          })),
+        });
+        return JSON.stringify({
+          saved: true,
+          week_id: result.plan.week_id,
+          plan_id: result.plan.id,
+          entries_count: result.entries.length,
+          message:
+            "Weekly plan persisted as an entity. Today's and future sessions read " +
+            "it deterministically from /api/schedule/today.",
+        });
+      } catch (err) {
+        // 结构化降级：already_exists（每周一次语义）与 invalid_input（Zod 拒绝）
+        // 都是 Agent 需要读懂并改道的结果，不是运行时故障 —— 记日志后返回。
+        if (
+          err instanceof ServiceError &&
+          err.code === ServiceErrorCode.ALREADY_EXISTS
+        ) {
+          return JSON.stringify({
+            saved: false,
+            reason: "already_exists",
+            week_id: weekId,
+            message:
+              "This week already has a plan (one per user per week, reuse-by-default). " +
+              "Read it with get_current_plan and adjust entries conversationally instead.",
+          });
+        }
+        console.error("[mcpTools.save_weekly_plan] failed:", err);
+        const message =
+          err instanceof Error ? err.message : "unknown validation failure";
+        return JSON.stringify({
+          saved: false,
+          reason: "invalid_input",
+          message: `Plan rejected by contract validation: ${message}. Fix the entries and retry.`,
+        });
+      }
+    },
+  });
+
   return [
     loadHistory,
     listExercises,
@@ -1097,6 +1259,8 @@ export function buildMcpToolsWith(
     writeSession,
     writeMemory,
     updateProfile,
+    getCurrentPlan,
+    saveWeeklyPlan,
   ];
 }
 
@@ -1128,25 +1292,41 @@ function trimSessions(
 }
 
 /**
- * Synthesize a compact one-line description from an exercise's structured columns so the
+ * Synthesize a compact one-line description from an exercise's attributes so the
  * agent can pick safe actions from the full list in-context. Carries exactly the
- * constraint-relevant fields: type/difficulty, mechanic/force, target muscles,
- * and required equipment (bodyweight when none).
+ * constraint-relevant fields: type/difficulty, movement pattern, target muscles,
+ * required equipment (bodyweight when none), and any notable joint impact (>=5).
  *
- * Robust to partial/missing columns — every field is optional.
+ * Robust to partial/missing attributes — every field is optional.
  */
 function describeExercise(row: ExerciseListRow): string {
+  const attr = (row.attributes ?? {}) as Record<string, unknown>;
   const parts: string[] = [];
   if (row.exercise_type) parts.push(String(row.exercise_type));
   if (row.difficulty) parts.push(String(row.difficulty));
-  if (row.mechanic) parts.push(`mechanic:${row.mechanic}`);
-  if (row.force_type) parts.push(`force:${row.force_type}`);
-  const muscles = [
-    ...(row.primary_muscles ?? []),
-    ...(row.secondary_muscles ?? []),
-  ];
-  if (muscles.length > 0) parts.push(`muscles:${muscles.join("+")}`);
-  // equipment 缺省语义 = bodyweight（002 归一口径：源 null/'body only' → bodyweight）
-  parts.push(`equipment:${row.equipment ?? "bodyweight"}`);
+  const pattern = attr.pattern;
+  if (typeof pattern === "string" && pattern) parts.push(`pattern:${pattern}`);
+  const targets = (attr.targets as { primary?: unknown } | undefined)?.primary;
+  if (Array.isArray(targets) && targets.length > 0) {
+    parts.push(
+      `targets:${targets.filter((t) => typeof t === "string").join("+")}`,
+    );
+  }
+  const equip = attr.equipment_required;
+  if (Array.isArray(equip) && equip.length > 0) {
+    parts.push(
+      `equipment:${equip.filter((e) => typeof e === "string").join("+")}`,
+    );
+  } else {
+    parts.push("equipment:bodyweight");
+  }
+  const impact = attr.impact_level;
+  if (impact && typeof impact === "object") {
+    const notable = Object.entries(impact as Record<string, unknown>)
+      .filter(([, v]) => typeof v === "number" && v >= 5)
+      .map(([k, v]) => `${k}:${v}`)
+      .join(",");
+    if (notable) parts.push(`impact:${notable}`);
+  }
   return parts.join(" | ");
 }

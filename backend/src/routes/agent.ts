@@ -13,10 +13,14 @@ import {
   postHRSamples,
 } from "../controllers/sessionController.js";
 import { postSuggestions } from "../controllers/suggestionController.js";
+import { getTodaySchedule } from "../controllers/scheduleController.js";
 
 export default async function agentRoutes(app: FastifyInstance) {
   app.post("/agent/classify", postClassifyExercise);
   app.post("/agent/image", postImage);
+  // E2: 今日课表确定性 API（训练前零容忍等待：纯 DB 读，无 LLM；
+  // 无计划时返回结构化 no_plan，前端据此引导，不在本路径生成）
+  app.get("/schedule/today", getTodaySchedule);
   // P010: canonical SSE chat endpoint over the frozen AgentService.chat seam.
   // Registered under the /api prefix in server.ts -> full path /api/chat.
   app.post("/chat", postChat);

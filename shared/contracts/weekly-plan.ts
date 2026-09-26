@@ -248,3 +248,129 @@ export const CreateWeeklyPlanInputSchema = z.object({
 });
 
 export type CreateWeeklyPlanInput = z.infer<typeof CreateWeeklyPlanInputSchema>;
+
+// ============================================================================
+// 今日课表 (Today Schedule) — E2 确定性 API（issue #1）
+// ============================================================================
+
+/**
+ * 今日课表三态（训练前零容忍等待路径的确定性响应形态）：
+ *  - planned   今日有条目（正常训练日）
+ *  - rest_day  本周有计划、今日无条目（休息日——前端按休息引导）
+ *  - no_plan   本周无计划（确定性兜底：前端据此引导生成，本路径不调 AI）
+ */
+export const TodayScheduleStatusSchema = z.enum([
+  'planned',
+  'rest_day',
+  'no_plan',
+]);
+
+export type TodayScheduleStatus = z.infer<typeof TodayScheduleStatusSchema>;
+
+/**
+ * 今日课表条目（展示形态）：plan_entries JOIN exercises.name 的投影。
+ * 字段语义与 PlanEntrySchema 对齐，差异点：
+ *  - 条目主键以 entry_id 暴露（与 exercise_id 区分，前端按它寻址条目状态）
+ *  - exercise_name 来自 join（exercises.name NOT NULL，INNER JOIN 安全）
+ */
+export const TodayScheduleEntrySchema = z.object({
+  entry_id: z.string().uuid(),
+  exercise_id: z.string().min(12).max(24), // NanoID（对齐 ExerciseSchema.id）
+  exercise_name: z.string().min(1),
+  target_sets: z.number().int().positive(),
+  target_load: TargetLoadSchema,
+  status: PlanEntryStatusSchema,
+  sort_order: z.number().int().min(0),
+});
+
+export type TodayScheduleEntry = z.infer<typeof TodayScheduleEntrySchema>;
+
+/**
+ * GET /api/schedule/today 响应契约（E2）：
+ * 纯 DB 读、无 LLM、无网络外呼。date 为客户端日历日（可选 ?date= 传入，
+ * 缺省服务器 UTC 当日）；week_id 由 date 推导（getIsoWeekId 单一真源）。
+ * no_plan 时 split=null、entries=[]——前端据 status 引导，不在本路径生成。
+ */
+export const TodayScheduleResponseSchema = z
+  .object({
+    date: z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'date 必须为 YYYY-MM-DD'),
+    week_id: WeekIdSchema,
+    status: TodayScheduleStatusSchema,
+    split: WeeklyPlanSplitSchema.nullable(), // no_plan 时 null
+    entries: z.array(TodayScheduleEntrySchema), // rest_day / no_plan 时空数组
+  })
+  .superRefine((res, ctx) => {
+    // 三态形态锁定（兜底不漂移）：
+    //  no_plan  → split 必为 null 且 entries 必为空（确定性兜底形态）
+    //  非 no_plan（本周有计划）→ split 必有值（计划元数据随行）
+    if (res.status === 'no_plan') {
+      if (res.split !== null) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'no_plan 时 split 必须为 null（本周无计划，无分化可言）',
+          path: ['split'],
+        });
+      }
+      if (res.entries.length > 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'no_plan 时 entries 必须为空数组（不存在无计划的条目）',
+          path: ['entries'],
+        });
+      }
+    } else if (res.split === null) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `${res.status} 时 split 不能为 null（本周存在计划，分化必随行）`,
+        path: ['split'],
+      });
+    }
+  });
+
+export type TodayScheduleResponse = z.infer<typeof TodayScheduleResponseSchema>;
+
+// ============================================================================
+// ISO 周推导（单一真源）与调度策略输入域（E3）
+// ============================================================================
+
+/**
+ * 经验等级——program-progression 分化决策表（split-selection）的输入域，
+ * 与 exercises.difficulty 取值风格一致（beginner/intermediate/advanced）。
+ */
+export const FitnessLevelSchema = z.enum([
+  'beginner',
+  'intermediate',
+  'advanced',
+]);
+
+export type FitnessLevel = z.infer<typeof FitnessLevelSchema>;
+
+/**
+ * ISO-8601 周推导：YYYY-MM-DD → YYYY-Www（周一为一周之始，周四规则定年）。
+ *
+ * week_id 推导的单一真源：Repository 参数校验、E2 今日课表 Service、
+ * E3 周计划工具（mcpTools 的当前周缺省值）与前端共用，杜绝各处内联
+ * 实现漂移（weeklyPlanRepository.test.ts 既有内联算法即由此提炼）。
+ * 输入非法抛 Error（Zod 红线：抛错，不静默）。
+ */
+export function getIsoWeekId(dateStr: string): WeekId {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(dateStr);
+  if (!match) {
+    throw new Error(
+      `getIsoWeekId: date 必须为 YYYY-MM-DD（当前: ${dateStr}）`,
+    );
+  }
+  // 周四规则：把日期校准到本周周四，取其年与周号（UTC 计算规避时区漂移）
+  const cal = new Date(
+    Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3])),
+  );
+  const day = cal.getUTCDay() || 7; // 周日=7
+  cal.setUTCDate(cal.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(cal.getUTCFullYear(), 0, 1));
+  const week = Math.ceil(
+    ((cal.getTime() - yearStart.getTime()) / 86400000 + 1) / 7,
+  );
+  return WeekIdSchema.parse(
+    `${cal.getUTCFullYear()}-W${String(week).padStart(2, '0')}`,
+  );
+}

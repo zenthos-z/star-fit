@@ -191,3 +191,102 @@ describeOrSkip("ExerciseRepository (real PG, migration 002)", () => {
     ).rejects.toThrow(/exercises_primary_muscles_vocab_check/);
   });
 });
+
+// ============================================================================
+// A3 导入写入路径（issue #11）——破坏性测试，双保险门控
+//
+// replaceAllPublicItems 会清空全部公共库行（owner_user_id IS NULL）：
+// 仅在 DATABASE_URL + A3_DESTRUCTIVE_REPOSITORY_TEST=1 同时设置时运行，
+// 避免误清已导入的正式动作库。跑过后如需恢复正式库，重跑导入脚本：
+//   DATABASE_URL=... npx tsx src/scripts/importExerciseLibrary.ts
+// ============================================================================
+
+const destructiveEnabled =
+  process.env.DATABASE_URL &&
+  process.env.A3_DESTRUCTIVE_REPOSITORY_TEST === "1";
+const describeDestructive = destructiveEnabled ? describe : describe.skip;
+
+/** 最小契约行工厂（ExerciseLibraryItemSchema 全字段） */
+function buildImportItem(name: string, equipment: "barbell" | "dumbbell") {
+  const now = new Date().toISOString();
+  return {
+    id: `a3v${name
+      .toLowerCase()
+      .replace(/[^a-z0-9]/g, "")
+      .padEnd(18, "0")
+      .slice(0, 18)}`,
+    name,
+    name_zh: null,
+    exercise_type: "resistance" as const,
+    difficulty: "intermediate" as const,
+    equipment,
+    category: "strength" as const,
+    body_part: "upper_legs" as const,
+    primary_muscles: ["quadriceps"],
+    secondary_muscles: ["glutes"],
+    force_type: "push" as const,
+    mechanic: "compound" as const,
+    instructions: ["Descend.", "Drive up."],
+    form_cues: ["Chest up"],
+    common_mistakes: ["Knee cave"],
+    breathing: "Inhale down, exhale up",
+    aliases: ["Squat"],
+    instructions_zh: null,
+    image_refs: null,
+    video_urls: { male: "https://cdn.example.com/male/squat.mp4" },
+    poster_url: "https://cdn.example.com/posters/male/squat.jpg",
+    owner_user_id: null,
+    content_html: null,
+    tutorials: undefined,
+    tags_json: undefined,
+    assets_json: undefined,
+    modified_by: "system" as const,
+    modified_at: null,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
+describeDestructive(
+  "ExerciseRepository.replaceAllPublicItems (A3 import path)",
+  () => {
+    it("整体替换公共库：写入/计数/回读/幂等重跑", async () => {
+      const repo = createExerciseRepository(getPostgresClient());
+      const items = [
+        buildImportItem(`A3 Test Barbell Squat ${Date.now()}`, "barbell"),
+        buildImportItem(`A3 Test Dumbbell Squat ${Date.now()}`, "dumbbell"),
+      ];
+
+      // 首跑：公共库 == 写入的两行
+      const first = await repo.replaceAllPublicItems(items);
+      expect(first.written).toBe(2);
+      expect(await repo.countPublicLibrary()).toBe(2);
+
+      // 回读：契约行 + 枚举/数组/jsonb 列完整
+      const reread = await repo.getItemByName(items[0]!.name);
+      expect(reread?.equipment).toBe("barbell");
+      expect(reread?.primary_muscles).toEqual(["quadriceps"]);
+      expect(reread?.secondary_muscles).toEqual(["glutes"]);
+      expect(reread?.video_urls).toEqual({
+        male: "https://cdn.example.com/male/squat.mp4",
+      });
+      expect(reread?.instructions).toEqual(["Descend.", "Drive up."]);
+
+      // 幂等重跑：行数不涨（先删后插的替换语义）
+      const second = await repo.replaceAllPublicItems(items);
+      expect(second.written).toBe(2);
+      expect(await repo.countPublicLibrary()).toBe(2);
+    });
+
+    it("非法行整批拒绝（Zod 失败即抛，不写半批）", async () => {
+      const repo = createExerciseRepository(getPostgresClient());
+      const bad = [
+        buildImportItem(`A3 Bad ${Date.now()}`, "barbell"),
+        { ...buildImportItem("x", "barbell"), equipment: "warp_drive" },
+      ];
+      await expect(
+        repo.replaceAllPublicItems(bad as never),
+      ).rejects.toBeInstanceOf(ValidationError);
+    });
+  },
+);
