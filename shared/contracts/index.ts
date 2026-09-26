@@ -1284,6 +1284,10 @@ export {
   WeeklyPlanWithEntriesSchema,
   PlanEntryInputSchema,
   CreateWeeklyPlanInputSchema,
+  TodayScheduleStatusSchema,
+  TodayScheduleEntrySchema,
+  TodayScheduleResponseSchema,
+  FitnessLevelSchema,
 
   // Types
   type WeekId,
@@ -1297,7 +1301,12 @@ export {
   type WeeklyPlanWithEntries,
   type PlanEntryInput,
   type CreateWeeklyPlanInput,
+  type TodayScheduleStatus,
+  type TodayScheduleEntry,
+  type TodayScheduleResponse,
+  type FitnessLevel,
 
   // Functions
   canTransitionPlanEntryStatus,
+  getIsoWeekId,
 } from './weekly-plan.js';

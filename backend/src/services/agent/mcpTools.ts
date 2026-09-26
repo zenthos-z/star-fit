@@ -9,7 +9,7 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (9)
+ * ## Tool set (11)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, description}].
  *                                 The library is small enough to fit in context, so the agent
@@ -30,6 +30,16 @@
  *                                 users' queries and the admin console filters
  *                                 can adopt it later. A NanoID is generated
  *                                 server-side (never LLM-supplied).
+ * - `get_current_plan`    (read)  the user's persisted weekly plan (E3: plans
+ *                                 are entities, reuse-by-default — one per user
+ *                                 per week; week_id defaults to the CURRENT
+ *                                 week resolved server-side, the agent never
+ *                                 does calendar math).
+ * - `save_weekly_plan`    (write) persist a weekly plan (weekly_plans +
+ *                                 plan_entries, atomic, via
+ *                                 WeeklyPlanRepository — B1 honoured). Refuses
+ *                                 to overwrite an existing week
+ *                                 (already_exists) — weekly-once semantics.
  *
  * ## Red lines honoured
  * - **Repository boundary (B1)**: tools reach data ONLY through the Repository
@@ -85,6 +95,14 @@ import {
 import { getPostgresClient } from "../../db/postgresql/index.js";
 import { mergeHistorySources } from "./historyMerger.js";
 import { generateExerciseNanoId } from "../../utils/nanoid.js";
+import { createWeeklyPlanRepository } from "../../db/postgresql/repository/weeklyPlan.repository.js";
+import { ServiceError, ServiceErrorCode } from "../errors/ServiceError.js";
+import {
+  WEEK_ID_PATTERN,
+  PLAN_ENTRY_DATE_PATTERN,
+  getIsoWeekId,
+} from "shared/contracts";
+import { utcToday } from "../schedule/scheduleService.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -657,6 +675,96 @@ export type MemoryInput = z.infer<typeof writeMemorySchema>;
 export type ProfileUpdateInput = z.infer<typeof updateProfileSchema>;
 
 // ---------------------------------------------------------------------------
+// Weekly plan tool schemas (E3: 计划为持久化实体，每周一次语义)
+// ---------------------------------------------------------------------------
+
+const getCurrentPlanSchema = z
+  .object({
+    week_id: z
+      .string()
+      .regex(WEEK_ID_PATTERN, "ISO week YYYY-Www (e.g. 2026-W40)")
+      .optional()
+      .describe(
+        "ISO week id YYYY-Www. OMIT it to read the CURRENT week " +
+          "(resolved server-side — never compute calendar math yourself).",
+      ),
+  })
+  .describe(
+    "Read the user's persisted weekly plan (weekly_plans + plan_entries). " +
+      "Read-only, scoped to the calling user. ALWAYS call this BEFORE generating " +
+      "a weekly plan: plans are persisted entities with reuse-by-default semantics " +
+      "(one plan per user per week) — if a plan already exists for the week, " +
+      "REUSE it and adjust entries on request instead of regenerating.",
+  );
+
+const weeklyPlanEntryInputSchema = z.object({
+  entry_date: z
+    .string()
+    .regex(PLAN_ENTRY_DATE_PATTERN, "Calendar day YYYY-MM-DD")
+    .describe("Calendar day YYYY-MM-DD this entry belongs to (no timezone)."),
+  exercise_id: z
+    .string()
+    .min(12)
+    .max(24)
+    .describe("Exercise id from list_exercises (NEVER invented)."),
+  target_sets: z
+    .number()
+    .int()
+    .positive()
+    .describe("Target set count for the day (positive integer)."),
+  target_load: z
+    .object({
+      type: z.enum(["rpe", "percent_1rm"]),
+      min: z.number(),
+      max: z.number(),
+    })
+    .describe(
+      "Target load range [min, max]: RPE 0-10 when type=rpe, %1RM (0,100] " +
+        "when type=percent_1rm. min must be <= max.",
+    ),
+  sort_order: z
+    .number()
+    .int()
+    .min(0)
+    .optional()
+    .describe("Order within the same day (default 0)."),
+});
+
+const saveWeeklyPlanSchema = z
+  .object({
+    week_id: z
+      .string()
+      .regex(WEEK_ID_PATTERN, "ISO week YYYY-Www (e.g. 2026-W40)")
+      .optional()
+      .describe(
+        "ISO week id. OMIT it to target the CURRENT week (resolved " +
+          "server-side — never compute calendar math yourself).",
+      ),
+    split: z
+      .enum(["full_body", "upper_lower", "push_pull_legs", "hybrid", "custom"])
+      .describe(
+        "Weekly split. Derive it from the user's weekly available days + level " +
+          "per the program-progression split-selection decision table.",
+      ),
+    entries: z
+      .array(weeklyPlanEntryInputSchema)
+      .min(1)
+      .max(200)
+      .describe(
+        "All plan entries for the week (one row per exercise per day). " +
+          "Dates must cover the user's training days of that week.",
+      ),
+  })
+  .describe(
+    "Persist a weekly plan as an entity (weekly_plans + plan_entries, written " +
+      "through the WeeklyPlanRepository in one atomic transaction). Call " +
+      "get_current_plan FIRST: one plan per user per week — if the week already " +
+      "has a plan the tool REFUSES to overwrite (returns already_exists); adjust " +
+      "existing entries conversationally instead of saving a new plan. The " +
+      "server stamps user_id server-side; the agent cannot target another user.",
+  );
+
+// ---------------------------------------------------------------------------
 // Scoped write helpers (exposed so B2/B3 can drive the guard with real PG)
 // ---------------------------------------------------------------------------
 
@@ -1040,6 +1148,107 @@ export function buildMcpToolsWith(
     },
   });
 
+  const getCurrentPlan = new DynamicStructuredTool({
+    name: "get_current_plan",
+    description:
+      "Read the user's persisted weekly plan (plan + all entries). Read-only, scoped to the calling user. " +
+      "ALWAYS call BEFORE generating a weekly plan — plans are persisted entities with reuse-by-default " +
+      "semantics (one per user per week); when a plan exists, reuse and adjust it, never regenerate.",
+    schema: getCurrentPlanSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const weekId = input.week_id ?? getIsoWeekId(utcToday());
+      const planRepo = createWeeklyPlanRepository(client);
+      const result = await planRepo.getWeeklyPlanByUserAndWeek(userId, weekId);
+      if (!result) {
+        return JSON.stringify({
+          found: false,
+          week_id: weekId,
+          message:
+            "No plan for this week yet. Generate one (load_history → list_exercises → " +
+            "save_weekly_plan) respecting the user's weekly days, equipment and injuries.",
+        });
+      }
+      return JSON.stringify({
+        found: true,
+        plan: result.plan,
+        entries: result.entries,
+        message:
+          "Plan for this week already exists (reuse-by-default). Adjust entries " +
+          "conversationally on request; do NOT regenerate the week.",
+      });
+    },
+  });
+
+  const saveWeeklyPlan = new DynamicStructuredTool({
+    name: "save_weekly_plan",
+    description:
+      "Persist the weekly plan as an entity (atomic: plan + all entries, via WeeklyPlanRepository). " +
+      "Call get_current_plan FIRST — one plan per user per week; an existing plan is NEVER overwritten " +
+      "(already_exists). Missing-entry adjustments afterwards happen conversationally, not by re-saving.",
+    schema: saveWeeklyPlanSchema,
+    func: async (input, _runManager, config) => {
+      const userId = getUserIdFromContext({
+        explicitConfig: config,
+        injectedUserId,
+      });
+      const weekId = input.week_id ?? getIsoWeekId(utcToday());
+      const planRepo = createWeeklyPlanRepository(client);
+      try {
+        const result = await planRepo.createWeeklyPlan({
+          user_id: userId,
+          week_id: weekId,
+          split: input.split,
+          status: "active" as const, // 新周计划立即生效
+          entries: input.entries.map((e) => ({
+            entry_date: e.entry_date,
+            exercise_id: e.exercise_id,
+            target_sets: e.target_sets,
+            target_load: e.target_load,
+            status: "planned" as const, // 新计划条目一律初始 planned
+            sort_order: e.sort_order ?? 0,
+          })),
+        });
+        return JSON.stringify({
+          saved: true,
+          week_id: result.plan.week_id,
+          plan_id: result.plan.id,
+          entries_count: result.entries.length,
+          message:
+            "Weekly plan persisted as an entity. Today's and future sessions read " +
+            "it deterministically from /api/schedule/today.",
+        });
+      } catch (err) {
+        // 结构化降级：already_exists（每周一次语义）与 invalid_input（Zod 拒绝）
+        // 都是 Agent 需要读懂并改道的结果，不是运行时故障 —— 记日志后返回。
+        if (
+          err instanceof ServiceError &&
+          err.code === ServiceErrorCode.ALREADY_EXISTS
+        ) {
+          return JSON.stringify({
+            saved: false,
+            reason: "already_exists",
+            week_id: weekId,
+            message:
+              "This week already has a plan (one per user per week, reuse-by-default). " +
+              "Read it with get_current_plan and adjust entries conversationally instead.",
+          });
+        }
+        console.error("[mcpTools.save_weekly_plan] failed:", err);
+        const message =
+          err instanceof Error ? err.message : "unknown validation failure";
+        return JSON.stringify({
+          saved: false,
+          reason: "invalid_input",
+          message: `Plan rejected by contract validation: ${message}. Fix the entries and retry.`,
+        });
+      }
+    },
+  });
+
   return [
     loadHistory,
     listExercises,
@@ -1050,6 +1259,8 @@ export function buildMcpToolsWith(
     writeSession,
     writeMemory,
     updateProfile,
+    getCurrentPlan,
+    saveWeeklyPlan,
   ];
 }
 

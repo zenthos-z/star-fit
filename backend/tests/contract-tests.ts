@@ -24,6 +24,9 @@ import {
   WeekIdSchema,
   canTransitionPlanEntryStatus,
   PLAN_ENTRY_STATUS_TRANSITIONS,
+  TodayScheduleResponseSchema,
+  TodayScheduleEntrySchema,
+  getIsoWeekId,
   type PlanEntry,
   type WeeklyPlan,
 } from "../../shared/contracts/index.js";
@@ -577,5 +580,125 @@ describe("Contract Tests: Weekly Plan", () => {
     for (const s of ["planned", "adjusted", "completed", "skipped"] as const) {
       assert.strictEqual(canTransitionPlanEntryStatus(s, s), true);
     }
+  });
+});
+
+// ============================================================================
+// Contract Tests: Today Schedule (E2) + ISO week derivation（真源 weekly-plan.ts）
+// ============================================================================
+
+describe("Contract Tests: Today Schedule & ISO Week", () => {
+  const ENTRY = {
+    entry_id: "3f2b1a00-0000-4000-8000-000000000001",
+    exercise_id: "test-exercise-0001",
+    exercise_name: "杠铃深蹲",
+    target_sets: 4,
+    target_load: { type: "percent_1rm", min: 70, max: 80 },
+    status: "planned",
+    sort_order: 1,
+  };
+
+  test("getIsoWeekId derives known anchors (ISO-8601, Monday start, Thursday rule)", () => {
+    const anchors: Array<[string, string]> = [
+      ["2026-01-01", "2026-W01"], // 元旦恰为周四
+      ["2025-12-29", "2026-W01"], // 跨年向前：上年 12 月末属来年 W01
+      ["2026-09-26", "2026-W39"],
+      ["2026-12-31", "2026-W53"], // 2026 为 53 周长年
+      ["2027-01-01", "2026-W53"], // 跨年向后：元旦周五属上年 W53
+      ["2024-12-29", "2024-W52"], // 周日收尾一周
+      ["2020-01-03", "2020-W01"],
+      ["2021-01-01", "2020-W53"], // 闰年长周跨年
+    ];
+    for (const [date, week] of anchors) {
+      assert.strictEqual(getIsoWeekId(date), week, `${date} → ${week}`);
+    }
+  });
+
+  test("getIsoWeekId throws on malformed date", () => {
+    for (const bad of ["2026-9-26", "20260926", "2026-09-26T00:00:00Z", ""]) {
+      assert.throws(() => getIsoWeekId(bad), /YYYY-MM-DD/, `"${bad}" 应抛错`);
+    }
+  });
+
+  test("TodayScheduleEntry rejects rows without the joined exercise_name", () => {
+    const { exercise_name: _drop, ...withoutName } = ENTRY;
+    assert.strictEqual(
+      TodayScheduleEntrySchema.safeParse(withoutName).success,
+      false,
+    );
+  });
+
+  test("TodayScheduleResponse accepts all three statuses with correct shapes", () => {
+    const base = { date: "2026-09-26", week_id: "2026-W39" };
+    // planned：split + 非空 entries
+    assert.strictEqual(
+      TodayScheduleResponseSchema.safeParse({
+        ...base,
+        status: "planned",
+        split: "upper_lower",
+        entries: [ENTRY],
+      }).success,
+      true,
+    );
+    // rest_day：计划元数据仍在，entries 空
+    assert.strictEqual(
+      TodayScheduleResponseSchema.safeParse({
+        ...base,
+        status: "rest_day",
+        split: "full_body",
+        entries: [],
+      }).success,
+      true,
+    );
+    // no_plan：确定性兜底——split 必为 null、entries 必为空
+    const noPlan = TodayScheduleResponseSchema.safeParse({
+      ...base,
+      status: "no_plan",
+      split: null,
+      entries: [],
+    });
+    assert.strictEqual(noPlan.success, true);
+    // no_plan 带 split 或条目则拒（兜底形态不可漂移）
+    assert.strictEqual(
+      TodayScheduleResponseSchema.safeParse({
+        ...base,
+        status: "no_plan",
+        split: "full_body",
+        entries: [],
+      }).success,
+      false,
+    );
+    assert.strictEqual(
+      TodayScheduleResponseSchema.safeParse({
+        ...base,
+        status: "no_plan",
+        split: null,
+        entries: [ENTRY],
+      }).success,
+      false,
+    );
+  });
+
+  test("TodayScheduleResponse rejects malformed date / unknown status", () => {
+    assert.strictEqual(
+      TodayScheduleResponseSchema.safeParse({
+        date: "2026-9-26",
+        week_id: "2026-W39",
+        status: "planned",
+        split: "full_body",
+        entries: [ENTRY],
+      }).success,
+      false,
+    );
+    assert.strictEqual(
+      TodayScheduleResponseSchema.safeParse({
+        date: "2026-09-26",
+        week_id: "2026-W39",
+        status: "maybe",
+        split: null,
+        entries: [],
+      }).success,
+      false,
+    );
   });
 });
