@@ -370,5 +370,66 @@ plan 卡由 uiHint 校验回路（M5c）程序化校验：schema 不通过 → �
 
 ---
 
-_最后更新时间: 2026-09-11_
-_版本: 3.1.0 - 移除幻影工具文档（submit_plan/calculate_capacity/create_exercise 均已不在工具表），对齐现行 6 工具 + plan 卡直出链路；重量允许留 0（首训自选、次训锚定）_
+## 十一、周计划模式（持久化实体，每周一次）
+
+> 4.0 起（E3/issue #2）：计划从「每次生成」变为持久化实体。本节是
+> 落库语义的权威说明；表结构与状态机契约见
+> `shared/contracts/weekly-plan.ts`（数据契约唯一定义源）。
+
+### 11.1 每周一次语义
+
+- 每周每用户**一份**计划（`(user_id, week_id)` 唯一约束）
+- 生成前**必查** `get_current_plan`：已有 → 默认复用，按诉求调整个别
+  条目（对话式），不重新落库；`save_weekly_plan` 对已有周返回
+  `already_exists` 拒绝覆盖
+- `week_id` 缺省由服务器推导当前 ISO 周——Agent 不做任何日历算术
+
+### 11.2 落库数据形态
+
+`save_weekly_plan(split, entries[])`，每条目：
+
+| 字段        | 形态                     | 说明                          |
+| ----------- | ------------------------ | ----------------------------- |
+| entry_date  | YYYY-MM-DD（无时区）     | 条目归属的日历日              |
+| exercise_id | NanoID（12-24 字符）     | 必须来自 list_exercises       |
+| target_sets | 正整数                   | 当日目标组数                  |
+| target_load | {type, min, max} 区间    | rpe ∈ [0,10] / %1RM ∈ (0,100] |
+| sort_order  | 非负整数（可选，默认 0） | 同日内排序                    |
+
+条目状态机（落库即 `planned`）：`planned → adjusted → completed/skipped`，
+后两态为终态。状态迁移由 Repository 强制执行（契约迁移表单一真源）。
+
+### 11.3 训练前读取路径（AI 隐形）
+
+- 今日课表走确定性 API `GET /api/schedule/today`（纯 DB 读、无 LLM）：
+  返回三态 `planned / rest_day / no_plan` + 当日条目（含动作名）
+- **已落库的计划不需要 Agent 在场**——用户问「今天练什么」时前端直读；
+  本技能只在「排周计划 / 换计划 / 调整条目」时介入
+
+### 11.4 缺勤顺延（查表规则，Agent 只解释）
+
+用户错过训练日时，处置由 Service 纯函数确定性完成
+（`backend/src/services/schedule/planAdjustment.ts`）：
+
+| 条目状态            | 错过？ | 今日状态 | 处置                 |
+| ------------------- | ------ | -------- | -------------------- |
+| completed / skipped | —      | —        | 不动（终态）         |
+| planned / adjusted  | 否     | —        | 照常执行             |
+| planned / adjusted  | 是     | 休息日   | 顺延并入今日         |
+| planned / adjusted  | 是     | 已有训练 | 置换为跳过（不补课） |
+
+Agent 职责边界：解释规则 + 引导按下一次训练正常执行；**绝不重新生成
+周计划、绝不重排条目、绝不把错过容量叠加到今天**。
+
+### 11.5 与 program-progression 的关系
+
+- 分化（split）选择 → 该技能的分化决策表；**代码真源**为
+  `backend/src/services/schedule/progressionPolicy.ts`（selectSplit 等纯函数）
+- 渐进超负荷 / deload 判定 → 同一真源（selectProgressionStrategy /
+  shouldDeload）；加重步进等算术一律引用 Service 结果，Agent 不自行计算
+
+---
+
+_最后更新时间: 2026-09-26_
+_版本: 4.0.0 - 周计划生成模式（E3/issue #2）：新增第十一节（落库契约/每周一次语义/缺勤顺延/决策表真源指针），对齐 get_current_plan + save_weekly_plan 工具链_
+_历史: 3.1.0 - 移除幻影工具文档（submit_plan/calculate_capacity/create_exercise 均已不在工具表），对齐现行 6 工具 + plan 卡直出链路；重量允许留 0（首训自选、次训锚定）_
