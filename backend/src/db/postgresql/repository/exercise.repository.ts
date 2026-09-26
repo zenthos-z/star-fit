@@ -196,6 +196,8 @@ export class ExerciseRepository extends BaseRepository {
 
   /**
    * 按名称读取动作（教学页/别名检索路径）。
+   * 中文名（name_zh）与英文源名（name）均可命中——A6 中文优先展示后，
+   * 前端 by-name 兜底可能携带任一语言名称。
    * 未命中返回 null。
    */
   async getItemByName(name: string): Promise<ExerciseLibraryItem | null> {
@@ -207,7 +209,7 @@ export class ExerciseRepository extends BaseRepository {
       );
     }
     const row = await this.queryOne<ExerciseRow>(
-      `${ITEM_SELECT_SQL} WHERE name = $name`,
+      `${ITEM_SELECT_SQL} WHERE name = $name OR name_zh = $name`,
       { name },
     );
     return row ? mapItemRow(row) : null;

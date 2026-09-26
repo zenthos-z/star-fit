@@ -16,6 +16,8 @@ import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../lib/nativeTabBar';
+import { resolveExerciseDisplayName } from '../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../hooks/useExerciseLibraryIndex';
 import {
   isUniformSetBlock,
   dayVolumeSummary,
@@ -91,6 +93,7 @@ export interface PlanDayDetailPageProps {
  * z-[110] 与信息页 z-[100]。打开时盖住原生 tab bar（引用计数），关闭恢复。
  */
 export const PlanDayDetailPage: React.FC<PlanDayDetailPageProps> = ({ detail, onClose }) => {
+  const libraryIndex = useExerciseLibraryIndex();
   useEffect(() => {
     if (!detail) return;
     setTabBarHidden(true);
@@ -160,7 +163,12 @@ export const PlanDayDetailPage: React.FC<PlanDayDetailPageProps> = ({ detail, on
             </div>
           ) : (
             detail.exercises.map((ex, i) => (
-              <ExerciseCard key={ex.exerciseId ?? `${ex.name}-${i}`} name={ex.name} sets={ex.sets} note={ex.note} />
+              <ExerciseCard
+                key={ex.exerciseId ?? `${ex.name}-${i}`}
+                name={resolveExerciseDisplayName(ex.name, { library: libraryIndex })}
+                sets={ex.sets}
+                note={ex.note}
+              />
             ))
           )}
         </div>

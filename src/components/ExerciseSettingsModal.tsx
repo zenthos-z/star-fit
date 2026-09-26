@@ -11,6 +11,8 @@ import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } fro
 import { guessCardioSubtype } from '@/utils/exerciseLogic';
 import { DeviationLogger } from '../services/logging/DeviationLogger';
 import { setTabBarHidden } from '../lib/nativeTabBar';
+import { resolveExerciseDisplayName } from '@/utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '@/hooks/useExerciseLibraryIndex';
 
 interface ExerciseSettingsModalProps {
   exercise: ExerciseAction;
@@ -278,9 +280,14 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
   // Basic Info - from ExerciseAction
   const [name, setName] = useState(exercise.metadata?.name || (exercise as any).name || '');
+  const libraryIndex = useExerciseLibraryIndex();
   // Display name for UI - show placeholder text instead of UUID
   // When name is empty, show "选择动作..." to prompt user to select from library
-  const displayName = name || '选择动作...';
+  // A6 中文优先：存量英文名经库索引解析为 name_zh，未命中回退原名
+  const displayName = resolveExerciseDisplayName(name, {
+    library: libraryIndex,
+    libraryId: exercise.metadata?.libraryId,
+  }) || '选择动作...';
   const [type, setType] = useState<ExerciseType>(normalizeType(exercise.type));
   const [referenceBodyweight, setReferenceBodyweight] = useState(exercise.metadata?.referenceBodyweight || DEFAULT_BODYWEIGHT);
   const [targetRpe, setTargetRpe] = useState(exercise.metadata?.targetRpe || 7);
@@ -623,7 +630,7 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
   // --- Handlers ---
 
-  const handleLibrarySelect = (newId: string, newName: string, newDefaultType?: string, newBodyCategory?: string, newMuscles?: string[], newEquipment?: string) => {
+  const handleLibrarySelect = (newId: string, newName: string, newDefaultType?: string, newBodyCategory?: string, newMuscles?: string[], newEquipment?: string, nameEn?: string) => {
       setName(newName);
       const nextType = (newDefaultType as ExerciseType) || type;
 
@@ -632,11 +639,13 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
       }
 
       // Store the libraryId for later use (e.g., when opening tutorial)
+      // A6：name 存中文展示名，nameEn 存库英文原名（by-name 反查/锚定回退）
       if (newId) {
           setMetadata(prev => ({
               ...prev,
               libraryId: newId,
-              name: newName
+              name: newName,
+              ...(nameEn ? { nameEn } : {})
           }));
       }
 

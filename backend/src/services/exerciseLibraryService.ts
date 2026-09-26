@@ -166,7 +166,7 @@ export const ExerciseLibraryService = {
     const client = this.getClient();
     const row = await client.queryOne<Exercise>(
       `
-      SELECT * FROM exercises WHERE name = $name
+      SELECT * FROM exercises WHERE name = $name OR name_zh = $name
     `,
       { name },
     );

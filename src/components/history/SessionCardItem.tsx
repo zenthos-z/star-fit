@@ -9,6 +9,8 @@ import React from 'react';
 import type { Session, Exercise } from '@/src/types/legacy';
 import SwipeableRow from '../SwipeableRow';
 import { setVolume } from '@/utils/workoutSummary';
+import { resolveExerciseDisplayName } from '@/utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '@/hooks/useExerciseLibraryIndex';
 
 const calculateVolume = (ex: Exercise) => {
   let vol = 0;
@@ -31,7 +33,12 @@ export function SessionCardItem({ session, onSelect, onDelete }: SessionCardItem
   const timeStr = dateObj.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
   const duration = Math.floor((session.endTime! - session.startTime - session.pausedDuration) / 1000 / 60);
   const totalVolume = session.exercises.reduce((acc, ex) => acc + calculateVolume(ex), 0);
-  const exerciseNames = session.exercises.map(e => e.name).slice(0, 3).join(', ');
+  const libraryIndex = useExerciseLibraryIndex();
+  // A6 中文优先：历史会话动作名统一中文展示（存量英文名经库索引解析）
+  const exerciseNames = session.exercises
+    .map(e => resolveExerciseDisplayName(e.name, { library: libraryIndex }))
+    .slice(0, 3)
+    .join(', ');
 
   return (
     <SwipeableRow

@@ -27,18 +27,22 @@ export interface ExerciseDetailData {
   [key: string]: unknown;
 }
 
-/** 按优先级选取教学内容；三槽皆空返回 null（调用方走离线备份/AI 生成） */
+/** 按优先级选取教学内容；三槽皆空返回 null（调用方走离线备份/AI 生成）
+ *
+ * A6 中文优先调整（issue #19 PR 返工）：tutorial_md（库结构化五段中文教学）
+ * 提为最高——content_html 存量为库源英文一句话 stub（314 条，60-139 字符），
+ * 会压住中文教学；content_html 降为 tutorial_md 缺席时的回退。 */
 export function pickTutorialContent(
   data: ExerciseDetailData | null | undefined,
 ): PickedTutorial | null {
   if (!data) return null;
 
-  if (typeof data.content_html === 'string' && data.content_html.trim() !== '') {
-    return { content: data.content_html, source: 'library' };
-  }
-
   if (typeof data.tutorial_md === 'string' && data.tutorial_md.trim() !== '') {
     return { content: data.tutorial_md, source: 'library' };
+  }
+
+  if (typeof data.content_html === 'string' && data.content_html.trim() !== '') {
+    return { content: data.content_html, source: 'library' };
   }
 
   const ai = parseTutorialsAi(data.tutorials);

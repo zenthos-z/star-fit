@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion, useMotionValue, useTransform, AnimatePresence, useSpring } from 'framer-motion';
 import { haptic } from '../../lib/nativeHaptics';
+import { resolveExerciseDisplayName } from '../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../hooks/useExerciseLibraryIndex';
 
 interface ReorderModeProps {
   exerciseName: string;
@@ -23,6 +25,9 @@ const ReorderMode: React.FC<ReorderModeProps> = ({
   onDrop,
   onCancel
 }) => {
+  const libraryIndex = useExerciseLibraryIndex();
+  // A6 中文优先：拖拽排序的刻度与幽灵卡动作名统一中文展示
+  const displayExerciseName = resolveExerciseDisplayName(exerciseName, { library: libraryIndex });
   const totalCount = exercises.length;
   const [targetIndex, setTargetIndex] = useState<number>(exerciseIndex);
   
@@ -209,7 +214,7 @@ const ReorderMode: React.FC<ReorderModeProps> = ({
                         }}
                     >
                         <span className={`text-right font-bold truncate text-sm shadow-black/50 drop-shadow-md transition-colors ${isActive ? 'text-white' : 'text-white/50'}`}>
-                            {ex.name}
+                            {resolveExerciseDisplayName(ex.name, { library: libraryIndex })}
                         </span>
                         <div className={`ml-3 rounded-full shadow-sm transition-all ${isActive ? 'bg-amber-400 w-2 h-2' : 'bg-white/30 w-1.5 h-1.5'}`} />
                     </motion.div>
@@ -237,7 +242,7 @@ const ReorderMode: React.FC<ReorderModeProps> = ({
               {exerciseIndex + 1}
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-gray-900 font-bold text-base truncate">{exerciseName}</div>
+              <div className="text-gray-900 font-bold text-base truncate">{displayExerciseName}</div>
             </div>
           </motion.div>
       )}

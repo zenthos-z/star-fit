@@ -6,7 +6,7 @@ import { ExerciseLibraryService } from '@/services/exerciseLibraryService';
 import { haptic } from '../lib/nativeHaptics';
 
 interface ExerciseLibraryModalProps {
-  onSelect: (id: string, name: string, defaultType?: string, bodyCategory?: string, muscles?: string[], equipment?: string) => void;
+  onSelect: (id: string, name: string, defaultType?: string, bodyCategory?: string, muscles?: string[], equipment?: string, nameEn?: string) => void;
   onClose: () => void;
   isCreatingMode?: boolean;
   onCancelCreate?: () => void;
@@ -16,6 +16,8 @@ interface ExerciseLibraryModalProps {
 interface Exercise {
   id: string;
   name: string;
+  /** 中文名（A6 翻译回填；旧缓存/自建动作可空 → 回退 name） */
+  name_zh?: string | null;
   exercise_type: string;
   targets: {
     primary: string[];
@@ -31,9 +33,29 @@ interface Exercise {
   };
 }
 
-// 肌肉分区映射到中文分类名
+// 肌群 → 中文分区名。两代键并存：
+//  - 17 基准英文枚举（A3 后端受控词表 primary_muscles 口径，targets.primary 返回值）
+//  - 存量中文键（旧缓存兼容）
 const MUSCLE_TO_CATEGORY: Record<string, string> = {
-  // 上肢
+  // ---- 17 基准英文枚举（snake_case，与 shared/contracts EXERCISE_MUSCLES 对齐）----
+  abdominals: '核心',
+  abductors: '腿部',
+  adductors: '腿部',
+  biceps: '手臂',
+  calves: '腿部',
+  chest: '胸部',
+  forearms: '手臂',
+  glutes: '腿部',
+  hamstrings: '腿部',
+  lats: '背部',
+  lower_back: '背部',
+  middle_back: '背部',
+  neck: '肩颈',
+  quadriceps: '腿部',
+  shoulders: '肩部',
+  traps: '肩部',
+  triceps: '手臂',
+  // ---- 存量中文键（旧缓存兼容）----
   '上胸': '胸部',
   '中下胸': '胸部',
   '前束': '肩部',
@@ -42,13 +64,11 @@ const MUSCLE_TO_CATEGORY: Record<string, string> = {
   '二头': '手臂',
   '三头': '手臂',
   '小臂': '手臂',
-  // 躯干
   '背部': '背部',
   '下背': '背部',
   '斜方肌': '肩部',
   '腹肌': '核心',
   '侧腹': '核心',
-  // 下肢
   '股四': '腿部',
   '腘绳': '腿部',
   '小腿': '腿部',
@@ -181,7 +201,7 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
 
   // 将后端数据转换为按分类分组的结构，并保留完整的动作信息
   const getLibrary = () => {
-    const grouped: Record<string, Array<{ name: string; type: string; bodyCategory?: string; muscles?: string[]; equipment?: string }>> = {};
+    const grouped: Record<string, Array<{ id?: string; name: string; nameEn?: string; type: string; bodyCategory?: string; muscles?: string[]; equipment?: string }>> = {};
 
     exercises.forEach(ex => {
       // Get primary targets from the new targets structure
@@ -199,7 +219,9 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
         const equipment = Array.isArray(ex.equipment_required) ? ex.equipment_required[0] : '';
 
         grouped[categoryName].push({
-          name: ex.name,
+          id: ex.id,
+          name: ex.name_zh?.trim() || ex.name, // 中文优先展示（A6）
+          nameEn: ex.name,
           type: ex.exercise_type || 'resistance',
           bodyCategory: categoryName, // For compatibility with handleLibrarySelect
           muscles: primaryTargets,
@@ -215,7 +237,9 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
         const equipment = Array.isArray(ex.equipment_required) ? ex.equipment_required[0] : '';
 
         grouped[categoryName].push({
-          name: ex.name,
+          id: ex.id,
+          name: ex.name_zh?.trim() || ex.name, // 中文优先展示（A6）
+          nameEn: ex.name,
           type: ex.exercise_type || 'resistance',
           bodyCategory: categoryName,
           muscles: [],
@@ -233,10 +257,13 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
 
     if (!searchTerm) return library;
 
-    const filtered: Record<string, Array<{ name: string; type: string; bodyCategory?: string; muscles?: string[]; equipment?: string }>> = {};
+    const filtered: Record<string, Array<{ id?: string; name: string; nameEn?: string; type: string; bodyCategory?: string; muscles?: string[]; equipment?: string }>> = {};
     Object.entries(library).forEach(([cat, items]) => {
+        // 双语搜索：中文展示名与英文原名均可命中（A6）
+        const term = searchTerm.toLowerCase();
         const matchingItems = items.filter(item =>
-            item.name.toLowerCase().includes(searchTerm.toLowerCase())
+            item.name.toLowerCase().includes(term) ||
+            (item.nameEn ?? '').toLowerCase().includes(term)
         );
         if (matchingItems.length > 0) {
             filtered[cat] = matchingItems;
@@ -471,8 +498,8 @@ const ExerciseLibraryModal: React.FC<ExerciseLibraryModalProps> = ({ onSelect, o
                        <div className="bg-white rounded-[20px] overflow-hidden shadow-sm">
                            {items.map((item, idx) => (
                                <button
-                                 key={(item as any).id || item.name}
-                                 onClick={() => { haptic('light'); onSelect((item as any).id || item.name, item.name, item.type, item.bodyCategory, item.muscles, item.equipment); }}
+                                 key={item.id || item.nameEn || item.name}
+                                 onClick={() => { haptic('light'); onSelect(item.id || item.nameEn || item.name, item.name, item.type, item.bodyCategory, item.muscles, item.equipment, item.nameEn); }}
                                  className={`w-full text-left px-5 py-3.5 active:bg-gray-100 transition-colors flex justify-between items-center group ${
                                    idx > 0 ? 'border-t border-gray-100' : ''
                                  }`}

@@ -3,6 +3,8 @@ import { ExerciseAction, LoadAnchors, LoadAnchor } from '../../../types/protocol
 import { deviationBuffer } from '../../../services/DeviationBuffer';
 import { DeviationWarningModal } from '../../DeviationWarningModal';
 import { CardHeader } from './CardHeader';
+import { resolveExerciseDisplayName } from '../../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../../hooks/useExerciseLibraryIndex';
 import { haptic } from '../../../lib/nativeHaptics';
 
 /**
@@ -257,7 +259,12 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
     setPressStartTime(0);
   };
 
-  const exerciseName = exercise.metadata?.name || 'Unknown Exercise';
+  const libraryIndex = useExerciseLibraryIndex();
+  // A6 中文优先：存量英文名经库索引解析 name_zh
+  const exerciseName = resolveExerciseDisplayName(exercise.metadata?.name, {
+    library: libraryIndex,
+    libraryId: exercise.metadata?.libraryId,
+  }) || 'Unknown Exercise';
   const targetRpe = exercise.metadata?.targetRpe;
   const completedCount = exercise.sets.filter(s => s.status === 'COMPLETED').length;
   const totalCount = exercise.sets.length;

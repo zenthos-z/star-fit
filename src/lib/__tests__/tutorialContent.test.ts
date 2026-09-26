@@ -8,22 +8,22 @@ import {
 describe('pickTutorialContent（库数据优先级）', () => {
   const AI_MD = 'x'.repeat(80);
 
-  it('① content_html（admin 官方版）最高，source=library', () => {
+  it('① tutorial_md（库结构化五段中文教学，A6 中文优先）最高，source=library', () => {
     const picked = pickTutorialContent({
       content_html: '<p>官方内容</p>',
       tutorial_md: '## 动作作用\n\n库内容',
       tutorials: { ai: { content_md: AI_MD } },
     });
-    expect(picked).toEqual({ content: '<p>官方内容</p>', source: 'library' });
+    expect(picked).toEqual({ content: '## 动作作用\n\n库内容', source: 'library' });
   });
 
-  it('② tutorial_md（动作库五段组装）次之，source=library', () => {
+  it('② content_html 降为 tutorial_md 缺席时的回退，source=library', () => {
     const picked = pickTutorialContent({
-      content_html: null,
-      tutorial_md: '## 动作作用\n\n库内容',
+      content_html: '<p>官方内容</p>',
+      tutorial_md: null,
       tutorials: { ai: { content_md: AI_MD } },
     });
-    expect(picked).toEqual({ content: '## 动作作用\n\n库内容', source: 'library' });
+    expect(picked).toEqual({ content: '<p>官方内容</p>', source: 'library' });
   });
 
   it('③ tutorials.ai.content_md 兜底，source=ai', () => {

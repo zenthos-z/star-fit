@@ -3,6 +3,8 @@ import { ExerciseAction, LoadAnchors } from '../../../types/protocol';
 import { Attachment } from '../FloatingAttachment';
 import { haptic } from '../../../lib/nativeHaptics';
 import { CardHeader } from './CardHeader';
+import { resolveExerciseDisplayName } from '../../../utils/exerciseDisplay';
+import { useExerciseLibraryIndex } from '../../../hooks/useExerciseLibraryIndex';
 
 /**
  * 数字字号按位数动态缩放（有下限）：
@@ -30,6 +32,7 @@ interface IsometricCardProps {
  * Based on EXERCISE_EXECUTION_REFACTOR_GUIDE.md
  */
 export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused, onUpdate, addAttachment }) => {
+  const libraryIndex = useExerciseLibraryIndex();
   const [activeSetIndex, setActiveSetIndex] = useState<number | null>(null);
   const [elapsedMap, setElapsedMap] = useState<Record<number, number>>({});
 
@@ -150,7 +153,14 @@ export const IsometricCard: React.FC<IsometricCardProps> = ({ exercise, isPaused
   return (
     <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
       {/* Header - Standard Structure */}
-      <CardHeader name={exercise.metadata?.name || '静力动作'} type={exercise.type} className="mb-8" />
+      <CardHeader
+        name={resolveExerciseDisplayName(exercise.metadata?.name, {
+          library: libraryIndex,
+          libraryId: exercise.metadata?.libraryId,
+        }) || '静力动作'}
+        type={exercise.type}
+        className="mb-8"
+      />
 
       <div className="space-y-10">
         {exercise.sets.map((set, idx) => {
