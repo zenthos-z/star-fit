@@ -69,7 +69,7 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "8e6a9b1724d375a83b4476a02aa489798a156b21701e38b6f1d72e9d0552eab2",
+    "261c355002bbac1fb3c825ba02840ec91d696edf7bb77911fa63b67da9dba270",
   "strength-training-designer/knowledge/non-big-three-guide.md":
     "2cfc4569bf8ee7adf99dd7f4a946e17f2be00c59e6c8989d6f2ed8b3b2320a82",
 };
