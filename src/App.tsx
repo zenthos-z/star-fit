@@ -653,6 +653,7 @@ const App: React.FC = () => {
       setChatMessage,
       chatHistory,
       isLoading,
+      entryPlaceholder,
       handleChatSubmit,
       handleConfirmPlan: handleAiConfirmPlan,
       markPlanConsumed,
@@ -1604,6 +1605,7 @@ const App: React.FC = () => {
                 }}
                 sessionStatus={session.status}
                 sessionSessionId={session.id}
+                entryPlaceholder={entryPlaceholder}
                 // [NEW] Thread management props
                 threads={threads}
                 currentThreadId={currentThreadId}

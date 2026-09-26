@@ -130,6 +130,10 @@ export const useAICoach = (
   const [chatMessage, setChatMessage] = useState("");
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([]);
   const [isLoading, setIsLoading] = useState(false);
+  // [B1 issue#5 返工] 入口预填 = placeholder 语义（2026-09-26 PR #27 打回）：
+  // 建议文案走输入框 placeholder（原生浅灰、可被输入天然替换），不进正式值、不可发送。
+  // 用户一旦输入任何内容即清空（下方 effect），发送亦清空——预填只服务「入口时刻」。
+  const [entryPlaceholder, setEntryPlaceholder] = useState('');
 
   // [NEW] Thread Management State
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -437,6 +441,9 @@ export const useAICoach = (
 
     const userMsg = messageToUse.trim();
     console.log('[handleChatSubmit] Sending message:', userMsg);
+
+    // [B1 返工] 用户已实际发起对话 → 入口预填 placeholder 退场，不再回来
+    setEntryPlaceholder('');
 
     // Handle survey data upload from SurveyCard
     if (userMsg.startsWith('[UPLOAD_SURVEY_DATA]:')) {
@@ -892,16 +899,20 @@ ${JSON.stringify(uploadData, null, 2)}`;
   }, []);
 
   /**
-   * [B1 issue#5] 入口预填：手动打开 AI 教练（无附件）时按三场景预填输入框——
+   * [B1 issue#5 返工] 入口预填（placeholder 语义）：手动打开 AI 教练时按三场景
+   * 把建议文案写入输入框 placeholder——
    *   A 有周计划且今日有条目 → 今日计划摘要（E2 确定性课表 API 组装）
    *   B 无计划新手（本地无训练记录 + 本周无计划）→ 引导预填
    *   C 老用户无今日计划 → 轻预填
    * 红线：纯前端确定性组装（scheduleService 已交付今日课表，AI 零参与）；
-   * 预填文本可编辑、不自动发送（只是 setChatMessage，发送权在用户）；
-   * 已有草稿 / 打开期间挂了附件 → 不覆盖。
+   * 只动 placeholder 不动 chatMessage（正式值），用户输入天然替换之；
+   * 挂附件的入口（教学页「咨询教练」）= 带着具体问题来 → 让位并清残留。
    */
   const prefillCoachEntry = useCallback(async () => {
-    if (attachedContextRef.current) return;
+    if (attachedContextRef.current) {
+      setEntryPlaceholder('');
+      return;
+    }
     try {
       const res = await fetch(`${API_BASE}/schedule/today?date=${todayDateKey()}`, {
         headers: getHeaders(),
@@ -922,13 +933,23 @@ ${JSON.stringify(uploadData, null, 2)}`;
       const hasHistory = Array.isArray(localHistory) && localHistory.length > 0;
 
       const text = resolveCoachPrefill(schedule, hasHistory);
-      if (!text) return;
-      // 函数式更新防竞态：fetch 期间用户已输入草稿 / 挂了附件 → 不覆盖
-      setChatMessage(prev => (prev.trim() || attachedContextRef.current ? prev : text));
+      // 二次让位（防同 tick 竞态）：fetch 期间挂上了附件（教学页「咨询教练」
+      // 先 setAttachedContext 再 openAiCoach）→ 预填退场且清残留，不盖问题场景
+      if (attachedContextRef.current) {
+        setEntryPlaceholder('');
+        return;
+      }
+      setEntryPlaceholder(text);
     } catch (err) {
       console.warn('[useAICoach] entry prefill skipped:', err);
     }
   }, []);
+
+  // [B1 返工] 用户一旦输入任何内容 → 预填清除（原生 placeholder 的「可替换」
+  // 只在输入非空期间成立；这里把它变成一次性：输入过就不再回来）
+  useEffect(() => {
+    if (chatMessage.trim()) setEntryPlaceholder('');
+  }, [chatMessage]);
 
   const openAiCoach = async (attachment?: any) => {
 
@@ -940,6 +961,10 @@ ${JSON.stringify(uploadData, null, 2)}`;
       console.log('[useAICoach] Already opening overlay with workout complete, skipping duplicate call');
       return;
     }
+
+    // [B1 issue#5] 入口预填 placeholder（fire-and-forget，不阻塞开浮层）：
+    // 无附件=手动进入按场景预填；带附件（workout_complete/教学页）=让位并清残留
+    void prefillCoachEntry();
 
     if (attachment) {
       // workout_complete / workout_summary 是内部触发（训练结束自动分析），
@@ -1087,8 +1112,6 @@ ${JSON.stringify(uploadData, null, 2)}`;
         return;
       }
     }
-    // [B1 issue#5] 手动打开（无附件）→ 按场景预填输入框（fire-and-forget，不阻塞开浮层）
-    void prefillCoachEntry();
     setIsAiOverlayOpen(true);
   };
 
@@ -1187,6 +1210,8 @@ ${JSON.stringify(uploadData, null, 2)}`;
     chatHistory,
     setChatHistory,
     isLoading,
+    // [B1 issue#5 返工] 入口预填 placeholder（AICoachOverlay 输入框展示用）
+    entryPlaceholder,
     handleChatSubmit,
     handleConfirmPlan,
     markPlanConsumed,

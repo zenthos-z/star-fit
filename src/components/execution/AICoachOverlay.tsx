@@ -271,6 +271,9 @@ interface AICoachOverlayProps {
   sessionStatus: 'idle' | 'active' | 'paused' | 'finished';
   sessionSessionId?: string; // [NEW] Session ID for progress tracking
   isTransitioning?: boolean;
+  /** [B1 issue#5] 入口预填 placeholder（三场景建议文案；空串=回退默认「给教练发消息」）。
+   *  仅在空闲态生效——聆听/分析/计划模式的状态文案优先。样式沿用现有 placeholder-gray-400。 */
+  entryPlaceholder?: string;
   // [NEW] Thread management props
   threads?: ChatThread[];
   currentThreadId?: string;
@@ -310,6 +313,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   sessionStatus,
   sessionSessionId,
   isTransitioning = false,
+  entryPlaceholder,
   // [NEW] Thread management
   threads = [],
   currentThreadId = '',
@@ -1094,7 +1098,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                     ? "正在分析本次训练…"
                     : isPlanMode
                       ? "描述你想调整的内容…"
-                      : "给教练发消息"
+                      : (entryPlaceholder || "给教练发消息")
               }
               disabled={isBusy}
               className="flex-1 resize-none bg-transparent outline-none text-[16px] leading-[1.4] py-1.5 max-h-24 text-gray-900 placeholder-gray-400 custom-scrollbar"
