@@ -6,9 +6,16 @@ import { API_BASE, getHeaders } from '../../services/geminiService';
 import { VideoPlayerModal } from './VideoPlayerModal';
 import { VideoAsset } from '../../types/video';
 import { MarkdownRenderer } from '../MarkdownRenderer';
+import { MuscleMapSection } from './MuscleMapSection';
 import { setTabBarHidden } from '../../lib/nativeTabBar';
 import { transitions } from '../../lib/animations';
 import { haptic } from '../../lib/nativeHaptics';
+import {
+  pickTutorialContent,
+  stripDecorativeEmoji,
+  type TutorialSourceKind,
+} from '../../lib/tutorialContent';
+import { EQUIPMENT_LABELS_ZH } from 'shared/contracts';
 
 interface ExerciseTutorialModalProps {
   exercise: ExerciseAction & { name?: string; targetRpe?: number; libraryId?: string };
@@ -17,15 +24,23 @@ interface ExerciseTutorialModalProps {
 }
 
 /**
- * ExerciseTutorialModal — 动作教学 Sheet（iOS HIG 风格重写版）
+ * ExerciseTutorialModal — 动作教学 Sheet（iOS HIG 风格，A4 库数据优先改造）
+ *
+ * 内容（A4 教程数据源切换）：五段结构（动作作用/发力心法/步骤/注意事项/常见错误）
+ * ① content_html admin 官方 → ② tutorial_md 动作库结构化组装（source=library，
+ * 后端模板渲染不走 LLM）→ ③ tutorials.ai 服务器 AI 版 → ④ 离线备份 → ⑤ AI 即时生成。
+ * 头部小字标注数据源（「数据源：动作库」/「AI 生成」）。
  *
  * 视觉：灰阶为主，蓝色只留交互/强调；无装饰渐变（与执行页卡片基线一致）。
+ * 肌群可视化：MuscleMapSection（iOS 原生人体图 + 胶囊图例，纯色 orange 系）。
  * 交互：
- * - 底部 Sheet 弹簧滑入，头部拖拽下滑关闭（iOS sheet 标准）
+ * - 底部 Sheet 弹簧滑入，头部拖拽下滑关闭（iOS sheet 标准）；拖拽/弹层期间
+ *   锁定原生肌群图防漂移
  * - 封面/正文配图点击放大（弹簧缩放照片查看器）
- * - 视频走 VideoPlayerModal
+ * - 视频走 VideoPlayerModal（库内 video_urls male/female + assets 合并）
  * - 「咨询教练」= 以附件形式挂入 AI 教练输入区（iMessage 附件 chip），不自动发送
- * 内容：MarkdownRenderer（GFM + 原生 HTML + KaTeX 公式）
+ * 内容：MarkdownRenderer（GFM + 原生 HTML + KaTeX 公式）；段落标识纯文字标题，
+ * 禁 emoji 图标（issue #8 实施修正，历史 AI 内容渲染前清洗）。
  */
 export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
   exercise,
@@ -34,7 +49,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
 }) => {
   const [content, setContent] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
-  const [isAiGenerated, setIsAiGenerated] = useState(false);
+  const [contentSource, setContentSource] = useState<TutorialSourceKind | null>(null);
   const [exerciseData, setExerciseData] = useState<any>(null);
   const [showVideoModal, setShowVideoModal] = useState(false);
   const [showAiButton, setShowAiButton] = useState(false);
@@ -46,6 +61,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
   // UI States
   const [previewImage, setPreviewImage] = useState<string | null>(null);
   const [isClosing, setIsClosing] = useState(false);
+  const [isSheetDragging, setIsSheetDragging] = useState(false);
   const dragControls = useDragControls();
 
   // Helper functions - defined first since they're used in TUTORIAL_CACHE_KEY
@@ -75,17 +91,6 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
   };
 
   const TUTORIAL_CACHE_KEY = `tutorial_cache_${getExerciseId() || getExerciseName()}`;
-
-  /** 解析 exerciseData 里的 tutorials JSONB（对象或字符串两种形态） */
-  const parseServerTutorials = (data: any): Record<string, any> => {
-    if (!data) return {};
-    let raw = data.tutorials;
-    if (raw === null || raw === undefined) return {};
-    if (typeof raw === 'string') {
-      try { raw = JSON.parse(raw); } catch { return {}; }
-    }
-    return (raw && typeof raw === 'object') ? raw : {};
-  };
 
   const getCachedTutorial = (): string | null => {
     try {
@@ -120,16 +125,21 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
     }
   };
 
-  const hasVideo = () => {
-    if (!exerciseData || !exerciseData.assets_json) return false;
-    const assets = typeof exerciseData.assets_json === 'string'
-      ? JSON.parse(exerciseData.assets_json)
-      : exerciseData.assets_json;
-    if (!assets.video) return false;
-    return Array.isArray(assets.video) ? assets.video.length > 0 : true;
+  /** 库内演示视频（A3 深化列 video_urls male/female + poster_url） */
+  const getLibraryVideos = (): Array<{ url: string; poster: string }> => {
+    if (!exerciseData?.video_urls) return [];
+    const vu = typeof exerciseData.video_urls === 'string'
+      ? (() => { try { return JSON.parse(exerciseData.video_urls); } catch { return null; } })()
+      : exerciseData.video_urls;
+    if (!vu || typeof vu !== 'object') return [];
+    const poster = typeof exerciseData.poster_url === 'string' ? exerciseData.poster_url : '';
+    const out: Array<{ url: string; poster: string }> = [];
+    if (typeof vu.male === 'string' && vu.male) out.push({ url: vu.male, poster });
+    if (typeof vu.female === 'string' && vu.female) out.push({ url: vu.female, poster });
+    return out;
   };
 
-  const getVideos = (): any[] => {
+  const getAssetVideos = (): any[] => {
     if (!exerciseData || !exerciseData.assets_json) return [];
     const assets = typeof exerciseData.assets_json === 'string'
       ? JSON.parse(exerciseData.assets_json)
@@ -142,6 +152,10 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
       qualities: v.sources
     }));
   };
+
+  const getVideos = (): any[] => [...getLibraryVideos(), ...getAssetVideos()];
+
+  const hasVideo = (): boolean => getVideos().length > 0;
 
   // 关闭流程：先播滑出动画，动画完成后才真正卸载（等价 AnimatePresence exit）
   const requestClose = () => setIsClosing(true);
@@ -197,26 +211,20 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
           const data = await response.json();
           setExerciseData(data);
 
-          // 内容优先级：① content_html（admin 官方版，最高）
-          // ② tutorials.ai（服务器上的 AI 生成版，无需重新生成）
-          // ③ localStorage 缓存（离线备份：断网时生成的，后端可能没有）
-          const hasContent = data.content_html !== null && data.content_html !== undefined && data.content_html.trim() !== '';
+          // 内容优先级（A4 库数据优先）：
+          // ① content_html（admin 官方版，最高）
+          // ② tutorial_md（动作库结构化五段，source=library）
+          // ③ tutorials.ai（服务器上的 AI 生成版，无需重新生成）
+          // ④ localStorage 缓存（离线备份：断网时生成的，后端可能没有）
+          const picked = pickTutorialContent(data);
 
-          if (mounted && hasContent) {
-            setContent(data.content_html);
-            setIsAiGenerated(false);
-            clearCachedTutorial();
-            setIsLoading(false);
-            return;
-          }
-
-          const serverAi = parseServerTutorials(data).ai;
-          const serverAiMd: string | undefined = serverAi?.content_md;
-
-          if (mounted && serverAiMd && serverAiMd.trim().length > 50) {
-            setContent(serverAiMd);
-            setIsAiGenerated(true);
-            // 服务器已有 AI 版：本地缓存使命完成，清掉（避免旧缓存今后误导「待上传」逻辑）
+          if (mounted && picked) {
+            setContent(
+              picked.source === 'ai' ? stripDecorativeEmoji(picked.content) : picked.content
+            );
+            setContentSource(picked.source);
+            // 服务器已有内容（官方/库/AI 任一槽）：本地缓存使命完成，清掉
+            //（避免旧缓存今后误导「待上传」逻辑）
             clearCachedTutorial();
             setIsLoading(false);
             return;
@@ -225,8 +233,8 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
           // 服务器两槽皆空 → 检查离线备份
           const cachedContent = getCachedTutorial();
           if (cachedContent && mounted) {
-            setContent(cachedContent);
-            setIsAiGenerated(true);
+            setContent(stripDecorativeEmoji(cachedContent));
+            setContentSource('ai');
             setOfflineBackup(cachedContent);
             setIsLoading(false);
             return;
@@ -235,8 +243,8 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
           // 网络失败（后端连不上）→ 走离线备份
           const cachedContent = getCachedTutorial();
           if (cachedContent && mounted) {
-            setContent(cachedContent);
-            setIsAiGenerated(true);
+            setContent(stripDecorativeEmoji(cachedContent));
+            setContentSource('ai');
             setOfflineBackup(cachedContent);
             setIsLoading(false);
             return;
@@ -278,15 +286,20 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
 
     const unsubscribe = socketService.subscribe('tutor.tutorial_result', (payload) => {
       if (payload.exerciseId === targetExerciseId) {
-        setContent(payload.content_md);
+        const md = payload.source === 'library'
+          ? payload.content_md
+          : stripDecorativeEmoji(payload.content_md);
+        setContent(md);
 
         if (payload.isFinal) {
-          // 只在生成完成且内容有效时更新缓存
-          if (payload.content_md && payload.content_md.length > 50) {
+          if (payload.source === 'library') {
+            // 库数据为服务端派生内容：不缓存不上传，徽标 = 动作库
+            setContentSource('library');
+          } else if (payload.content_md && payload.content_md.length > 50) {
+            // 只在生成完成且内容有效时更新缓存
             setCachedTutorial(payload.content_md);
+            setContentSource('ai');
           }
-
-          setIsAiGenerated(true);
           setIsGenerating(false);
           setShowAiButton(false);
           unsubscribe();
@@ -323,7 +336,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       // 上传成功 → 备份使命完成
       setOfflineBackup(null);
-      setIsAiGenerated(true);
+      setContentSource('ai');
     } catch (e) {
       console.warn('[ExerciseTutorialModal] Failed to upload backup:', e);
       // 失败保留 offlineBackup，下次打开还能再传
@@ -344,7 +357,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
       content: `用户正在查看动作「${exerciseName}」的教学，请结合该动作的要领与用户训练历史回答。`,
       metadata: {
         source: 'tutorial_modal',
-        isAiGenerated
+        tutorialSource: contentSource
       }
     };
 
@@ -436,6 +449,23 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
   const hasMuscles = (targets.primary?.length ?? 0) > 0 || (targets.secondary?.length ?? 0) > 0;
   const hasMeta = exerciseData && (hasMuscles || equipment.length > 0 || exerciseData.exercise_type);
 
+  // 封面：库内 poster_url（A3 深化列）优先，assets.cover 兜底
+  const coverUrl = (typeof exerciseData?.poster_url === 'string' && exerciseData.poster_url)
+    ? getFullUrl(exerciseData.poster_url)
+    : (assets.cover ? getFullUrl(assets.cover) : null);
+
+  // 原生肌群图可用窗口：非拖拽、无全屏弹层（视频/大图）时
+  const muscleMapInteractive = !isSheetDragging && !showVideoModal && !previewImage;
+
+  // 头部数据源小字（issue #12：库优先/AI 兜底徽标口径）
+  const sourceLabel = isGenerating
+    ? '生成中'
+    : contentSource === 'ai'
+      ? 'AI 生成'
+      : contentSource === 'library'
+        ? '数据源：动作库'
+        : '动作教学';
+
   return (
     <>
       {/* 背景遮罩：淡入淡出 */}
@@ -457,7 +487,9 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
         dragControls={dragControls}
         dragConstraints={{ top: 0, bottom: 0 }}
         dragElastic={{ top: 0, bottom: 0.55 }}
+        onDragStart={() => setIsSheetDragging(true)}
         onDragEnd={(_, info) => {
+          setIsSheetDragging(false);
           if (info.offset.y > 120 || info.velocity.y > 800) {
             haptic('light');
             requestClose();
@@ -484,8 +516,8 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
             <div className="text-[17px] font-semibold text-gray-900 leading-tight truncate">
               {getExerciseName()}
             </div>
-            <div className="text-[12px] text-gray-400 leading-tight mt-0.5">
-              {isAiGenerated ? 'AI 生成教学' : '动作教学'}
+            <div className="text-[12px] text-gray-400 leading-tight mt-0.5 truncate">
+              {sourceLabel}
               {exerciseData?.difficulty && ` · ${difficultyNames[exerciseData.difficulty] || ''}`}
             </div>
           </div>
@@ -524,13 +556,13 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
               )}
 
               {/* 封面配图：点击放大；无封面时灰阶字母占位（不裸露空白） */}
-              {assets.cover ? (
+              {coverUrl ? (
                 <div
                   className="relative mt-1 rounded-3xl overflow-hidden bg-gray-50 active:opacity-90 transition-opacity"
-                  onClick={() => { haptic('light'); setPreviewImage(getFullUrl(assets.cover)); }}
+                  onClick={() => { haptic('light'); setPreviewImage(coverUrl); }}
                 >
                   <img
-                    src={getFullUrl(assets.cover)}
+                    src={coverUrl}
                     alt={getExerciseName()}
                     className="w-full h-56 object-cover"
                     onError={(e) => {
@@ -560,26 +592,18 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
                 </div>
               )}
 
+              {/* 肌群可视化：iOS 原生 MuscleMap 人体图 + 胶囊图例（非 iOS 降级胶囊） */}
+              {hasMuscles && (
+                <MuscleMapSection
+                  primary={targets.primary ?? []}
+                  secondary={targets.secondary ?? []}
+                  interactive={muscleMapInteractive}
+                />
+              )}
+
               {/* 元信息：灰阶 chips（类型标识一律灰阶，蓝色只留交互） */}
               {hasMeta && (
-                <div className="mt-5">
-                  {hasMuscles && (
-                    <>
-                      <div className="text-xs text-gray-400 font-medium mb-2">目标肌群</div>
-                      <div className="flex flex-wrap gap-2 mb-4">
-                        {targets.primary?.map((mg: string, i: number) => (
-                          <span key={`p-${i}`} className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-700 text-xs font-medium">
-                            {mg}
-                          </span>
-                        ))}
-                        {targets.secondary?.map((mg: string, i: number) => (
-                          <span key={`s-${i}`} className="px-3 py-1.5 rounded-full bg-gray-50 text-gray-400 border border-gray-100 text-xs font-medium">
-                            {mg}
-                          </span>
-                        ))}
-                      </div>
-                    </>
-                  )}
+                <div className="mt-4">
                   <div className="flex flex-wrap gap-2">
                     {exerciseData.difficulty && (
                       <span className="px-3 py-1.5 rounded-full bg-gray-100 text-gray-500 text-xs font-medium">
@@ -593,14 +617,14 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
                     )}
                     {equipment.map((eq: string, i: number) => (
                       <span key={`eq-${i}`} className="px-3 py-1.5 rounded-full bg-gray-50 text-gray-400 border border-gray-100 text-xs font-medium">
-                        {eq}
+                        {(EQUIPMENT_LABELS_ZH as Record<string, string>)[eq] ?? eq}
                       </span>
                     ))}
                   </div>
                 </div>
               )}
 
-              {/* 教学正文 */}
+              {/* 教学正文：五段结构（库数据组装或 AI 生成），MarkdownRenderer 渲染 */}
               <div className="mt-6">
                 {isGenerating ? (
                   <div className="flex flex-col items-center justify-center py-16 gap-4">
@@ -630,7 +654,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
                     <div className="prose prose-sm prose-slate max-w-none markdown-body">
                       <MarkdownRenderer content={content} onImageClick={url => setPreviewImage(url)} />
                     </div>
-                    {isAiGenerated && (
+                    {contentSource === 'ai' && (
                       <div className="mt-8 pt-5 border-t border-gray-100 text-center">
                         <button
                           onClick={() => { haptic('light'); handleGenerateAiTutorial(); }}

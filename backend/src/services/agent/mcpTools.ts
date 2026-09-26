@@ -124,11 +124,24 @@ interface ExerciseListRow {
 interface ExerciseDetailRow {
   id: string;
   name: string;
+  name_zh: string | null;
   exercise_type: string | null;
   difficulty: string | null;
   attributes: unknown;
   tutorials: unknown;
   content_html: string | null;
+  // ---- A2/A3 深化列（A4：get_exercise_detail 一并透出，Agent 教学问答直读库数据）----
+  equipment: string | null;
+  category: string | null;
+  body_part: string | null;
+  primary_muscles: string[] | null;
+  secondary_muscles: string[] | null;
+  force_type: string | null;
+  mechanic: string | null;
+  instructions: string[] | null;
+  form_cues: string[] | null;
+  common_mistakes: string[] | null;
+  breathing: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -366,10 +379,12 @@ export class ExerciseQuery extends BaseRepository {
     );
   }
 
-  /** Full record for one exercise by id (attributes, tutorials, content_html). */
+  /** Full record for one exercise by id (attributes, tutorials, content_html, deepened teaching columns). */
   async findByIdFull(id: string): Promise<ExerciseDetailRow | null> {
     return this.queryOne<ExerciseDetailRow>(
-      `SELECT id, name, exercise_type, difficulty, attributes, tutorials, content_html
+      `SELECT id, name, name_zh, exercise_type, difficulty, attributes, tutorials, content_html,
+              equipment, category, body_part, primary_muscles, secondary_muscles,
+              force_type, mechanic, instructions, form_cues, common_mistakes, breathing
          FROM exercises
         WHERE id = $id`,
       { id },
@@ -956,9 +971,11 @@ export function buildMcpToolsWith(
   const getExerciseDetail = new DynamicStructuredTool({
     name: "get_exercise_detail",
     description:
-      "Fetch the full record of one exercise by id (attributes incl. equipment/targets/impact, tutorials, content_html). " +
+      "Fetch the full record of one exercise by id (attributes incl. equipment/targets/impact, tutorials, content_html, " +
+      "plus deepened teaching columns: primary/secondary_muscles, instructions, form_cues, common_mistakes, breathing). " +
       "Read-only. Optional drill-down after list_exercises when you need a candidate tutorials/content_html " +
-      "or to confirm impact_level on an injured joint.",
+      "or to confirm impact_level on an injured joint. Answer teaching questions (steps/form/mistakes) " +
+      "from the returned library fields instead of inventing them.",
     schema: getExerciseDetailSchema,
     func: async (input) => {
       const exerciseQuery = new ExerciseQuery(client);

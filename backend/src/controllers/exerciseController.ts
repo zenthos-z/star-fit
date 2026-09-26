@@ -18,6 +18,7 @@ import {
 } from "../services/exerciseLibraryService.js";
 import { parseJSONSafe } from "../types/validation.js";
 import { getNowISO } from "../utils/timestamp.js";
+import { assembleTutorialMd } from "../services/tutorialAssembler.js";
 
 /**
  * 组装 API 响应视图：结构化列 → 兼容既有前端键（targets / equipment_required）。
@@ -31,6 +32,22 @@ function withViewFields(ex: Exercise) {
       secondary: ex.secondary_muscles ?? [],
     },
     equipment_required: JSON.stringify(ex.equipment ? [ex.equipment] : []),
+  };
+}
+
+/**
+ * A4 教程数据源切换（详情端点专用）：库内有结构化教学数据时附
+ * tutorial_md（五段模板渲染，不走 LLM）+ tutorial_source='library'，
+ * 前端教学 sheet 据此优先渲染库数据、展示数据源徽标；
+ * 缺失时两字段缺省（前端走 AI 兜底链路）。
+ */
+function withTutorialView(ex: Exercise) {
+  const tutorialMd = assembleTutorialMd(ex);
+  return {
+    ...withViewFields(ex),
+    ...(tutorialMd
+      ? { tutorial_md: tutorialMd, tutorial_source: "library" as const }
+      : {}),
   };
 }
 
@@ -79,8 +96,8 @@ export async function getExerciseById(
       return;
     }
 
-    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
-    const parsed = withViewFields(exercise);
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键 + 教程库源）
+    const parsed = withTutorialView(exercise);
 
     reply.send(parsed);
   } catch (error) {
@@ -110,8 +127,8 @@ export async function getExerciseByName(
       return;
     }
 
-    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
-    const parsed = withViewFields(exercise);
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键 + 教程库源）
+    const parsed = withTutorialView(exercise);
 
     reply.send(parsed);
   } catch (error) {
