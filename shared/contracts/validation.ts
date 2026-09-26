@@ -43,7 +43,7 @@ export class ValidationError extends Error {
 export class JSONParseError extends Error {
   constructor(
     message: string,
-    public readonly input: string,
+    public readonly input: string | object,
     public readonly originalError: SyntaxError | Error
   ) {
     super(message);
@@ -139,42 +139,43 @@ export function validateWithLogging<T>(
  * Safely parse JSON with detailed error handling
  * Never returns silently - always logs errors
  *
- * @param jsonString - JSON string to parse
+ * @param jsonInput - JSON string, or an already-parsed object (PostgreSQL
+ *                    JSONB columns deserialize to objects via pg driver)
  * @param context - Context string for error messages
  * @returns Parsed object or null if parsing fails
  * @throws JSONParseError in development (NODE_ENV !== 'production')
  */
 export function parseJSONSafe<T = unknown>(
-  jsonString: string | null | undefined,
+  jsonInput: string | object | null | undefined,
   context: string = 'JSON parsing'
 ): T | null {
   // Handle null/undefined input
-  if (jsonString === null || jsonString === undefined) {
+  if (jsonInput === null || jsonInput === undefined) {
     console.warn(`[${context}] Input is null/undefined, returning null`);
     return null;
   }
 
   // Handle already-parsed objects (PostgreSQL JSONB)
-  if (typeof jsonString === 'object') {
+  if (typeof jsonInput === 'object') {
     console.warn(`[${context}] Input is already an object (likely JSONB), returning as-is`);
-    return jsonString as T;
+    return jsonInput as T;
   }
 
   // Handle empty string
-  if ((jsonString as string).trim() === '') {
+  if (jsonInput.trim() === '') {
     console.warn(`[${context}] Input is empty string, returning null`);
     return null;
   }
 
   try {
-    return JSON.parse(jsonString as string) as T;
+    return JSON.parse(jsonInput) as T;
   } catch (error) {
     const errorMessage = `[${context}] Failed to parse JSON: ${(error as Error).message}`;
 
     // Always log the error
     console.error(errorMessage, {
       context,
-      input: jsonString,
+      input: jsonInput,
       error
     });
 
@@ -182,7 +183,7 @@ export function parseJSONSafe<T = unknown>(
     if (process?.env?.NODE_ENV !== 'production') {
       throw new JSONParseError(
         errorMessage,
-        jsonString,
+        jsonInput,
         error as SyntaxError | Error
       );
     }

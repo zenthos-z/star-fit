@@ -1,16 +1,34 @@
 import React, { useState, useEffect } from 'react';
 import { X, Check } from 'lucide-react';
 import { Button } from '../../ui/Button';
+import type { ExerciseMuscle } from 'shared/contracts';
 
-// Copying type from backend for consistency, but frontend should have its own types or shared ones
-export type MuscleTarget =
-    | '上胸' | '中下胸'
-    | '前束' | '中束' | '后束'
-    | '二头' | '三头' | '小臂'
-    | '背部' | '下背' | '斜方肌'
-    | '腹肌' | '侧腹'
-    | '股四' | '腘绳' | '小腿'
-    | '上臀部' | '下臀部';
+/**
+ * 肌群受控词表：值 = 17 基准英文词表（shared/contracts 单一真源，直存库），
+ * 显示 = 中文 label。002 迁移后 DB CHECK 只接受英文词表值。
+ */
+export type MuscleTarget = ExerciseMuscle;
+
+/** 17 基准肌群 → 中文显示名 */
+const MUSCLE_LABELS: Record<MuscleTarget, string> = {
+    abdominals: '腹肌',
+    abductors: '髋外展肌',
+    adductors: '髋内收肌',
+    biceps: '肱二头肌',
+    calves: '小腿',
+    chest: '胸部',
+    forearms: '前臂',
+    glutes: '臀部',
+    hamstrings: '腘绳肌',
+    lats: '背阔肌',
+    lower_back: '下背',
+    middle_back: '中背',
+    neck: '颈部',
+    quadriceps: '股四头肌',
+    shoulders: '肩部',
+    traps: '斜方肌',
+    triceps: '肱三头肌',
+};
 
 interface MuscleSelectorDialogProps {
     isOpen: boolean;
@@ -22,34 +40,38 @@ interface MuscleSelectorDialogProps {
     onConfirm: (selected: MuscleTarget[]) => void;
 }
 
-const MUSCLE_GROUPS = [
+const MUSCLE_GROUPS: { name: string; muscles: MuscleTarget[] }[] = [
     {
         name: '胸部',
-        muscles: ['上胸', '中下胸'] as MuscleTarget[],
+        muscles: ['chest'],
     },
     {
         name: '肩部',
-        muscles: ['前束', '中束', '后束'] as MuscleTarget[],
+        muscles: ['shoulders'],
     },
     {
         name: '手臂',
-        muscles: ['二头', '三头', '小臂'] as MuscleTarget[],
+        muscles: ['biceps', 'triceps', 'forearms'],
     },
     {
         name: '背部',
-        muscles: ['背部', '下背', '斜方肌'] as MuscleTarget[],
+        muscles: ['lats', 'middle_back', 'lower_back', 'traps'],
     },
     {
         name: '核心',
-        muscles: ['腹肌', '侧腹'] as MuscleTarget[],
+        muscles: ['abdominals'],
     },
     {
         name: '腿部',
-        muscles: ['股四', '腘绳', '小腿'] as MuscleTarget[],
+        muscles: ['quadriceps', 'hamstrings', 'calves', 'abductors', 'adductors'],
     },
     {
         name: '臀部',
-        muscles: ['上臀部', '下臀部'] as MuscleTarget[],
+        muscles: ['glutes'],
+    },
+    {
+        name: '颈部',
+        muscles: ['neck'],
     },
 ];
 
@@ -129,7 +151,7 @@ export const MuscleSelectorDialog: React.FC<MuscleSelectorDialogProps> = ({
                                                             : 'bg-gray-50 text-gray-600 hover:bg-gray-100 border border-gray-100'
                                                     }`}
                                             >
-                                                <span>{muscle}</span>
+                                                <span>{MUSCLE_LABELS[muscle]}</span>
                                                 {isSelected && <Check size={14} className="text-white" />}
                                             </button>
                                         );

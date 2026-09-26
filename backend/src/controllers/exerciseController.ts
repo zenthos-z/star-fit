@@ -11,15 +11,28 @@
  * - GET /api/exercises/stats - 获取统计信息
  */
 
-import { FastifyRequest, FastifyReply } from 'fastify';
+import { FastifyRequest, FastifyReply } from "fastify";
 import {
   ExerciseLibraryService,
-  parseTargets,
-  parseEquipmentRequired,
-  type MuscleTarget
-} from '../services/exerciseLibraryService.js';
-import { parseJSONSafe } from '../types/validation.js';
-import { getNowISO } from '../utils/timestamp.js';
+  type Exercise,
+} from "../services/exerciseLibraryService.js";
+import { parseJSONSafe } from "../types/validation.js";
+import { getNowISO } from "../utils/timestamp.js";
+
+/**
+ * 组装 API 响应视图：结构化列 → 兼容既有前端键（targets / equipment_required）。
+ * 值域为英文受控词表（17 肌群 / 15 器材大类）。
+ */
+function withViewFields(ex: Exercise) {
+  return {
+    ...ex,
+    targets: {
+      primary: ex.primary_muscles ?? [],
+      secondary: ex.secondary_muscles ?? [],
+    },
+    equipment_required: JSON.stringify(ex.equipment ? [ex.equipment] : []),
+  };
+}
 
 // ============================================
 // Handlers
@@ -30,26 +43,19 @@ import { getNowISO } from '../utils/timestamp.js';
  */
 export async function getAllExercises(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const exercises = await ExerciseLibraryService.getAllExercises();
 
-    // 解析 JSON 字段 - 从 attributes JSONB 中提取
-    const parsed = exercises.map(ex => {
-      const attributes = parseJSONSafe<Record<string, any>>(ex.attributes, 'exercise attributes') || {};
-      return {
-        ...ex,
-        targets: parseTargets(attributes.targets),
-        equipment_required: parseEquipmentRequired(attributes.equipment_required)
-      };
-    });
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
+    const parsed = exercises.map(withViewFields);
 
     reply.send(parsed);
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to fetch exercises',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to fetch exercises",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -59,7 +65,7 @@ export async function getAllExercises(
  */
 export async function getExerciseById(
   request: FastifyRequest<{ Params: { id: string } }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const { id } = request.params;
@@ -67,25 +73,20 @@ export async function getExerciseById(
 
     if (!exercise) {
       reply.status(404).send({
-        error: 'Exercise not found',
-        exerciseId: id
+        error: "Exercise not found",
+        exerciseId: id,
       });
       return;
     }
 
-    // 解析 JSON 字段 - 从 attributes JSONB 中提取
-    const attributes = parseJSONSafe<Record<string, any>>(exercise.attributes, 'exercise attributes') || {};
-    const parsed = {
-      ...exercise,
-      targets: parseTargets(attributes.targets),
-      equipment_required: parseEquipmentRequired(attributes.equipment_required)
-    };
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
+    const parsed = withViewFields(exercise);
 
     reply.send(parsed);
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to fetch exercise',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to fetch exercise",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -95,7 +96,7 @@ export async function getExerciseById(
  */
 export async function getExerciseByName(
   request: FastifyRequest<{ Params: { name: string } }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const { name } = request.params;
@@ -103,25 +104,20 @@ export async function getExerciseByName(
 
     if (!exercise) {
       reply.status(404).send({
-        error: 'Exercise not found',
-        exerciseName: name
+        error: "Exercise not found",
+        exerciseName: name,
       });
       return;
     }
 
-    // 解析 JSON 字段 - 从 attributes JSONB 中提取
-    const attributes = parseJSONSafe<Record<string, any>>(exercise.attributes, 'exercise attributes') || {};
-    const parsed = {
-      ...exercise,
-      targets: parseTargets(attributes.targets),
-      equipment_required: parseEquipmentRequired(attributes.equipment_required)
-    };
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
+    const parsed = withViewFields(exercise);
 
     reply.send(parsed);
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to fetch exercise by name',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to fetch exercise by name",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -131,27 +127,20 @@ export async function getExerciseByName(
  */
 export async function getExercisesByTarget(
   request: FastifyRequest<{ Params: { target: string } }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const { target } = request.params;
-    const exercises = await ExerciseLibraryService.getByTarget(target as MuscleTarget);
+    const exercises = await ExerciseLibraryService.getByTarget(target);
 
-    // 解析 JSON 字段 - 从 attributes JSONB 中提取
-    const parsed = exercises.map(ex => {
-      const attributes = parseJSONSafe<Record<string, any>>(ex.attributes, 'exercise attributes') || {};
-      return {
-        ...ex,
-        targets: parseTargets(attributes.targets),
-        equipment_required: parseEquipmentRequired(attributes.equipment_required)
-      };
-    });
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
+    const parsed = exercises.map(withViewFields);
 
     reply.send(parsed);
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to fetch exercises by target',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to fetch exercises by target",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -161,40 +150,33 @@ export async function getExercisesByTarget(
  */
 export async function getExercisesByDifficulty(
   request: FastifyRequest<{ Params: { difficulty: string } }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const { difficulty } = request.params;
 
     // 验证难度等级
-    const validDifficulties = ['beginner', 'intermediate', 'advanced'];
+    const validDifficulties = ["beginner", "intermediate", "advanced"];
     if (!validDifficulties.includes(difficulty)) {
       reply.status(400).send({
-        error: 'Invalid difficulty level',
-        validDifficulties
+        error: "Invalid difficulty level",
+        validDifficulties,
       });
       return;
     }
 
     const exercises = await ExerciseLibraryService.getByDifficulty(
-      difficulty as 'beginner' | 'intermediate' | 'advanced'
+      difficulty as "beginner" | "intermediate" | "advanced",
     );
 
-    // 解析 JSON 字段 - 从 attributes JSONB 中提取
-    const parsed = exercises.map(ex => {
-      const attributes = parseJSONSafe<Record<string, any>>(ex.attributes, 'exercise attributes') || {};
-      return {
-        ...ex,
-        targets: parseTargets(attributes.targets),
-        equipment_required: parseEquipmentRequired(attributes.equipment_required)
-      };
-    });
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
+    const parsed = exercises.map(withViewFields);
 
     reply.send(parsed);
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to fetch exercises by difficulty',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to fetch exercises by difficulty",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -204,35 +186,28 @@ export async function getExercisesByDifficulty(
  */
 export async function getExercisesByEquipment(
   request: FastifyRequest<{ Querystring: { equipment?: string } }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const { equipment } = request.query;
 
     if (!equipment) {
       reply.status(400).send({
-        error: 'Equipment parameter is required'
+        error: "Equipment parameter is required",
       });
       return;
     }
 
     const exercises = await ExerciseLibraryService.getByEquipment(equipment);
 
-    // 解析 JSON 字段 - 从 attributes JSONB 中提取
-    const parsed = exercises.map(ex => {
-      const attributes = parseJSONSafe<Record<string, any>>(ex.attributes, 'exercise attributes') || {};
-      return {
-        ...ex,
-        targets: parseTargets(attributes.targets),
-        equipment_required: parseEquipmentRequired(attributes.equipment_required)
-      };
-    });
+    // 组装响应视图字段（结构化列 → targets / equipment_required 兼容键）
+    const parsed = exercises.map(withViewFields);
 
     reply.send(parsed);
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to fetch exercises by equipment',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to fetch exercises by equipment",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -255,7 +230,7 @@ export async function createExercise(
       tags?: any;
     };
   }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const body = request.body;
@@ -263,20 +238,23 @@ export async function createExercise(
     // 验证必填字段
     if (!body.id || !body.name || !body.exercise_type || !body.targets) {
       reply.status(400).send({
-        error: 'Missing required fields',
-        required: ['id', 'name', 'exercise_type', 'targets']
+        error: "Missing required fields",
+        required: ["id", "name", "exercise_type", "targets"],
       });
       return;
     }
 
     // 验证 targets 结构
     let targets: any;
-    if (typeof body.targets === 'string') {
-      const parsed = parseJSONSafe(body.targets, 'exerciseController.createExercise');
+    if (typeof body.targets === "string") {
+      const parsed = parseJSONSafe(
+        body.targets,
+        "exerciseController.createExercise",
+      );
       if (!parsed) {
         reply.status(400).send({
-          error: 'Invalid targets format',
-          details: 'targets must be valid JSON'
+          error: "Invalid targets format",
+          details: "targets must be valid JSON",
         });
         return;
       }
@@ -285,30 +263,41 @@ export async function createExercise(
       targets = body.targets;
     }
 
-    if (!targets.primary || !Array.isArray(targets.primary) || targets.primary.length === 0) {
+    if (
+      !targets.primary ||
+      !Array.isArray(targets.primary) ||
+      targets.primary.length === 0
+    ) {
       reply.status(400).send({
-        error: 'Invalid targets format',
-        details: 'targets must be an object with primary array containing at least one muscle'
+        error: "Invalid targets format",
+        details:
+          "targets must be an object with primary array containing at least one muscle",
       });
       return;
     }
 
     // 序列化 JSON 字段
-    const targets_json = typeof body.targets === 'string'
-      ? body.targets
-      : JSON.stringify(body.targets);
+    const targets_json =
+      typeof body.targets === "string"
+        ? body.targets
+        : JSON.stringify(body.targets);
 
-    const equipment_required = typeof body.equipment_required === 'string'
-      ? body.equipment_required
-      : JSON.stringify(body.equipment_required);
+    const equipment_required =
+      typeof body.equipment_required === "string"
+        ? body.equipment_required
+        : JSON.stringify(body.equipment_required);
 
     // 处理 assets_json - 可能直接是 assets 对象或已序列化的字符串
     const assets_json = body.assets_json
       ? body.assets_json
-      : (body.assets ? JSON.stringify(body.assets) : '{}');
+      : body.assets
+        ? JSON.stringify(body.assets)
+        : "{}";
 
     const tags_json = body.tags
-      ? (typeof body.tags === 'string' ? body.tags : JSON.stringify(body.tags))
+      ? typeof body.tags === "string"
+        ? body.tags
+        : JSON.stringify(body.tags)
       : null;
 
     await ExerciseLibraryService.createExercise(
@@ -318,28 +307,24 @@ export async function createExercise(
         exercise_type: body.exercise_type as any,
         targets: targets_json,
         equipment_required,
-        // createExercise rebuilds attributes from targets/equipment_required
-        // internally; data.attributes is unused, so a placeholder satisfies the
-        // Exercise interface without inventing a request field the schema lacks.
-        attributes: '{}',
         difficulty: body.difficulty as any,
-        content_html: body.content_html || '',
+        content_html: body.content_html || "",
         assets_json,
         tags_json: tags_json || undefined,
-        modified_by: 'admin',
-        modified_at: getNowISO()
+        modified_by: "admin",
+        modified_at: getNowISO(),
       },
-      'admin'
+      "admin",
     );
 
     reply.status(201).send({
-      message: 'Exercise created successfully',
-      exerciseId: body.id
+      message: "Exercise created successfully",
+      exerciseId: body.id,
     });
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to create exercise',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to create exercise",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -364,7 +349,7 @@ export async function updateExercise(
       change_reason?: string;
     };
   }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const { id } = request.params;
@@ -375,20 +360,24 @@ export async function updateExercise(
 
     // 处理基本字段（包括 null 和空字符串的情况）
     if (body.name !== undefined) data.name = body.name;
-    if (body.exercise_type !== undefined) data.exercise_type = body.exercise_type;
+    if (body.exercise_type !== undefined)
+      data.exercise_type = body.exercise_type;
     if (body.difficulty !== undefined) data.difficulty = body.difficulty;
     if (body.content_html !== undefined) data.content_html = body.content_html;
 
     // 序列化 JSON 字段（显式检查是否提供了该字段）
-    if ('targets' in body && body.targets !== undefined) {
+    if ("targets" in body && body.targets !== undefined) {
       // 验证 targets 结构
       let targets: any;
-      if (typeof body.targets === 'string') {
-        const parsed = parseJSONSafe(body.targets, 'exerciseController.updateExercise');
+      if (typeof body.targets === "string") {
+        const parsed = parseJSONSafe(
+          body.targets,
+          "exerciseController.updateExercise",
+        );
         if (!parsed) {
           reply.status(400).send({
-            error: 'Invalid targets format',
-            details: 'targets must be valid JSON'
+            error: "Invalid targets format",
+            details: "targets must be valid JSON",
           });
           return;
         }
@@ -397,22 +386,29 @@ export async function updateExercise(
         targets = body.targets;
       }
 
-      if (!targets.primary || !Array.isArray(targets.primary) || targets.primary.length === 0) {
+      if (
+        !targets.primary ||
+        !Array.isArray(targets.primary) ||
+        targets.primary.length === 0
+      ) {
         reply.status(400).send({
-          error: 'Invalid targets format',
-          details: 'targets must be an object with primary array containing at least one muscle'
+          error: "Invalid targets format",
+          details:
+            "targets must be an object with primary array containing at least one muscle",
         });
         return;
       }
-      data.targets = typeof body.targets === 'string'
-        ? body.targets
-        : JSON.stringify(body.targets);
+      data.targets =
+        typeof body.targets === "string"
+          ? body.targets
+          : JSON.stringify(body.targets);
     }
 
-    if ('equipment_required' in body && body.equipment_required !== undefined) {
-      data.equipment_required = typeof body.equipment_required === 'string'
-        ? body.equipment_required
-        : JSON.stringify(body.equipment_required);
+    if ("equipment_required" in body && body.equipment_required !== undefined) {
+      data.equipment_required =
+        typeof body.equipment_required === "string"
+          ? body.equipment_required
+          : JSON.stringify(body.equipment_required);
     }
 
     // 处理 assets_json
@@ -428,30 +424,29 @@ export async function updateExercise(
     }
 
     if (body.tags !== undefined) {
-      data.tags_json = typeof body.tags === 'string'
-        ? body.tags
-        : JSON.stringify(body.tags);
+      data.tags_json =
+        typeof body.tags === "string" ? body.tags : JSON.stringify(body.tags);
     }
 
     // 添加修改元数据
-    data.modified_by = 'admin';
+    data.modified_by = "admin";
     data.modified_at = getNowISO();
 
     await ExerciseLibraryService.updateExercise({
       exerciseId: id,
       data,
-      modifiedBy: 'admin',
-      changeReason: body.change_reason
+      modifiedBy: "admin",
+      changeReason: body.change_reason,
     });
 
     reply.send({
-      message: 'Exercise updated successfully',
-      exerciseId: id
+      message: "Exercise updated successfully",
+      exerciseId: id,
     });
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to update exercise',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to update exercise",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -461,7 +456,7 @@ export async function updateExercise(
  */
 export async function deleteExercise(
   request: FastifyRequest<{ Params: { id: string } }>,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   const { id } = request.params;
 
@@ -469,21 +464,21 @@ export async function deleteExercise(
     await ExerciseLibraryService.deleteExercise(id);
 
     reply.send({
-      message: 'Exercise deleted successfully',
-      exerciseId: id
+      message: "Exercise deleted successfully",
+      exerciseId: id,
     });
   } catch (error) {
-    if (error instanceof Error && error.message.includes('not found')) {
+    if (error instanceof Error && error.message.includes("not found")) {
       reply.status(404).send({
-        error: 'Exercise not found',
-        exerciseId: id
+        error: "Exercise not found",
+        exerciseId: id,
       });
       return;
     }
 
     reply.status(500).send({
-      error: 'Failed to delete exercise',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to delete exercise",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
@@ -493,15 +488,15 @@ export async function deleteExercise(
  */
 export async function getExerciseStats(
   request: FastifyRequest,
-  reply: FastifyReply
+  reply: FastifyReply,
 ): Promise<void> {
   try {
     const stats = await ExerciseLibraryService.getStats();
     reply.send(stats);
   } catch (error) {
     reply.status(500).send({
-      error: 'Failed to fetch exercise statistics',
-      details: error instanceof Error ? error.message : String(error)
+      error: "Failed to fetch exercise statistics",
+      details: error instanceof Error ? error.message : String(error),
     });
   }
 }
