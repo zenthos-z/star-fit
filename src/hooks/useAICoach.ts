@@ -134,6 +134,9 @@ export const useAICoach = (
   // 建议文案走输入框 placeholder（原生浅灰、可被输入天然替换），不进正式值、不可发送。
   // 用户一旦输入任何内容即清空（下方 effect），发送亦清空——预填只服务「入口时刻」。
   const [entryPlaceholder, setEntryPlaceholder] = useState('');
+  // [B1 二次返工] chatHistory 镜像 ref：预填守门用（useCallback([]) 里读不到最新历史，
+  // 同 attachedContextRef 模式）——会话中途（已有消息）预填不复活
+  const chatHistoryRef = useRef(chatHistory);
 
   // [NEW] Thread Management State
   const [threads, setThreads] = useState<ChatThread[]>([]);
@@ -147,6 +150,7 @@ export const useAICoach = (
   // 预填据此让位——带附件=用户带着具体问题来，不预填
   const attachedContextRef = useRef<unknown>(null);
   useEffect(() => { attachedContextRef.current = attachedContext; }, [attachedContext]);
+  useEffect(() => { chatHistoryRef.current = chatHistory; }, [chatHistory]);
 
   // [NEW] Store workout data for questionnaire upload
   const workoutDataRef = useRef<any>(null);
@@ -212,6 +216,8 @@ export const useAICoach = (
     setChatHistory([]);
     // 新对话 = 干净输入区：清掉上一线程残留的附件 chip，否则空「上下文附件」跨线程飘着
     setAttachedContext(null);
+    // [B1 二次返工] 同理清预填 placeholder：预填只在打开入口时注入，切/建新话题不复活
+    setEntryPlaceholder('');
 
     // Save to storage
     await saveChatThreadList(limitedThreads);
@@ -906,13 +912,16 @@ ${JSON.stringify(uploadData, null, 2)}`;
    *   C 老用户无今日计划 → 轻预填
    * 红线：纯前端确定性组装（scheduleService 已交付今日课表，AI 零参与）；
    * 只动 placeholder 不动 chatMessage（正式值），用户输入天然替换之；
-   * 挂附件的入口（教学页「咨询教练」）= 带着具体问题来 → 让位并清残留。
+   * 挂附件的入口（教学页「咨询教练」）= 带着具体问题来 → 让位并清残留；
+   * 会话中途（当前线程已有消息）不复活——预填只在打开入口、会话未开始时注入。
    */
   const prefillCoachEntry = useCallback(async () => {
+    // 一检（同步，省一次无效 fetch）：带附件 / 会话已开始 → 不注入
     if (attachedContextRef.current) {
       setEntryPlaceholder('');
       return;
     }
+    if (chatHistoryRef.current.length > 0) return;
     try {
       const res = await fetch(`${API_BASE}/schedule/today?date=${todayDateKey()}`, {
         headers: getHeaders(),
@@ -933,12 +942,14 @@ ${JSON.stringify(uploadData, null, 2)}`;
       const hasHistory = Array.isArray(localHistory) && localHistory.length > 0;
 
       const text = resolveCoachPrefill(schedule, hasHistory);
-      // 二次让位（防同 tick 竞态）：fetch 期间挂上了附件（教学页「咨询教练」
-      // 先 setAttachedContext 再 openAiCoach）→ 预填退场且清残留，不盖问题场景
+      // 二检（防 fetch 窗口内竞态）：
+      // 附件（教学页同 tick 先 setAttachedContext）→ 让位并清残留，不盖问题场景；
+      // 会话已开始（窗口期内发出消息）→ 不复活
       if (attachedContextRef.current) {
         setEntryPlaceholder('');
         return;
       }
+      if (chatHistoryRef.current.length > 0) return;
       setEntryPlaceholder(text);
     } catch (err) {
       console.warn('[useAICoach] entry prefill skipped:', err);
