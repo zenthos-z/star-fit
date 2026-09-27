@@ -59,6 +59,8 @@ export interface PickerLibraryEntry {
   /** 器械 slug（展示文案经 EQUIPMENT_LABELS_ZH） */
   equipment: string;
   difficulty: string;
+  /** 库3 3D 解剖缩略图（R2 CDN，male 版；'' = 库内缺失） */
+  thumbnail: string;
 }
 
 /** 单组推荐值（合成） */
@@ -91,7 +93,7 @@ export interface PickerExercise {
   muscle: string;
   /** 主+次肌群中文（筛选用） */
   muscles: string[];
-  /** 主发力肌群（17 词表原值，MuscleMapThumb 数据源） */
+  /** 主发力肌群（17 词表原值，MuscleMap 数据源） */
   primaryMuscles: string[];
   /** 次发力肌群（17 词表原值） */
   secondaryMuscles: string[];
@@ -110,8 +112,8 @@ export interface PickerExercise {
   /** 「为你推荐」徽标（mock 确定性布点） */
   isRecommended: boolean;
   suggestion: PickerSuggestion;
-  /** 缩略图接口预留位：对接批次消费动作库图片接口；列表渲染（v3 起）不消费 */
-  imageRefs?: { thumb?: string };
+  /** 动作封面：库3 3D 解剖渲染图（R2 CDN，male 版）；缺失 '' → 列表回退类型图标 */
+  thumbnail: string;
 }
 
 /** 配置面板中可编辑的一组（清单页/配置页流转的草稿形态） */
@@ -213,16 +215,6 @@ export const PROTOCOL_TYPE: Record<PickerExerciseType, import('../../types/proto
 };
 
 // ---------------------------------------------------------------------------
-// 缩略图接口预留（对接批次消费；v3 列表渲染不消费——行首为 MuscleMap 可视化）
-// ---------------------------------------------------------------------------
-
-/** 库1 图片外链前缀（与 backend normalizeSources 的 LIB1_IMAGE_BASE 同源；文件不落仓） */
-export const IMAGE_BASE = 'https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/';
-
-/** 引用动作库真实素材（对接批次用） */
-export const libraryImage = (path: string) => ({ thumb: `${IMAGE_BASE}${path}` });
-
-// ---------------------------------------------------------------------------
 // 库条目 → 选择器条目派生（确定性纯函数）
 // ---------------------------------------------------------------------------
 
@@ -303,6 +295,12 @@ function initialsOfEn(name: string): string {
     .join('');
 }
 
+/** 库3 3D 解剖封面准入：仅接受 R2 CDN 渲染图；库1 真人照片 URL（raw.githubusercontent）
+ *  即便残留于 image_refs 也不准入（用户已拍板不要真人示意图） */
+function sanitizeThumbnail(url: string): string {
+  return url.includes('r2.dev/exercise-posters/') ? url : '';
+}
+
 /** 库条目 → 选择器条目（全量派生；顺序即导出顺序 = mock 的 rank/hotRank 真源） */
 export function buildPickerExercises(library: PickerLibraryEntry[]): PickerExercise[] {
   return library.map((e, i) => {
@@ -330,6 +328,7 @@ export function buildPickerExercises(library: PickerLibraryEntry[]): PickerExerc
       hotRank: i + 1,
       isRecommended: i + 1 > 3 && (i + 1) % 17 === 0,
       suggestion: synthesizeSuggestion(type, e.equipment, e.difficulty),
+      thumbnail: sanitizeThumbnail(e.thumbnail),
     };
   });
 }

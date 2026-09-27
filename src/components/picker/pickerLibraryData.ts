@@ -10,7 +10,7 @@
 
 import type { PickerLibraryEntry } from './pickerData';
 
-export const PICKER_LIBRARY_EXPORTED_AT = "2026-09-27T02:33:39.339Z";
+export const PICKER_LIBRARY_EXPORTED_AT = "2026-09-27T03:39:21.530Z";
 
 export const PICKER_LIBRARY: PickerLibraryEntry[] = [
   {
@@ -23,6 +23,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "lower_back"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/hanging-leg-hip-raise.jpg",
   },
   {
     id: "a3vunUF5mkiX2CDlj-hIO",
@@ -34,6 +35,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-feet-and-ankles-stretch.jpg",
   },
   {
     id: "a3vpF0GNL2Mnq41-3pyI6",
@@ -45,6 +47,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "cable",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-lying-fly-flat-bench-cable-fly.jpg",
   },
   {
     id: "a3v2B3vXKvKg5ifr5UohK",
@@ -56,6 +59,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/crunch-floor-female.jpg",
   },
   {
     id: "a3vEg7PQ1asHIuQ0kc_aV",
@@ -67,6 +71,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "forearms"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/hanging-straight-leg-raise.jpg",
   },
   {
     id: "a3vM98Xo4_PhGyY1gjXf4",
@@ -78,6 +83,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-one-leg-kickback-bent-position.jpg",
   },
   {
     id: "a3vfXOLLGc3RmlKfsAB3J",
@@ -89,6 +95,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back", "biceps"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-standing-rear-delt-row.jpg",
   },
   {
     id: "a3vaw7JEDU40_2UUsiqrj",
@@ -100,6 +107,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-incline-bench-press.jpg",
   },
   {
     id: "a3vBmhIczbcsaWM96rCkh",
@@ -111,6 +119,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-flexion-leg-sit-up.jpg",
   },
   {
     id: "a3vhxRT3Sl_QSOMdLOOi6",
@@ -122,6 +131,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-one-arm-curl.jpg",
   },
   {
     id: "a3vSiptvXmTQTj4f5Dsvc",
@@ -133,6 +143,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/inverted-row-with-straps.jpg",
   },
   {
     id: "a3vZhzCgOO6rPmlIM8pBp",
@@ -144,6 +155,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-pulldown.jpg",
   },
   {
     id: "a3vrhsfRSyBQdN0ZU-UR3",
@@ -155,6 +167,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "forearms"],
     equipment: "cable",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-rope-high-pulley-overhead-triceps-extension.jpg",
   },
   {
     id: "a3vKVXjhfedK-hxwL7PV-",
@@ -166,6 +179,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "shoulders"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-seated-high-row-v-bar.jpg",
   },
   {
     id: "a3vzrVceV4GnBHSz8HDJ1",
@@ -177,6 +191,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/jack-knife-floor.jpg",
   },
   {
     id: "a3f4MIDFjF1wY9Xi-VCO5",
@@ -188,6 +203,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abductors", "adductors", "calves", "glutes", "quadriceps"],
     equipment: "other",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Box_Skip/0.jpg",
   },
   {
     id: "a3vU3nUoddaRmXq0CxET-",
@@ -199,6 +215,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back", "calves"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-front-toe-touch.jpg",
   },
   {
     id: "a3vDqEMrRUx48a8AGdlHl",
@@ -210,6 +227,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "calves", "shoulders", "chest"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/burpee.jpg",
   },
   {
     id: "a3fKuwgOJRJm0q3wsCjGv",
@@ -221,6 +239,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms", "glutes", "hamstrings", "lower_back"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Cable_Deadlifts/0.jpg",
   },
   {
     id: "a3vDQVgOJT6TW4UkWkzIp",
@@ -232,6 +251,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cardio-exercises.jpg",
   },
   {
     id: "a3vOmIvWwh5Iiw8h6y-T6",
@@ -243,6 +263,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "triceps"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-one-arm-lateral-raise.jpg",
   },
   {
     id: "a3vCvuDES4PEb_aI8dJg_",
@@ -254,6 +275,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "adductors", "hamstrings"],
     equipment: "machine",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/close-feet-leg-press.jpg",
   },
   {
     id: "a3vpho4x0oUx1UZzQz6hi",
@@ -265,6 +287,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-standing-inner-curl.jpg",
   },
   {
     id: "a3vPYA8T2oXPtaWa_Xfhr",
@@ -276,6 +299,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["chest", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/close-grip-push-ups.jpg",
   },
   {
     id: "a3vRgX-IksqXh7H8_cPgQ",
@@ -287,6 +311,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-standing-lift.jpg",
   },
   {
     id: "a3vHdrzLetwud5H0QVfb8",
@@ -298,6 +323,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-twist-up-down.jpg",
   },
   {
     id: "a3v_ie84nhmqp2ovs4XdF",
@@ -309,6 +335,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-lateral-raise.jpg",
   },
   {
     id: "a3vckSc3Q_9-whxex8Sp9",
@@ -320,6 +347,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/chin-ups-narrow-parallel-grip.jpg",
   },
   {
     id: "a3vn0nMS716UmeeOtIckb",
@@ -331,6 +359,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "traps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-front-raise.jpg",
   },
   {
     id: "a3vJ4XkBVJIS5Civm9ppf",
@@ -342,6 +371,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-seated-calf-raise.jpg",
   },
   {
     id: "a3vMuqstiXFdZ8tfxIOck",
@@ -353,6 +383,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-decline-fly-45-degree-1.jpg",
   },
   {
     id: "a3fwEqaN5XoibTLMcScJC",
@@ -364,6 +395,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back", "abdominals", "triceps"],
     equipment: "kettlebell",
     difficulty: "beginner",
+    thumbnail: "",
   },
   {
     id: "a3vdGLioFlm7FNmwfxS0o",
@@ -375,6 +407,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "chest"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-arnold-press.jpg",
   },
   {
     id: "a3vXLiYXrlm7kAmPS7PKn",
@@ -386,6 +419,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-lying-alternate-extension.jpg",
   },
   {
     id: "a3vZ6x6T7VOKrOLeknEGg",
@@ -397,6 +431,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-lying-femoral.jpg",
   },
   {
     id: "a3vuv3U9HAmdRq01jyVlb",
@@ -408,6 +443,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-one-arm-zottman-preacher-curl.jpg",
   },
   {
     id: "a3vBV1Ysi1oSEzTja-8sB",
@@ -419,6 +455,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-over-bench-wrist-curl.jpg",
   },
   {
     id: "a3vP8LXcQM3hPBc-nzfe-",
@@ -430,6 +467,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-preacher-curl-over-exercise-ball.jpg",
   },
   {
     id: "a3vOMhtzddB7AItKGBiqV",
@@ -441,6 +479,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-prone-incline-curl.jpg",
   },
   {
     id: "a3vs4V5CSwozSwAU6mGdX",
@@ -452,6 +491,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-seated-neutral-wrist-curl.jpg",
   },
   {
     id: "a3vXDnN5loZHEZL2d7I2g",
@@ -463,6 +503,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-side-bend.jpg",
   },
   {
     id: "a3vxmkEf4iugRmch870L0",
@@ -474,6 +515,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-standing-calf-raise.jpg",
   },
   {
     id: "a3v8coM83AQ2QIn4IliDy",
@@ -485,6 +527,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "adductors", "hamstrings"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-bar-grip-sumo-squat.jpg",
   },
   {
     id: "a3vVlM2WWsJ1M5rqC51BG",
@@ -496,6 +539,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lying-straight-leg-raise.jpg",
   },
   {
     id: "a3v1s8BWqt2GQP2H72b9I",
@@ -507,6 +551,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "chest"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/ez-barbell-anti-gravity-press.jpg",
   },
   {
     id: "a3vv5R74U-oEgrI9GSYhU",
@@ -518,6 +563,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/chest-dips.jpg",
   },
   {
     id: "a3vf4Tfqw3CHAGc-ND0bv",
@@ -529,6 +575,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/hip-raise-bridge.jpg",
   },
   {
     id: "a3f1fDEYFhkaVQvPNWOwH",
@@ -540,6 +587,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "shoulders", "triceps"],
     equipment: "medicine_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Chest_Push_single_response/0.jpg",
   },
   {
     id: "a3f66fcrAO11JKTv0R-Y9",
@@ -551,6 +599,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "shoulders", "triceps"],
     equipment: "kettlebell",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Kettlebell_Windmill/0.jpg",
   },
   {
     id: "a3vYihaqhieaTbpBT0OuB",
@@ -562,6 +611,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-dynamic-chest-stretch.jpg",
   },
   {
     id: "a3vXHQtbMFKSel_ImEt5T",
@@ -573,6 +623,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "barbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/ez-barbell-biceps-curl.jpg",
   },
   {
     id: "a3v6FIH-bmzTKgl8Bs4GT",
@@ -584,6 +635,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-behind-back-wrist-curl.jpg",
   },
   {
     id: "a3vrEKub2Ru7-tGn61tqO",
@@ -595,6 +647,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "adductors", "calves", "abductors"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/jumping-jack.jpg",
   },
   {
     id: "a3fxpjcUk0w8694QaX7FX",
@@ -606,6 +659,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes", "hamstrings", "shoulders"],
     equipment: "kettlebell",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Goblet_Squat/0.jpg",
   },
   {
     id: "a3vlY0n-6upx4nueST0Xx",
@@ -617,6 +671,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-biceps-curl.jpg",
   },
   {
     id: "a3vTSJdurthd9rBDuaSI1",
@@ -628,6 +683,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-hammer-curl.jpg",
   },
   {
     id: "a3vrg-EL69n7WyH_oiIVV",
@@ -639,6 +695,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-kneeling-lat-stretch.jpg",
   },
   {
     id: "a3vPbcqKHgXgnvWjNVSqb",
@@ -650,6 +707,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-kneeling-leg-curl.jpg",
   },
   {
     id: "a3vZe32XoQvIcTg5yrdkp",
@@ -661,6 +719,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "calves"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-squat.jpg",
   },
   {
     id: "a3vjxzpPw2qkvUvQJydfE",
@@ -672,6 +731,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "glutes"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-seated-hip-adduction.jpg",
   },
   {
     id: "a3f6LU3UL_GPvdoFBbRaI",
@@ -683,6 +743,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "glutes", "hamstrings", "lower_back", "quadriceps", "traps"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Farmers_Walk/0.jpg",
   },
   {
     id: "a3v49xCsHkLiM-7UuXdbp",
@@ -694,6 +755,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lying-floor-leg-raise.jpg",
   },
   {
     id: "a3v7r7ieNN6LnPJmofFjE",
@@ -705,6 +767,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abductors", "glutes", "adductors"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-hip-circles-stretch.jpg",
   },
   {
     id: "a3vHVhYqmhje6iyni4Gik",
@@ -716,6 +779,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-hip-extension-stretch.jpg",
   },
   {
     id: "a3v0TtDQDDr5tRucHW_VT",
@@ -727,6 +791,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-above-head-chest-stretch.jpg",
   },
   {
     id: "a3vG6UZuEY6S8w8gwqICS",
@@ -738,6 +803,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "quadriceps", "hamstrings", "glutes"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/jump-rope.jpg",
   },
   {
     id: "a3fKjoNpM7wCORO9LwUAC",
@@ -749,6 +815,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "triceps"],
     equipment: "kettlebell",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Kettlebell_Thruster/0.jpg",
   },
   {
     id: "a3v2qBwFTqGCS-PG8OvrE",
@@ -760,6 +827,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/reverse-crunch-female.jpg",
   },
   {
     id: "a3vWodpE4lYmd4ud16aka",
@@ -771,6 +839,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/landmine-180.jpg",
   },
   {
     id: "a3vssw3EegkT6kS6axKm5",
@@ -782,6 +851,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "shoulders"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/scapula-dips.jpg",
   },
   {
     id: "a3vy1pGJN_Gi6W_2hAzND",
@@ -793,6 +863,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-back-extension.jpg",
   },
   {
     id: "a3vN_ADBst8h3FU08ikLZ",
@@ -804,6 +875,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back", "chest"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-seated-shoulder-flexor-depresor-retractor.jpg",
   },
   {
     id: "a3vThjfZa9UyB9s0DIMrI",
@@ -815,6 +887,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes", "lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-single-straight-leg-stretch.jpg",
   },
   {
     id: "a3fEI8EbCBlLNex3bUpB-",
@@ -826,6 +899,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "other",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Single-Leg_High_Box_Squat/0.jpg",
   },
   {
     id: "a3vH3EpeFB5hfh700CMRg",
@@ -837,6 +911,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "lats"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/old-school-reverse-extensions.jpg",
   },
   {
     id: "a3vzs4TzfF5TbL5ueMq0x",
@@ -848,6 +923,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-lying-leg-curl.jpg",
   },
   {
     id: "a3vZuvw_XWRznAjruLLtg",
@@ -859,6 +935,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-seated-hip-abduction.jpg",
   },
   {
     id: "a3vMsYP_lM2kJK4AL9psD",
@@ -870,6 +947,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "calves", "lower_back"],
     equipment: "stability_ball",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/leg-curl-on-stability-ball.jpg",
   },
   {
     id: "a3vFg3pXaGkvaMfyhnPdL",
@@ -881,6 +959,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-standing-calf-raise.jpg",
   },
   {
     id: "a3vSGM8TBzQxMS3xutMK4",
@@ -892,6 +971,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-triceps-extension.jpg",
   },
   {
     id: "a3fiS_36glPNsKVtbHR3U",
@@ -903,6 +983,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["chest", "shoulders"],
     equipment: "medicine_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Supine_Chest_Throw/0.jpg",
   },
   {
     id: "a3fjctgHYMasA2a7II6sH",
@@ -914,6 +995,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes", "quadriceps"],
     equipment: "kettlebell",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Lunge_Pass_Through/0.jpg",
   },
   {
     id: "a3vsNZHuuBdkk98yld2mX",
@@ -925,6 +1007,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-neck-side-stretch.jpg",
   },
   {
     id: "a3v3Xt3a2v4wTYy7-eaNo",
@@ -936,6 +1019,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/v-up.jpg",
   },
   {
     id: "a3fdUZqUfHeP1mJlipMad",
@@ -947,6 +1031,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "medicine_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Overhead_Slam/0.jpg",
   },
   {
     id: "a3flRbkOpd2wqj61VwZSv",
@@ -958,6 +1043,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings"],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Physioball_Hip_Bridge/0.jpg",
   },
   {
     id: "a3vnFDvKYmftoz_IEclw8",
@@ -969,6 +1055,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "quadriceps", "hamstrings"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-plyo-side-lunge-stretch.jpg",
   },
   {
     id: "a3f07GVWNTRQ2ZSpltOMG",
@@ -980,6 +1067,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms", "glutes", "hamstrings", "middle_back", "quadriceps", "traps"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Axle_Deadlift/0.jpg",
   },
   {
     id: "a3v5ZeI-IVp-xTUlFX-Tp",
@@ -991,6 +1079,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "lower_back"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-front-chest-squat.jpg",
   },
   {
     id: "a3vNmkisgu91qKbFXZEXQ",
@@ -1002,6 +1091,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-standing-crunch.jpg",
   },
   {
     id: "a3fn3zEzA22ArQ7ZQ8ImK",
@@ -1013,6 +1103,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps"],
     equipment: "stability_ball",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Push-Ups_With_Feet_On_An_Exercise_Ball/0.jpg",
   },
   {
     id: "a3vc9-rZ9Qttw1sSzIZAP",
@@ -1024,6 +1115,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "glutes", "shoulders", "triceps"],
     equipment: "barbell",
     difficulty: "advanced",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-clean-and-press.jpg",
   },
   {
     id: "a3vEeDciUpTuduATe6ieM",
@@ -1035,6 +1127,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "triceps"],
     equipment: "barbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-front-raise.jpg",
   },
   {
     id: "a3vS_iGtijoPKKnQwfmLm",
@@ -1046,6 +1139,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "barbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-shrug.jpg",
   },
   {
     id: "a3v8P2y8mzqlkMgUEH99m",
@@ -1057,6 +1151,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "forearms"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-close-grip-front-lat-pulldown.jpg",
   },
   {
     id: "a3vxZlI8-0He9ag6Yk4F5",
@@ -1068,6 +1163,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "chest"],
     equipment: "cable",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-one-arm-forward-raise.jpg",
   },
   {
     id: "a3vbOw8O6ecRzXLZQHdZ4",
@@ -1079,6 +1175,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-straight-arm-pulldown.jpg",
   },
   {
     id: "a3vhwj_km2wYfHm68I4jp",
@@ -1090,6 +1187,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/cardio-exercises-machine.jpg",
   },
   {
     id: "a3v7J-gPcQ2DdLKXjhR09",
@@ -1101,6 +1199,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/donkey-calf-raise.jpg",
   },
   {
     id: "a3vkwlp0r96wtarFNw3fC",
@@ -1112,6 +1211,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-concentration-curl.jpg",
   },
   {
     id: "a3vzv-soPdd4GtRA1CEA7",
@@ -1123,6 +1223,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-bench-press.jpg",
   },
   {
     id: "a3vIWPLHmm6iQsxefNoJu",
@@ -1134,6 +1235,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-fly.jpg",
   },
   {
     id: "a3vnu0QXe30NW-uO-tjVU",
@@ -1145,6 +1247,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/lying-scissor-kick-female.jpg",
   },
   {
     id: "a3vFttLlzLEyWVSRxRZ9P",
@@ -1156,6 +1259,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-shrug.jpg",
   },
   {
     id: "a3v5JNLY7A8TxztQkE013",
@@ -1167,6 +1271,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-kickback.jpg",
   },
   {
     id: "a3ftNDK9ipMaea10glWP4",
@@ -1178,6 +1283,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "shoulders"],
     equipment: "kettlebell",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Kettlebell_Figure_8/0.jpg",
   },
   {
     id: "a3fOgTAMkmmdW7axegGHZ",
@@ -1189,6 +1295,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Kneeling_High_Pulley_Row/0.jpg",
   },
   {
     id: "a3vSIrIrGgQ5PmfBf-aZK",
@@ -1200,6 +1307,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "lower_back"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/leg-raise-hip-lift.jpg",
   },
   {
     id: "a3vyPg6rJRC7Ko3xJ1nO1",
@@ -1211,6 +1319,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "adductors"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-horizontal-leg-press.jpg",
   },
   {
     id: "a3vXgGySOrTmcyTzag8fJ",
@@ -1222,6 +1331,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-lying-chest-press.jpg",
   },
   {
     id: "a3v2ML7jL4EEABAMpgP8X",
@@ -1233,6 +1343,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-seated-calf-raise.jpg",
   },
   {
     id: "a3vfSnEixrLbRWJrjKARZ",
@@ -1244,6 +1355,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-seated-reverse-fly.jpg",
   },
   {
     id: "a3vVywiVMR-YezDbbfx1j",
@@ -1255,6 +1367,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "shoulders", "traps", "biceps"],
     equipment: "machine",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-t-bar-row.jpg",
   },
   {
     id: "a3vJbkfBlG78Hs_1guaIU",
@@ -1266,6 +1379,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-middle-back-stretch-1.jpg",
   },
   {
     id: "a3vrmOTTkBNdAD_z5J3FF",
@@ -1277,6 +1391,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "traps", "forearms"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/pull-up-shoulder-grip.jpg",
   },
   {
     id: "a3fVSi411I0PAcLLRtwyA",
@@ -1288,6 +1403,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "shoulders"],
     equipment: "medicine_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/One-Arm_Medicine_Ball_Slam/0.jpg",
   },
   {
     id: "a3vueUuLSxelQilBx2Pio",
@@ -1299,6 +1415,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/push-ups.jpg",
   },
   {
     id: "a3vHO31W4NAuFiU93KK-m",
@@ -1310,6 +1427,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-high-fly.jpg",
   },
   {
     id: "a3vWF2xC29pqtSnkiqIEj",
@@ -1321,6 +1439,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "chest"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-reverse-dip.jpg",
   },
   {
     id: "a3vLv3NgpcIkLd2zcbZ2n",
@@ -1332,6 +1451,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-runners-stretch.jpg",
   },
   {
     id: "a3vhPm3quqiTJJSL0Nv45",
@@ -1343,6 +1463,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-alternate-seated-biceps-curl.jpg",
   },
   {
     id: "a3vY7aqLWVNg-92S37kMv",
@@ -1354,6 +1475,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps", "biceps", "shoulders"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-straight-back-seated-row-v-grip.jpg",
   },
   {
     id: "a3vIOwypsdtHaDVoWwULv",
@@ -1365,6 +1487,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "traps", "chest"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-bench-seated-press.jpg",
   },
   {
     id: "a3vka5WIErDWXUZdw88wf",
@@ -1376,6 +1499,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "lats"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-side-wrist-pull-stretch.jpg",
   },
   {
     id: "a3v7E9FK1kOcf-3xFv6TY",
@@ -1387,6 +1511,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/sit-ups.jpg",
   },
   {
     id: "a3v-HsLIz9feTKiM_yxWv",
@@ -1398,6 +1523,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "middle_back"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/smith-seated-shoulder-press.jpg",
   },
   {
     id: "a3fXR-A0Qk9XNTRBof3OI",
@@ -1409,6 +1535,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Ab_Roller/0.jpg",
   },
   {
     id: "a3vMX0GWoYTh8210wtgv9",
@@ -1420,6 +1547,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-hip-abduction.jpg",
   },
   {
     id: "a3vFfB6nNXaxLIoJSyDdl",
@@ -1431,6 +1559,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "hamstrings"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-spine-stretch.jpg",
   },
   {
     id: "a3fT4CaQIM3IQRj4sEB0o",
@@ -1442,6 +1571,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes", "hamstrings", "lower_back"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Squats_-_With_Bands/0.jpg",
   },
   {
     id: "a3vCLy_1oQsW_DZY2B7qx",
@@ -1453,6 +1583,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "band",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-assisted-pull-up.jpg",
   },
   {
     id: "a3va8j0M8tS1Yi6kzpcO7",
@@ -1464,6 +1595,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["chest"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-one-arm-forward-raise.jpg",
   },
   {
     id: "a3vSUKm4rRgP6aJRzRmrL",
@@ -1475,6 +1607,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-standing-bench-calf-stretch.jpg",
   },
   {
     id: "a3vUOom0O3A2C6Iy7iEHU",
@@ -1486,6 +1619,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-leg-curl.jpg",
   },
   {
     id: "a3vLtSNjysRlx9hAyrieQ",
@@ -1497,6 +1631,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps", "shoulders", "biceps"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-seated-row.jpg",
   },
   {
     id: "a3v6r_Rzbp-FbwSOgTp8F",
@@ -1508,6 +1643,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps", "biceps"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-straight-back-seated-row.jpg",
   },
   {
     id: "a3v-whbiAgXeeVDON9ybv",
@@ -1519,6 +1655,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "lower_back", "adductors"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/classic-barbell-squat.jpg",
   },
   {
     id: "a3voWomVETPZpuJRBBbCe",
@@ -1530,6 +1667,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "barbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-curl.jpg",
   },
   {
     id: "a3vk-VGoejl6pVY6BtOus",
@@ -1541,6 +1679,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "lats", "traps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-standing-reach-up-back-rotation-stretch.jpg",
   },
   {
     id: "a3vIU9hhdDMTssXEpNLI0",
@@ -1552,6 +1691,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "barbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-reverse-wrist-curl-over-grip.jpg",
   },
   {
     id: "a3vUYP6WrjvP3zKBUIpbs",
@@ -1563,6 +1703,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "lower_back"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-straight-leg-deadlift.jpg",
   },
   {
     id: "a3vYd6_6lubtleBznKEHF",
@@ -1574,6 +1715,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/crunch-on-bench.jpg",
   },
   {
     id: "a3fGrGmnNAiPh_8EbOSWS",
@@ -1585,6 +1727,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "lower_back", "quadriceps", "shoulders", "triceps"],
     equipment: "kettlebell",
     difficulty: "advanced",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bent_Press/0.jpg",
   },
   {
     id: "a3vFQFYwAGyv7CWYQuf6o",
@@ -1596,6 +1739,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/crunch-straight-leg-up.jpg",
   },
   {
     id: "a3vbc_Xys2uAELMWiVEdL",
@@ -1607,6 +1751,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps", "lats"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-seated-row-wide-grip.jpg",
   },
   {
     id: "a3vPciwd9rNQifgzuJL5G",
@@ -1618,6 +1763,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/rear-decline-bridge.jpg",
   },
   {
     id: "a3vTafDQ57Gi0xy2UNG1B",
@@ -1629,6 +1775,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/reverse-grip-machine-lat-pulldown.jpg",
   },
   {
     id: "a3vTPY0iDtMup_Y0bu0FE",
@@ -1640,6 +1787,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "calves"],
     equipment: "weighted",
     difficulty: "advanced",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/weighted-sissy-squat.jpg",
   },
   {
     id: "a3vRx_7QzrepwgBrJGwTE",
@@ -1651,6 +1799,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps", "abdominals"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/rotate-push-up-female.jpg",
   },
   {
     id: "a3vCYjB-63-qOa2oZRkLP",
@@ -1662,6 +1811,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-slopes-towards-stretch.jpg",
   },
   {
     id: "a3vAyNdu9Lqru-Bm0ezu0",
@@ -1673,6 +1823,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back"],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/side-bend-on-stability-ball.jpg",
   },
   {
     id: "a3vslU3e7d-u6Yz6xi3Nl",
@@ -1684,6 +1835,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "calves"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/sled-hack-squat.jpg",
   },
   {
     id: "a3vCNUDteRj7XE3DVmcOc",
@@ -1695,6 +1847,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "calves"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/smith-chair-squat.jpg",
   },
   {
     id: "a3v7541Qkf--r0wX_C_3j",
@@ -1706,6 +1859,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "calves"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-hamstring-stretch.jpg",
   },
   {
     id: "a3v_3R_HIiS9ax0Y-EvxM",
@@ -1717,6 +1871,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-quadriceps-stretch.jpg",
   },
   {
     id: "a3vlxgkXKB1kdH5y9L0Ug",
@@ -1728,6 +1883,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "glutes", "calves"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stationary-bike.jpg",
   },
   {
     id: "a3vYOQrNzV2SHed9BpbQ7",
@@ -1739,6 +1895,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lying-supine-dumbbell-curl.jpg",
   },
   {
     id: "a3vrSzC3GUqScmNDvLCze",
@@ -1750,6 +1907,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/vertical-leg-raise-on-parallel-bars.jpg",
   },
   {
     id: "a3fF-HX5sZ5Ng4JWgoqkk",
@@ -1761,6 +1919,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "middle_back"],
     equipment: "stability_ball",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Weighted_Ball_Hyperextension/0.jpg",
   },
   {
     id: "a3vc5y1ubD5jBJiRW2BMm",
@@ -1772,6 +1931,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "weighted",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/weighted-lying-twist.jpg",
   },
   {
     id: "a3vHUsCDGOs2G4wT00u8A",
@@ -1783,6 +1943,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "traps", "middle_back", "shoulders"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-bar-lateral-pulldown-wide-shoulder-grip.jpg",
   },
   {
     id: "a3fjf2dZWyzSzQLzygfgT",
@@ -1794,6 +1955,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "medicine_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Backward_Medicine_Ball_Throw/0.jpg",
   },
   {
     id: "a3f07Z9EJn9uxMYF3w0sw",
@@ -1805,6 +1967,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes", "hamstrings"],
     equipment: "other",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Bench_Sprint/0.jpg",
   },
   {
     id: "a3vWl91zL2u8buZ0NNUy6",
@@ -1816,6 +1979,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/45-degree-hyperextension.jpg",
   },
   {
     id: "a3vuKHS7z_sYiGxrMGm6I",
@@ -1827,6 +1991,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/45-degree-bycicle-twisting-crunch.jpg",
   },
   {
     id: "a3vwP-ux1tXJiR6hmy22Y",
@@ -1838,6 +2003,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-all-fours-squad-stretch.jpg",
   },
   {
     id: "a3vue7m-XeRD1JzYxb4Es",
@@ -1849,6 +2015,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-bent-over-rear-lateral-raise.jpg",
   },
   {
     id: "a3vtMJAkAlJahiUHqqpwn",
@@ -1860,6 +2027,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abductors", "quadriceps"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-hip-adduction.jpg",
   },
   {
     id: "a3vWYGE5zjE9ezPnzhWEh",
@@ -1871,6 +2039,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-kneeling-one-arm-pulldown.jpg",
   },
   {
     id: "a3vzoTf9a8twFVwDtmRu2",
@@ -1882,6 +2051,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-overhead-triceps-extension.jpg",
   },
   {
     id: "a3v1eo31eiL1AnI0jaj6h",
@@ -1893,6 +2063,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/close-grip-chin-up.jpg",
   },
   {
     id: "a3v0owvR5A1kHy170MdpD",
@@ -1904,6 +2075,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-pull-through.jpg",
   },
   {
     id: "a3vbbNGsOqwPI_2ZqCDRx",
@@ -1915,6 +2087,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "band",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-decline-sit-ups.jpg",
   },
   {
     id: "a3vvdZa5w72xlXh46uUjB",
@@ -1926,6 +2099,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-seated-leg-extension.jpg",
   },
   {
     id: "a3v8sQxPymNS8bnbRsiYy",
@@ -1937,6 +2111,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["chest", "shoulders"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-close-grip-bench-press.jpg",
   },
   {
     id: "a3v9FufM37NWSHRyEotxI",
@@ -1948,6 +2123,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "chest"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-band-warm-up-shoulder-stretch.jpg",
   },
   {
     id: "a3vYjIqIzxfM2_FsvGF5a",
@@ -1959,6 +2135,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-side-bend.jpg",
   },
   {
     id: "a3vmN6vN5qeSie21JjuXE",
@@ -1970,6 +2147,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-standing-calf-raise.jpg",
   },
   {
     id: "a3vztIJxtWFFtshDIIRXx",
@@ -1981,6 +2159,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-standing-leg-curl.jpg",
   },
   {
     id: "a3vM6c231Af1Hf73DURE1",
@@ -1992,6 +2171,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "quadriceps"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-standing-lift.jpg",
   },
   {
     id: "a3f_BUFIycrhtfS752Kb9",
@@ -2003,6 +2183,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abductors", "adductors", "calves", "glutes", "quadriceps"],
     equipment: "other",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Box_Jump_Multiple_Response/0.jpg",
   },
   {
     id: "a3vx2JK_OnnlX3gsewO27",
@@ -2014,6 +2195,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/band-triceps-pushdown.jpg",
   },
   {
     id: "a3vIsD2kYt413KqYM9eor",
@@ -2025,6 +2207,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-bench-press.jpg",
   },
   {
     id: "a3vihUivslT3D_e73-huc",
@@ -2036,6 +2219,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "biceps"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-upright-row-wide-grip.jpg",
   },
   {
     id: "a3v7SKMVeJFm-EvNHqFtH",
@@ -2047,6 +2231,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-decline-bench-press.jpg",
   },
   {
     id: "a3vSpanPffHHLTONoQ_3i",
@@ -2058,6 +2243,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-drag-curl.jpg",
   },
   {
     id: "a3vUMINe7fTHI7zkyO-s9",
@@ -2069,6 +2255,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "calves"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-lunge.jpg",
   },
   {
     id: "a3vHu5kTBdBCm5OD_-noy",
@@ -2080,6 +2267,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "barbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-prone-incline-curl.jpg",
   },
   {
     id: "a3vGLwc-dumtRvhMPNdOt",
@@ -2091,6 +2279,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-rear-delt-raise.jpg",
   },
   {
     id: "a3vosz8pCLCkInpNI_xwU",
@@ -2102,6 +2291,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "traps"],
     equipment: "barbell",
     difficulty: "advanced",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-seated-behind-head-military-press.jpg",
   },
   {
     id: "a3v-70JCBRIsHERWH_CH5",
@@ -2113,6 +2303,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "shoulders"],
     equipment: "barbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-standing-back-wrist-curl.jpg",
   },
   {
     id: "a3v2-4YMcJnrgQChT6B25",
@@ -2124,6 +2315,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "traps", "shoulders"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/barbell-underhand-bent-over-row.jpg",
   },
   {
     id: "a3vLtALdA7__no9ygUVXX",
@@ -2135,6 +2327,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/battling-ropes.jpg",
   },
   {
     id: "a3voaZ60CWJVnnUjQTezZ",
@@ -2146,6 +2339,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["chest", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/bench-dips.jpg",
   },
   {
     id: "a3v-SP_a97x4IPre8BemW",
@@ -2157,6 +2351,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "traps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/bench-pull-ups.jpg",
   },
   {
     id: "a3vbdhWmA9B1qXxYKsX3h",
@@ -2168,6 +2363,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes"],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/bent-knee-lying-twist-on-stability-ball.jpg",
   },
   {
     id: "a3vWeFzOW7Z2g4S8wYeR4",
@@ -2179,6 +2375,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back", "quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-bridge-pose-setu-bandhasana.jpg",
   },
   {
     id: "a3v8EourRerDeqz73RODo",
@@ -2190,6 +2387,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-butterfly-yoga-pose.jpg",
   },
   {
     id: "a3vhoLERWuWx49un26scy",
@@ -2201,6 +2399,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps"],
     equipment: "cable",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-crossover-reverse-fly.jpg",
   },
   {
     id: "a3vwYn4Gr170YiM5ADL9x",
@@ -2212,6 +2411,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-kneeling-crunch.jpg",
   },
   {
     id: "a3vT5fzSsHQGAVDaP2MEY",
@@ -2223,6 +2423,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "triceps"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-lateral-raise.jpg",
   },
   {
     id: "a3vB_OF6DkMX4-YHbAJKv",
@@ -2234,6 +2435,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-pushdown-rope-attachment.jpg",
   },
   {
     id: "a3vaNhtgOXb5X-0YjVlIE",
@@ -2245,6 +2447,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-lying-triceps-extension.jpg",
   },
   {
     id: "a3vBLZg0k_bsTv-U8b7Hm",
@@ -2256,6 +2459,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back"],
     equipment: "cable",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-one-arm-lateral-pulldown.jpg",
   },
   {
     id: "a3vRJwLFYNPHNjo0J8BpC",
@@ -2267,6 +2471,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "middle_back", "biceps", "shoulders"],
     equipment: "cable",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-one-arm-twisting-seated-row.jpg",
   },
   {
     id: "a3v_vCcvdxd1cd4wsTJzs",
@@ -2278,6 +2483,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back", "biceps"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-rear-delt-row-with-rope.jpg",
   },
   {
     id: "a3vJbqCzAMuS4Z0Mt1lKk",
@@ -2289,6 +2495,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-calf-stretch-with-strap.jpg",
   },
   {
     id: "a3ve1fCD_Tnbiw4ozgO93",
@@ -2300,6 +2507,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-standing-crunch.jpg",
   },
   {
     id: "a3vKjbDIOnPRXK8jT0XJX",
@@ -2311,6 +2519,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-standing-fly-crossover-fly.jpg",
   },
   {
     id: "a3vQTKoZM7HMfSrm62aS_",
@@ -2322,6 +2531,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-standing-one-arm-triceps-extension.jpg",
   },
   {
     id: "a3vWa5BBS8AJEOtqeHwqO",
@@ -2333,6 +2543,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-triceps-pushdown.jpg",
   },
   {
     id: "a3vNvy_YlcpoxDx6btu_R",
@@ -2344,6 +2555,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "band",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-calf-stretch-with-rope.jpg",
   },
   {
     id: "a3vIXCyLfoA_eJAIIFgZr",
@@ -2355,6 +2567,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cambered-bar-lying-row.jpg",
   },
   {
     id: "a3vchYYiGz-uOU9LnIx2p",
@@ -2366,6 +2579,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cardio-exercises-machines.jpg",
   },
   {
     id: "a3v0LDFeJubxzHvIAKNGW",
@@ -2377,6 +2591,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/chest-lift-with-rotation.jpg",
   },
   {
     id: "a3vPpl3hhYpE61mm7o-Ha",
@@ -2388,6 +2603,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-chin-to-chest-stretch.jpg",
   },
   {
     id: "a3vRv0HOXbUVh3i9rJUkj",
@@ -2399,6 +2615,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "forearms", "abdominals", "traps"],
     equipment: "bodyweight",
     difficulty: "advanced",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/commando-pull-up.jpg",
   },
   {
     id: "a3v09zr-JJLyPaJTya5_P",
@@ -2410,6 +2627,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-crossover-kneeling-hip-flexor-stretch.jpg",
   },
   {
     id: "a3vQfseoIJeLILkB65AG1",
@@ -2421,6 +2639,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/decline-dumbbell-bench-press-45-degree.jpg",
   },
   {
     id: "a3vSbVSRv8VVB25qLVEhi",
@@ -2432,6 +2651,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-fly-on-exercise-ball.jpg",
   },
   {
     id: "a3vphoV5tZWzz_tfKdcLI",
@@ -2443,6 +2663,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/deep-push-ups.jpg",
   },
   {
     id: "a3vW8H81GzQCG6IG--rM-",
@@ -2454,6 +2675,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "chest", "traps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-alternate-shoulder-press.jpg",
   },
   {
     id: "a3vQx7-km1s5lswX1uK-T",
@@ -2465,6 +2687,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps", "shoulders", "biceps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-bent-over-row.jpg",
   },
   {
     id: "a3vLSZ0fP8LVczT8e0KNK",
@@ -2476,6 +2699,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-biceps-curl.jpg",
   },
   {
     id: "a3vsuOCW61eWmuhL-7AxP",
@@ -2487,6 +2711,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["chest", "shoulders"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-close-grip-press.jpg",
   },
   {
     id: "a3v_0Vk0go7EAnK727kPL",
@@ -2498,6 +2723,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/corkscrew-pilates.jpg",
   },
   {
     id: "a3v-iTcpz-ZXWbBNc6cfX",
@@ -2509,6 +2735,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-cross-body-hammer-curl.jpg",
   },
   {
     id: "a3vgYwtUTeBDWQHZAqHyC",
@@ -2520,6 +2747,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-deadlift.jpg",
   },
   {
     id: "a3v5xohBVOUpnIwNF47I6",
@@ -2531,6 +2759,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-fly.jpg",
   },
   {
     id: "a3vRrJ9qIk1gQvR8xrmDg",
@@ -2542,6 +2771,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "calves"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-goblet-squat.jpg",
   },
   {
     id: "a3v03toyevBKNsf2lDmi1",
@@ -2553,6 +2783,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps", "shoulders", "biceps"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-hammer-grip-incline-bench-row.jpg",
   },
   {
     id: "a3vDTKQ1isoxsKEsUcVoa",
@@ -2564,6 +2795,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-curl.jpg",
   },
   {
     id: "a3vPKI0Of6oSfz_rtC4gq",
@@ -2575,6 +2807,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-fly-on-exercise-ball.jpg",
   },
   {
     id: "a3veP7CHPcl0kOG7R9Y6-",
@@ -2586,6 +2819,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-hammer-press.jpg",
   },
   {
     id: "a3vHA9KxrOpFOKxR0K6gX",
@@ -2597,6 +2831,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-rear-lateral-raise.jpg",
   },
   {
     id: "a3vTo7Se2EjpCGz2VjQQw",
@@ -2608,6 +2843,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-row.jpg",
   },
   {
     id: "a3vFjIZmH4GTsVcFf4ZxS",
@@ -2619,6 +2855,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-incline-triceps-extension.jpg",
   },
   {
     id: "a3v2Ma_dzdlpnAGfm8uKo",
@@ -2630,6 +2867,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "chest"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-iron-cross.jpg",
   },
   {
     id: "a3v7M3wpMsTb5u464vusM",
@@ -2641,6 +2879,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "calves"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-lunge.jpg",
   },
   {
     id: "a3v9SzZVVlY4YvwTqX-oL",
@@ -2652,6 +2891,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-lying-hammer-press.jpg",
   },
   {
     id: "a3v_Vwl0eot2r9MJO55-4",
@@ -2663,6 +2903,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-lying-rear-delt-row.jpg",
   },
   {
     id: "a3vmUrPzdEU8PclcANqme",
@@ -2674,6 +2915,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-lying-triceps-extension.jpg",
   },
   {
     id: "a3vLglRDHlFihlh0H43iD",
@@ -2685,6 +2927,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "triceps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-one-arm-lateral-raise.jpg",
   },
   {
     id: "a3vI7ACnj7n5jzrRdOf-q",
@@ -2696,6 +2939,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-one-arm-triceps-extension.jpg",
   },
   {
     id: "a3viLbRcmPooHD9KwuNM1",
@@ -2707,6 +2951,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-palm-rotational-bent-over-row.jpg",
   },
   {
     id: "a3vjqSpgGRGwXBH2ThK7o",
@@ -2718,6 +2963,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-pronate-grip-triceps-extension.jpg",
   },
   {
     id: "a3vr_wWW4pneInpgpGJ_h",
@@ -2729,6 +2975,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-rear-delt-row.jpg",
   },
   {
     id: "a3vgrTDv85wDnE-dGqxNF",
@@ -2740,6 +2987,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "biceps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-seated-front-raise.jpg",
   },
   {
     id: "a3vkjEr545dM59vSKitQ8",
@@ -2751,6 +2999,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-seated-kickback.jpg",
   },
   {
     id: "a3v_Tbc-1VvrQXeo5sNO5",
@@ -2762,6 +3011,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-seated-lateral-raise.jpg",
   },
   {
     id: "a3vur6UcBusQN4yLbLJqq",
@@ -2773,6 +3023,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-seated-preacher-curl.jpg",
   },
   {
     id: "a3vhOYU926zZkAy4n6EMM",
@@ -2784,6 +3035,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-seated-triceps-extension.jpg",
   },
   {
     id: "a3vrEUlFxp7bxTZM7Oapn",
@@ -2795,6 +3047,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-shrug.jpg",
   },
   {
     id: "a3ve5lAJJ4rVug-bT1PO0",
@@ -2806,6 +3059,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-single-leg-calf-raise.jpg",
   },
   {
     id: "a3vcX7zqftWYKlwdx4Jhn",
@@ -2817,6 +3071,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "calves"],
     equipment: "dumbbell",
     difficulty: "advanced",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-single-leg-squat.jpg",
   },
   {
     id: "a3vYKGp3dkPqyL1TCMfyA",
@@ -2828,6 +3083,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "dumbbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-stiff-leg-deadlift.jpg",
   },
   {
     id: "a3v8mDI1l4YhIpWh4D-n-",
@@ -2839,6 +3095,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "biceps"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/dumbbell-upright-row.jpg",
   },
   {
     id: "a3vPyOmmnUsLILsIVuU6y",
@@ -2850,6 +3107,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "glutes", "calves", "chest", "shoulders"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/elliptical.jpg",
   },
   {
     id: "a3vgtMnqVXGOJlXpuOQx-",
@@ -2861,6 +3119,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/sit-up-on-exercise-ball.jpg",
   },
   {
     id: "a3v6eXztwqI8zI_PzpImj",
@@ -2872,6 +3131,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "quadriceps"],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-spinal-stretch-on-exercise-ball.jpg",
   },
   {
     id: "a3vrlQPWIIVdHO24bg19o",
@@ -2883,6 +3143,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/hundred-pilates.jpg",
   },
   {
     id: "a3vxWlTahyK63IlWg3GPk",
@@ -2894,6 +3155,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/ez-barbell-lying-triceps-extension.jpg",
   },
   {
     id: "a3v3hnI19EpIkgGesxMfP",
@@ -2905,6 +3167,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-feet-and-ankles-rotation-stretch.jpg",
   },
   {
     id: "a3vh4e6fYF6Xp7gNMy3iO",
@@ -2916,6 +3179,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-hip-flexor-and-quad-stretch.jpg",
   },
   {
     id: "a3vs_vFf0PB1p4u_zwcr7",
@@ -2927,6 +3191,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/incline-leg-hip-raise.jpg",
   },
   {
     id: "a3vLBs1oLvbJdDk_Gb7IR",
@@ -2938,6 +3203,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/incline-push-ups.jpg",
   },
   {
     id: "a3vXVm9PS33of3IfkrZwE",
@@ -2949,6 +3215,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "traps", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/inverted-row-between-chairs.jpg",
   },
   {
     id: "a3vD-yYA37XKeNP-Lh9wG",
@@ -2960,6 +3227,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back", "abductors", "glutes", "chest"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-iron-cross-stretch.jpg",
   },
   {
     id: "a3vFSyscX7oPVV7XG0KHy",
@@ -2971,6 +3239,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "lower_back", "glutes"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/jackknife-pilates.jpg",
   },
   {
     id: "a3vX1EtYhZxdlyF1CXfBB",
@@ -2982,6 +3251,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "adductors"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/jack-split-crunches.jpg",
   },
   {
     id: "a3vnbnrbFQBrRW8sQ8fIW",
@@ -2993,6 +3263,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "calves"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/jump-step-up.jpg",
   },
   {
     id: "a3vZLM3MEdVZfFjPtMKti",
@@ -3004,6 +3275,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back", "quadriceps", "forearms"],
     equipment: "kettlebell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/kettlebell-deadlift.jpg",
   },
   {
     id: "a3vFivBLUs3Dm9SDLgIVs",
@@ -3015,6 +3287,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "chest", "lats"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-kneeling-back-rotation-stretch.jpg",
   },
   {
     id: "a3veCsuj8NBPw-v6TJ6iY",
@@ -3026,6 +3299,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-kneeling-triceps-extension.jpg",
   },
   {
     id: "a3vYJAfpI4RF8XQahmEr7",
@@ -3037,6 +3311,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/crunch-leg-raise.jpg",
   },
   {
     id: "a3vk3Jf1h2-uXqsxoFTId",
@@ -3048,6 +3323,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "shoulders"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-high-row.jpg",
   },
   {
     id: "a3vXXl_hNJdicme-FW6Xn",
@@ -3059,6 +3335,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "triceps"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-incline-hammer-chest-press.jpg",
   },
   {
     id: "a3vnMftQOoBRfO7DkdvXV",
@@ -3070,6 +3347,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-lateral-raise.jpg",
   },
   {
     id: "a3vi_xLg4Y7R8dGiAwOdT",
@@ -3081,6 +3359,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-leg-extension.jpg",
   },
   {
     id: "a3vC2p25zuzo-a2QN2PMp",
@@ -3092,6 +3371,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-preacher-curl.jpg",
   },
   {
     id: "a3vS99pKg6ehbsxZaTS31",
@@ -3103,6 +3383,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-reverse-hyperextension.jpg",
   },
   {
     id: "a3vaTR7KfA10qUnDo0q0-",
@@ -3114,6 +3395,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "forearms"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-reverse-t-bar-row.jpg",
   },
   {
     id: "a3vZRNRDxntUM8IJY9tSm",
@@ -3125,6 +3407,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-seated-crunch-1.jpg",
   },
   {
     id: "a3vJzOlbKDuwbFKwJFwxY",
@@ -3136,6 +3419,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["chest", "shoulders"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-seated-dips.jpg",
   },
   {
     id: "a3fI6TJkCUpCFcOS-oNDG",
@@ -3147,6 +3431,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "medicine_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Weighted_Crunches/0.jpg",
   },
   {
     id: "a3vyc9E0Gwk5jnUwozdB9",
@@ -3158,6 +3443,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-quadriceps-lying-stretch.jpg",
   },
   {
     id: "a3vcC5Kvp3bElYO5BU_t5",
@@ -3169,6 +3455,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-seated-leg-curl.jpg",
   },
   {
     id: "a3vRjimwA6_MpkXjjUmam",
@@ -3180,6 +3467,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-shrug.jpg",
   },
   {
     id: "a3vAx97o_N5by8kUqvsIq",
@@ -3191,6 +3479,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-standing-hip-extension.jpg",
   },
   {
     id: "a3vwvDM8b_ux0rPPKDfd5",
@@ -3202,6 +3491,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-standing-rear-kick.jpg",
   },
   {
     id: "a3vBe1LyRd3ZBw7xsVXWa",
@@ -3213,6 +3503,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "stability_ball",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/lying-hip-lift-on-stability-ball.jpg",
   },
   {
     id: "a3vafN0dN0KBJtbKs06XU",
@@ -3224,6 +3515,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "shoulders"],
     equipment: "weighted",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/medicine-ball-sit-up-wall.jpg",
   },
   {
     id: "a3vj70q0EROZmkzQjDbA6",
@@ -3235,6 +3527,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["triceps", "traps", "chest"],
     equipment: "barbell",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/military-press.jpg",
   },
   {
     id: "a3vvwKGnJk5ZsVn53p7R-",
@@ -3246,6 +3539,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "shoulders"],
     equipment: "weighted",
     difficulty: "advanced",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/otis-ups.jpg",
   },
   {
     id: "a3vNPq-XoO7Z4RInr2LlY",
@@ -3257,6 +3551,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "biceps"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/lever-pec-deck-fly.jpg",
   },
   {
     id: "a3vuwbhhKR9Jd4OSc2rjQ",
@@ -3268,6 +3563,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-peroneals-stretch.jpg",
   },
   {
     id: "a3vGfwTFTFFyVvbQUkV2Y",
@@ -3279,6 +3575,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["traps", "middle_back", "biceps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/pull-up-wide-front-grip.jpg",
   },
   {
     id: "a3vh8ew0YZgD2zGbBmpXz",
@@ -3290,6 +3587,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "traps", "shoulders"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/chin-ups-pull-ups.jpg",
   },
   {
     id: "a3vZwXBxTLZ6znxBoWG38",
@@ -3301,6 +3599,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["middle_back", "traps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-rear-deltoid-stretch.jpg",
   },
   {
     id: "a3vmfPWhThW41nFviaBm4",
@@ -3312,6 +3611,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-hip-flexor-stretch-rear-foot-elevated.jpg",
   },
   {
     id: "a3vedrLctPcRzI2j32cZv",
@@ -3323,6 +3623,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "forearms"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/reverse-grip-pull-up.jpg",
   },
   {
     id: "a3vysCx170eA7zXSmrPEr",
@@ -3334,6 +3635,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["biceps", "middle_back", "traps"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/cable-bar-lateral-pulldown-reverse-grip.jpg",
   },
   {
     id: "a3v6GwV5EwIORtg4x-dZU",
@@ -3345,6 +3647,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "biceps", "shoulders", "traps"],
     equipment: "bodyweight",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/ring-high-row.jpg",
   },
   {
     id: "a3vliegDK_7yq7b4tHrwd",
@@ -3356,6 +3659,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "glutes", "calves"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/running.jpg",
   },
   {
     id: "a3vHnqikma6N1d7btkUpH",
@@ -3367,6 +3671,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "stability_ball",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/russian-twist-on-stability-ball-arms-straight.jpg",
   },
   {
     id: "a3vJjUA-qEpUIWLgJCLGq",
@@ -3378,6 +3683,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "hamstrings", "traps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-sitting-bent-over-back-stretch.jpg",
   },
   {
     id: "a3v4ig6mnp-Wi_5PU5m7u",
@@ -3389,6 +3695,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back", "glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-boat-stretch.jpg",
   },
   {
     id: "a3vrHunTd8ZOMAyvcHA10",
@@ -3400,6 +3707,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-seated-calf-stretch.jpg",
   },
   {
     id: "a3vbCxiTmqDvCg2okzVh0",
@@ -3411,6 +3719,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-seated-lower-back-stretch.jpg",
   },
   {
     id: "a3v4woG6m3XSqGA44mrt4",
@@ -3422,6 +3731,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/seated-twist-straight-arm.jpg",
   },
   {
     id: "a3v4-ZPtD9qPugq6s-DE-",
@@ -3433,6 +3743,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back", "glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-seated-twist-straight-arm.jpg",
   },
   {
     id: "a3vmZwUtVNWEEJxUI68aY",
@@ -3444,6 +3755,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/seated-twist-on-stability-ball.jpg",
   },
   {
     id: "a3vh4xfEzgkG8Hx6xydQH",
@@ -3455,6 +3767,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back", "glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-seated-wide-angle-pose-sequence.jpg",
   },
   {
     id: "a3v6lIwjUQ2KZIGf9oApF",
@@ -3466,6 +3779,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abductors", "lower_back", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/side-bridge-side-plank.jpg",
   },
   {
     id: "a3vypCSImYazzqiLtJBbM",
@@ -3477,6 +3791,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "lower_back"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/single-dumbbell-stiff-leg-deadlift.jpg",
   },
   {
     id: "a3vVoTmyMxiIhCFjQ5w9C",
@@ -3488,6 +3803,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-single-leg-stretch-bent-knee.jpg",
   },
   {
     id: "a3vQVhmckB90rkF2-oAig",
@@ -3499,6 +3815,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/sled-45-degree-calf-press.jpg",
   },
   {
     id: "a3v_o7inJHymW9Uo0WNOS",
@@ -3510,6 +3827,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "adductors", "hamstrings"],
     equipment: "machine",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/sled-45-degree-leg-wide-press.jpg",
   },
   {
     id: "a3vQkp1PXUUStB5hB37oO",
@@ -3521,6 +3839,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/smith-calf-raise.jpg",
   },
   {
     id: "a3vNBnfMyLmLNKxtQn1cS",
@@ -3532,6 +3851,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "traps", "forearms"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/smith-deadlift-deadlift-1.jpg",
   },
   {
     id: "a3vaSWvbVTxfvjRJuocHf",
@@ -3543,6 +3863,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "glutes"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-adductor-stretch.jpg",
   },
   {
     id: "a3vYy8t_PJYKW8NzK_1ge",
@@ -3554,6 +3875,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "adductors"],
     equipment: "machine",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/smith-leg-press.jpg",
   },
   {
     id: "a3vUL1dBR2ubcBwnjeWjk",
@@ -3565,6 +3887,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back"],
     equipment: "dumbbell",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/spell-caster.jpg",
   },
   {
     id: "a3vB-c8QqleJZMyWpmB3z",
@@ -3576,6 +3899,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings", "lower_back", "adductors"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/squat.jpg",
   },
   {
     id: "a3vgnSyCBFu1_4AlE2xWT",
@@ -3587,6 +3911,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "stability_ball",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/crunch-legs-on-stability-ball.jpg",
   },
   {
     id: "a3vBkLKO0CbLxZB4Kc-AB",
@@ -3598,6 +3923,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-stairs-calf-stretch.jpg",
   },
   {
     id: "a3vPJ-HD_hXYEcfdBFwRL",
@@ -3609,6 +3935,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lower_back", "lats"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-standing-back-rotation-stretch.jpg",
   },
   {
     id: "a3vr-nQcuJlwzhK7yAHaG",
@@ -3620,6 +3947,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-ceiling-look-stretch.jpg",
   },
   {
     id: "a3v4DidkYdIys23kAUJjM",
@@ -3631,6 +3959,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-knee-raise.jpg",
   },
   {
     id: "a3vV-NAg7I1c2OSXWO1B_",
@@ -3642,6 +3971,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-standing-lateral-stretch-1.jpg",
   },
   {
     id: "a3vjgNqv1uNpInLbe1jWB",
@@ -3653,6 +3983,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-standing-side-bend-bent-arm.jpg",
   },
   {
     id: "a3vI1cIFlGj4cJhEtZSgU",
@@ -3664,6 +3995,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["lats", "chest", "shoulders"],
     equipment: "bodyweight",
     difficulty: "advanced",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-standing-wheel-rollout.jpg",
   },
   {
     id: "a3vItOSTh7TKQD4T9WLV8",
@@ -3675,6 +4007,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/twisting-crunch.jpg",
   },
   {
     id: "a3v0gydiD9iLVydd6bxjD",
@@ -3686,6 +4019,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps", "hamstrings", "calves", "glutes"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/treadmill-running.jpg",
   },
   {
     id: "a3vwxZBPLfO6AC4ndnyy5",
@@ -3697,6 +4031,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders", "chest"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/triceps-dips.jpg",
   },
   {
     id: "a3vToEJo9bu86KRo3MEw5",
@@ -3708,6 +4043,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "quadriceps", "hamstrings", "abductors", "calves"],
     equipment: "machine",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/walk-wave-machine.jpg",
   },
   {
     id: "a3vdSUvJXEbgTmFTtKLxG",
@@ -3719,6 +4055,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["quadriceps"],
     equipment: "weighted",
     difficulty: "intermediate",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/weighted-leg-extension-crunch.jpg",
   },
   {
     id: "a3vZqWHyttP_8-t41T0dh",
@@ -3730,6 +4067,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms"],
     equipment: "weighted",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/weighted-standing-curl.jpg",
   },
   {
     id: "a3vSbrc-qmJg35RxfRwOH",
@@ -3741,6 +4079,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/male/stretching-wrist-circles.jpg",
   },
   {
     id: "a3fBhRl6DjWltr_7K-3j0",
@@ -3752,6 +4091,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Exercise_Ball_Crunch/0.jpg",
   },
   {
     id: "a3fwoiW8QKFFGQxnoKKgK",
@@ -3763,6 +4103,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "stability_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Torso_Rotation/0.jpg",
   },
   {
     id: "a3fdWdLfM7u86DgjB1rfl",
@@ -3774,6 +4115,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "adductors", "biceps", "calves", "forearms", "glutes", "hamstrings", "middle_back", "quadriceps", "traps"],
     equipment: "other",
     difficulty: "advanced",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Atlas_Stones/0.jpg",
   },
   {
     id: "a3fMjTQzdipc3Ed2iyTyM",
@@ -3785,6 +4127,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "hamstrings"],
     equipment: "other",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Hyperextensions_Back_Extensions/0.jpg",
   },
   {
     id: "a3fDMhvYc2hLhmEtdgpbr",
@@ -3796,6 +4139,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes", "hamstrings", "shoulders"],
     equipment: "kettlebell",
     difficulty: "advanced",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Kettlebell_Pistol_Squat/0.jpg",
   },
   {
     id: "a3fIyennhlR4w1Im35JYN",
@@ -3807,6 +4151,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["shoulders"],
     equipment: "medicine_ball",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Medicine_Ball_Full_Twist/0.jpg",
   },
   {
     id: "a3fkl1Hw2QI7QdwuQ7j0m",
@@ -3818,6 +4163,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["hamstrings", "lower_back"],
     equipment: "cable",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Pull_Through/0.jpg",
   },
   {
     id: "a3fIQ_DEfzy8HTvxKPb25",
@@ -3829,6 +4175,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abductors", "adductors", "calves", "glutes", "hamstrings"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Suspended_Split_Squat/0.jpg",
   },
   {
     id: "a3fYZ4SbYWESZSvw2Y7Zp",
@@ -3840,6 +4187,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "glutes", "hamstrings"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Weighted_Squat/0.jpg",
   },
   {
     id: "a3ftGzwChaC5111MYacGU",
@@ -3851,6 +4199,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["forearms", "glutes", "hamstrings", "lower_back", "traps"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Car_Deadlift/0.jpg",
   },
   {
     id: "a3fXouuswyzSRFa-OnrZ5",
@@ -3862,6 +4211,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "calves", "glutes", "hamstrings", "lower_back", "quadriceps", "traps"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Rickshaw_Carry/0.jpg",
   },
   {
     id: "a3fAcPyqIozSZhnoRmUQd",
@@ -3873,6 +4223,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["abdominals", "abductors", "adductors", "calves", "glutes", "hamstrings", "lower_back"],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Yoke_Walk/0.jpg",
   },
   {
     id: "a3fHk1De4z25o5g60uz62",
@@ -3884,6 +4235,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: [],
     equipment: "other",
     difficulty: "intermediate",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Plate_Twist/0.jpg",
   },
   {
     id: "a3fCxXff2nwibtxGxfh1P",
@@ -3895,6 +4247,7 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["calves", "forearms", "lats", "middle_back", "shoulders"],
     equipment: "other",
     difficulty: "beginner",
+    thumbnail: "https://raw.githubusercontent.com/yuhonas/free-exercise-db/main/exercises/Sledgehammer_Swings/0.jpg",
   },
   {
     id: "a3vQyEYYuUxg3Q0palN2h",
@@ -3906,5 +4259,6 @@ export const PICKER_LIBRARY: PickerLibraryEntry[] = [
     secondaryMuscles: ["glutes", "shoulders"],
     equipment: "bodyweight",
     difficulty: "beginner",
+    thumbnail: "https://pub-585d42eb1aa64a67aedf483ec328d3fe.r2.dev/exercise-posters/female/front-plank-female.jpg",
   },
 ];

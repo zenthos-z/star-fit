@@ -1,10 +1,12 @@
 /**
- * PickerConfigSheet — A9 参数配置面板（返工 v2：真组件复用）
+ * PickerConfigSheet — A9 参数配置面板（真组件复用 + v4 UI 重审）
  *
  * 参数配置主体 = 真实 src/components/ExerciseSettingsModal.tsx 组件本体
- * （逐组编辑 / RPE / 建议徽标 / 数据依据 / 偏离提醒全部为现有组件原逻辑），
+ * （逐组编辑 / RPE / 建议徽标 / 数据依据 / 应用建议全部为现有组件原逻辑）。
  * 本文件只承载两个增量点的挂载：
- *   ① 组类型标注（热身/正式/递增/递减/AMRAP）——经 renderSetExtras 注入每组行内；
+ *   ① 组类型标注（热身/正式/递增/递减/AMRAP）——chip 经 renderSetExtras 注入
+ *      每组行内；点按在该组行正下方展开 inline 选择条（renderSetFootnote，
+ *      v4 由底部选择条改为行内切换，路径更短、上下文更近）；
  *   ② 智能填充开关——经 smartFillSlot 注入「训练组安排」上方；
  *      开启时经 externalApiRef 触发面板内部「应用建议」同款逻辑。
  * 协议扩展点：组类型（set_role）为前端 mock 字段，后端契约暂未收录，
@@ -71,8 +73,8 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
   const [roles, setRoles] = useState<PickerSetRole[]>(item.sets.map(s => s.role));
   /** 智能填充（增量点②）：默认开——清单初始值即推荐值 */
   const [smartFill, setSmartFill] = useState(true);
-  /** 正在改组类型的组下标（底部迷你选择条） */
-  const [roleSheetIdx, setRoleSheetIdx] = useState<number | null>(null);
+  /** 正在展开行内选择条的组下标 */
+  const [roleEditorIdx, setRoleEditorIdx] = useState<number | null>(null);
   const apiRef = useRef<{ applySuggestion?: () => void } | null>(null);
 
   const roleOf = (i: number): PickerSetRole => roles[i] ?? 'working';
@@ -85,7 +87,7 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
       next[i] = role;
       return next;
     });
-    setRoleSheetIdx(null);
+    setRoleEditorIdx(null);
   };
 
   const toggleSmartFill = () => {
@@ -122,10 +124,13 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
     onClose();
   };
 
-  /** 增量点①：逐组行内的组类型 chip（点按弹出底部迷你选择条） */
+  /** 增量点①：逐组行内的组类型 chip（点按展开行下 inline 选择条） */
   const renderSetExtras = (i: number) => (
     <button
-      onClick={() => { haptic('light'); setRoleSheetIdx(i); }}
+      onClick={() => {
+        haptic('light');
+        setRoleEditorIdx(cur => (cur === i ? null : i));
+      }}
       aria-label={`第 ${i + 1} 组类型：${ROLE_LABELS[roleOf(i)]}`}
       className={`w-[52px] shrink-0 px-1 py-1.5 rounded-md text-[10px] font-bold text-center transition-colors ${ROLE_BADGE_CLASS[roleOf(i)]}`}
     >
@@ -133,9 +138,29 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
     </button>
   );
 
+  /** 增量点①（v4）：行内选择条——在该组行正下方展开，无需跳转到底部选择条 */
+  const renderSetFootnote = (i: number) => {
+    if (roleEditorIdx !== i) return null;
+    return (
+      <div className="grid grid-cols-5 gap-1 mt-2 pl-[42px]" role="group" aria-label={`第 ${i + 1} 组类型选择`}>
+        {ROLE_ORDER.map(role => (
+          <button
+            key={role}
+            onClick={() => assignRole(i, role)}
+            className={`py-1.5 rounded-md text-[10px] font-bold transition-colors ${
+              roleOf(i) === role ? 'bg-star-dark text-white' : 'bg-gray-100 text-gray-500'
+            }`}
+          >
+            {ROLE_LABELS[role]}
+          </button>
+        ))}
+      </div>
+    );
+  };
+
   /** 增量点②：智能填充开关卡（建议来源徽标/数据依据/建议数值均由真实面板原生呈现） */
   const smartFillSlot = (
-    <div className="px-6 mb-4">
+    <div className="px-6 mb-6">
       <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4 flex items-center justify-between gap-3">
         <div className="min-w-0">
           <div className="flex items-center gap-2 mb-1">
@@ -183,49 +208,10 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
         isLibraryOpen={false}
         onLibraryOpenChange={() => {}}
         renderSetExtras={renderSetExtras}
+        renderSetFootnote={renderSetFootnote}
         smartFillSlot={smartFillSlot}
         externalApiRef={apiRef}
       />
-
-      {/* 组类型选择条（增量点①的交互层） */}
-      {roleSheetIdx !== null && (
-        <div className="absolute inset-0 z-[100] bg-black/40" onClick={() => setRoleSheetIdx(null)}>
-          <motion.div
-            role="dialog"
-            aria-modal="true"
-            aria-label={`第 ${roleSheetIdx + 1} 组组类型选择`}
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            transition={{ type: 'tween', duration: 0.25, ease: 'easeOut' }}
-            className="absolute bottom-0 inset-x-0 bg-white rounded-t-3xl px-4 pt-3"
-            onClick={e => e.stopPropagation()}
-          >
-            <p className="text-center text-[15px] font-semibold text-star-dark pb-3">
-              第 {roleSheetIdx + 1} 组 · 组类型
-            </p>
-            <div className="grid grid-cols-5 gap-1.5 pb-4">
-              {ROLE_ORDER.map(role => (
-                <button
-                  key={role}
-                  onClick={() => assignRole(roleSheetIdx, role)}
-                  className={`py-2.5 rounded-xl text-xs font-bold transition-colors ${
-                    roleOf(roleSheetIdx) === role ? 'bg-star-dark text-white' : 'bg-gray-100 text-gray-500'
-                  }`}
-                >
-                  {ROLE_LABELS[role]}
-                </button>
-              ))}
-            </div>
-            <button
-              onClick={() => setRoleSheetIdx(null)}
-              className="w-full py-3.5 border-t border-gray-100 text-[17px] font-medium text-gray-500 active:bg-gray-50"
-            >
-              取消
-            </button>
-            <div style={{ height: 'max(env(safe-area-inset-bottom), 8px)' }} />
-          </motion.div>
-        </div>
-      )}
     </motion.div>
   );
 };

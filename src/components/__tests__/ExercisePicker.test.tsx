@@ -21,7 +21,6 @@ import {
 } from '../picker/pickerData';
 import {
   EMPTY_FILTERS,
-  computeDragTarget,
   filterAndSortExercises,
   formatParamSummary,
   matchSearch,
@@ -153,22 +152,6 @@ describe('pickerLogic · 胶囊回显与行副标题', () => {
   });
 });
 
-describe('pickerLogic · 长按拖拽落位（computeDragTarget）', () => {
-  it('下拖一行高 → 与相邻行交换', () => {
-    expect(computeDragTarget(0, 66, 66, 4)).toBe(1);
-  });
-  it('上拖两行高 → 上移两位', () => {
-    expect(computeDragTarget(3, -132, 66, 4)).toBe(1);
-  });
-  it('夹紧到列表边界', () => {
-    expect(computeDragTarget(0, -500, 66, 4)).toBe(0);
-    expect(computeDragTarget(3, 500, 66, 4)).toBe(3);
-  });
-  it('位移不足半行 → 保持原位', () => {
-    expect(computeDragTarget(1, 20, 66, 4)).toBe(1);
-  });
-});
-
 describe('pickerLogic · 参数摘要一行（合成建议）', () => {
   it('拉伸（固定合成）：2组×30秒 · RPE 4', () => {
     const ex = MOCK_EXERCISES.find(e => e.exerciseType === 'flexibility')!;
@@ -206,7 +189,8 @@ describe('pickerLogic · 参数摘要一行（合成建议）', () => {
 describe('ExercisePickerModal · A8 主列表', () => {
   it('渲染列表 + 「常用」「为你推荐」徽标 + 近期的训练分区（全库前 3 模拟）', () => {
     render(<ExercisePickerModal onClose={() => {}} />);
-    expect(screen.getByText('添加运动')).toBeInTheDocument();
+    // Large Title + 折叠小标题同屏存在（滚动折叠机制）
+    expect(screen.getAllByText('添加运动').length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText('近期的训练')).toBeInTheDocument();
     for (const id of RECENT_IDS) {
       expect(screen.getByText(byId(id).name)).toBeInTheDocument();
@@ -215,12 +199,15 @@ describe('ExercisePickerModal · A8 主列表', () => {
     expect(screen.getAllByText('为你推荐')).toHaveLength(MOCK_EXERCISES.filter(e => e.isRecommended).length);
   });
 
-  it('行首为肌群胶囊降级形态，不渲染真人照片（无 img 元素）', () => {
+  it('行首为库3 3D 解剖封面（R2 缩略图），不渲染 free-exercise-db 真人照片源', () => {
     const { container } = render(<ExercisePickerModal onClose={() => {}} />);
-    expect(container.querySelector('img')).toBeNull();
-    // 近期首条的主发力肌群胶囊可见（muscleLabelZh 中文标签）
-    const first = byId(RECENT_IDS[0]);
-    expect(screen.getAllByText(muscleLabelZh(first.primaryMuscles[0])).length).toBeGreaterThan(0);
+    const imgs = container.querySelectorAll('img');
+    expect(imgs.length).toBeGreaterThan(0);
+    // 封面均为 R2 CDN 缩略图；v2 的 raw.githubusercontent 真人照片源不再被消费
+    imgs.forEach(img => {
+      expect(img.getAttribute('src')).not.toContain('raw.githubusercontent.com');
+    });
+    expect(container.querySelector('img[src*="r2.dev/exercise-posters/male"]')).not.toBeNull();
   });
 
   it('新手态：无「常用」徽标 + 引导卡 + 无近期分区', () => {
@@ -348,7 +335,7 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument());
   });
 
-  it('去配置进入清单页：参数摘要一行 + 移除（调序为长按拖拽，无上下箭头按钮）', async () => {
+  it('清单页独立卡片：浏览态无删除/拖柄，编辑态出现并可移除', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
     const a = byId(RECENT_IDS[0]);
@@ -360,14 +347,26 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     expect(screen.getByText('训练清单')).toBeInTheDocument();
     expect(screen.getByText(summaryOfItem({ exercise: a, sets: planToDraftSets(a.suggestion.sets), targetRpe: a.suggestion.targetRpe }))).toBeInTheDocument();
 
-    // 箭头调序按钮已删除；长按拖拽提示存在
+    // 箭头调序按钮已删除
     expect(screen.queryByLabelText(/上移 |下移 /)).not.toBeInTheDocument();
-    expect(screen.getByText(/长按拖动调整顺序/)).toBeInTheDocument();
 
-    // 移除 b → 只剩 a
+    // 浏览态：无删除钮、无拖动柄；有 ⓘ 教程入口
+    expect(screen.queryByLabelText(`移除 ${b.name}`)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText(`拖动排序 ${b.name}`)).not.toBeInTheDocument();
+    expect(screen.getByLabelText(`教程 ${b.name}`)).toBeInTheDocument();
+
+    // 编辑态切换：拖动柄（行首）+ 红色删除（行尾）浮出
+    await user.click(screen.getByRole('button', { name: '编辑' }));
+    expect(screen.getByLabelText(`拖动排序 ${b.name}`)).toBeInTheDocument();
+    expect(screen.getByLabelText(`移除 ${b.name}`)).toBeInTheDocument();
+    expect(screen.queryByLabelText(`教程 ${b.name}`)).not.toBeInTheDocument();
+
+    // 移除 b → 只剩 a；退出编辑
     await user.click(screen.getByLabelText(`移除 ${b.name}`));
     expect(screen.queryByLabelText(`配置 ${b.name}`)).not.toBeInTheDocument();
     expect(screen.getByLabelText(`配置 ${a.name}`)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: '完成' }));
+    expect(screen.getByRole('button', { name: '编辑' })).toBeInTheDocument();
   });
 
   it('选满 9 个出现琥珀色软提示', () => {
@@ -412,16 +411,20 @@ describe('PickerConfigSheet · 参数配置（嵌套真实 ExerciseSettingsModal
     expect(sw).toHaveAttribute('aria-checked', 'true');
   });
 
-  it('增量点：组类型标注 chip → 底部选择条改「递增」→ 保存回写清单', async () => {
+  it('增量点：组类型标注 chip → 行内选择条改「递增」→ 保存回写清单', async () => {
     const { user, onChange, bench } = setupSheet();
     // 合成建议含热身/正式
     expect(screen.getAllByText('热身').length).toBeGreaterThan(0);
     expect(screen.getAllByText('正式').length).toBeGreaterThan(0);
 
+    // 点 chip → 该组行正下方展开 inline 选择条（v4：不再弹底部选择条）
+    expect(screen.queryByRole('group', { name: '第 1 组类型选择' })).not.toBeInTheDocument();
     await user.click(screen.getByLabelText('第 1 组类型：热身'));
-    const sheet = screen.getByRole('dialog', { name: '第 1 组组类型选择' });
-    await user.click(within(sheet).getByRole('button', { name: '递增' }));
+    const strip = screen.getByRole('group', { name: '第 1 组类型选择' });
+    await user.click(within(strip).getByRole('button', { name: '递增' }));
     expect(screen.getByLabelText('第 1 组类型：递增')).toBeInTheDocument();
+    // 选择后收起
+    expect(screen.queryByRole('group', { name: '第 1 组类型选择' })).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: '确认添加动作' }));
     expect(onChange).toHaveBeenCalledTimes(1);
