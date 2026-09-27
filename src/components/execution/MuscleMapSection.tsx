@@ -95,8 +95,8 @@ export const MuscleMapSection: React.FC<MuscleMapSectionProps> = ({
     return () => window.clearTimeout(t);
   }, [nativeState, interactive, primary, secondary, reportRect]);
 
-  // 滚动跟随：捕获阶段监听任意滚动祖先 + visualViewport 变化（#11 漂移最小修复：
-  // 键盘/缩放/原生层位移都会改 visualViewport 几何，rAF 节流重报 rect）
+  // 滚动跟随：捕获阶段监听任意滚动祖先 + window/visualViewport resize（#11 漂移
+  // 最小修复：键盘/缩放/原生层位移都会改视口几何，rAF 节流重报 rect）
   useEffect(() => {
     if (nativeState !== 'active') return;
     const onScroll = () => {
@@ -108,10 +108,12 @@ export const MuscleMapSection: React.FC<MuscleMapSectionProps> = ({
     };
     const vv = window.visualViewport;
     window.addEventListener('scroll', onScroll, true);
+    window.addEventListener('resize', onScroll);
     vv?.addEventListener('resize', onScroll);
     vv?.addEventListener('scroll', onScroll);
     return () => {
       window.removeEventListener('scroll', onScroll, true);
+      window.removeEventListener('resize', onScroll);
       vv?.removeEventListener('resize', onScroll);
       vv?.removeEventListener('scroll', onScroll);
       if (rafRef.current != null) {

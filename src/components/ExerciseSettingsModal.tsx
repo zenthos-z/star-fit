@@ -1090,7 +1090,10 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
             handleLibrarySelect(sel.id, sel.name, sel.type, sel.bodyCategory, sel.muscles, sel.equipment, sel.nameEn);
           }}
           onClose={() => {
-            if (isCreating && onCancelCreate) onCancelCreate();
+            // 白屏根因修复（D）：确认选动作后再点返回，此前会走 onCancelCreate
+            // 把 pendingExercise 一并清掉 → 配置面板整体卸载 → 主流程白屏。
+            // 现按是否已选到动作分流：未选（name 空）返回=取消创建；已选返回=回配置面板。
+            if (isCreating && onCancelCreate && !name) onCancelCreate();
             else onLibraryOpenChange(false);
           }}
         />

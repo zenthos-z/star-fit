@@ -20,7 +20,7 @@
  * 数据：全部 mock（pickerData.ts），无 API 调用；对接后端时仅替换数据源。
  */
 
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { haptic } from '../../lib/nativeHaptics';
@@ -150,29 +150,66 @@ function BackCircleButton({ onClick, label }: { onClick: () => void; label: stri
   );
 }
 
+/** 长按进入拖拽的阈值（ms）——与 SwipeableRow 口径一致 */
+const LONG_PRESS_MS = 300;
+
 /**
- * 清单卡片（v4 整页重做）：
- * - 独立白卡（rounded-[20px] shadow-sm），卡片间 space-y-3，弃单一白容器
- * - 拖拽 = framer-motion Reorder 官方方案：motion value 直接驱动被拖卡片
- *   （完全跟手），其余卡片 layout 让位；拖拽仅经行首拖动柄启动（编辑态）
- * - 浏览态：序号 + 名称/摘要 + ⓘ 教程；编辑态：拖动柄（行首）+ 红色删除（行尾）
+ * 清单卡片（v4 + 用户反馈 C 修正）：
+ * - 独立白卡（rounded-[20px] shadow-sm），卡片间 space-y-3
+ * - 手势分离（iOS 惯例，无编辑钮）：短按主区域=进参数配置；长按 300ms=整卡
+ *   进入 Reorder 拖拽（motion value 跟手，其余卡片 layout 让位），位移>10px
+ *   判定为滚动即取消长按
+ * - 智能填充轻提示：清单参数即建议值（SuggestionService 口径），卡片带蓝色
+ *   小徽标表达，不弹说明文案
+ * - 行尾双钮：ⓘ 教程 + 红色「—」移除
  */
 function CartCard({
   item,
   index,
-  editing,
   onOpen,
   onTutorial,
   onRemove,
 }: {
   item: PickerSelectionItem;
   index: number;
-  editing: boolean;
   onOpen: () => void;
   onTutorial: () => void;
   onRemove: () => void;
 }) {
   const controls = useDragControls();
+  const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pressStart = useRef<{ x: number; y: number } | null>(null);
+  /** 长按已触发：随后的 click（pointerup 后派发）不再当作「点按配置」 */
+  const longPressFired = useRef(false);
+
+  const clearPress = () => {
+    if (pressTimer.current) {
+      clearTimeout(pressTimer.current);
+      pressTimer.current = null;
+    }
+  };
+
+  const onPointerDown = (e: React.PointerEvent) => {
+    // 仅行尾动作钮（教程/移除）不参与长按；主区域遵循移动端惯例：长按=拖拽，短按=配置
+    if ((e.target as HTMLElement).closest('[data-no-drag]')) return;
+    longPressFired.current = false;
+    pressStart.current = { x: e.clientX, y: e.clientY };
+    clearPress();
+    pressTimer.current = setTimeout(() => {
+      haptic('medium');
+      longPressFired.current = true;
+      controls.start(e);
+    }, LONG_PRESS_MS);
+  };
+  const onPointerMove = (e: React.PointerEvent) => {
+    // 位移超阈值：判定为滚动，取消长按
+    if (pressTimer.current && pressStart.current) {
+      if (Math.abs(e.clientX - pressStart.current.x) + Math.abs(e.clientY - pressStart.current.y) > 10) {
+        clearPress();
+      }
+    }
+  };
+  const onPointerUp = () => clearPress();
 
   return (
     <Reorder.Item
@@ -180,39 +217,44 @@ function CartCard({
       dragListener={false}
       dragControls={controls}
       whileDrag={{ scale: 1.03, boxShadow: '0 12px 32px rgba(0,0,0,0.16)' }}
-      onDragEnd={() => haptic('light')}
+      onDragEnd={() => {
+        haptic('light');
+        longPressFired.current = false;
+      }}
+      onPointerDown={onPointerDown}
+      onPointerMove={onPointerMove}
+      onPointerUp={onPointerUp}
+      onPointerCancel={onPointerUp}
       className="list-none bg-white rounded-[20px] shadow-sm px-4 py-3.5 flex items-center gap-3"
       style={{ touchAction: 'pan-y' }}
     >
-      {/* 编辑态：行首拖动柄（唯一拖拽入口，物理防误触） */}
-      {editing && (
-        <span
-          role="button"
-          aria-label={`拖动排序 ${item.exercise.name}`}
-          onPointerDown={e => {
-            haptic('medium');
-            controls.start(e);
-          }}
-          className="w-7 h-11 -ml-1 shrink-0 flex items-center justify-center text-gray-300 cursor-grab active:cursor-grabbing"
-          style={{ touchAction: 'none' }}
-        >
-          <svg className="w-4 h-5" viewBox="0 0 16 20" fill="currentColor">
-            <circle cx="5" cy="4" r="1.5" /><circle cx="11" cy="4" r="1.5" />
-            <circle cx="5" cy="10" r="1.5" /><circle cx="11" cy="10" r="1.5" />
-            <circle cx="5" cy="16" r="1.5" /><circle cx="11" cy="16" r="1.5" />
-          </svg>
-        </span>
-      )}
-
       <span className="w-8 h-8 shrink-0 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 tabular-nums">
         {index + 1}
       </span>
 
-      <button onClick={onOpen} className="flex-1 min-w-0 text-left" aria-label={`配置 ${item.exercise.name}`}>
+      {/* 短按=参数配置；长按拖拽后的 click 在此吞掉 */}
+      <button
+        onClick={() => {
+          if (longPressFired.current) {
+            longPressFired.current = false;
+            return;
+          }
+          onOpen();
+        }}
+        className="flex-1 min-w-0 text-left"
+        aria-label={`配置 ${item.exercise.name}`}
+      >
         <span className="flex items-center gap-1.5 min-w-0">
           <span className="text-[17px] font-medium text-star-dark truncate">{item.exercise.name}</span>
           <span className="shrink-0 bg-gray-100 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
             {TYPE_LABELS[item.exercise.exerciseType]}
+          </span>
+          {/* 智能填充轻提示（B）：清单参数即建议值 */}
+          <span className="shrink-0 inline-flex items-center gap-0.5 bg-blue-50 text-blue-500 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
+            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
+              <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z" />
+            </svg>
+            智能填充
           </span>
         </span>
         <span className="block text-[13px] text-gray-400 font-medium mt-0.5 truncate tabular-nums">
@@ -220,34 +262,32 @@ function CartCard({
         </span>
       </button>
 
-      {/* 浏览态：ⓘ 教程入口 */}
-      {!editing && (
-        <button
-          onClick={e => {
-            e.stopPropagation();
-            onTutorial();
-          }}
-          aria-label={`教程 ${item.exercise.name}`}
-          className="w-11 h-11 -mr-2.5 shrink-0 flex items-center justify-center text-gray-300 active:text-gray-500 transition-colors"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-          </svg>
-        </button>
-      )}
+      {/* ⓘ 教程入口 */}
+      <button
+        data-no-drag
+        onClick={e => {
+          e.stopPropagation();
+          onTutorial();
+        }}
+        aria-label={`教程 ${item.exercise.name}`}
+        className="w-11 h-11 -mr-1 shrink-0 flex items-center justify-center text-gray-300 active:text-gray-500 transition-colors"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+        </svg>
+      </button>
 
-      {/* 编辑态：行尾红色删除 */}
-      {editing && (
-        <button
-          onClick={onRemove}
-          aria-label={`移除 ${item.exercise.name}`}
-          className="w-9 h-9 shrink-0 rounded-full bg-red-50 text-red-500 flex items-center justify-center active:scale-90 transition-all"
-        >
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
-          </svg>
-        </button>
-      )}
+      {/* 红色「—」移除 */}
+      <button
+        data-no-drag
+        onClick={onRemove}
+        aria-label={`移除 ${item.exercise.name}`}
+        className="w-9 h-9 -mr-1 shrink-0 rounded-full bg-red-50 text-red-500 flex items-center justify-center active:scale-90 transition-all"
+      >
+        <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2.5} stroke="currentColor" className="w-4 h-4">
+          <path strokeLinecap="round" strokeLinejoin="round" d="M5 12h14" />
+        </svg>
+      </button>
     </Reorder.Item>
   );
 }
@@ -271,8 +311,6 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   const [configIdx, setConfigIdx] = useState<number | null>(null);
   /** 教程 Sheet 当前动作（ⓘ 入口） */
   const [tutorialEx, setTutorialEx] = useState<PickerExercise | null>(null);
-  /** 清单页编辑态（拖动柄/删除钮仅编辑态出现） */
-  const [cartEditing, setCartEditing] = useState(false);
   /** 浏览列表滚动折叠（Large Title 机制，同 ExerciseLibraryModal） */
   const [isScrolled, setIsScrolled] = useState(false);
   const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -654,15 +692,9 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
             style={{ paddingTop: 'calc(var(--safe-top, 0px) + 4px)', paddingBottom: '10px' }}
           >
             <div className="flex items-center justify-between pb-2">
-              <BackCircleButton onClick={() => { setCartEditing(false); setScreen('browse'); }} label="返回动作列表" />
+              <BackCircleButton onClick={() => setScreen('browse')} label="返回动作列表" />
               <h2 className="text-[34px] leading-[41px] font-bold text-star-dark tracking-tight">训练清单</h2>
-              {/* 编辑态切换（iOS 惯例右上角文字钮）：编辑=拖动柄+删除；完成=退出编辑 */}
-              <button
-                onClick={() => { haptic('light'); setCartEditing(v => !v); }}
-                className="w-11 text-right text-[17px] font-medium text-blue-500 active:opacity-50 transition-opacity"
-              >
-                {cartEditing ? '完成' : '编辑'}
-              </button>
+              <span className="w-11" aria-hidden="true" />
             </div>
           </div>
 
@@ -680,16 +712,15 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
             ) : (
               <>
                 <p className="px-1 pb-3 text-[13px] font-semibold text-gray-400 uppercase tracking-widest">
-                  训练顺序 · {cartEditing ? '拖动柄调整顺序，红色移除' : '点按动作配置参数'}
+                  训练顺序 · 短按改参数 · 长按拖动排序
                 </p>
-                {/* 独立卡片 + space-y-3 间隔；Reorder 官方拖拽排序列表（仅拖动柄可启动） */}
+                {/* 独立卡片 + space-y-3 间隔；Reorder 官方拖拽排序列表（长按整卡启动） */}
                 <Reorder.Group axis="y" values={selected} onReorder={setSelected} className="space-y-3">
                   {selected.map((item, idx) => (
                     <CartCard
                       key={item.exercise.id}
                       item={item}
                       index={idx}
-                      editing={cartEditing}
                       onOpen={() => { haptic('light'); setConfigIdx(idx); }}
                       onTutorial={() => openTutorial(item.exercise)}
                       onRemove={() => removeItem(idx)}

@@ -51,6 +51,8 @@ const makeItem = (id: string): PickerSelectionItem => {
   return { exercise: ex, sets: planToDraftSets(ex.suggestion.sets), targetRpe: ex.suggestion.targetRpe };
 };
 
+const selectedCountOf = (exs: Array<{ id: string }>) => exs.length;
+
 // ---------------------------------------------------------------------------
 // 纯逻辑
 // ---------------------------------------------------------------------------
@@ -335,7 +337,7 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     await waitFor(() => expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument());
   });
 
-  it('清单页独立卡片：浏览态无删除/拖柄，编辑态出现并可移除', async () => {
+  it('清单页独立卡片：短按进配置/长按拖拽语义分离 + 智能填充徽标 + 直接移除', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
     const a = byId(RECENT_IDS[0]);
@@ -347,26 +349,18 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     expect(screen.getByText('训练清单')).toBeInTheDocument();
     expect(screen.getByText(summaryOfItem({ exercise: a, sets: planToDraftSets(a.suggestion.sets), targetRpe: a.suggestion.targetRpe }))).toBeInTheDocument();
 
-    // 箭头调序按钮已删除
+    // 箭头调序按钮已删除；编辑钮已删除（长按直接拖拽，iOS 惯例）
     expect(screen.queryByLabelText(/上移 |下移 /)).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
 
-    // 浏览态：无删除钮、无拖动柄；有 ⓘ 教程入口
-    expect(screen.queryByLabelText(`移除 ${b.name}`)).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(`拖动排序 ${b.name}`)).not.toBeInTheDocument();
+    // 智能填充轻提示徽标（B）：每张卡片都有
+    expect(screen.getAllByText('智能填充').length).toBe(selectedCountOf([a, b]));
+
+    // 行尾双钮并存：ⓘ 教程 + 红色移除（长按拖拽用整卡手势，无独立拖柄）
     expect(screen.getByLabelText(`教程 ${b.name}`)).toBeInTheDocument();
-
-    // 编辑态切换：拖动柄（行首）+ 红色删除（行尾）浮出
-    await user.click(screen.getByRole('button', { name: '编辑' }));
-    expect(screen.getByLabelText(`拖动排序 ${b.name}`)).toBeInTheDocument();
-    expect(screen.getByLabelText(`移除 ${b.name}`)).toBeInTheDocument();
-    expect(screen.queryByLabelText(`教程 ${b.name}`)).not.toBeInTheDocument();
-
-    // 移除 b → 只剩 a；退出编辑
     await user.click(screen.getByLabelText(`移除 ${b.name}`));
     expect(screen.queryByLabelText(`配置 ${b.name}`)).not.toBeInTheDocument();
     expect(screen.getByLabelText(`配置 ${a.name}`)).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: '完成' }));
-    expect(screen.getByRole('button', { name: '编辑' })).toBeInTheDocument();
   });
 
   it('选满 9 个出现琥珀色软提示', () => {
