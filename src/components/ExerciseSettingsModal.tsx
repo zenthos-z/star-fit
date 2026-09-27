@@ -26,13 +26,21 @@ interface ExerciseSettingsModalProps {
   loadAnchors?: LoadAnchorsType;
   userId?: string;
   onSaveComplete?: () => void;  // New callback to notify parent that save is complete
+  // ---- A9 动作选择器扩展挂载点（全部可选，缺省不渲染/不注册，存量调用零影响） ----
+  /** 逐组行内扩展：在每个组行（输入框与删除钮之间）追加内容，如组类型标注 chip */
+  renderSetExtras?: (setIndex: number) => React.ReactNode;
+  /** 「训练组安排」区块上方扩展：如智能填充开关卡 */
+  smartFillSlot?: React.ReactNode;
+  /** 组件能力出口：宿主经此触发内部「应用建议」同款逻辑（applyAiSuggestion） */
+  externalApiRef?: React.MutableRefObject<{ applySuggestion?: () => void } | null>;
 }
 
 // ---------------------------------------------------------------------------
 // 建议来源徽标 + 解释窗口（纯展示组件）
 // ---------------------------------------------------------------------------
 
-const DATA_BASIS_LABELS: Record<string, string> = {
+// A9 动作选择器复用：数据依据标签为唯一真源，本文件导出供 picker 模块引用
+export const DATA_BASIS_LABELS: Record<string, string> = {
     anchor: '训练锚点（系统记录）',
     history: '历史最佳推导',
     bodyweight_estimate: '体重系数估算',
@@ -55,7 +63,8 @@ function relativeTime(ts: number | undefined): string {
     return `${Math.floor(diff / 86400000)} 天前`;
 }
 
-function SuggestionSourceBadge({ source, generatedAt }: { source?: SuggestionSource; generatedAt?: number }) {
+// A9 动作选择器复用：建议来源徽标真组件（picker 模块直接引用，不再自造）
+export function SuggestionSourceBadge({ source, generatedAt }: { source?: SuggestionSource; generatedAt?: number }) {
     if (!source) return null;
     const isCloud = source === 'formula' || source === 'hybrid';
     const isHeuristic = source === 'heuristic';
@@ -237,7 +246,10 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   isTransitioning = false,
   loadAnchors = {},
   userId = '',
-  onSaveComplete
+  onSaveComplete,
+  renderSetExtras,
+  smartFillSlot,
+  externalApiRef
 }) => {
 
   // Convert ExerciseAction type to ExerciseType (now unified lowercase, no conversion needed)
@@ -436,6 +448,16 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
               .catch(() => {});
       });
   }, [name, type, targetRpe]);
+
+  // A9 扩展挂载点：把「应用建议」能力暴露给宿主（无 deps——每次渲染刷新闭包，保证拿到最新 sets/aiSuggestion）
+  useEffect(() => {
+      if (externalApiRef) {
+          externalApiRef.current = { applySuggestion: applyAiSuggestion };
+      }
+      return () => {
+          if (externalApiRef) externalApiRef.current = null;
+      };
+  });
 
   const applyAiSuggestion = () => {
       if (!aiSuggestion) return;
@@ -1412,6 +1434,9 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                 </div>
             )}
 
+            {/* A9 扩展挂载点：「训练组安排」上方扩展（如智能填充开关卡） */}
+            {smartFillSlot}
+
             {/* COMPACT SETS EDITOR */}
             {type !== 'cardio' && type !== 'outdoor' && (
             <div className="px-6">
@@ -1468,6 +1493,9 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                                     </div>
                                 );
                             })}
+
+                            {/* A9 扩展挂载点：逐组行内扩展（如组类型标注） */}
+                            {renderSetExtras?.(i)}
 
                             {/* Delete */}
                             <button 

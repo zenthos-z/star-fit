@@ -18,6 +18,7 @@ import {
 } from '../picker/pickerData';
 import {
   EMPTY_FILTERS,
+  computeDragTarget,
   filterAndSortExercises,
   formatParamSummary,
   matchSearch,
@@ -134,6 +135,22 @@ describe('pickerLogic · 胶囊回显与行副标题', () => {
   });
 });
 
+describe('pickerLogic · 长按拖拽落位（computeDragTarget）', () => {
+  it('下拖一行高 → 与相邻行交换', () => {
+    expect(computeDragTarget(0, 66, 66, 4)).toBe(1);
+  });
+  it('上拖两行高 → 上移两位', () => {
+    expect(computeDragTarget(3, -132, 66, 4)).toBe(1);
+  });
+  it('夹紧到列表边界', () => {
+    expect(computeDragTarget(0, -500, 66, 4)).toBe(0);
+    expect(computeDragTarget(3, 500, 66, 4)).toBe(3);
+  });
+  it('位移不足半行 → 保持原位', () => {
+    expect(computeDragTarget(1, 20, 66, 4)).toBe(1);
+  });
+});
+
 describe('pickerLogic · 参数摘要一行', () => {
   it('力量动作：「4组×8-10 · 60kg · RPE 7」', () => {
     const item = makeItem('bench-press');
@@ -218,7 +235,7 @@ describe('ExercisePickerModal · A8 主列表', () => {
     await user.click(within(dialog).getByRole('button', { name: /显示 \d+ 个结果/ }));
 
     expect(screen.getByText('杠铃卧推')).toBeInTheDocument();
-    expect(screen.queryByText('引体向上')).not.toBeInTheDocument();
+    expect(screen.queryByText('反手引体向上')).not.toBeInTheDocument();
   });
 
   it('器械 Sheet：清除筛选器复位胶囊与列表', async () => {
@@ -251,7 +268,7 @@ describe('ExercisePickerModal · A8 主列表', () => {
     render(<ExercisePickerModal onClose={() => {}} />);
     await user.type(screen.getByPlaceholderText('搜索运动'), 'glwt');
     expect(screen.getByText('杠铃卧推')).toBeInTheDocument();
-    expect(screen.queryByText('引体向上')).not.toBeInTheDocument();
+    expect(screen.queryByText('反手引体向上')).not.toBeInTheDocument();
     // 搜索时近期分区隐藏
     expect(screen.queryByText('近期的训练')).not.toBeInTheDocument();
   });
@@ -270,20 +287,23 @@ describe('ExercisePickerModal · A8 主列表', () => {
 });
 
 describe('ExercisePickerModal · A9 购物车多选', () => {
-  it('行圈选连续添加不关弹窗，悬浮条实时计数', async () => {
+  it('行圈选连续添加不关弹窗，选中态以行高亮+缩略图角标表达（无独立复选框）', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
     await user.click(screen.getByLabelText('选择 杠铃卧推'));
     expect(screen.getByText('已选', { exact: false })).toBeInTheDocument();
-    expect(screen.getByLabelText('选择 引体向上')).toBeInTheDocument(); // 弹窗未关
-    await user.click(screen.getByLabelText('选择 引体向上'));
+    expect(screen.getByLabelText('选择 反手引体向上')).toBeInTheDocument(); // 弹窗未关
+    await user.click(screen.getByLabelText('选择 反手引体向上'));
     expect(screen.getByText('2')).toBeInTheDocument();
     // 再点取消圈选
-    await user.click(screen.getByLabelText('取消选择 引体向上'));
-    expect(screen.getByLabelText('选择 引体向上')).toBeInTheDocument();
+    await user.click(screen.getByLabelText('取消选择 反手引体向上'));
+    expect(screen.getByLabelText('选择 反手引体向上')).toBeInTheDocument();
+    // 选中行不渲染独立 checkbox/radio 控件
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('radio')).not.toBeInTheDocument();
   });
 
-  it('去配置进入清单页：参数摘要一行 + 调序 + 移除', async () => {
+  it('去配置进入清单页：参数摘要一行 + 移除（调序为长按拖拽，无上下箭头按钮）', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
     await user.click(screen.getByLabelText('选择 杠铃卧推'));
@@ -293,11 +313,10 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     expect(screen.getByText('训练清单')).toBeInTheDocument();
     expect(screen.getByText('4组×8-10 · 60kg · RPE 7')).toBeInTheDocument();
 
-    // 顺序：卧推(1) → 深蹲(2)；上移深蹲后交换
-    const configButtons = () => screen.getAllByRole('button', { name: /^配置 / });
-    expect(configButtons()[0]).toHaveAttribute('aria-label', '配置 杠铃卧推');
-    await user.click(screen.getByLabelText('上移 杠铃深蹲'));
-    expect(configButtons()[0]).toHaveAttribute('aria-label', '配置 杠铃深蹲');
+    // 箭头调序按钮已删除
+    expect(screen.queryByLabelText(/上移 |下移 /)).not.toBeInTheDocument();
+    // 长按拖拽提示存在
+    expect(screen.getByText(/长按拖动调整顺序/)).toBeInTheDocument();
 
     // 移除深蹲 → 只剩卧推
     await user.click(screen.getByLabelText('移除 杠铃深蹲'));
@@ -319,57 +338,52 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
   });
 });
 
-describe('PickerConfigSheet · 参数配置（复用 ExerciseSettingsModal 形态）', () => {
-  const setupSheet = async () => {
+describe('PickerConfigSheet · 参数配置（嵌套真实 ExerciseSettingsModal + 两个增量挂载点）', () => {
+  const setupSheet = () => {
     const user = userEvent.setup();
     const onChange = vi.fn();
     render(<PickerConfigSheet item={makeItem('bench-press')} onChange={onChange} onClose={() => {}} />);
     return { user, onChange };
   };
 
-  it('智能填充默认开 + 建议来源徽标 + 数据依据标签 + 组类型标注', async () => {
-    const { user, onChange } = await setupSheet();
-    expect(screen.getByRole('switch', { name: '智能填充' })).toHaveAttribute('aria-checked', 'true');
-    expect(screen.getByText('云端 · AI')).toBeInTheDocument();
-    expect(screen.getByText('数据依据')).toBeInTheDocument();
-    expect(screen.getByText('历史最佳推导')).toBeInTheDocument();
-    // 组类型标注：卧推含 热身 / 正式 / AMRAP
-    expect(screen.getAllByText('热身').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('正式').length).toBeGreaterThan(0);
-    expect(screen.getAllByText('AMRAP').length).toBeGreaterThan(0);
-    // 逐组编辑输入存在且为推荐值
-    expect(screen.getByLabelText('第 2 组配重')).toHaveValue(60);
+  it('渲染真实面板主体区块 + 建议徽标（真组件复用，非自造形态）', () => {
+    setupSheet();
+    // 真实 ExerciseSettingsModal 的标志性区块
+    expect(screen.getByText('目标强度')).toBeInTheDocument();
+    expect(screen.getByText('训练组安排')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /动作库/ })).toBeInTheDocument();
+    // 真实面板的建议来源徽标（云端 · AI）
+    expect(screen.getAllByText(/云端/).length).toBeGreaterThan(0);
+  });
 
-    // 点组类型 chip 展开选择条，改第 1 组为「递增」
+  it('增量点：智能填充开关默认开，可切换', async () => {
+    const { user } = setupSheet();
+    const sw = screen.getByRole('switch', { name: '智能填充' });
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+    await user.click(sw);
+    expect(sw).toHaveAttribute('aria-checked', 'false');
+    await user.click(sw);
+    expect(sw).toHaveAttribute('aria-checked', 'true');
+  });
+
+  it('增量点：组类型标注 chip → 底部选择条改「递增」→ 保存回写清单', async () => {
+    const { user, onChange } = setupSheet();
+    // 卧推初始组类型：热身 / 正式 / AMRAP
+    expect(screen.getAllByText('热身').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('AMRAP').length).toBeGreaterThan(0);
+
     await user.click(screen.getByLabelText('第 1 组类型：热身'));
-    await user.click(screen.getByRole('button', { name: '递增' }));
+    const sheet = screen.getByRole('dialog', { name: '第 1 组组类型选择' });
+    await user.click(within(sheet).getByRole('button', { name: '递增' }));
     expect(screen.getByLabelText('第 1 组类型：递增')).toBeInTheDocument();
 
-    // 保存回写
-    await user.click(screen.getByLabelText('保存配置'));
-    expect(onChange).toHaveBeenCalledTimes(1);
-    expect((onChange.mock.calls[0][0] as PickerSelectionItem).sets[0].role).toBe('rampUp');
-  });
-
-  it('关掉智能填充后手动改值，保存回写清单', async () => {
-    const { user, onChange } = await setupSheet();
-    const switchBtn = screen.getByRole('switch', { name: '智能填充' });
-    await user.click(switchBtn);
-    expect(switchBtn).toHaveAttribute('aria-checked', 'false');
-
-    const weightInput = screen.getByLabelText('第 2 组配重') as HTMLInputElement;
-    await user.clear(weightInput);
-    await user.type(weightInput, '65');
-    await user.click(screen.getByLabelText('保存配置'));
-
+    // 经真实面板确认按钮保存（isCreating 语义 → 「确认添加动作」）→ 草稿回写（角色与 RPE 保留）
+    await user.click(screen.getByRole('button', { name: '确认添加动作' }));
     expect(onChange).toHaveBeenCalledTimes(1);
     const saved = onChange.mock.calls[0][0] as PickerSelectionItem;
-    expect(saved.sets[1].weight).toBe(65);
-    expect(formatParamSummary(saved.exercise, saved.sets, saved.targetRpe)).toBe('4组×8-10 · 60-65kg · RPE 7');
-  });
-
-  it('时长型动作（拉伸）显示秒列', () => {
-    render(<PickerConfigSheet item={makeItem('cat-cow')} onChange={() => {}} onClose={() => {}} />);
-    expect(screen.getByLabelText('第 1 组时长')).toHaveValue(30);
+    expect(saved.sets).toHaveLength(4);
+    expect(saved.sets[0].role).toBe('rampUp');
+    expect(saved.sets[3].role).toBe('amrap');
+    expect(saved.targetRpe).toBe(7);
   });
 });
