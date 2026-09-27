@@ -143,8 +143,9 @@ export const Keys = {
   exerciseLibrary: "starfit_exercise_library",
   exerciseLibraryMeta: "starfit_exercise_library_meta",
   suggestionCache: "starfit_suggestion_cache",
-  // B3 首次使用预调研（issue #23）：首次打开 AI 教练分流后置 true，仅弹一次
-  firstUseCoachTriage: "starfit_coach_first_use_triage",
+  // B3 首次使用预调研（issue #23）：首次打开 AI 教练分流后置 true，仅弹一次。
+  // 按用户维度键（chatThreadList 先例）：换用户重新走分流，同用户新设备不重复弹
+  firstUseCoachTriage: (userId: string) => `first_use_triage:${userId}`,
   // Login and Authentication
   userId: "starfit_user_id",
   serverUrl: "starfit_server_url",

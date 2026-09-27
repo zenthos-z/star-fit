@@ -10,6 +10,7 @@ import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/a
 import { resolveCoachPrefill } from '../utils/coachPrefill';
 import {
   resolveFirstUseTriage,
+  resolveUserHasHistory,
   PLAN_GUIDE_TEXT,
   NEWBIE_SURVEY_TEXT,
   NEWBIE_SURVEY_QUESTIONS,
@@ -972,24 +973,43 @@ ${JSON.stringify(uploadData, null, 2)}`;
   }, [chatMessage]);
 
   /**
-   * [B3 issue#23] 首次使用预调研分流（仅第一次，可跳过）：
+   * [B3 issue#23] 首次使用预调研分流（仅第一次，可跳过，按**用户**维度）：
    * 手动打开 AI 教练（无附件）且会话为空时判定——
-   * 有训练历史 → 老用户不打扰；无历史+周计划 → 引导发送资料/截图；
+   * 有本人训练历史 → 老用户不打扰；无历史+周计划 → 引导发送资料/截图；
    * 纯新手 → survey_card 画像调研卡（走 uiHint 多态回路，SurveyCard 渲染）。
+   *
+   * 维度修复：历史判定与首次标志均按 userId（设备维度会让同设备换新用户
+   * 误读他人历史）。历史真源=后端该用户记录数（/sessions/recent.count）；
+   * 后端不可达回退设备历史条目级 userId 过滤（旧数据无 userId 不计入，
+   * 精度损失=离线老用户可能重看一次分流）。旧设备维度标志键直接忽略。
    * 标志先行落 storage（跳过=不强制交互，也只弹这一次）。
    */
   const maybeRunFirstUseTriage = useCallback(async () => {
     try {
-      if (await storageGet<boolean>(Keys.firstUseCoachTriage)) return;
-      await storageSet(Keys.firstUseCoachTriage, true);
+      const userId = getUserId();
+      const flagKey = Keys.firstUseCoachTriage(userId);
+      if (await storageGet<boolean>(flagKey)) return;
+      await storageSet(flagKey, true);
       // 只在空会话注入：已有对话（切线程恢复/竞态窗口内开聊）不打扰
       if (chatHistoryRef.current.length > 0) return;
-      // 训练历史（与入口预填同源：本地记录，读不到按无记录）
-      let hasHistory = false;
+      // 训练历史（用户维度）：后端记录数真源，不可达回退设备历史归属过滤
+      let backendSessionCount: number | null = null;
       try {
-        const localHistory = await loadHistory();
-        hasHistory = Array.isArray(localHistory) && localHistory.length > 0;
-      } catch { /* IDB 不可用 → 按无记录 */ }
+        const res = await fetch(`${API_BASE}/sessions/recent?limit=1`, {
+          headers: getHeaders(),
+        });
+        if (res.ok) {
+          const raw = parseJSONSafe<{ count?: number }>(await res.text(), 'firstUseTriage');
+          if (raw && typeof raw.count === 'number') backendSessionCount = raw.count;
+        }
+      } catch { /* 离线 → 走本地回退 */ }
+      let deviceHistory: Array<{ userId?: string }> | null = null;
+      if (backendSessionCount === null) {
+        try {
+          deviceHistory = ((await loadHistory()) ?? []) as Array<{ userId?: string }>;
+        } catch { deviceHistory = null; }
+      }
+      const hasHistory = resolveUserHasHistory({ backendSessionCount, deviceHistory, currentUserId: userId });
       if (hasHistory) return;
       // 周计划判定：/schedule/today（形态防御同 prefillCoachEntry）
       let scheduleStatus: ScheduleStatus = null;

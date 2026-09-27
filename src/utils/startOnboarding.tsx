@@ -80,6 +80,30 @@ export type FirstUseTriage = 'none' | 'plan_guide' | 'newbie_survey';
 export type ScheduleStatus = 'planned' | 'rest_day' | 'no_plan' | null;
 
 /**
+ * 用户维度的「是否有训练历史」判定（issue #23 修复：历史不再按设备判人）。
+ *
+ * - 后端可达（backendSessionCount 非空）：该用户训练记录数 > 0 即老用户（真源）；
+ * - 后端不可达：回退本地设备历史，并做条目级 userId 归属过滤——
+ *   条目不带 userId（旧数据形态）无法证明归属，一律不计入（精度损失：
+ *   离线时老用户可能被判为新用户而重看一次分流，宁可误弹不可误拦）。
+ */
+export function resolveUserHasHistory(input: {
+  backendSessionCount: number | null;
+  deviceHistory: Array<{ userId?: string }> | null;
+  currentUserId: string;
+}): boolean {
+  if (input.backendSessionCount !== null) {
+    return input.backendSessionCount > 0;
+  }
+  const history = input.deviceHistory;
+  if (!Array.isArray(history) || history.length === 0) return false;
+  if (!input.currentUserId) return false;
+  const tagged = history.filter(h => typeof h.userId === 'string' && h.userId.length > 0);
+  if (tagged.length === 0) return false;
+  return tagged.some(h => h.userId === input.currentUserId);
+}
+
+/**
  * 首次打开 AI 教练的分流：
  * - 有训练历史 → 老用户不打扰（none）
  * - 无历史 + 周计划在身 → 引导发送资料/截图，AI 解析既有计划（plan_guide）

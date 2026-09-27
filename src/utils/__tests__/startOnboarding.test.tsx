@@ -8,6 +8,7 @@ import { render, screen } from '@testing-library/react';
 import {
   buildStartMenuOptions,
   resolveFirstUseTriage,
+  resolveUserHasHistory,
   NEWBIE_SURVEY_QUESTIONS,
   PLAN_GUIDE_TEXT,
   NEWBIE_SURVEY_TEXT,
@@ -77,6 +78,58 @@ describe('resolveFirstUseTriage · 首次分流决策', () => {
     expect(resolveFirstUseTriage(false, 'no_plan')).toBe('newbie_survey');
     expect(resolveFirstUseTriage(false, 'rest_day')).toBe('newbie_survey');
     expect(resolveFirstUseTriage(false, null)).toBe('newbie_survey');
+  });
+});
+
+describe('resolveUserHasHistory · 用户维度历史判定（B3 修复）', () => {
+  const newUserId = 'user-new';
+
+  it('新用户 + 设备有他人历史 → 无本人历史（走 newbie_survey 分支）', () => {
+    // 后端不可达回退：设备历史全是他人条目
+    expect(resolveUserHasHistory({
+      backendSessionCount: null,
+      deviceHistory: [{ userId: 'someone-else' }, { userId: 'someone-else-2' }],
+      currentUserId: newUserId,
+    })).toBe(false);
+    // 组合分流：该判定为 false + 无计划 → newbie_survey
+    expect(resolveFirstUseTriage(
+      resolveUserHasHistory({ backendSessionCount: null, deviceHistory: [{ userId: 'someone-else' }], currentUserId: newUserId }),
+      'no_plan',
+    )).toBe('newbie_survey');
+  });
+
+  it('新用户 + 设备有旧版未打标历史（SessionLite 无 userId 字段的存量形态）→ 不计入', () => {
+    expect(resolveUserHasHistory({
+      backendSessionCount: null,
+      deviceHistory: [{ }, { userId: undefined } as { userId?: string }],
+      currentUserId: newUserId,
+    })).toBe(false);
+  });
+
+  it('老用户（有本人历史）：后端 count>0 真源判定 → none', () => {
+    const has = resolveUserHasHistory({
+      backendSessionCount: 3,
+      deviceHistory: null,
+      currentUserId: newUserId,
+    });
+    expect(has).toBe(true);
+    expect(resolveFirstUseTriage(has, 'no_plan')).toBe('none');
+  });
+
+  it('老用户：后端不可达 + 设备历史含本人打标条目 → 判有历史', () => {
+    expect(resolveUserHasHistory({
+      backendSessionCount: null,
+      deviceHistory: [{ userId: 'someone-else' }, { userId: newUserId }],
+      currentUserId: newUserId,
+    })).toBe(true);
+  });
+
+  it('后端可达时 count 真源优先：count=0 即新用户，设备历史再多也不算', () => {
+    expect(resolveUserHasHistory({
+      backendSessionCount: 0,
+      deviceHistory: [{ userId: 'someone-else' }],
+      currentUserId: newUserId,
+    })).toBe(false);
   });
 });
 
