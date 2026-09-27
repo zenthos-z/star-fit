@@ -6,7 +6,8 @@ import { ExerciseAction, LoadAnchors as LoadAnchorsType } from '../types/protoco
 import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '@/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { Timer, MapPin, Watch, Heart, Flame, Zap, Trophy, Gauge, Navigation } from 'lucide-react';
-import ExerciseLibraryModal from './ExerciseLibraryModal';
+import ExercisePickerModal from './picker/ExercisePickerModal';
+import { pickerItemToLibrarySelect } from './picker/pickerAdapter';
 import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } from '../services/suggestionService';
 import { guessCardioSubtype } from '@/utils/exerciseLogic';
 import { DeviationLogger } from '../services/logging/DeviationLogger';
@@ -29,6 +30,8 @@ interface ExerciseSettingsModalProps {
   // ---- A9 动作选择器扩展挂载点（全部可选，缺省不渲染/不注册，存量调用零影响） ----
   /** 逐组行内扩展：在每个组行（输入框与删除钮之间）追加内容，如组类型标注 chip */
   renderSetExtras?: (setIndex: number) => React.ReactNode;
+  /** 逐组行下扩展：在组行正下方追加内容（如行内组类型选择条，v4 inline 切换） */
+  renderSetFootnote?: (setIndex: number) => React.ReactNode;
   /** 「训练组安排」区块上方扩展：如智能填充开关卡 */
   smartFillSlot?: React.ReactNode;
   /** 组件能力出口：宿主经此触发内部「应用建议」同款逻辑（applyAiSuggestion） */
@@ -248,6 +251,7 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   userId = '',
   onSaveComplete,
   renderSetExtras,
+  renderSetFootnote,
   smartFillSlot,
   externalApiRef
 }) => {
@@ -1070,12 +1074,25 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   return (
     <>
       {isLibraryOpen ? (
-        <ExerciseLibraryModal
+        /* A8A9 接线：动作库换新选择器（筛选器/3D 封面/购物车多选，PR #30）。
+           回调适配：onConfirm 为购物车多选（PickerSelectionItem[]），主流程创建
+           语义为单动作回填——取数组首项经 pickerAdapter 映射回旧 onSelect 原语，
+           其余项忽略（批量添加需 App 层循环，已知取舍）；创建态返回 = 取消创建。 */
+        <ExercisePickerModal
           key="library"
-          onSelect={handleLibrarySelect}
-          onClose={() => onLibraryOpenChange(false)}
-          isCreatingMode={isCreating}
-          onCancelCreate={onCancelCreate}
+          onConfirm={items => {
+            const first = items[0];
+            if (!first) {
+              onLibraryOpenChange(false);
+              return;
+            }
+            const sel = pickerItemToLibrarySelect(first);
+            handleLibrarySelect(sel.id, sel.name, sel.type, sel.bodyCategory, sel.muscles, sel.equipment, sel.nameEn);
+          }}
+          onClose={() => {
+            if (isCreating && onCancelCreate) onCancelCreate();
+            else onLibraryOpenChange(false);
+          }}
         />
       ) : (
         <motion.div
@@ -1471,7 +1488,8 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
                  <div className="space-y-2">
                     {sets.map((set, i) => (
-                        <div key={set.id || i} className="flex items-center gap-3 animate-in slide-in-from-bottom-1 duration-300">
+                        <div key={set.id || i}>
+                        <div className="flex items-center gap-3 animate-in slide-in-from-bottom-1 duration-300">
                             {/* Index */}
                             <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
                                 {i + 1}
@@ -1498,12 +1516,15 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                             {renderSetExtras?.(i)}
 
                             {/* Delete */}
-                            <button 
+                            <button
                                 onClick={() => handleRemoveSet(i)}
                                 className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
+                        </div>
+                        {/* A9 扩展挂载点：逐组行下扩展（如行内组类型选择条） */}
+                        {renderSetFootnote?.(i)}
                         </div>
                     ))}
                  </div>
