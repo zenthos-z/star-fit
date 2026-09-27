@@ -39,6 +39,7 @@ import {
 } from './pickerData';
 import {
   EMPTY_FILTERS,
+  computeDragTarget,
   filterAndSortExercises,
   isFiltersEmpty,
   planToDraftSets,
@@ -154,33 +155,42 @@ function BackCircleButton({ onClick, label }: { onClick: () => void; label: stri
 const LONG_PRESS_MS = 300;
 
 /**
- * 清单卡片（v4 + 用户反馈 C 修正）：
+ * 清单卡片（v5：拖拽全范围 + 去智能填充徽标）：
  * - 独立白卡（rounded-[20px] shadow-sm），卡片间 space-y-3
  * - 手势分离（iOS 惯例，无编辑钮）：短按主区域=进参数配置；长按 300ms=整卡
  *   进入 Reorder 拖拽（motion value 跟手，其余卡片 layout 让位），位移>10px
  *   判定为滚动即取消长按
- * - 智能填充轻提示：清单参数即建议值（SuggestionService 口径），卡片带蓝色
- *   小徽标表达，不弹说明文案
- * - 行尾双钮：ⓘ 教程 + 红色「—」移除
+ * - 拖拽范围修复（v5）：不再覆写 touch-action（原 pan-y 覆写令触摸拖拽被浏览器
+ *   滚动接管 pointercancel，表现为拖动范围受限）；交由 Reorder 自身的
+ *   touch-action:none 承载，列表滚动由卡片间隙与页面其余区域承担
+ * - 智能填充：无逐卡徽标（v5 去噪），告知语义收敛到清单顶部一次性提示
  */
 function CartCard({
   item,
   index,
+  total,
   onOpen,
   onTutorial,
   onRemove,
+  onMoveTo,
 }: {
   item: PickerSelectionItem;
   index: number;
+  total: number;
   onOpen: () => void;
   onTutorial: () => void;
   onRemove: () => void;
+  /** 松手兜底落位：把 from 位确定性移动到 to 位 */
+  onMoveTo: (from: number, to: number) => void;
 }) {
   const controls = useDragControls();
+  const rowRef = useRef<HTMLLIElement>(null);
   const pressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pressStart = useRef<{ x: number; y: number } | null>(null);
   /** 长按已触发：随后的 click（pointerup 后派发）不再当作「点按配置」 */
   const longPressFired = useRef(false);
+  /** 拖拽起点下标（offset 从起点累计，落位计算用） */
+  const dragStartIdx = useRef(index);
 
   const clearPress = () => {
     if (pressTimer.current) {
@@ -213,20 +223,27 @@ function CartCard({
 
   return (
     <Reorder.Item
+      ref={rowRef}
       value={item}
       dragListener={false}
       dragControls={controls}
       whileDrag={{ scale: 1.03, boxShadow: '0 12px 32px rgba(0,0,0,0.16)' }}
-      onDragEnd={() => {
+      onDragStart={() => {
+        dragStartIdx.current = index;
+      }}
+      onDragEnd={(_, info) => {
         haptic('light');
         longPressFired.current = false;
+        // 松手兜底（v5）：实时换位存在滞后，按最终偏移确定性落位
+        const rowH = rowRef.current?.getBoundingClientRect().height || 76;
+        const target = computeDragTarget(dragStartIdx.current, info.offset.y, rowH, total);
+        if (target !== index) onMoveTo(index, target);
       }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       className="list-none bg-white rounded-[20px] shadow-sm px-4 py-3.5 flex items-center gap-3"
-      style={{ touchAction: 'pan-y' }}
     >
       <span className="w-8 h-8 shrink-0 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 tabular-nums">
         {index + 1}
@@ -248,13 +265,6 @@ function CartCard({
           <span className="text-[17px] font-medium text-star-dark truncate">{item.exercise.name}</span>
           <span className="shrink-0 bg-gray-100 text-gray-400 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
             {TYPE_LABELS[item.exercise.exerciseType]}
-          </span>
-          {/* 智能填充轻提示（B）：清单参数即建议值 */}
-          <span className="shrink-0 inline-flex items-center gap-0.5 bg-blue-50 text-blue-500 text-[10px] font-bold px-1.5 py-0.5 rounded-md">
-            <svg className="w-2.5 h-2.5" fill="currentColor" viewBox="0 0 24 24">
-              <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z" />
-            </svg>
-            智能填充
           </span>
         </span>
         <span className="block text-[13px] text-gray-400 font-medium mt-0.5 truncate tabular-nums">
@@ -406,6 +416,19 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
       if (idx === configIdx) setConfigIdx(null);
       else if (idx < configIdx) setConfigIdx(configIdx - 1);
     }
+  };
+
+  /** 拖拽落位兜底：把 from 位确定性移动到 to 位（顺序即训练顺序） */
+  const moveItemTo = (from: number, to: number) => {
+    if (from === to) return;
+    haptic('light');
+    setSelected(prev => {
+      if (from < 0 || from >= prev.length || to < 0 || to >= prev.length) return prev;
+      const next = [...prev];
+      const [moved] = next.splice(from, 1);
+      next.splice(to, 0, moved);
+      return next;
+    });
   };
 
   const updateItem = (idx: number, next: PickerSelectionItem) => {
@@ -711,9 +734,18 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
               </div>
             ) : (
               <>
-                <p className="px-1 pb-3 text-[13px] font-semibold text-gray-400 uppercase tracking-widest">
-                  训练顺序 · 短按改参数 · 长按拖动排序
-                </p>
+                {/* 操作提示 + 智能填充一次性告知（v5：全局一条，传达已填充/非固定/可改） */}
+                <div className="px-1 pb-3">
+                  <p className="text-[13px] font-semibold text-gray-400 uppercase tracking-widest">
+                    训练顺序 · 短按改参数 · 长按拖动排序
+                  </p>
+                  <p className="text-xs text-gray-400 font-medium mt-1 flex items-center gap-1">
+                    <svg className="w-3 h-3 shrink-0 text-blue-400" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path d="M12 2l1.8 6.2L20 10l-6.2 1.8L12 18l-1.8-6.2L4 10l6.2-1.8L12 2z" />
+                    </svg>
+                    训练参数已按你的训练画像智能填充，点按卡片即可调整
+                  </p>
+                </div>
                 {/* 独立卡片 + space-y-3 间隔；Reorder 官方拖拽排序列表（长按整卡启动） */}
                 <Reorder.Group axis="y" values={selected} onReorder={setSelected} className="space-y-3">
                   {selected.map((item, idx) => (
@@ -721,9 +753,11 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
                       key={item.exercise.id}
                       item={item}
                       index={idx}
+                      total={selected.length}
                       onOpen={() => { haptic('light'); setConfigIdx(idx); }}
                       onTutorial={() => openTutorial(item.exercise)}
                       onRemove={() => removeItem(idx)}
+                      onMoveTo={moveItemTo}
                     />
                   ))}
                 </Reorder.Group>

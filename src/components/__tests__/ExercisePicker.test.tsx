@@ -353,8 +353,9 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     expect(screen.queryByLabelText(/上移 |下移 /)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: '编辑' })).not.toBeInTheDocument();
 
-    // 智能填充轻提示徽标（B）：每张卡片都有
-    expect(screen.getAllByText('智能填充').length).toBe(selectedCountOf([a, b]));
+    // 智能填充：逐卡徽标已去除（v5），改为清单顶部一次性提示（含已填充/可改语义）
+    expect(screen.queryByText('智能填充')).not.toBeInTheDocument();
+    expect(screen.getByText(/训练参数已按你的训练画像智能填充/)).toBeInTheDocument();
 
     // 行尾双钮并存：ⓘ 教程 + 红色移除（长按拖拽用整卡手势，无独立拖柄）
     expect(screen.getByLabelText(`教程 ${b.name}`)).toBeInTheDocument();
@@ -386,23 +387,17 @@ describe('PickerConfigSheet · 参数配置（嵌套真实 ExerciseSettingsModal
     return { user, onChange, bench };
   };
 
-  it('渲染真实面板主体区块 + 建议徽标（真组件复用，非自造形态）', () => {
+  it('渲染真实面板主体区块（真组件复用，非自造形态）', () => {
     setupSheet();
     expect(screen.getByText('目标强度')).toBeInTheDocument();
     expect(screen.getByText('训练组安排')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /动作库/ })).toBeInTheDocument();
-    // 真实面板的建议来源徽标（合成口径=本地估算）
-    expect(screen.getAllByText(/本地估算/).length).toBeGreaterThan(0);
   });
 
-  it('增量点：智能填充开关默认开，可切换', async () => {
-    const { user } = setupSheet();
-    const sw = screen.getByRole('switch', { name: '智能填充' });
-    expect(sw).toHaveAttribute('aria-checked', 'true');
-    await user.click(sw);
-    expect(sw).toHaveAttribute('aria-checked', 'false');
-    await user.click(sw);
-    expect(sw).toHaveAttribute('aria-checked', 'true');
+  it('增量点收敛（v5）：智能填充开关已去除（默认开启不可关），仅组类型标注保留', () => {
+    setupSheet();
+    expect(screen.queryByRole('switch', { name: '智能填充' })).not.toBeInTheDocument();
+    expect(screen.getAllByText('热身').length).toBeGreaterThan(0);
   });
 
   it('增量点：组类型标注 chip → 行内选择条改「递增」→ 保存回写清单', async () => {

@@ -196,3 +196,17 @@ export function formatParamSummary(exercise: PickerExercise, sets: PickerDraftSe
 export function summaryOfItem(item: PickerSelectionItem): string {
   return formatParamSummary(item.exercise, item.sets, item.targetRpe);
 }
+
+// ---------------------------------------------------------------------------
+// 拖拽落位兜底（v5：Reorder 实时换位存在滞后，松手时按最终偏移确定性落位）
+// ---------------------------------------------------------------------------
+
+/**
+ * 由拖拽纵向位移计算目标落位。
+ * 行高等高时：目标 = 起始下标 + round(位移/行高)，夹紧到列表范围内。
+ */
+export function computeDragTarget(startIdx: number, offsetY: number, rowHeight: number, length: number): number {
+  if (rowHeight <= 0 || length <= 1) return startIdx;
+  const steps = Math.round(offsetY / rowHeight);
+  return Math.max(0, Math.min(length - 1, startIdx + steps));
+}

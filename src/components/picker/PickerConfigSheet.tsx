@@ -1,14 +1,15 @@
 /**
- * PickerConfigSheet — A9 参数配置面板（真组件复用 + v4 UI 重审）
+ * PickerConfigSheet — A9 参数配置面板（真组件复用；v5 智能填充去开关）
  *
  * 参数配置主体 = 真实 src/components/ExerciseSettingsModal.tsx 组件本体
  * （逐组编辑 / RPE / 建议徽标 / 数据依据 / 应用建议全部为现有组件原逻辑）。
- * 本文件只承载两个增量点的挂载：
- *   ① 组类型标注（热身/正式/递增/递减/AMRAP）——chip 经 renderSetExtras 注入
- *      每组行内；点按在该组行正下方展开 inline 选择条（renderSetFootnote，
- *      v4 由底部选择条改为行内切换，路径更短、上下文更近）；
- *   ② 智能填充开关——经 smartFillSlot 注入「训练组安排」上方；
- *      开启时经 externalApiRef 触发面板内部「应用建议」同款逻辑。
+ * 增量点只剩组类型标注（热身/正式/递增/递减/AMRAP）：chip 经 renderSetExtras
+ * 注入每组行内，点按在该组行正下方展开 inline 选择条（renderSetFootnote）。
+ *
+ * 智能填充（v5 用户批注）：与「应用建议」能力重复——去开关、默认开启不可关，
+ * 不再挂 smartFillSlot/externalApiRef（挂载点在真实面板上保留为可选位）；
+ * 「已自动填充、非固定、可调」的告知语义由清单页顶部一次性提示承担。
+ *
  * 协议扩展点：组类型（set_role）为前端 mock 字段，后端契约暂未收录，
  * 接入时以 shared/contracts 扩展为准。
  *
@@ -16,9 +17,9 @@
  * 本包装层以 z-[80] 建立独立层叠上下文，让内部 z-[60] 的真实面板整体浮于选择器之上。
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
-import ExerciseSettingsModal, { SuggestionSourceBadge } from '../ExerciseSettingsModal';
+import ExerciseSettingsModal from '../ExerciseSettingsModal';
 import type { ExerciseAction } from '../../types/protocol';
 import { haptic } from '../../lib/nativeHaptics';
 import {
@@ -68,14 +69,10 @@ function toExerciseAction(item: PickerSelectionItem): ExerciseAction {
 }
 
 const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, onClose }) => {
-  const { exercise } = item;
   /** 组类型标注（增量点①）：与清单草稿逐组对齐，真实面板增删组后按序补齐 */
   const [roles, setRoles] = useState<PickerSetRole[]>(item.sets.map(s => s.role));
-  /** 智能填充（增量点②）：默认开——清单初始值即推荐值 */
-  const [smartFill, setSmartFill] = useState(true);
   /** 正在展开行内选择条的组下标 */
   const [roleEditorIdx, setRoleEditorIdx] = useState<number | null>(null);
-  const apiRef = useRef<{ applySuggestion?: () => void } | null>(null);
 
   const roleOf = (i: number): PickerSetRole => roles[i] ?? 'working';
 
@@ -88,16 +85,6 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
       return next;
     });
     setRoleEditorIdx(null);
-  };
-
-  const toggleSmartFill = () => {
-    const next = !smartFill;
-    setSmartFill(next);
-    // 开=全推荐值自动填入（触发真实面板的「应用建议」同款逻辑）；关=手动，不再自动覆盖
-    if (next) {
-      haptic('medium');
-      apiRef.current?.applySuggestion();
-    }
   };
 
   /** 真实面板保存回调 → 回写清单草稿 */
@@ -138,7 +125,7 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
     </button>
   );
 
-  /** 增量点①（v4）：行内选择条——在该组行正下方展开，无需跳转到底部选择条 */
+  /** 行内选择条——在该组行正下方展开，无需跳转到底部选择条 */
   const renderSetFootnote = (i: number) => {
     if (roleEditorIdx !== i) return null;
     return (
@@ -157,38 +144,6 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
       </div>
     );
   };
-
-  /** 增量点②：智能填充开关卡（建议来源徽标/数据依据/建议数值均由真实面板原生呈现） */
-  const smartFillSlot = (
-    <div className="px-6 mb-6">
-      <div className="rounded-2xl border border-gray-200 bg-white shadow-sm p-4 flex items-center justify-between gap-3">
-        <div className="min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-[17px] font-semibold text-star-dark">智能填充</span>
-            <SuggestionSourceBadge source={exercise.suggestion.source} />
-          </div>
-          <p className="text-xs font-medium text-gray-400 leading-snug">
-            {smartFill ? '推荐值已自动填入；重新开启将再次应用' : '手动模式，推荐值不再自动覆盖'}
-          </p>
-        </div>
-        <button
-          role="switch"
-          aria-checked={smartFill}
-          aria-label="智能填充"
-          onClick={toggleSmartFill}
-          className={`shrink-0 w-[51px] h-[31px] rounded-full p-[2px] transition-colors duration-200 ${
-            smartFill ? 'bg-blue-500' : 'bg-gray-200'
-          }`}
-        >
-          <span
-            className={`block w-[27px] h-[27px] bg-white rounded-full shadow transition-transform duration-200 ${
-              smartFill ? 'translate-x-[20px]' : 'translate-x-0'
-            }`}
-          />
-        </button>
-      </div>
-    </div>
-  );
 
   return (
     <motion.div
@@ -209,8 +164,6 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
         onLibraryOpenChange={() => {}}
         renderSetExtras={renderSetExtras}
         renderSetFootnote={renderSetFootnote}
-        smartFillSlot={smartFillSlot}
-        externalApiRef={apiRef}
       />
     </motion.div>
   );
