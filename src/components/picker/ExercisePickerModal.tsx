@@ -20,7 +20,7 @@
  * 数据：全部 mock（pickerData.ts），无 API 调用；对接后端时仅替换数据源。
  */
 
-import React, { useCallback, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { haptic } from '../../lib/nativeHaptics';
@@ -191,6 +191,15 @@ function CartCard({
   const longPressFired = useRef(false);
   /** 拖拽起点下标（offset 从起点累计，落位计算用） */
   const dragStartIdx = useRef(index);
+  /**
+   * iOS 触摸修复（v6）：framer-motion v12 在 dragListener={false} 时不注入
+   * touch-action:none（render/html/use-props.mjs 只在 dragListener !== false
+   * 时设），WKWebView 长按后手指一动即被原生滚动抢占 → pointercancel。
+   * 修法=动态切换（优先方案）：长按 fire 时置 none + touchmove preventDefault
+   * （non-passive，防原生滚动/长按菜单），onDragEnd 复原 pan-y。
+   */
+  const [iosDragActive, setIosDragActive] = useState(false);
+  const touchMoveGuard = useRef<((ev: TouchEvent) => void) | null>(null);
 
   const clearPress = () => {
     if (pressTimer.current) {
@@ -198,6 +207,29 @@ function CartCard({
       pressTimer.current = null;
     }
   };
+
+  /** iOS：接管触摸手势（禁原生滚动/长按菜单），拖拽结束/卸载时解除 */
+  const engageTouchGuard = (el: HTMLLIElement) => {
+    setIosDragActive(true);
+    if (touchMoveGuard.current) return;
+    const guard = (ev: TouchEvent) => ev.preventDefault();
+    el.addEventListener('touchmove', guard, { passive: false });
+    touchMoveGuard.current = guard;
+  };
+  const releaseTouchGuard = (el: HTMLLIElement | null) => {
+    setIosDragActive(false);
+    if (el && touchMoveGuard.current) {
+      el.removeEventListener('touchmove', touchMoveGuard.current);
+    }
+    touchMoveGuard.current = null;
+  };
+
+  useEffect(() => () => {
+    if (rowRef.current && touchMoveGuard.current) {
+      rowRef.current.removeEventListener('touchmove', touchMoveGuard.current);
+    }
+    touchMoveGuard.current = null;
+  }, []);
 
   const onPointerDown = (e: React.PointerEvent) => {
     // 仅行尾动作钮（教程/移除）不参与长按；主区域遵循移动端惯例：长按=拖拽，短按=配置
@@ -208,6 +240,10 @@ function CartCard({
     pressTimer.current = setTimeout(() => {
       haptic('medium');
       longPressFired.current = true;
+      // iOS 触摸：长按生效瞬间接管手势（动态 touch-action + touchmove 拦截）
+      if (e.pointerType === 'touch' && rowRef.current) {
+        engageTouchGuard(rowRef.current);
+      }
       controls.start(e);
     }, LONG_PRESS_MS);
   };
@@ -234,6 +270,7 @@ function CartCard({
       onDragEnd={(_, info) => {
         haptic('light');
         longPressFired.current = false;
+        releaseTouchGuard(rowRef.current);
         // 松手兜底（v5）：实时换位存在滞后，按最终偏移确定性落位
         const rowH = rowRef.current?.getBoundingClientRect().height || 76;
         const target = computeDragTarget(dragStartIdx.current, info.offset.y, rowH, total);
@@ -244,6 +281,14 @@ function CartCard({
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
       className="list-none bg-white rounded-[20px] shadow-sm px-4 py-3.5 flex items-center gap-3"
+      style={{
+        // v6 iOS 触摸修复：拖拽进行中禁用一切原生手势（framer v12 在
+        // dragListener={false} 下不代为注入）；其余时段 pan-y 保列表可滚
+        touchAction: iosDragActive ? 'none' : 'pan-y',
+        userSelect: iosDragActive ? 'none' : undefined,
+        WebkitUserSelect: iosDragActive ? 'none' : undefined,
+        WebkitTouchCallout: iosDragActive ? 'none' : undefined,
+      }}
     >
       <span className="w-8 h-8 shrink-0 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 tabular-nums">
         {index + 1}
