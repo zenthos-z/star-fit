@@ -125,17 +125,26 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
     }
   };
 
-  /** 库内演示视频（A3 深化列 video_urls male/female + poster_url） */
-  const getLibraryVideos = (): Array<{ url: string; poster: string }> => {
+  /** 库内演示视频（A3 深化列 video_urls male/female + image_refs 双版本海报） */
+  const getLibraryVideos = (): Array<{ url: string; poster: string; label: string }> => {
     if (!exerciseData?.video_urls) return [];
     const vu = typeof exerciseData.video_urls === 'string'
       ? (() => { try { return JSON.parse(exerciseData.video_urls); } catch { return null; } })()
       : exerciseData.video_urls;
     if (!vu || typeof vu !== 'object') return [];
-    const poster = typeof exerciseData.poster_url === 'string' ? exerciseData.poster_url : '';
-    const out: Array<{ url: string; poster: string }> = [];
-    if (typeof vu.male === 'string' && vu.male) out.push({ url: vu.male, poster });
-    if (typeof vu.female === 'string' && vu.female) out.push({ url: vu.female, poster });
+    // 预览图：image_refs [male, female] 双版本海报（v4：预览条各用各的封面）
+    const refs: string[] = Array.isArray(exerciseData.image_refs)
+      ? exerciseData.image_refs
+      : (() => {
+          try { return JSON.parse(exerciseData.image_refs ?? '[]'); } catch { return []; }
+        })();
+    const posters: Record<'male' | 'female', string> = {
+      male: typeof exerciseData.poster_url === 'string' ? exerciseData.poster_url : (refs[0] ?? ''),
+      female: refs[1] ?? (refs[0] ?? ''),
+    };
+    const out: Array<{ url: string; poster: string; label: string }> = [];
+    if (typeof vu.male === 'string' && vu.male) out.push({ url: vu.male, poster: posters.male, label: '男版演示' });
+    if (typeof vu.female === 'string' && vu.female) out.push({ url: vu.female, poster: posters.female, label: '女版演示' });
     return out;
   };
 
@@ -718,6 +727,7 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
           <VideoPlayerModal
             isOpen={showVideoModal}
             onClose={() => setShowVideoModal(false)}
+            title={getExerciseName()}
             videos={getVideos()}
           />
         )}

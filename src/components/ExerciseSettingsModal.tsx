@@ -6,7 +6,8 @@ import { ExerciseAction, LoadAnchors as LoadAnchorsType } from '../types/protoco
 import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '@/constants';
 import { v4 as uuidv4 } from 'uuid';
 import { Timer, MapPin, Watch, Heart, Flame, Zap, Trophy, Gauge, Navigation } from 'lucide-react';
-import ExerciseLibraryModal from './ExerciseLibraryModal';
+import ExercisePickerModal from './picker/ExercisePickerModal';
+import { pickerItemToLibrarySelect } from './picker/pickerAdapter';
 import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } from '../services/suggestionService';
 import { guessCardioSubtype } from '@/utils/exerciseLogic';
 import { DeviationLogger } from '../services/logging/DeviationLogger';
@@ -26,13 +27,23 @@ interface ExerciseSettingsModalProps {
   loadAnchors?: LoadAnchorsType;
   userId?: string;
   onSaveComplete?: () => void;  // New callback to notify parent that save is complete
+  // ---- A9 动作选择器扩展挂载点（全部可选，缺省不渲染/不注册，存量调用零影响） ----
+  /** 逐组行内扩展：在每个组行（输入框与删除钮之间）追加内容，如组类型标注 chip */
+  renderSetExtras?: (setIndex: number) => React.ReactNode;
+  /** 逐组行下扩展：在组行正下方追加内容（如行内组类型选择条，v4 inline 切换） */
+  renderSetFootnote?: (setIndex: number) => React.ReactNode;
+  /** 「训练组安排」区块上方扩展：如智能填充开关卡 */
+  smartFillSlot?: React.ReactNode;
+  /** 组件能力出口：宿主经此触发内部「应用建议」同款逻辑（applyAiSuggestion） */
+  externalApiRef?: React.MutableRefObject<{ applySuggestion?: () => void } | null>;
 }
 
 // ---------------------------------------------------------------------------
 // 建议来源徽标 + 解释窗口（纯展示组件）
 // ---------------------------------------------------------------------------
 
-const DATA_BASIS_LABELS: Record<string, string> = {
+// A9 动作选择器复用：数据依据标签为唯一真源，本文件导出供 picker 模块引用
+export const DATA_BASIS_LABELS: Record<string, string> = {
     anchor: '训练锚点（系统记录）',
     history: '历史最佳推导',
     bodyweight_estimate: '体重系数估算',
@@ -55,7 +66,8 @@ function relativeTime(ts: number | undefined): string {
     return `${Math.floor(diff / 86400000)} 天前`;
 }
 
-function SuggestionSourceBadge({ source, generatedAt }: { source?: SuggestionSource; generatedAt?: number }) {
+// A9 动作选择器复用：建议来源徽标真组件（picker 模块直接引用，不再自造）
+export function SuggestionSourceBadge({ source, generatedAt }: { source?: SuggestionSource; generatedAt?: number }) {
     if (!source) return null;
     const isCloud = source === 'formula' || source === 'hybrid';
     const isHeuristic = source === 'heuristic';
@@ -237,7 +249,11 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   isTransitioning = false,
   loadAnchors = {},
   userId = '',
-  onSaveComplete
+  onSaveComplete,
+  renderSetExtras,
+  renderSetFootnote,
+  smartFillSlot,
+  externalApiRef
 }) => {
 
   // Convert ExerciseAction type to ExerciseType (now unified lowercase, no conversion needed)
@@ -436,6 +452,16 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
               .catch(() => {});
       });
   }, [name, type, targetRpe]);
+
+  // A9 扩展挂载点：把「应用建议」能力暴露给宿主（无 deps——每次渲染刷新闭包，保证拿到最新 sets/aiSuggestion）
+  useEffect(() => {
+      if (externalApiRef) {
+          externalApiRef.current = { applySuggestion: applyAiSuggestion };
+      }
+      return () => {
+          if (externalApiRef) externalApiRef.current = null;
+      };
+  });
 
   const applyAiSuggestion = () => {
       if (!aiSuggestion) return;
@@ -1048,12 +1074,28 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   return (
     <>
       {isLibraryOpen ? (
-        <ExerciseLibraryModal
+        /* A8A9 接线：动作库换新选择器（筛选器/3D 封面/购物车多选，PR #30）。
+           回调适配：onConfirm 为购物车多选（PickerSelectionItem[]），主流程创建
+           语义为单动作回填——取数组首项经 pickerAdapter 映射回旧 onSelect 原语，
+           其余项忽略（批量添加需 App 层循环，已知取舍）；创建态返回 = 取消创建。 */
+        <ExercisePickerModal
           key="library"
-          onSelect={handleLibrarySelect}
-          onClose={() => onLibraryOpenChange(false)}
-          isCreatingMode={isCreating}
-          onCancelCreate={onCancelCreate}
+          onConfirm={items => {
+            const first = items[0];
+            if (!first) {
+              onLibraryOpenChange(false);
+              return;
+            }
+            const sel = pickerItemToLibrarySelect(first);
+            handleLibrarySelect(sel.id, sel.name, sel.type, sel.bodyCategory, sel.muscles, sel.equipment, sel.nameEn);
+          }}
+          onClose={() => {
+            // 白屏根因修复（D）：确认选动作后再点返回，此前会走 onCancelCreate
+            // 把 pendingExercise 一并清掉 → 配置面板整体卸载 → 主流程白屏。
+            // 现按是否已选到动作分流：未选（name 空）返回=取消创建；已选返回=回配置面板。
+            if (isCreating && onCancelCreate && !name) onCancelCreate();
+            else onLibraryOpenChange(false);
+          }}
         />
       ) : (
         <motion.div
@@ -1412,6 +1454,9 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                 </div>
             )}
 
+            {/* A9 扩展挂载点：「训练组安排」上方扩展（如智能填充开关卡） */}
+            {smartFillSlot}
+
             {/* COMPACT SETS EDITOR */}
             {type !== 'cardio' && type !== 'outdoor' && (
             <div className="px-6">
@@ -1446,7 +1491,8 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
                  <div className="space-y-2">
                     {sets.map((set, i) => (
-                        <div key={set.id || i} className="flex items-center gap-3 animate-in slide-in-from-bottom-1 duration-300">
+                        <div key={set.id || i}>
+                        <div className="flex items-center gap-3 animate-in slide-in-from-bottom-1 duration-300">
                             {/* Index */}
                             <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
                                 {i + 1}
@@ -1469,13 +1515,19 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                                 );
                             })}
 
+                            {/* A9 扩展挂载点：逐组行内扩展（如组类型标注） */}
+                            {renderSetExtras?.(i)}
+
                             {/* Delete */}
-                            <button 
+                            <button
                                 onClick={() => handleRemoveSet(i)}
                                 className="w-8 h-8 flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors"
                             >
                                 <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
                             </button>
+                        </div>
+                        {/* A9 扩展挂载点：逐组行下扩展（如行内组类型选择条） */}
+                        {renderSetFootnote?.(i)}
                         </div>
                     ))}
                  </div>

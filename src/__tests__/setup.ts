@@ -64,3 +64,18 @@ global.cancelAnimationFrame = (id: number) => {
 };
 
 (globalThis as any).jest = vi;
+
+// jsdom 27 × Node undici 版本错位（v3 测试环境修正）：
+// jsdom 的 window.fetch 在 POST+自定义头组合下，dispatcher 内部浮动 promise 必然抛
+// 'invalid onError method'（Agent.dispatch 校验失败，jsdom 侧传入的 onError 形状不被
+// 当前 undici 接受）——该 promise 不经过调用方 await 链，无法在业务代码捕获。
+// 测试环境处理：①全局以快速失败桩替换 realm fetch（组件链路离线降级分支本就依赖失败）；
+// ②对仍从 jsdom 内部逃逸的这一特定 rejection 静默（其余 unhandled 照常打印）。
+vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('offline (test env)')));
+const JSDOM_UNDICI_REJ = 'invalid onError method';
+const vitestRejectionListeners = process.listeners('unhandledRejection');
+process.removeAllListeners('unhandledRejection');
+process.on('unhandledRejection', (reason) => {
+  if (String((reason as Error)?.message ?? reason).includes(JSDOM_UNDICI_REJ)) return;
+  for (const l of vitestRejectionListeners) (l as (r: unknown) => void)(reason);
+});
