@@ -4,6 +4,8 @@ import { ConfigRepo } from "./knowledgeRepo.js";
 import {
   resolveDeepSeekModel,
   resolveGLMModel,
+  resolveGLMAnthropicModel,
+  resolveGLMLegacyModel,
   resolveDefaultedProvider,
   resolveTaskConfig,
   isKnownProvider,
@@ -128,11 +130,15 @@ async function getBaseURL(): Promise<string> {
 /**
  * Load a langchain BaseChatModel for a scenario.
  *
- * Default provider is GLM (Z.ai, model "glm-5.3-flash", OpenAI-compatible);
- * deepseek / gemini / openai are honored when configured via DB/env. thinking
- * is off by default (glm/openai have no thinking kwargs; deepseek explicitly
- * disables it). Unknown provider / missing API key fail explicitly (no silent
- * fallback).
+ * Default provider is glm — GLM Coding Plan OpenAI 兼容端点
+ * (https://open.bigmodel.cn/api/coding/paas/v4, ChatOpenAI, issue #35)。
+ * glm-anthropic 是 B4 备选路径（bigmodel Anthropic Messages 协议，
+ * ChatAnthropic，thinking 走 content blocks）；glm-legacy 回退旧 z.ai
+ * OpenAI 兼容端点。deepseek / gemini / openai are honored when configured
+ * via DB/env. thinking：glm 流式自带 additional_kwargs.reasoning_content
+ * （DeepAgentService 分流进 thinking 事件，无需额外 kwargs）；deepseek 走
+ * ChatDeepSeek 协议级 reasoning_content。Unknown provider / missing API key
+ * fail explicitly (no silent fallback).
  */
 export async function loadModel(
   scenario: Scenario = "default",
@@ -143,20 +149,49 @@ export async function loadModel(
     throw new UnknownProviderError(provider);
   }
 
-  if (provider === "glm") {
-    const resolved = await resolveGLMModel(scenario);
+  if (provider === "glm" || provider === "glm-legacy") {
+    // glm = Coding Plan 端点（默认）；glm-legacy = z.ai 回退。两者同为
+    // OpenAI 兼容 chat/completions，仅 baseURL 解析键不同。
+    const resolved =
+      provider === "glm"
+        ? await resolveGLMModel(scenario)
+        : await resolveGLMLegacyModel(scenario);
     const apiKey = await resolveApiKey("glm");
     if (!apiKey) {
-      throw new MissingApiKeyError("glm");
+      throw new MissingApiKeyError(provider);
     }
     const { ChatOpenAI } = await import("@langchain/openai");
-    // Z.ai GLM is OpenAI-compatible. No thinking kwargs (GLM-5.3-flash default
-    // behaves fine for tool calls without extra request-body fields).
+    // GLM is OpenAI-compatible. No thinking kwargs — GLM-5.3-flash streams
+    // reasoning_content into additional_kwargs on its own and tool calls work
+    // without extra request-body fields. maxTokens 16384 keeps long tool-call
+    // argument JSON clear of the OpenAI-SDK default cap (mid-args truncation
+    // otherwise breaks the deepagents AgentNode AIMessage validation).
     return new ChatOpenAI({
       model: resolved.model || DEFAULT_GLM_MODEL,
       apiKey,
       configuration: { baseURL: resolved.baseURL },
       temperature: 1.0,
+      maxTokens: 16384,
+    });
+  }
+
+  if (provider === "glm-anthropic") {
+    // B4 备选路径：bigmodel Anthropic Messages 协议（x-api-key 鉴权由
+    // ChatAnthropic 处理），thinking 走标准 content blocks
+    // （{type:'thinking', thinking:'…'}，DeepAgentService.extractReasoningContent
+    // 已适配分流进 thinking 事件）。
+    const resolved = await resolveGLMAnthropicModel(scenario);
+    const apiKey = await resolveApiKey("glm-anthropic");
+    if (!apiKey) {
+      throw new MissingApiKeyError("glm-anthropic");
+    }
+    const { ChatAnthropic } = await import("@langchain/anthropic");
+    return new ChatAnthropic({
+      model: resolved.model || DEFAULT_GLM_MODEL,
+      apiKey,
+      anthropicApiUrl: resolved.baseURL,
+      temperature: 1.0,
+      maxTokens: 16384,
     });
   }
 
@@ -379,16 +414,76 @@ export async function generateTextUnified(
         String(j?.choices?.[0]?.message?.content || "").trim() ||
         "抱歉，当前无法生成回复，请稍后再试。"
       );
-    } else if (providerTrim === "glm") {
+    } else if (providerTrim === "glm-anthropic") {
+      // B4 备选路径：bigmodel Anthropic Messages 协议（x-api-key 鉴权；
+      // systemPrompt 走顶层 system 参数，不放 messages）。
+      const key = await resolveApiKey("glm-anthropic");
+      if (!key) {
+        throw new MissingApiKeyError("glm-anthropic");
+      }
+      const glm = await resolveGLMAnthropicModel(task);
+      endpoint = glm.baseURL.replace(/\/+$/, "") + "/v1/messages";
+
+      const body: Record<string, unknown> = {
+        model: glm.model || DEFAULT_GLM_MODEL,
+        max_tokens: 4096,
+        messages: [{ role: "user", content: input }],
+      };
+      if (systemPrompt) {
+        body.system = systemPrompt;
+      }
+
+      const r = await fetchWithRetry(
+        endpoint,
+        {
+          method: "POST",
+          headers: {
+            "x-api-key": key,
+            "anthropic-version": "2023-06-01",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(body),
+          signal: controller.signal,
+        },
+        log,
+      );
+      clearTimeout(timeoutId);
+      if (!r.ok) {
+        const errBody = await r.text();
+        const e = new Error(`glm_anthropic_http_${r.status}`) as Error &
+          Record<string, unknown>;
+        e.status = r.status;
+        e.body = errBody;
+        e.provider = providerTrim;
+        e.model = glm.model;
+        e.task = task;
+        e.endpoint = endpoint;
+        throw e;
+      }
+      const j = (await r.json()) as {
+        content?: Array<{ type?: string; text?: string }>;
+      };
+      const text = Array.isArray(j?.content)
+        ? j.content
+            .filter((b) => b?.type === "text")
+            .map((b) => b.text ?? "")
+            .join("")
+        : "";
+      return text.trim() || "抱歉，当前无法生成回复，请稍后再试。";
+    } else if (providerTrim === "glm" || providerTrim === "glm-legacy") {
       const key = await resolveApiKey("glm");
       if (!key) {
-        throw new MissingApiKeyError("glm");
+        throw new MissingApiKeyError(providerTrim);
       }
       const proxyUrl = (await getProxyUrl("glm")).trim();
       const dispatcher = createDispatcher(proxyUrl);
       proxy = proxyUrl;
-      // Z.ai GLM is OpenAI-compatible (chat/completions).
-      const glm = await resolveGLMModel(task);
+      // glm = Coding Plan 端点（默认）/ glm-legacy = z.ai 回退，均 OpenAI
+      // 兼容 (chat/completions)，仅 baseURL 解析键不同。
+      const glm =
+        providerTrim === "glm"
+          ? await resolveGLMModel(task)
+          : await resolveGLMLegacyModel(task);
       const baseURL = glm.baseURL;
       endpoint = baseURL.replace(/\/+$/, "") + "/chat/completions";
 
@@ -418,8 +513,11 @@ export async function generateTextUnified(
       clearTimeout(timeoutId);
       if (!r.ok) {
         const errBody = await r.text();
-        const e = new Error(`glm_http_${r.status}`) as Error &
-          Record<string, unknown>;
+        const e = new Error(
+          providerTrim === "glm"
+            ? `glm_http_${r.status}`
+            : `glm_legacy_http_${r.status}`,
+        ) as Error & Record<string, unknown>;
         e.status = r.status;
         e.body = errBody;
         e.provider = providerTrim;

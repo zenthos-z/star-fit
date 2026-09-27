@@ -48,6 +48,11 @@ import {
   getAvailableImageModels,
   getImageGenApiKey,
   testImageGenConnection as testImageGenConnectionService,
+  isGLMAnthropicProvider,
+  DEFAULT_GLM_BASE_URL,
+  DEFAULT_GLM_ANTHROPIC_BASE_URL,
+  DEFAULT_GLM_LEGACY_BASE_URL,
+  type Provider,
 } from "../services/modelConfigService.js";
 import {
   ExportMarkdownQuerySchema,
@@ -347,10 +352,10 @@ export const updateConfig = async (
   const userId = getUserId(req);
   try {
     await ConfigRepo.setConfig(userId, key, value);
-    await wsService.broadcast(
-      userId,
-      { type: "config_updated", data: { key } },
-    );
+    await wsService.broadcast(userId, {
+      type: "config_updated",
+      data: { key },
+    });
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -491,24 +496,20 @@ export const testProxy = async (req: FastifyRequest, reply: FastifyReply) => {
       if (aiType === "gemini") {
         const apiKey = queryApiKey || (await getApiKey("gemini"));
         if (!apiKey)
-          return reply
-            .status(400)
-            .send({
-              success: false,
-              error: "Google API Key is not configured",
-            });
+          return reply.status(400).send({
+            success: false,
+            error: "Google API Key is not configured",
+          });
         finalModel = queryModel || "gemini-3-flash-preview";
         // Use v1beta as it supports more preview/experimental models
         targetUrl = `https://generativelanguage.googleapis.com/v1beta/models/${finalModel}:generateContent?key=${encodeURIComponent(apiKey)}`;
       } else if (aiType === "openai") {
         const apiKey = queryApiKey || (await getApiKey("openai"));
         if (!apiKey)
-          return reply
-            .status(400)
-            .send({
-              success: false,
-              error: "OpenAI API Key is not configured",
-            });
+          return reply.status(400).send({
+            success: false,
+            error: "OpenAI API Key is not configured",
+          });
         finalModel = queryModel || "gpt-4o-mini";
         targetUrl = "https://api.openai.com/v1/chat/completions";
       }
@@ -859,13 +860,13 @@ export const updateExercise = async (
     // Exercises are global, but we can notify the user who updated it or all users
     // For now, broadcast to 'global' or similar if needed, or just specific user
     const userId = getUserId(req);
-    await wsService.broadcast(
-      userId,
-      { type: "knowledge_updated", data: {
-      type: "exercise",
-      id: ex.id,
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "knowledge_updated",
+      data: {
+        type: "exercise",
+        id: ex.id,
+      },
+    });
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -880,13 +881,13 @@ export const deleteExercise = async (
   try {
     await KnowledgeRepo.deleteExercise(id);
     const userId = getUserId(req);
-    await wsService.broadcast(
-      userId,
-      { type: "knowledge_updated", data: {
-      type: "exercise_deleted",
-      id,
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "knowledge_updated",
+      data: {
+        type: "exercise_deleted",
+        id,
+      },
+    });
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -911,13 +912,13 @@ export const updateGuidance = async (
   const doc = req.body as any;
   try {
     await KnowledgeRepo.upsertGuidance(userId, doc);
-    await wsService.broadcast(
-      userId,
-      { type: "knowledge_updated", data: {
-      type: "guidance",
-      key: doc.key,
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "knowledge_updated",
+      data: {
+        type: "guidance",
+        key: doc.key,
+      },
+    });
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -935,13 +936,13 @@ export const updatePromptStyle = async (
   };
   try {
     await ConfigRepo.setStyleParam(userId, styleKey, parameters);
-    await wsService.broadcast(
-      userId,
-      { type: "config_updated", data: {
-      type: "prompt_style",
-      styleKey,
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "config_updated",
+      data: {
+        type: "prompt_style",
+        styleKey,
+      },
+    });
     return reply.send({ success: true });
   } catch (e: any) {
     return reply.status(500).send({ error: e.message });
@@ -1155,16 +1156,48 @@ async function checkAIConnectionInternal(resolved: {
       return { connected: response.statusCode === 200, model };
     }
 
-    // OpenAI-compatible providers: openai / deepseek / glm (chat/completions).
-    const apiKey = await getApiKey(provider as "openai" | "deepseek" | "glm");
+    // GLM anthropic 协议（B4 备选路径）：glm-anthropic →
+    // https://open.bigmodel.cn/api/anthropic（x-api-key + anthropic-version）。
+    if (isGLMAnthropicProvider(provider)) {
+      const apiKey = await getApiKey("glm");
+      if (!apiKey) return { connected: false, model: "" };
+
+      const baseUrl = resolved.baseURL || DEFAULT_GLM_ANTHROPIC_BASE_URL;
+      const url = `${baseUrl.replace(/\/+$/, "")}/v1/messages`;
+
+      const response = await request(url, {
+        method: "POST",
+        headers: {
+          "content-type": "application/json",
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+        },
+        headersTimeout: 15000,
+        bodyTimeout: 15000,
+        body: JSON.stringify({
+          model,
+          max_tokens: 8,
+          messages: [{ role: "user", content: "ping" }],
+        }),
+      });
+
+      return { connected: response.statusCode === 200, model };
+    }
+
+    // OpenAI-compatible providers: openai / deepseek / glm (coding 端点) / glm-legacy。
+    const apiKey = await getApiKey(
+      provider === "glm" || provider === "glm-legacy" ? "glm" : provider,
+    );
     if (!apiKey) return { connected: false, model: "" };
 
     const defaultBaseURL =
       provider === "glm"
-        ? "https://api.z.ai/api/paas/v4"
-        : provider === "deepseek"
-          ? "https://ark.cn-beijing.volces.com/api/coding/v3"
-          : "https://api.openai.com/v1";
+        ? DEFAULT_GLM_BASE_URL
+        : provider === "glm-legacy"
+          ? DEFAULT_GLM_LEGACY_BASE_URL
+          : provider === "deepseek"
+            ? "https://ark.cn-beijing.volces.com/api/coding/v3"
+            : "https://api.openai.com/v1";
     const baseUrl = resolved.baseURL || defaultBaseURL;
     const url = `${baseUrl.replace(/\/+$/, "")}/chat/completions`;
 
@@ -1478,7 +1511,7 @@ export const getAIConfig = async (req: FastifyRequest, reply: FastifyReply) => {
     const aiProvider =
       (await ConfigRepo.getConfig("system", "AI_PROVIDER")) ||
       process.env.AI_PROVIDER ||
-      "gemini";
+      "glm";
     const promptStyle =
       (await ConfigRepo.getConfig("system", "PROMPT_STYLE")) ||
       process.env.PROMPT_STYLE ||
@@ -1579,7 +1612,7 @@ export const updateModelConfig = async (
   try {
     const { task, provider, model, baseURL } = req.body as {
       task: string;
-      provider: "gemini" | "openai" | "deepseek" | "glm";
+      provider: Provider;
       model: string;
       baseURL?: string;
     };
@@ -1621,7 +1654,7 @@ export const testModelConnection = async (
   try {
     const query = req.query as any;
     const { provider, model, baseURL } = query as {
-      provider?: "gemini" | "openai" | "deepseek" | "glm";
+      provider?: Provider;
       model?: string;
       baseURL?: string;
     };
@@ -1827,10 +1860,10 @@ export const setAdminConfig = async (
     await ConfigRepo.setConfig("admin", key, value);
 
     // Broadcast config update to admin clients
-    await wsService.broadcast(
-      "admin",
-      { type: "config_updated", data: { key } },
-    );
+    await wsService.broadcast("admin", {
+      type: "config_updated",
+      data: { key },
+    });
 
     return reply.send({ success: true, key, value });
   } catch (e: any) {
@@ -1891,12 +1924,12 @@ export const setPinnedUsers = async (
     await ConfigRepo.setConfig("admin", "pinned_users", userIds);
 
     // Broadcast update to admin clients (use pinned_users for consistency)
-    await wsService.broadcast(
-      "admin",
-      { type: "pinned_users_updated", data: {
-      pinned_users: userIds,
-    } },
-    );
+    await wsService.broadcast("admin", {
+      type: "pinned_users_updated",
+      data: {
+        pinned_users: userIds,
+      },
+    });
 
     return reply.send({ success: true, pinned_users: userIds });
   } catch (e: any) {
@@ -1939,12 +1972,12 @@ export const togglePinnedUser = async (
     const pinnedAfter = await getAdminPinnedUsers();
 
     // Broadcast update to admin clients (use pinned_users for consistency)
-    await wsService.broadcast(
-      "admin",
-      { type: "pinned_users_updated", data: {
-      pinned_users: pinnedAfter,
-    } },
-    );
+    await wsService.broadcast("admin", {
+      type: "pinned_users_updated",
+      data: {
+        pinned_users: pinnedAfter,
+      },
+    });
 
     return reply.send({
       success: true,
@@ -2000,13 +2033,13 @@ export const batchDeleteUsers = async (
     }
 
     // Broadcast update to admin clients
-    await wsService.broadcast(
-      "admin",
-      { type: "users_deleted", data: {
-      userIds,
-      deletedCount,
-    } },
-    );
+    await wsService.broadcast("admin", {
+      type: "users_deleted",
+      data: {
+        userIds,
+        deletedCount,
+      },
+    });
 
     return reply.send({
       success: true,
@@ -2067,12 +2100,10 @@ export const exportUserTrainingMarkdown = async (
   // Parse and validate query parameters using Zod
   const queryResult = ExportMarkdownQuerySchema.safeParse(req.query);
   if (!queryResult.success) {
-    return reply
-      .status(400)
-      .send({
-        error: "Invalid query parameters",
-        details: queryResult.error.issues,
-      });
+    return reply.status(400).send({
+      error: "Invalid query parameters",
+      details: queryResult.error.issues,
+    });
   }
 
   const { startDate, endDate } = queryResult.data;
@@ -2325,13 +2356,13 @@ export const updateUserProfileStatic = async (
       console.log("[AdminAPI] UserProfileService.updateProfile completed!");
 
       // Broadcast update to user if online
-      await wsService.broadcast(
-      userId,
-      { type: "profile_updated", data: {
-        type: "static",
-        updates: updates,
-      } },
-    );
+      await wsService.broadcast(userId, {
+        type: "profile_updated",
+        data: {
+          type: "static",
+          updates: updates,
+        },
+      });
 
       return reply.send({ success: true, message: "Profile static updated" });
     }
@@ -2366,13 +2397,13 @@ export const updateUserProfileStatic = async (
     });
 
     // Broadcast update to user if online
-    await wsService.broadcast(
-      userId,
-      { type: "profile_updated", data: {
-      type: "static",
-      updates: { ...basicInfoUpdates, ...psychologicalUpdates },
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "profile_updated",
+      data: {
+        type: "static",
+        updates: { ...basicInfoUpdates, ...psychologicalUpdates },
+      },
+    });
 
     return reply.send({ success: true, message: "Profile static updated" });
   } catch (e: any) {
@@ -2416,12 +2447,12 @@ export const updateUserProfileDynamic = async (
       });
 
       // Broadcast to user
-      await wsService.broadcast(
-      userId,
-      { type: "load_anchors_updated", data: {
-        load_anchors,
-      } },
-    );
+      await wsService.broadcast(userId, {
+        type: "load_anchors_updated",
+        data: {
+          load_anchors,
+        },
+      });
     }
 
     // Persist dynamic state (active_limitations / recovery_state) into profile_dynamic JSONB
@@ -2435,13 +2466,13 @@ export const updateUserProfileDynamic = async (
       });
 
       if (active_limitations) {
-        await wsService.broadcast(
-      userId,
-      { type: "profile_dynamic_updated", data: {
-          userId,
-          updates: { active_limitations },
-        } },
-    );
+        await wsService.broadcast(userId, {
+          type: "profile_dynamic_updated",
+          data: {
+            userId,
+            updates: { active_limitations },
+          },
+        });
       }
     }
 
@@ -2511,13 +2542,13 @@ export const updateUserLoadAnchor = async (
     });
 
     // Broadcast to user
-    await wsService.broadcast(
-      userId,
-      { type: "load_anchor_updated", data: {
-      exerciseId,
-      anchor: updatedAnchors[exerciseId],
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "load_anchor_updated",
+      data: {
+        exerciseId,
+        anchor: updatedAnchors[exerciseId],
+      },
+    });
 
     return reply.send({
       success: true,
@@ -2584,12 +2615,12 @@ export const addUserLimitation = async (
     );
 
     // Broadcast to user
-    await wsService.broadcast(
-      userId,
-      { type: "limitation_added", data: {
-      limitation: newLimitation,
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "limitation_added",
+      data: {
+        limitation: newLimitation,
+      },
+    });
 
     return reply.send({
       success: true,
@@ -2647,10 +2678,10 @@ export const removeUserLimitation = async (
     }
 
     // Broadcast to user
-    await wsService.broadcast(
-      userId,
-      { type: "limitation_removed", data: { part } },
-    );
+    await wsService.broadcast(userId, {
+      type: "limitation_removed",
+      data: { part },
+    });
 
     return reply.send({
       success: true,
@@ -2680,12 +2711,10 @@ export const updateUserDisplayName = async (
   }
 
   if (displayName.length > 50) {
-    return reply
-      .status(400)
-      .send({
-        success: false,
-        error: "Display name must be 50 characters or less",
-      });
+    return reply.status(400).send({
+      success: false,
+      error: "Display name must be 50 characters or less",
+    });
   }
 
   try {
@@ -2715,12 +2744,12 @@ export const updateUserDisplayName = async (
     );
 
     // Broadcast to user
-    await wsService.broadcast(
-      userId,
-      { type: "display_name_updated", data: {
-      displayName,
-    } },
-    );
+    await wsService.broadcast(userId, {
+      type: "display_name_updated",
+      data: {
+        displayName,
+      },
+    });
 
     return reply.send({
       success: true,

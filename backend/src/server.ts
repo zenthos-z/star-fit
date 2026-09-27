@@ -257,6 +257,10 @@ const start = async () => {
     await server.register(websocket);
 
     // Static Files (Uploads)
+    // uploads/ is gitignored, so fresh checkouts/worktrees boot without it and
+    // @fastify/static then throws ENOENT at registration (Agent/媒体落盘目录)。
+    // Ensure it exists before the plugin resolves the root path.
+    fs.mkdirSync(path.join(process.cwd(), "uploads"), { recursive: true });
     await server.register(fastifyStatic, {
       root: path.join(process.cwd(), "uploads"),
       prefix: "/uploads/",
