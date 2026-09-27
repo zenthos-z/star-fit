@@ -38,12 +38,6 @@ export type PickerRegion = 'upper' | 'lower' | 'core' | 'cardio';
 /** 组类型标注（协议扩展点：后端契约暂未收录 set_role，接入时以 shared/contracts 扩展为准） */
 export type PickerSetRole = 'warmup' | 'working' | 'rampUp' | 'rampDown' | 'amrap';
 
-/** 建议来源（与 ExerciseSettingsModal 的 SuggestionSource 徽标同口径） */
-export type PickerSuggestionSource = 'hybrid' | 'formula' | 'cache' | 'heuristic';
-
-/** 数据依据标签（展示文案真源 = ExerciseSettingsModal 导出的 DATA_BASIS_LABELS） */
-export type PickerDataBasis = 'anchor' | 'history' | 'bodyweight_estimate' | 'type_default';
-
 /** 生产库 exercises 行（pickerLibraryData.ts 同构形状） */
 export interface PickerLibraryEntry {
   id: string;
@@ -61,24 +55,6 @@ export interface PickerLibraryEntry {
   difficulty: string;
   /** 库3 3D 解剖缩略图（R2 CDN，male 版；'' = 库内缺失） */
   thumbnail: string;
-}
-
-/** 单组推荐值（合成） */
-export interface PickerSetPlan {
-  role: PickerSetRole;
-  /** kg；0 = 自重 */
-  weight: number;
-  reps: number;
-  /** 秒（按时长计的组：有氧 / 拉伸） */
-  durationSec?: number;
-}
-
-/** 动作推荐参数（合成口径：本地估算/类型默认，接入后由建议服务下发） */
-export interface PickerSuggestion {
-  source: PickerSuggestionSource;
-  dataBasis: PickerDataBasis;
-  targetRpe: number;
-  sets: PickerSetPlan[];
 }
 
 /** 选择器条目（由库条目派生；列表/清单/配置全流程消费的形状） */
@@ -111,7 +87,6 @@ export interface PickerExercise {
   hotRank: number;
   /** 「为你推荐」徽标（mock 确定性布点） */
   isRecommended: boolean;
-  suggestion: PickerSuggestion;
   /** 动作封面：库3 3D 解剖渲染图（R2 CDN，male 版）；缺失 '' → 列表回退类型图标 */
   thumbnail: string;
 }
@@ -243,50 +218,6 @@ const BODY_PART_REGION: Record<string, PickerRegion> = {
   waist: 'core',
 };
 
-/** 合成建议的器械基准配重（kg；0=自重口径） */
-const EQUIPMENT_BASE_WEIGHT: Record<string, number> = {
-  barbell: 60,
-  dumbbell: 16,
-  machine: 40,
-  cable: 25,
-  band: 15,
-  kettlebell: 12,
-  medicine_ball: 8,
-  weighted: 20,
-  stability_ball: 0,
-  bodyweight: 0,
-  other: 20,
-};
-
-const plan = (role: PickerSetRole, weight: number, reps: number, durationSec?: number): PickerSetPlan => ({
-  role,
-  weight,
-  reps,
-  ...(durationSec !== undefined ? { durationSec } : {}),
-});
-
-/** 参数建议合成（本地估算/类型默认口径；接入后由建议服务下发） */
-function synthesizeSuggestion(type: PickerExerciseType, equipment: string, difficulty: string): PickerSuggestion {
-  if (type === 'cardio' || type === 'outdoor') {
-    return { source: 'heuristic', dataBasis: 'type_default', targetRpe: 5, sets: [plan('working', 0, 0, 1200)] };
-  }
-  if (type === 'flexibility') {
-    return { source: 'heuristic', dataBasis: 'type_default', targetRpe: 4, sets: [plan('working', 0, 0, 30), plan('working', 0, 0, 30)] };
-  }
-  const rpe = difficulty === 'advanced' ? 8 : difficulty === 'intermediate' ? 7.5 : 7;
-  const base = EQUIPMENT_BASE_WEIGHT[equipment] ?? 20;
-  if (base === 0) {
-    return {
-      source: 'heuristic', dataBasis: 'bodyweight_estimate', targetRpe: rpe,
-      sets: [plan('working', 0, 12), plan('working', 0, 12), plan('working', 0, 10)],
-    };
-  }
-  return {
-    source: 'heuristic', dataBasis: 'type_default', targetRpe: rpe,
-    sets: [plan('warmup', Math.round(base / 2), 12), plan('working', base, 8), plan('working', base, 8), plan('working', base, 10)],
-  };
-}
-
 function initialsOfEn(name: string): string {
   return name
     .split(/[^A-Za-z]+/)
@@ -327,7 +258,6 @@ export function buildPickerExercises(library: PickerLibraryEntry[]): PickerExerc
       rank: i + 1,
       hotRank: i + 1,
       isRecommended: i + 1 > 3 && (i + 1) % 17 === 0,
-      suggestion: synthesizeSuggestion(type, e.equipment, e.difficulty),
       thumbnail: sanitizeThumbnail(e.thumbnail),
     };
   });

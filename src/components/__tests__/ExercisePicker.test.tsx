@@ -9,6 +9,25 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { muscleLabelZh } from '../../lib/muscleMap';
+
+// 参数建议统一走 SuggestionService（链路 A）：测试环境 mock resolve 为确定性值，
+// 断言「清单参数 == 配置页建议值」的同源语义。
+// vi.mock 工厂在模块导入期执行，mock 引用必须经 vi.hoisted 提升，否则 TDZ 报错
+// 且 mock 静默不生效（回退真实启发式）。
+const { resolveMock } = vi.hoisted(() => ({
+  resolveMock: vi.fn(async (_name: string, _type: string, _rpe: number) => ({
+    values: { weight: 60, reps: 10, set_count: 3, target_rpe: 7 },
+    source: 'heuristic' as const,
+    generatedAt: Date.now(),
+  })),
+}));
+vi.mock('../../services/suggestionService', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../services/suggestionService')>();
+  return {
+    ...actual,
+    SuggestionService: Object.assign(actual.SuggestionService, { resolve: resolveMock }),
+  };
+});
 import ExercisePickerModal from '../picker/ExercisePickerModal';
 import PickerConfigSheet from '../picker/PickerConfigSheet';
 import {
@@ -24,7 +43,6 @@ import {
   filterAndSortExercises,
   formatParamSummary,
   matchSearch,
-  planToDraftSets,
   rowSubtitle,
   summarizeTypeDim,
   summaryOfItem,
@@ -46,10 +64,16 @@ const findEn = (nameEn: string) => {
   return ex;
 };
 
-const makeItem = (id: string): PickerSelectionItem => {
-  const ex = byId(id);
-  return { exercise: ex, sets: planToDraftSets(ex.suggestion.sets), targetRpe: ex.suggestion.targetRpe };
-};
+const makeItem = (id: string): PickerSelectionItem => ({
+  exercise: byId(id),
+  // 链路 A 填充后的典型形态：热身 1 组 + 正式 2 组（组类型为用户可改的草稿位）
+  sets: [
+    { id: 't-1', role: 'warmup', weight: 60, reps: 10, durationSec: 0 },
+    { id: 't-2', role: 'working', weight: 60, reps: 10, durationSec: 0 },
+    { id: 't-3', role: 'working', weight: 60, reps: 10, durationSec: 0 },
+  ],
+  targetRpe: 7,
+});
 
 const selectedCountOf = (exs: Array<{ id: string }>) => exs.length;
 
@@ -143,9 +167,9 @@ describe('pickerLogic · 胶囊回显与行副标题', () => {
     expect(summarizeTypeDim(['cardio', 'bodyweight'])).toBe('有氧等2项');
   });
 
-  it('有氧行副标题显示时长语义', () => {
+  it('有氧行副标题：全类型统一口径（肌群 + 器械中文），无时长语义', () => {
     const c = MOCK_EXERCISES.find(e => e.exerciseType === 'cardio')!;
-    expect(rowSubtitle(c)).toBe(`建议 20分钟 · ${c.equipmentLabel}`);
+    expect(rowSubtitle(c)).toBe(`${c.muscles.join(' · ')} · ${c.equipmentLabel}`);
   });
 
   it('力量行副标题显示目标肌群 + 器械中文', () => {
@@ -154,33 +178,21 @@ describe('pickerLogic · 胶囊回显与行副标题', () => {
   });
 });
 
-describe('pickerLogic · 参数摘要一行（合成建议）', () => {
-  it('拉伸（固定合成）：2组×30秒 · RPE 4', () => {
-    const ex = MOCK_EXERCISES.find(e => e.exerciseType === 'flexibility')!;
-    const item = makeItem(ex.id);
-    expect(formatParamSummary(item.exercise, item.sets, item.targetRpe)).toBe('2组×30秒 · RPE 4');
+describe('pickerLogic · 参数摘要一行（链路 A 同源参数）', () => {
+  it('自重+次数：3组×10 · 60kg · RPE 7', () => {
+    const item = makeItem(findEn('Barbell Bench Press').id);
+    expect(formatParamSummary(item.exercise, item.sets, item.targetRpe)).toBe('3组×10 · 60kg · RPE 7');
   });
 
-  it('有氧（固定合成）：20分钟 · RPE 5', () => {
-    const ex = MOCK_EXERCISES.find(e => e.exerciseType === 'cardio')!;
-    const item = makeItem(ex.id);
-    expect(formatParamSummary(item.exercise, item.sets, item.targetRpe)).toBe('20分钟 · RPE 5');
+  it('时长型：2组×30秒 · RPE 4', () => {
+    const item = makeItem(byId(MOCK_EXERCISES[1].id).id);
+    const sets = item.sets.map(x => ({ ...x, weight: 0, reps: 0, durationSec: 30 }));
+    expect(formatParamSummary(item.exercise, sets, 4)).toBe('3组×30秒 · RPE 4');
   });
 
-  it('自重合成：3组×10-12 · 自重 · RPE 按难度', () => {
-    const ex = MOCK_EXERCISES.find(e => e.equipment === 'bodyweight')!;
-    const item = makeItem(ex.id);
-    expect(formatParamSummary(item.exercise, item.sets, item.targetRpe)).toBe(`3组×10-12 · 自重 · RPE ${ex.suggestion.targetRpe}`);
-  });
-
-  it('杠铃力量合成（卧推）：热身+正式 → 区间负荷', () => {
-    const bench = findEn('Barbell Bench Press');
-    const item = makeItem(bench.id);
-    expect(item.sets).toHaveLength(4);
-    expect(item.sets[0].role).toBe('warmup');
-    expect(formatParamSummary(item.exercise, item.sets, item.targetRpe)).toBe(
-      `4组×8-12 · 30-60kg · RPE ${bench.suggestion.targetRpe}`,
-    );
+  it('空组占位：仅显示 RPE', () => {
+    const item = makeItem(findEn('Barbell Bench Press').id);
+    expect(formatParamSummary(item.exercise, [], 7)).toBe('RPE 7');
   });
 });
 
@@ -347,7 +359,8 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     await user.click(screen.getByRole('button', { name: '去配置' }));
 
     expect(screen.getByText('训练清单')).toBeInTheDocument();
-    expect(screen.getByText(summaryOfItem({ exercise: a, sets: planToDraftSets(a.suggestion.sets), targetRpe: a.suggestion.targetRpe }))).toBeInTheDocument();
+    // 链路 A 同源填充：两张卡的参数摘要均由 SuggestionService.resolve 写入（mock 确定性 60kg×10×3），逐字一致
+    expect(screen.getAllByText(summaryOfItem({ exercise: a, sets: makeItem(a.id).sets, targetRpe: makeItem(a.id).targetRpe }))).toHaveLength(2);
 
     // 箭头调序按钮已删除；编辑钮已删除（长按直接拖拽，iOS 惯例）
     expect(screen.queryByLabelText(/上移 |下移 /)).not.toBeInTheDocument();
@@ -418,8 +431,10 @@ describe('PickerConfigSheet · 参数配置（嵌套真实 ExerciseSettingsModal
     await user.click(screen.getByRole('button', { name: '确认添加动作' }));
     expect(onChange).toHaveBeenCalledTimes(1);
     const saved = onChange.mock.calls[0][0] as PickerSelectionItem;
-    expect(saved.sets).toHaveLength(4);
+    // 组数不变（3 组），仅第 1 组类型改写；targetRpe 来自链路 A resolve（mock 固定 7）
+    expect(saved.sets).toHaveLength(3);
     expect(saved.sets[0].role).toBe('rampUp');
-    expect(saved.targetRpe).toBe(bench.suggestion.targetRpe);
+    expect(saved.sets[1].role).toBe('working');
+    expect(saved.targetRpe).toBe(7);
   });
 });

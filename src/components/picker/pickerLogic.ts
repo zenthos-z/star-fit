@@ -9,7 +9,6 @@ import type {
   PickerExercise,
   PickerExerciseType,
   PickerSelectionItem,
-  PickerSetPlan,
 } from './pickerData';
 import { TYPE_LABELS } from './pickerData';
 
@@ -95,51 +94,18 @@ export function summarizeTypeDim(selected: PickerExerciseType[]): string {
 // 列表行副标题
 // ---------------------------------------------------------------------------
 
-function fmtDurationLabel(sec: number): string {
-  if (sec >= 120) return `${+(sec / 60).toFixed(1)}分钟`;
-  return `${+sec.toFixed(0)}秒`;
-}
-
 /**
- * 列表行副标题：有氧/户外动作显示时长语义（参考案例口径），
- * 其余显示目标肌群；器械统一缀在末尾。
+ * 列表行副标题：全类型统一口径——目标肌群 + 器械中文。
+ * （时长语义不再进副标题：链路 A 化后参数建议由 SuggestionService 异步填充，
+ * 列表行只呈现动作固有属性。）
  */
 export function rowSubtitle(ex: PickerExercise): string {
-  const equipment = ex.equipmentLabel;
-  if (ex.exerciseType === 'cardio' || ex.exerciseType === 'outdoor') {
-    const durations = ex.suggestion.sets.map(s => s.durationSec ?? 0).filter(v => v > 0);
-    const totalSec = durations.length ? durations.reduce((a, b) => a + b, 0) : 0;
-    return totalSec > 0 ? `建议 ${fmtDurationLabel(totalSec)} · ${equipment}` : equipment;
-  }
-  return `${ex.muscles.join(' · ')} · ${equipment}`;
+  return `${ex.muscles.join(' · ')} · ${ex.equipmentLabel}`;
 }
 
 // ---------------------------------------------------------------------------
 // 参数摘要 + 草稿组
 // ---------------------------------------------------------------------------
-
-let draftIdSeq = 0;
-
-/** 稳定可测的草稿组 id（纯前端 mock，不引入 uuid 依赖） */
-export function createDraftId(): string {
-  draftIdSeq += 1;
-  return `picker-set-${draftIdSeq}`;
-}
-
-export function resetDraftIdSeqForTest(): void {
-  draftIdSeq = 0;
-}
-
-/** 建议值 → 可编辑草稿组（智能填充的填入来源） */
-export function planToDraftSets(plans: PickerSetPlan[]): PickerDraftSet[] {
-  return plans.map(p => ({
-    id: createDraftId(),
-    role: p.role,
-    weight: p.weight,
-    reps: p.reps,
-    durationSec: p.durationSec ?? 0,
-  }));
-}
 
 function fmtNum(n: number): string {
   return Number.isInteger(n) ? String(n) : String(+n.toFixed(1));
@@ -195,6 +161,20 @@ export function formatParamSummary(exercise: PickerExercise, sets: PickerDraftSe
 /** 清单项便捷摘要 */
 export function summaryOfItem(item: PickerSelectionItem): string {
   return formatParamSummary(item.exercise, item.sets, item.targetRpe);
+}
+
+export type { PickerDraftSet } from './pickerData';
+
+// ---------------------------------------------------------------------------
+// 草稿组 id
+// ---------------------------------------------------------------------------
+
+let draftIdSeq = 0;
+
+/** 稳定可测的草稿组 id（纯前端 mock，不引入 uuid 依赖） */
+export function createDraftId(): string {
+  draftIdSeq += 1;
+  return `picker-set-${draftIdSeq}`;
 }
 
 // ---------------------------------------------------------------------------

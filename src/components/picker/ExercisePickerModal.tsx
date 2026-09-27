@@ -32,7 +32,6 @@ import {
   SOFT_LIMIT_COUNT,
   TYPE_LABELS,
   equipmentLabelOf,
-  type PickerDraftSet,
   type PickerExercise,
   type PickerExerciseType,
   type PickerSelectionItem,
@@ -42,7 +41,6 @@ import {
   computeDragTarget,
   filterAndSortExercises,
   isFiltersEmpty,
-  planToDraftSets,
   rowSubtitle,
   showCommonBadge,
   summarizeFilterDim,
@@ -53,6 +51,8 @@ import {
 import { ExerciseTutorialModal } from '../execution/ExerciseTutorialModal';
 import PickerConfigSheet from './PickerConfigSheet';
 import PickerFilterSheet, { type PickerFilterDim } from './PickerFilterSheet';
+import { SuggestionService } from '../../services/suggestionService';
+import { toLegacyType, valuesToDraftSets } from './pickerAdapter';
 
 export interface ExercisePickerModalProps {
   /** 是否有训练历史；false = 新手态（热门排序 + 引导卡） */
@@ -120,14 +120,12 @@ function toTutorialAction(ex: PickerExercise) {
       name: ex.name,
       nameEn: ex.nameEn,
       libraryId: ex.id,
-      targetRpe: ex.suggestion.targetRpe,
       primaryMuscles: ex.primaryMuscles,
       equipment: ex.equipmentLabel,
       bodyCategory: ex.muscle,
     },
     name: ex.name,
     libraryId: ex.id,
-    targetRpe: ex.suggestion.targetRpe,
   };
 }
 
@@ -366,6 +364,8 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   const [configIdx, setConfigIdx] = useState<number | null>(null);
   /** 教程 Sheet 当前动作（ⓘ 入口） */
   const [tutorialEx, setTutorialEx] = useState<PickerExercise | null>(null);
+  /** 进行中的 resolve 去重（按动作 id） */
+  const resolvingRef = useRef<Set<string>>(new Set());
   /** 浏览列表滚动折叠（Large Title 机制，同 ExerciseLibraryModal） */
   const [isScrolled, setIsScrolled] = useState(false);
   const handleListScroll = useCallback((e: React.UIEvent<HTMLDivElement>) => {
@@ -377,11 +377,7 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
     return defaultSelectedIds
       .map(id => byId.get(id))
       .filter((ex): ex is PickerExercise => !!ex)
-      .map(ex => ({
-        exercise: ex,
-        sets: planToDraftSets(ex.suggestion.sets),
-        targetRpe: ex.suggestion.targetRpe,
-      }));
+      .map(ex => ({ exercise: ex, sets: [], targetRpe: 7 }));
   });
 
   const filtered = useMemo(
@@ -436,21 +432,15 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
     if (sheetDim) setFilters(prev => ({ ...prev, [sheetDim]: [] }));
   };
 
-  /** A9：行圈选——连续添加不关弹窗 */
+  /** A9：行圈选——连续添加不关弹窗。参数建议统一挂 SuggestionService（链路 A）：
+      先占位（空组），resolve 回来后由统一 effect 填入（见下方 effect）。 */
   const toggleSelect = (ex: PickerExercise) => {
     haptic('light');
     setSelected(prev => {
       if (prev.some(item => item.exercise.id === ex.id)) {
         return prev.filter(item => item.exercise.id !== ex.id);
       }
-      return [
-        ...prev,
-        {
-          exercise: ex,
-          sets: planToDraftSets(ex.suggestion.sets),
-          targetRpe: ex.suggestion.targetRpe,
-        },
-      ];
+      return [...prev, { exercise: ex, sets: [], targetRpe: 7 }];
     });
   };
 
@@ -462,6 +452,34 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
       else if (idx < configIdx) setConfigIdx(configIdx - 1);
     }
   };
+
+  /** 参数建议统一挂 SuggestionService（链路 A，issue #31）：
+      清单中出现空组占位条目时按 name/type 走 resolve（缓存→后端→本地启发式），
+      回来后填入 sets/targetRpe；defaultSelectedIds 恢复场景同样覆盖。 */
+  useEffect(() => {
+    for (const item of selected) {
+      const ex = item.exercise;
+      if (item.sets.length > 0 || resolvingRef.current.has(ex.id)) continue;
+      resolvingRef.current.add(ex.id);
+      SuggestionService.resolve(ex.name, toLegacyType(ex.exerciseType), 7)
+        .then(res => {
+          setSelected(prev => prev.map(it =>
+            it.exercise.id === ex.id && it.sets.length === 0
+              ? { ...it, sets: valuesToDraftSets(res.values), targetRpe: res.values.target_rpe ?? it.targetRpe }
+              : it,
+          ));
+        })
+        .catch(() => {
+          // resolve 三级链内部已兜底；此分支仅防御意外拒绝
+          setSelected(prev => prev.map(it =>
+            it.exercise.id === ex.id && it.sets.length === 0
+              ? { ...it, sets: valuesToDraftSets({ reps: 10, set_count: 3, target_rpe: 7 }) }
+              : it,
+          ));
+        })
+        .finally(() => resolvingRef.current.delete(ex.id));
+    }
+  }, [selected]);
 
   /** 拖拽落位兜底：把 from 位确定性移动到 to 位（顺序即训练顺序） */
   const moveItemTo = (from: number, to: number) => {
@@ -857,6 +875,6 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
 
 // 供演示页复用的类型/常量出口（业务接入不需要）
 export { MOCK_EXERCISES as pickerDemoExercises };
-export type { PickerDraftSet, PickerSelectionItem, PickerExercise, PickerExerciseType };
+export type { PickerSelectionItem, PickerExercise, PickerExerciseType };
 
 export default ExercisePickerModal;
