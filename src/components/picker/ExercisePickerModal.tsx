@@ -21,7 +21,7 @@
  */
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, AnimatePresence, Reorder, useDragControls } from 'framer-motion';
+import { motion, AnimatePresence, Reorder, useDragControls, useMotionValue, animate } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { haptic } from '../../lib/nativeHaptics';
 import {
@@ -189,6 +189,9 @@ function CartCard({
   const longPressFired = useRef(false);
   /** 拖拽起点下标（offset 从起点累计，落位计算用） */
   const dragStartIdx = useRef(index);
+  /** framer 拖拽在飞（onDragStart 置位，settleDrag 复位）——pointercancel 兜底判据 */
+  const dragInFlight = useRef(false);
+  const cancelFallbackTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   /**
    * iOS 触摸修复（v6）：framer-motion v12 在 dragListener={false} 时不注入
    * touch-action:none（render/html/use-props.mjs 只在 dragListener !== false
@@ -198,6 +201,15 @@ function CartCard({
    */
   const [iosDragActive, setIosDragActive] = useState(false);
   const touchMoveGuard = useRef<((ev: TouchEvent) => void) | null>(null);
+  /**
+   * 浮动卡视觉（v7）：不再用 whileDrag —— 实测 v12 在 Reorder.Item +
+   * dragListener={false} 组合下，无论正常松手还是 pointercancel，
+   * whileDrag 的退出动画都可能不创建（scale 永久冻在 1.03，即用户看到的
+   * 「卡死在中间态」）。改为自有 motion value 驱动 scale，settleDrag 在
+   * 全部终局路径显式 animate 回 1；阴影走 class + CSS transition。
+   */
+  const floatScale = useMotionValue(1);
+  const [dragRaised, setDragRaised] = useState(false);
 
   const clearPress = () => {
     if (pressTimer.current) {
@@ -222,11 +234,52 @@ function CartCard({
     touchMoveGuard.current = null;
   };
 
+  /** 拖拽终局统一复位（v7）：onDragEnd 与 pointercancel/touchcancel 兜底共用同一条路径 */
+  const settleDrag = () => {
+    dragInFlight.current = false;
+    longPressFired.current = false;
+    clearPress();
+    releaseTouchGuard(rowRef.current);
+    // 浮动卡确定性归位（scale 由自有 motion value 驱动，不依赖 framer 退出时序）
+    setDragRaised(false);
+    animate(floatScale, 1, { type: 'spring', stiffness: 500, damping: 35 });
+  };
+
+  /**
+   * 终局兜底（v7 卡死修复）：framer v12 PanSession 在「无位移松手/取消」时
+   * handlePointerUp 提前 return（PanSession.mjs:87），stop()/onDragEnd 均不
+   * 发生；系统接管（touchcancel）时 framer 更是完全无感。元素级监听先于
+   * framer 的 document 级触发；且过早 cancel() 会先杀 panSession，让 framer
+   * 随后自身的 stop 变 no-op（isDragging 已翻 false）→ settle 动画不发、
+   * y 冻结 —— 实测复现过。因此兜底推迟到 rAF×2（覆盖 frame.postRender 的
+   * onDragEnd 派发），framer 已正常终局（onDragEnd → settleDrag → 旗标翻转）
+   * 则不干预；未终局才自行复位 + cancel() 强停。
+   */
+  const queueDragConclude = () => {
+    if (cancelFallbackTimer.current) clearTimeout(cancelFallbackTimer.current);
+    cancelFallbackTimer.current = setTimeout(() => {
+      cancelFallbackTimer.current = null;
+      requestAnimationFrame(() => requestAnimationFrame(() => {
+        if (!dragInFlight.current) return;
+        settleDrag();
+        controls.cancel();
+      }));
+    }, 0);
+  };
+  const onDragPointerCancel = () => {
+    clearPress();
+    if (dragInFlight.current) queueDragConclude();
+  };
+
   useEffect(() => () => {
     if (rowRef.current && touchMoveGuard.current) {
       rowRef.current.removeEventListener('touchmove', touchMoveGuard.current);
     }
     touchMoveGuard.current = null;
+    if (cancelFallbackTimer.current) {
+      clearTimeout(cancelFallbackTimer.current);
+      cancelFallbackTimer.current = null;
+    }
   }, []);
 
   const onPointerDown = (e: React.PointerEvent) => {
@@ -238,6 +291,10 @@ function CartCard({
     pressTimer.current = setTimeout(() => {
       haptic('medium');
       longPressFired.current = true;
+      dragInFlight.current = true;
+      // 浮动卡浮起（scale 自有 motion value + 阴影 class，退出在 settleDrag）
+      setDragRaised(true);
+      animate(floatScale, 1.03, { type: 'spring', stiffness: 500, damping: 35 });
       // iOS 触摸：长按生效瞬间接管手势（动态 touch-action + touchmove 拦截）
       if (e.pointerType === 'touch' && rowRef.current) {
         engageTouchGuard(rowRef.current);
@@ -253,7 +310,11 @@ function CartCard({
       }
     }
   };
-  const onPointerUp = () => clearPress();
+  /** 松手：有位移走 framer onDragEnd；无位移 framer 不发终局事件，走兜底复位浮起态 */
+  const onPointerUp = () => {
+    clearPress();
+    if (dragInFlight.current) queueDragConclude();
+  };
 
   return (
     <Reorder.Item
@@ -261,15 +322,15 @@ function CartCard({
       value={item}
       dragListener={false}
       dragControls={controls}
-      whileDrag={{ scale: 1.03, boxShadow: '0 12px 32px rgba(0,0,0,0.16)' }}
       onDragStart={() => {
         dragStartIdx.current = index;
+        dragInFlight.current = true;
       }}
       onDragEnd={(_, info) => {
         haptic('light');
-        longPressFired.current = false;
-        releaseTouchGuard(rowRef.current);
+        settleDrag();
         // 松手兜底（v5）：实时换位存在滞后，按最终偏移确定性落位
+        // （绝对目标语义：moveItemTo 先删后插，与 Reorder 已落位的 index 现值自洽）
         const rowH = rowRef.current?.getBoundingClientRect().height || 76;
         const target = computeDragTarget(dragStartIdx.current, info.offset.y, rowH, total);
         if (target !== index) onMoveTo(index, target);
@@ -277,9 +338,17 @@ function CartCard({
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
-      onPointerCancel={onPointerUp}
-      className="list-none bg-white rounded-[20px] shadow-sm px-4 py-3.5 flex items-center gap-3"
+      onPointerCancel={onDragPointerCancel}
+      onTouchCancel={onDragPointerCancel}
+      className={`list-none bg-white rounded-[20px] px-4 py-3.5 flex items-center gap-3 transition-shadow duration-150 ${
+        dragRaised ? 'shadow-[0_12px_32px_rgba(0,0,0,0.16)]' : 'shadow-sm'
+      }`}
       style={{
+        // 浮起 scale 由自有 motion value 驱动（退出复位在 settleDrag，v7）
+        scale: floatScale,
+        // 浮起阴影内联且两态显式（framer 不回滚「键消失」的样式；arbitrary class
+        // 也会输给 shadow-sm 的 --tw-shadow 层叠序）；静默值 = shadow-sm 同款
+        boxShadow: dragRaised ? '0 12px 32px rgba(0, 0, 0, 0.16)' : '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
         // v6 iOS 触摸修复：拖拽进行中禁用一切原生手势（framer v12 在
         // dragListener={false} 下不代为注入）；其余时段 pan-y 保列表可滚
         touchAction: iosDragActive ? 'none' : 'pan-y',
