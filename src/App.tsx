@@ -31,6 +31,7 @@ import {
   ExerciseLibraryService
 } from '@/services';
 import { SuggestionService } from './services/suggestionService';
+import { buildStartMenuOptions } from './utils/startOnboarding';
 import { App as CapacitorApp } from '@capacitor/app';
 import { eventTracking, TrackingEvent } from '@/services/eventTracking';
 import { DEFAULT_REST_TIME, RPE_COLORS, DEFAULT_AI_CONFIG } from '@/constants';
@@ -1431,45 +1432,21 @@ const App: React.FC = () => {
             onOpenManual={() => setShowTimeEditor(true)}
             onEnd={() => handleEndSession()}
             onLockScreen={() => setIsLockScreenOpen(true)}
-            startOptions={[
+            startOptions={buildStartMenuOptions(
+              Boolean(nextPlan && Array.isArray(nextPlan) && nextPlan.length > 0),
               {
-                key: 'library',
-                label: '挑选动作',
-                icon: (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
-                    <path d="M4 6h16M4 12h16M4 18h10" />
-                  </svg>
-                ),
-                onSelect: handleAddSingleExercise
-              },
-              {
-                key: 'ai-coach',
-                label: 'AI 教练',
-                icon: (
-                  <svg className="w-[18px] h-[18px]" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12 2L14.85 9.15L22 12L14.85 14.85L12 22L9.15 14.85L2 12L9.15 9.15L12 2Z" />
-                  </svg>
-                ),
-                onSelect: () => {
+                onPickLibrary: handleAddSingleExercise,
+                onOpenCoach: () => {
                   // 菜单关闭动画先走，再开 AI 浮层（与返回键时序一致的错峰）
                   setTimeout(() => openAiCoach(), 150);
-                }
-              },
-              ...(nextPlan && Array.isArray(nextPlan) && nextPlan.length > 0 ? [{
-                key: 'next-plan',
-                label: '今日计划',
-                icon: (
-                  <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
-                    <rect x="3" y="4" width="18" height="18" rx="2" />
-                    <path d="M16 2v4M8 2v4M3 10h18" />
-                  </svg>
-                ),
-                onSelect: handleImportNextPlan
-              }] : [])
-            ]}
+                },
+                // 「开始今日训练」：直接预填今日计划进会话（handleImportNextPlan 本就是预填语义）
+                onStartTodayPlan: handleImportNextPlan,
+              }
+            )}
           />
 
-          {/* 空状态「导入计划」旧悬浮钮已删：功能吸收进 TimerCapsule 分裂菜单「今日计划」 */}
+          {/* 空状态「导入计划」旧悬浮钮已删：功能吸收进 TimerCapsule 分裂菜单（B3 起为「开始今日训练」） */}
 
           <MainTabBar
               tab={mainTab}
