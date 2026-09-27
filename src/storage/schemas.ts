@@ -143,8 +143,11 @@ export const Keys = {
   exerciseLibrary: "starfit_exercise_library",
   exerciseLibraryMeta: "starfit_exercise_library_meta",
   suggestionCache: "starfit_suggestion_cache",
-  // B3 首次使用预调研（issue #23）：首次打开 AI 教练分流后置 true，仅弹一次
-  firstUseCoachTriage: "starfit_coach_first_use_triage",
+  // B3 首次使用预调研（issue #23）：首次打开 AI 教练分流后置 true，仅弹一次。
+  // [fix #23] 按用户维度（issue 语义=新用户第一次使用）：同设备切换新用户需重新
+  // 分流。旧设备维度键（无 :userId 后缀）废弃不迁移——误判一次的代价只是
+  // 多弹一张可跳过的卡，不值得为其做数据搬迁
+  firstUseCoachTriage: (userId: string) => `starfit_coach_first_use_triage:${userId}`,
   // Login and Authentication
   userId: "starfit_user_id",
   serverUrl: "starfit_server_url",

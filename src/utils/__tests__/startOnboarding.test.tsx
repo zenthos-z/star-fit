@@ -8,11 +8,13 @@ import { render, screen } from '@testing-library/react';
 import {
   buildStartMenuOptions,
   resolveFirstUseTriage,
+  resolveUserHasHistory,
   NEWBIE_SURVEY_QUESTIONS,
   PLAN_GUIDE_TEXT,
   NEWBIE_SURVEY_TEXT,
   START_OPTION_KEYS,
 } from '../startOnboarding';
+import { Keys } from '@/storage/schemas';
 
 const noop = () => {};
 const actions = {
@@ -77,6 +79,66 @@ describe('resolveFirstUseTriage · 首次分流决策', () => {
     expect(resolveFirstUseTriage(false, 'no_plan')).toBe('newbie_survey');
     expect(resolveFirstUseTriage(false, 'rest_day')).toBe('newbie_survey');
     expect(resolveFirstUseTriage(false, null)).toBe('newbie_survey');
+  });
+});
+
+// ---------------------------------------------------------------------------
+// [fix #23] 用户维度判定：同设备新用户不得误读他人历史
+// ---------------------------------------------------------------------------
+
+describe('resolveUserHasHistory · 用户维度历史判定', () => {
+  it('后端该用户记录数 >0 → 老用户（本人有历史）', () => {
+    expect(resolveUserHasHistory({ backendSessionCount: 1, deviceHistoryCount: 0 })).toBe(true);
+    expect(resolveUserHasHistory({ backendSessionCount: 42, deviceHistoryCount: 99 })).toBe(true);
+  });
+
+  it('后端该用户记录数 =0 → 新手：设备上有他人历史也不算数', () => {
+    expect(resolveUserHasHistory({ backendSessionCount: 0, deviceHistoryCount: 7 })).toBe(false);
+    expect(resolveUserHasHistory({ backendSessionCount: 0, deviceHistoryCount: 0 })).toBe(false);
+  });
+
+  it('后端不可达（null）→ 回退设备本地历史（精度损失：含他人记录）', () => {
+    expect(resolveUserHasHistory({ backendSessionCount: null, deviceHistoryCount: 3 })).toBe(true);
+    expect(resolveUserHasHistory({ backendSessionCount: null, deviceHistoryCount: 0 })).toBe(false);
+  });
+});
+
+describe('resolveUserHasHistory × resolveFirstUseTriage · 用户维度分流闭环 [fix #23]', () => {
+  // 判定链与 useAICoach.maybeRunFirstUseTriage 一致：
+  // hasHistory = resolveUserHasHistory(...) → resolveFirstUseTriage(hasHistory, schedule)
+  const triageFor = (backendSessionCount: number | null, deviceHistoryCount: number, schedule: Parameters<typeof resolveFirstUseTriage>[1]) =>
+    resolveFirstUseTriage(
+      resolveUserHasHistory({ backendSessionCount, deviceHistoryCount }),
+      schedule,
+    );
+
+  it('新用户 + 设备上有他人历史 → newbie_survey（修复主场景：不误判老用户）', () => {
+    expect(triageFor(0, 5, 'no_plan')).toBe('newbie_survey');
+    expect(triageFor(0, 5, null)).toBe('newbie_survey');
+  });
+
+  it('本人有历史（后端记录 >0）→ none（老用户不打扰）', () => {
+    expect(triageFor(3, 0, null)).toBe('none');
+    // 设备维度旧口径会误判的场景：新设备登录老账号 → 仍正确识别老用户
+    expect(triageFor(3, 0, 'planned')).toBe('none');
+  });
+
+  it('新用户 + 周计划在身 → plan_guide', () => {
+    expect(triageFor(0, 0, 'planned')).toBe('plan_guide');
+    // 设备有他人历史但本人在后端无记录 + 有计划 → 仍走计划引导
+    expect(triageFor(0, 9, 'planned')).toBe('plan_guide');
+  });
+
+  it('后端不可达回退设备历史：他人历史误判老用户（精度损失，与修复前行为一致）', () => {
+    expect(triageFor(null, 5, 'no_plan')).toBe('none');
+  });
+});
+
+describe('Keys.firstUseCoachTriage · 首次标志按用户落键 [fix #23]', () => {
+  it('工厂键：不同 userId 得到不同键（切换用户重新分流）', () => {
+    expect(Keys.firstUseCoachTriage('u-aaa')).toBe('starfit_coach_first_use_triage:u-aaa');
+    expect(Keys.firstUseCoachTriage('u-bbb')).toBe('starfit_coach_first_use_triage:u-bbb');
+    expect(Keys.firstUseCoachTriage('u-aaa')).not.toBe(Keys.firstUseCoachTriage('u-bbb'));
   });
 });
 

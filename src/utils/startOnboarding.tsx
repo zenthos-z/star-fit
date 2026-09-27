@@ -9,6 +9,8 @@
  *    训练历史为空才算新用户；有周计划 → 引导发送资料/截图（AI 解析既有计划）；
  *    纯新手 → 基础调研引导卡片（画像四项：经验/目标/器材/频次）。
  *    卡片走 survey_card uiHint 多态回路（SurveyCard 渲染），不新造组件。
+ * 3. resolveUserHasHistory [fix #23]：训练历史判定改用户维度（后端该用户记录数
+ *    优先，后端不可达回退设备本地历史），杜绝同设备他人历史误判老用户。
  */
 import React from 'react';
 import type { StartMenuOption } from '../components/TimerCapsule';
@@ -78,6 +80,30 @@ export type FirstUseTriage = 'none' | 'plan_guide' | 'newbie_survey';
 
 /** /schedule/today 的 status 形态（不可得传 null，按纯新手兜底） */
 export type ScheduleStatus = 'planned' | 'rest_day' | 'no_plan' | null;
+
+/**
+ * [fix #23] 用户维度训练历史判定入参：
+ * - backendSessionCount  后端该用户训练记录总数（GET /sessions/recent 的 count，
+ *                        users 表按 userId 隔离，天然用户维度）；null = 后端不可达
+ * - deviceHistoryCount   本地设备历史条数（historyForDevice(deviceId)，设备维度
+ *                        含他人记录，仅后端不可达时兜底）
+ */
+export interface UserHasHistoryInput {
+  backendSessionCount: number | null;
+  deviceHistoryCount: number;
+}
+
+/**
+ * [fix #23] hasHistory 改用户维度：本地 SessionLite 无 userId 字段（设备维度），
+ * 同设备换新用户会误读他人历史 → 误判老用户。判定优先级：
+ * 1. 后端该用户记录数：>0 即老用户；=0 即真新手（设备上他人历史不算数）
+ * 2. 后端不可达 → 回退本地设备历史（精度损失：同设备他人历史误判为老用户，
+ *    退化至修复前行为；首次分流卡片本身可跳过，代价可控）
+ */
+export function resolveUserHasHistory(input: UserHasHistoryInput): boolean {
+  if (input.backendSessionCount !== null) return input.backendSessionCount > 0;
+  return input.deviceHistoryCount > 0;
+}
 
 /**
  * 首次打开 AI 教练的分流：

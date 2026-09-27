@@ -10,6 +10,7 @@ import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/a
 import { resolveCoachPrefill } from '../utils/coachPrefill';
 import {
   resolveFirstUseTriage,
+  resolveUserHasHistory,
   PLAN_GUIDE_TEXT,
   NEWBIE_SURVEY_TEXT,
   NEWBIE_SURVEY_QUESTIONS,
@@ -977,19 +978,37 @@ ${JSON.stringify(uploadData, null, 2)}`;
    * 有训练历史 → 老用户不打扰；无历史+周计划 → 引导发送资料/截图；
    * 纯新手 → survey_card 画像调研卡（走 uiHint 多态回路，SurveyCard 渲染）。
    * 标志先行落 storage（跳过=不强制交互，也只弹这一次）。
+   * [fix #23] 判定改用户维度：首次标志按 userId 落键（同设备切换新用户重新
+   * 分流）；训练历史优先取后端该用户记录数（本地历史是设备维度，含他人记录）。
    */
   const maybeRunFirstUseTriage = useCallback(async () => {
     try {
-      if (await storageGet<boolean>(Keys.firstUseCoachTriage)) return;
-      await storageSet(Keys.firstUseCoachTriage, true);
+      const triageFlagKey = Keys.firstUseCoachTriage(getUserId());
+      if (await storageGet<boolean>(triageFlagKey)) return;
+      await storageSet(triageFlagKey, true);
       // 只在空会话注入：已有对话（切线程恢复/竞态窗口内开聊）不打扰
       if (chatHistoryRef.current.length > 0) return;
-      // 训练历史（与入口预填同源：本地记录，读不到按无记录）
-      let hasHistory = false;
+      // [fix #23] 训练历史用户维度：后端该用户记录数（/sessions/recent 的
+      // count，users 表按 userId 隔离）；不可达回退本地设备历史（精度损失
+      // 见 resolveUserHasHistory：同设备他人历史会误判老用户）
+      let backendSessionCount: number | null = null;
       try {
-        const localHistory = await loadHistory();
-        hasHistory = Array.isArray(localHistory) && localHistory.length > 0;
-      } catch { /* IDB 不可用 → 按无记录 */ }
+        const res = await fetch(`${API_BASE}/sessions/recent?limit=1`, {
+          headers: getHeaders(),
+        });
+        if (res.ok) {
+          const raw = parseJSONSafe<{ count?: unknown }>(await res.text(), 'firstUseTriage');
+          if (raw && typeof raw.count === 'number') backendSessionCount = raw.count;
+        }
+      } catch { /* 后端不可达 → count 置空，走本地设备历史回退 */ }
+      let deviceHistoryCount = 0;
+      if (backendSessionCount === null) {
+        try {
+          const localHistory = await loadHistory();
+          deviceHistoryCount = Array.isArray(localHistory) ? localHistory.length : 0;
+        } catch { /* IDB 不可用 → 按无记录 */ }
+      }
+      const hasHistory = resolveUserHasHistory({ backendSessionCount, deviceHistoryCount });
       if (hasHistory) return;
       // 周计划判定：/schedule/today（形态防御同 prefillCoachEntry）
       let scheduleStatus: ScheduleStatus = null;
