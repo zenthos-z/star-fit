@@ -27,14 +27,15 @@ import { haptic } from '../../lib/nativeHaptics';
 import {
   MOCK_EXERCISES,
   NEWBIE_GUIDE,
+  PROTOCOL_TYPE,
   RECENT_IDS,
   SOFT_LIMIT_COUNT,
   TYPE_LABELS,
+  equipmentLabelOf,
   type PickerDraftSet,
   type PickerExercise,
   type PickerExerciseType,
   type PickerSelectionItem,
-  type PickerVisual,
 } from './pickerData';
 import {
   EMPTY_FILTERS,
@@ -49,6 +50,8 @@ import {
   summaryOfItem,
   type PickerFilters,
 } from './pickerLogic';
+import MuscleMapThumb from './MuscleMapThumb';
+import { ExerciseTutorialModal } from '../execution/ExerciseTutorialModal';
 import PickerConfigSheet from './PickerConfigSheet';
 import PickerFilterSheet, { type PickerFilterDim } from './PickerFilterSheet';
 
@@ -68,47 +71,38 @@ export interface ExercisePickerModalProps {
 // 小件
 // ---------------------------------------------------------------------------
 
-/** 列表缩略图：动作库真实素材（image_refs）；加载失败回退类型图标占位 */
-function KindThumb({ visual, imageRef, selected }: { visual: PickerVisual; imageRef?: string; selected?: boolean }) {
-  const [imgFailed, setImgFailed] = useState(false);
-  const paths: Record<PickerVisual, string[]> = {
-    dumbbell: ['M7 7v10', 'M17 7v10', 'M3.75 9.5v5', 'M20.25 9.5v5', 'M7 12h10'],
-    bodyweight: [
-      'M12 6.75a1.75 1.75 0 100-3.5 1.75 1.75 0 000 3.5z',
-      'M12 9v6', 'M12 11l-3.25 1.75', 'M12 11l3.25 1.75', 'M12 15l-2.5 5.5', 'M12 15l2.5 5.5',
-    ],
-    pulse: ['M3 12h4l2.25-5.25L12.75 17l2.25-5H21'],
-    stretch: ['M3.75 12h16.5', 'M3.75 12l3-3', 'M3.75 12l3 3', 'M20.25 12l-3-3', 'M20.25 12l-3 3'],
-  };
+/** 选中角标（A9 选中态表达；叠在行首肌群小图上，不使用独立 radio/checkbox 控件） */
+function SelectedBadge() {
   return (
-    <span className="relative w-12 h-12 shrink-0">
-      {imageRef && !imgFailed ? (
-        <img
-          src={imageRef}
-          alt=""
-          loading="lazy"
-          onError={() => setImgFailed(true)}
-          className="w-12 h-12 rounded-xl object-cover shrink-0 bg-gray-100"
-        />
-      ) : (
-        <span className="w-12 h-12 rounded-xl bg-gray-100 flex items-center justify-center shrink-0 text-gray-500">
-          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-6 h-6">
-            {paths[visual].map((d, i) => (
-              <path key={i} strokeLinecap="round" strokeLinejoin="round" d={d} />
-            ))}
-          </svg>
-        </span>
-      )}
-      {/* 选中角标（A9 选中态表达；不使用独立 radio/checkbox 控件） */}
-      {selected && (
-        <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center shadow-sm">
-          <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-          </svg>
-        </span>
-      )}
+    <span className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-blue-500 border-2 border-white flex items-center justify-center shadow-sm">
+      <svg className="w-2.5 h-2.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={4}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+      </svg>
     </span>
   );
+}
+
+/** 清单项 → 教程 Sheet 入参（ExerciseTutorialModal 真组件所需字段口径） */
+function toTutorialAction(ex: PickerExercise) {
+  return {
+    protocol_version: '2.0.0' as const,
+    id: ex.id,
+    exerciseId: `fit://library/exercise/${ex.id}`,
+    type: PROTOCOL_TYPE[ex.exerciseType],
+    sets: [],
+    metadata: {
+      name: ex.name,
+      nameEn: ex.nameEn,
+      libraryId: ex.id,
+      targetRpe: ex.suggestion.targetRpe,
+      primaryMuscles: ex.primaryMuscles,
+      equipment: ex.equipmentLabel,
+      bodyCategory: ex.muscle,
+    },
+    name: ex.name,
+    libraryId: ex.id,
+    targetRpe: ex.suggestion.targetRpe,
+  };
 }
 
 /** 分区标题（近期的训练 / 所有运动，参考案例灰色大字口径） */
@@ -278,6 +272,8 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   const [sheetDim, setSheetDim] = useState<PickerFilterDim | null>(null);
   const [sheetDraft, setSheetDraft] = useState<string[]>([]);
   const [configIdx, setConfigIdx] = useState<number | null>(null);
+  /** 教程 Sheet 当前动作（ⓘ 入口） */
+  const [tutorialEx, setTutorialEx] = useState<PickerExercise | null>(null);
   const [selected, setSelected] = useState<PickerSelectionItem[]>(() => {
     if (defaultSelectedIds.length === 0) return [];
     const byId = new Map(MOCK_EXERCISES.map(ex => [ex.id, ex]));
@@ -400,7 +396,7 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   const pillLabels: Record<PickerFilterDim, string> = {
     types: summarizeTypeDim(filters.types),
     muscles: summarizeFilterDim(filters.muscles, '所有肌肉', v => v),
-    equipment: summarizeFilterDim(filters.equipment, '所有器械', v => v),
+    equipment: summarizeFilterDim(filters.equipment, '所有器械', equipmentLabelOf),
   };
   const pillActive: Record<PickerFilterDim, boolean> = {
     types: filters.types.length > 0,
@@ -408,20 +404,42 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
     equipment: filters.equipment.length > 0,
   };
 
-  /** 列表行（圈选 + 徽标 + 副标题） */
+  /** 教程入口（ⓘ）：打开 ExerciseTutorialModal 真组件 Sheet */
+  const openTutorial = (ex: PickerExercise) => {
+    if (!ex.id && !ex.name) {
+      haptic('warning'); // 缺教程必需字段（库 id/名称）：轻提示不打开
+      return;
+    }
+    haptic('light');
+    setTutorialEx(ex);
+  };
+
+  /** 列表行（圈选 + 徽标 + 副标题 + 教程入口） */
   const renderRow = (ex: PickerExercise, className = '') => {
     const isSelected = selectedIds.has(ex.id);
     return (
-      <button
+      <div
         key={ex.id}
+        role="button"
+        tabIndex={0}
         onClick={() => toggleSelect(ex)}
+        onKeyDown={e => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleSelect(ex);
+          }
+        }}
         aria-pressed={isSelected}
         aria-label={`${isSelected ? '取消选择' : '选择'} ${ex.name}`}
-        className={`w-full text-left px-4 py-3.5 active:bg-gray-100 transition-colors flex items-center gap-3 ${className} ${
+        className={`w-full text-left px-4 py-3.5 active:bg-gray-100 transition-colors flex items-center gap-3 cursor-pointer ${className} ${
           isSelected ? 'bg-blue-50/40' : ''
         }`}
       >
-        <KindThumb visual={ex.visual} imageRef={ex.imageRefs?.thumb} selected={isSelected} />
+        {/* 行首：肌群可视化小图（iOS 原生 MuscleMap 44px / 浏览器降级紧凑胶囊）+ 选中角标 */}
+        <span className="relative shrink-0">
+          <MuscleMapThumb primary={ex.primaryMuscles} secondary={ex.secondaryMuscles} />
+          {isSelected && <SelectedBadge />}
+        </span>
         <span className="flex-1 min-w-0">
           <span className="flex items-center gap-1.5 min-w-0">
             <span className="text-[17px] font-medium text-star-dark truncate">{ex.name}</span>
@@ -440,7 +458,20 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
             {rowSubtitle(ex)}
           </span>
         </span>
-      </button>
+        {/* 行尾：教程入口 ⓘ（stopPropagation，不触发行圈选） */}
+        <button
+          onClick={e => {
+            e.stopPropagation();
+            openTutorial(ex);
+          }}
+          aria-label={`教程 ${ex.name}`}
+          className="w-11 h-11 -mr-2.5 shrink-0 flex items-center justify-center text-gray-300 active:text-gray-500 transition-colors"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={1.8} stroke="currentColor" className="w-5 h-5">
+            <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+          </svg>
+        </button>
+      </div>
     );
   };
 
@@ -709,6 +740,17 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
           />
         )}
       </AnimatePresence>
+
+      {/* ---------------- 动作教程 Sheet（ⓘ 入口；ExerciseTutorialModal 真组件） ---------------- */}
+      {tutorialEx && (
+        <div className="fixed inset-0 z-[85]">
+          <ExerciseTutorialModal
+            exercise={toTutorialAction(tutorialEx)}
+            onClose={() => setTutorialEx(null)}
+            onAskAi={() => {}}
+          />
+        </div>
+      )}
     </motion.div>
   );
 };

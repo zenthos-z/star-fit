@@ -20,11 +20,11 @@ import ExerciseSettingsModal, { SuggestionSourceBadge } from '../ExerciseSetting
 import type { ExerciseAction } from '../../types/protocol';
 import { haptic } from '../../lib/nativeHaptics';
 import {
+  PROTOCOL_TYPE,
   ROLE_BADGE_CLASS,
   ROLE_LABELS,
   ROLE_ORDER,
   type PickerDraftSet,
-  type PickerExerciseType,
   type PickerSelectionItem,
   type PickerSetRole,
 } from './pickerData';
@@ -36,19 +36,6 @@ interface PickerConfigSheetProps {
   onChange: (next: PickerSelectionItem) => void;
   onClose: () => void;
 }
-
-/** legacy/协议 9 类口径映射（ExerciseAction.type 走协议枚举，originalType 保留 legacy 口径） */
-const PROTOCOL_TYPE: Record<PickerExerciseType, ExerciseAction['type']> = {
-  resistance: 'resistance',
-  cardio: 'cardio',
-  bodyweight: 'bodyweight',
-  isometric: 'isometric',
-  assisted: 'assisted',
-  unilateral: 'unilateral',
-  weight_only: 'heavy_weight',
-  reps_only: 'rep_training',
-  outdoor: 'outdoor',
-};
 
 /** 清单项 → ExerciseAction（对齐 src/types/bridge.ts convertExerciseToAction 的字段口径） */
 function toExerciseAction(item: PickerSelectionItem): ExerciseAction {
@@ -72,7 +59,7 @@ function toExerciseAction(item: PickerSelectionItem): ExerciseAction {
       targetRpe,
       originalType: exercise.exerciseType, // legacy 9 类口径（normalizeType 兜底用）
       primaryMuscles: exercise.muscles,
-      equipment: exercise.equipment,
+      equipment: exercise.equipmentLabel, // 展示口径：真实面板标签行直读该值
       bodyCategory: exercise.muscle,
     },
   };

@@ -105,7 +105,7 @@ function fmtDurationLabel(sec: number): string {
  * 其余显示目标肌群；器械统一缀在末尾。
  */
 export function rowSubtitle(ex: PickerExercise): string {
-  const equipment = ex.equipment;
+  const equipment = ex.equipmentLabel;
   if (ex.exerciseType === 'cardio' || ex.exerciseType === 'outdoor') {
     const durations = ex.suggestion.sets.map(s => s.durationSec ?? 0).filter(v => v > 0);
     const totalSec = durations.length ? durations.reduce((a, b) => a + b, 0) : 0;

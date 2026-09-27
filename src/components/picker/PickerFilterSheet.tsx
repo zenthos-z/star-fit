@@ -14,6 +14,7 @@ import {
   MUSCLE_SHEET_GROUPS,
   TYPE_LABELS,
   TYPE_SHEET_ORDER,
+  equipmentLabelOf,
 } from './pickerData';
 
 export type PickerFilterDim = 'types' | 'muscles' | 'equipment';
@@ -42,6 +43,7 @@ const ICON_PATHS: Record<string, string[]> = {
   assisted: ['M4.5 16.5c5-8.5 10-8.5 15-7.5', 'M16 6.5l3.5 2.5-2.5 3.5'],
   unilateral: ['M5 9v6', 'M9 7v10', 'M9 12h10'],
   outdoor: ['M3 18l6-9.5 4 6 2.5-3.5L21 18z'],
+  flexibility: ['M3.75 12h16.5', 'M3.75 12l3-3', 'M3.75 12l3 3', 'M20.25 12l-3-3', 'M20.25 12l-3 3'],
   // 肌肉
   muscle: ['M12 3.75a8.25 8.25 0 100 16.5 8.25 8.25 0 000-16.5z', 'M8.5 9.5c1-2 2.5-2.5 3.5-2.5s2.5.5 3.5 2.5'],
   // 器械
@@ -55,6 +57,10 @@ const ICON_PATHS: Record<string, string[]> = {
     'M12 6.75a1.75 1.75 0 100-3.5 1.75 1.75 0 000 3.5z',
     'M12 9v6', 'M12 11l-3.25 1.75', 'M12 11l3.25 1.75', 'M12 15l-2.5 5.5', 'M12 15l2.5 5.5',
   ],
+  kettlebell: ['M10 8.5a4.5 4.5 0 104 0', 'M10.5 8.5L9.5 5h5l-1 3.5'],
+  stability_ball: ['M12 4.75a7.25 7.25 0 100 14.5 7.25 7.25 0 000-14.5z', 'M8.5 11.5c1.5-2 5.5-2 7 0'],
+  medicine_ball: ['M12 5.75a6.25 6.25 0 100 12.5 6.25 6.25 0 000-12.5z', 'M9.5 9.5h5M12 9.5v5'],
+  weighted: ['M12 4.75a7.25 7.25 0 100 14.5 7.25 7.25 0 000-14.5z', 'M12 9.5a2.5 2.5 0 100 5 2.5 2.5 0 000-5z'],
   treadmill: ['M4 17.5h13.5a2.75 2.75 0 000-5.5H9', 'M7 6l3 6'],
   rower: ['M5 17h11', 'M6.5 5.5C13 6.5 16.5 11 18 16.5', 'M15 5.5l3 2.5'],
   other: ['M6.5 12h.01', 'M12 12h.01', 'M17.5 12h.01'],
@@ -150,7 +156,7 @@ const PickerFilterSheet: React.FC<FilterSheetProps> = ({
     }
     if (dim === 'equipment') {
       return renderGrid(
-        EQUIPMENT_SHEET_ORDER.map(e => ({ value: e, label: e, iconKey: e })),
+        EQUIPMENT_SHEET_ORDER.map(e => ({ value: e, label: equipmentLabelOf(e), iconKey: e })),
       );
     }
     // 肌肉群：上肢/下肢/核心 分组小标题（参考案例 Upper/Lower 口径）
