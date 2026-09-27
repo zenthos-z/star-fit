@@ -7,25 +7,32 @@
 import type {
   PickerDraftSet,
   PickerExercise,
-  PickerKind,
-  PickerRegion,
+  PickerExerciseType,
   PickerSelectionItem,
   PickerSetPlan,
 } from './pickerData';
+import { TYPE_LABELS } from './pickerData';
 
 // ---------------------------------------------------------------------------
 // 筛选 + 排序
 // ---------------------------------------------------------------------------
 
+/** 三维正交筛选：维度间 AND，维度内多选 OR；空数组 = 该维度不限 */
 export interface PickerFilters {
-  kind: PickerKind | 'all';
-  region: PickerRegion | 'all';
-  muscle: string | 'all';
+  types: PickerExerciseType[];
+  muscles: string[];
+  equipment: string[];
+}
+
+export const EMPTY_FILTERS: PickerFilters = { types: [], muscles: [], equipment: [] };
+
+export function isFiltersEmpty(filters: PickerFilters): boolean {
+  return filters.types.length === 0 && filters.muscles.length === 0 && filters.equipment.length === 0;
 }
 
 /**
  * 搜索兜底：中文名 / 英文名 / 全拼 / 拼音首字母 均可命中。
- * 搜索词非空时跨全库检索（忽略三行筛选，搜索即兜底路径）。
+ * 搜索词非空时跨全库检索（忽略筛选维度，搜索即兜底路径）。
  */
 export function matchSearch(ex: PickerExercise, term: string): boolean {
   const t = term.trim().toLowerCase();
@@ -39,7 +46,7 @@ export function matchSearch(ex: PickerExercise, term: string): boolean {
 }
 
 /**
- * 三行正交筛选 + 排序。
+ * 三维正交筛选 + 排序。
  * - hasHistory=true：按 rank（智能排序预置序）呈现，前 3 位由 UI 层加「常用」徽标；
  * - hasHistory=false（新手态）：降级热门排序（hotRank），无「常用」徽标，列表顶部出引导卡。
  */
@@ -56,30 +63,13 @@ export function filterAndSortExercises(
   } else {
     result = result.filter(
       ex =>
-        (filters.kind === 'all' || ex.kind === filters.kind) &&
-        (filters.region === 'all' || ex.region === filters.region) &&
-        (filters.muscle === 'all' || ex.muscles.includes(filters.muscle)),
+        (filters.types.length === 0 || filters.types.includes(ex.exerciseType)) &&
+        (filters.muscles.length === 0 || filters.muscles.some(m => ex.muscles.includes(m))) &&
+        (filters.equipment.length === 0 || filters.equipment.includes(ex.equipment)),
     );
   }
 
   return [...result].sort((a, b) => (hasHistory ? a.rank - b.rank : a.hotRank - b.hotRank));
-}
-
-/** 列表按主肌群分组；入参已排序，分组按首次出现顺序（即名次顺序）。 */
-export function groupByMuscle(list: PickerExercise[]): Array<{ muscle: string; items: PickerExercise[] }> {
-  const groups: Array<{ muscle: string; items: PickerExercise[] }> = [];
-  const index = new Map<string, number>();
-  for (const ex of list) {
-    const key = ex.muscle;
-    const i = index.get(key);
-    if (i === undefined) {
-      index.set(key, groups.length);
-      groups.push({ muscle: key, items: [ex] });
-    } else {
-      groups[i].items.push(ex);
-    }
-  }
-  return groups;
 }
 
 /** 「常用」徽标：有训练历史时智能排序前 3；新手态不出现。 */
@@ -87,6 +77,41 @@ export const COMMON_BADGE_MAX_RANK = 3;
 
 export function showCommonBadge(ex: PickerExercise, hasHistory: boolean): boolean {
   return hasHistory && ex.rank <= COMMON_BADGE_MAX_RANK;
+}
+
+/** 筛选胶囊回显文案：未选=「所有X」；1 个=其名；多个=「A等N项」 */
+export function summarizeFilterDim(selected: string[], allText: string, labelOf: (v: string) => string): string {
+  if (selected.length === 0) return allText;
+  if (selected.length === 1) return labelOf(selected[0]);
+  return `${labelOf(selected[0])}等${selected.length}项`;
+}
+
+/** 类型维度胶囊回显 */
+export function summarizeTypeDim(selected: PickerExerciseType[]): string {
+  return summarizeFilterDim(selected, '所有类型', v => TYPE_LABELS[v as PickerExerciseType]);
+}
+
+// ---------------------------------------------------------------------------
+// 列表行副标题
+// ---------------------------------------------------------------------------
+
+function fmtDurationLabel(sec: number): string {
+  if (sec >= 120) return `${+(sec / 60).toFixed(1)}分钟`;
+  return `${+sec.toFixed(0)}秒`;
+}
+
+/**
+ * 列表行副标题：有氧/户外动作显示时长语义（参考案例口径），
+ * 其余显示目标肌群；器械统一缀在末尾。
+ */
+export function rowSubtitle(ex: PickerExercise): string {
+  const equipment = ex.equipment;
+  if (ex.exerciseType === 'cardio' || ex.exerciseType === 'outdoor') {
+    const durations = ex.suggestion.sets.map(s => s.durationSec ?? 0).filter(v => v > 0);
+    const totalSec = durations.length ? durations.reduce((a, b) => a + b, 0) : 0;
+    return totalSec > 0 ? `建议 ${fmtDurationLabel(totalSec)} · ${equipment}` : equipment;
+  }
+  return `${ex.muscles.join(' · ')} · ${equipment}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -134,7 +159,7 @@ function formatRange(values: number[]): string {
 
 /**
  * 清单页参数摘要一行，如「4组×8-10 · 60kg · RPE 7」。
- * - 时长型（有氧/拉伸，全部组按秒计）：单组「20分钟 · RPE 5」，多组「3组×45秒 · RPE 6」
+ * - 时长型（有氧/拉伸/静态，全部组按秒计）：单组「20分钟 · RPE 5」，多组「3组×45秒 · RPE 6」
  * - 次数型：「N组×次区间 · 负荷 · RPE n」，负荷=kg 值/区间，全零为「自重」
  */
 export function formatParamSummary(exercise: PickerExercise, sets: PickerDraftSet[], targetRpe: number): string {

@@ -16,11 +16,11 @@ import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   DATA_BASIS_LABELS,
-  KIND_LABELS,
   ROLE_BADGE_CLASS,
   ROLE_LABELS,
   ROLE_ORDER,
   SOURCE_LABELS,
+  TYPE_LABELS,
   type PickerDraftSet,
   type PickerSelectionItem,
   type PickerSetRole,
@@ -92,9 +92,10 @@ const CompactNumericInput: React.FC<{
 
 const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, onClose }) => {
   const { exercise } = item;
-  const isStrength = exercise.kind === 'strength';
-  /** 时长列展示单位：有氧按分钟，拉伸按秒 */
-  const durationUnit = exercise.kind === 'cardio' ? '分' : '秒';
+  /** 列形态由组数据本身决定：全部组按秒计 → 时长列，否则 配重+次数 列 */
+  const isStrength = !item.sets.every(s => s.durationSec > 0);
+  /** 时长列展示单位：有氧/户外按分钟，拉伸/静态按秒 */
+  const durationUnit = exercise.exerciseType === 'cardio' || exercise.exerciseType === 'outdoor' ? '分' : '秒';
 
   const [sets, setSets] = useState<PickerDraftSet[]>(item.sets);
   const [targetRpe, setTargetRpe] = useState(item.targetRpe);
@@ -208,8 +209,8 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
             {/* Tags Row（种类/肌群/器械 只读标签） */}
             <div className="flex flex-wrap gap-2 mb-2 min-h-[20px] items-center">
               <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-gray-100">
-                <span className={`w-1.5 h-1.5 rounded-full ${exercise.kind === 'cardio' ? 'bg-orange-400' : 'bg-blue-400'}`} />
-                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">{KIND_LABELS[exercise.kind]}</span>
+                <span className={`w-1.5 h-1.5 rounded-full ${exercise.exerciseType === 'cardio' || exercise.exerciseType === 'outdoor' ? 'bg-orange-400' : 'bg-blue-400'}`} />
+                <span className="text-[10px] font-bold text-gray-600 uppercase tracking-wide">{TYPE_LABELS[exercise.exerciseType]}</span>
               </span>
               {exercise.muscles.map(m => (
                 <span key={m} className="inline-flex items-center px-2.5 py-1 rounded-md bg-gray-100">
@@ -358,9 +359,9 @@ const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, o
                     ) : (
                       <div className="flex-1 min-w-0">
                         <CompactNumericInput
-                          val={exercise.kind === 'cardio' ? Math.round((set.durationSec / 60) * 10) / 10 : set.durationSec}
+                          val={durationUnit === '分' ? Math.round((set.durationSec / 60) * 10) / 10 : set.durationSec}
                           label={`第 ${i + 1} 组时长`}
-                          onChange={v => updateSet(i, { durationSec: exercise.kind === 'cardio' ? Math.round(v * 60) : v })}
+                          onChange={v => updateSet(i, { durationSec: durationUnit === '分' ? Math.round(v * 60) : v })}
                         />
                       </div>
                     )}

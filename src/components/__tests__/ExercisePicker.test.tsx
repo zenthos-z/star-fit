@@ -1,5 +1,5 @@
 /**
- * A8+A9 动作选择器单测：筛选/搜索兜底/排序逻辑 + 圈选/清单/参数配置交互
+ * A8+A9 动作选择器单测：筛选/搜索兜底/排序逻辑 + 筛选 Sheet + 圈选/清单/参数配置交互
  */
 
 import React from 'react';
@@ -8,13 +8,22 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import ExercisePickerModal from '../picker/ExercisePickerModal';
 import PickerConfigSheet from '../picker/PickerConfigSheet';
-import { MOCK_EXERCISES, type PickerSelectionItem } from '../picker/pickerData';
 import {
+  EQUIPMENT_SHEET_ORDER,
+  MOCK_EXERCISES,
+  TYPE_SHEET_ORDER,
+  TYPE_LABELS,
+  type PickerExerciseType,
+  type PickerSelectionItem,
+} from '../picker/pickerData';
+import {
+  EMPTY_FILTERS,
   filterAndSortExercises,
   formatParamSummary,
-  groupByMuscle,
   matchSearch,
   planToDraftSets,
+  rowSubtitle,
+  summarizeTypeDim,
 } from '../picker/pickerLogic';
 
 const byId = (id: string) => {
@@ -27,8 +36,6 @@ const makeItem = (id: string): PickerSelectionItem => {
   const ex = byId(id);
   return { exercise: ex, sets: planToDraftSets(ex.suggestion.sets), targetRpe: ex.suggestion.targetRpe };
 };
-
-// matchMedia / rAF 等环境桩由 src/__tests__/setup.ts 全局提供
 
 // ---------------------------------------------------------------------------
 // 纯逻辑
@@ -54,43 +61,76 @@ describe('pickerLogic · 搜索兜底', () => {
   });
 });
 
-describe('pickerLogic · 三行正交筛选 + 排序', () => {
+describe('pickerLogic · 三维正交筛选 + 排序', () => {
   const all = MOCK_EXERCISES;
 
-  it('种类筛选：有氧只含有氧动作', () => {
-    const result = filterAndSortExercises(all, { kind: 'cardio', region: 'all', muscle: 'all' }, '', true);
+  it('类型筛选：有氧只含有氧动作（cardio 必须可筛选）', () => {
+    const result = filterAndSortExercises(all, { ...EMPTY_FILTERS, types: ['cardio'] }, '', true);
     expect(result.length).toBeGreaterThan(0);
-    expect(result.every(e => e.kind === 'cardio')).toBe(true);
+    expect(result.every(e => e.exerciseType === 'cardio')).toBe(true);
   });
 
-  it('区域 + 肌群联动筛选', () => {
-    const result = filterAndSortExercises(all, { kind: 'all', region: 'lower', muscle: '腿部' }, '', true);
+  it('维度内多选 OR：有氧 + 自重', () => {
+    const result = filterAndSortExercises(all, { ...EMPTY_FILTERS, types: ['cardio', 'bodyweight'] }, '', true);
     expect(result.length).toBeGreaterThan(0);
-    expect(result.every(e => e.region === 'lower' && e.muscles.includes('腿部'))).toBe(true);
+    expect(result.every(e => e.exerciseType === 'cardio' || e.exerciseType === 'bodyweight')).toBe(true);
+  });
+
+  it('维度间 AND：力量 × 杠铃', () => {
+    const result = filterAndSortExercises(all, { types: ['resistance'], muscles: [], equipment: ['杠铃'] }, '', true);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every(e => e.exerciseType === 'resistance' && e.equipment === '杠铃')).toBe(true);
+  });
+
+  it('肌肉筛选：腿部', () => {
+    const result = filterAndSortExercises(all, { types: [], muscles: ['腿部'], equipment: [] }, '', true);
+    expect(result.length).toBeGreaterThan(0);
+    expect(result.every(e => e.muscles.includes('腿部'))).toBe(true);
+  });
+
+  it('ExerciseType 9 类全集每类至少 1 个 mock 条目（筛选体系覆盖 cardio 等）', () => {
+    const present = new Set(MOCK_EXERCISES.map(e => e.exerciseType));
+    for (const t of TYPE_SHEET_ORDER) {
+      expect(present.has(t)).toBe(true);
+    }
+    expect(TYPE_SHEET_ORDER).toHaveLength(9);
+  });
+
+  it('器械 Sheet 每类至少 1 个 mock 条目', () => {
+    for (const e of EQUIPMENT_SHEET_ORDER) {
+      expect(MOCK_EXERCISES.some(ex => ex.equipment === e)).toBe(true);
+    }
   });
 
   it('有历史：智能排序（rank），卧推第一', () => {
-    const result = filterAndSortExercises(all, { kind: 'all', region: 'all', muscle: 'all' }, '', true);
+    const result = filterAndSortExercises(all, EMPTY_FILTERS, '', true);
     expect(result[0].id).toBe('bench-press');
   });
 
   it('新手态：降级热门排序（hotRank），深蹲第一', () => {
-    const result = filterAndSortExercises(all, { kind: 'all', region: 'all', muscle: 'all' }, '', false);
+    const result = filterAndSortExercises(all, EMPTY_FILTERS, '', false);
     expect(result[0].id).toBe('barbell-squat');
   });
 
-  it('搜索词非空时跨全库检索，忽略三行筛选', () => {
-    const result = filterAndSortExercises(all, { kind: 'cardio', region: 'lower', muscle: '腿部' }, 'bench', true);
+  it('搜索词非空时跨全库检索，忽略筛选维度', () => {
+    const result = filterAndSortExercises(all, { types: ['cardio'], muscles: [], equipment: [] }, 'bench', true);
     expect(result.map(e => e.id)).toContain('bench-press');
   });
 });
 
-describe('pickerLogic · 分组与徽标', () => {
-  it('分组按名次顺序首次出现排序', () => {
-    const sorted = filterAndSortExercises(MOCK_EXERCISES, { kind: 'all', region: 'all', muscle: 'all' }, '', true);
-    const groups = groupByMuscle(sorted);
-    expect(groups[0].muscle).toBe('胸部'); // 杠铃卧推 rank 1
-    expect(groups[0].items[0].id).toBe('bench-press');
+describe('pickerLogic · 胶囊回显与行副标题', () => {
+  it('类型胶囊回显：未选/单选/多选', () => {
+    expect(summarizeTypeDim([])).toBe('所有类型');
+    expect(summarizeTypeDim(['cardio'])).toBe('有氧');
+    expect(summarizeTypeDim(['cardio', 'bodyweight'])).toBe('有氧等2项');
+  });
+
+  it('有氧行副标题显示时长语义', () => {
+    expect(rowSubtitle(byId('treadmill-jog'))).toBe('建议 20分钟 · 跑步机');
+  });
+
+  it('力量行副标题显示目标肌群 + 器械', () => {
+    expect(rowSubtitle(byId('bench-press'))).toBe('胸部 · 手臂 · 杠铃');
   });
 });
 
@@ -125,58 +165,107 @@ describe('pickerLogic · 参数摘要一行', () => {
 // 组件交互
 // ---------------------------------------------------------------------------
 
-describe('ExercisePickerModal · A8 筛选列表', () => {
-  it('渲染分组列表 + 「常用」「为你推荐」徽标', () => {
+describe('ExercisePickerModal · A8 主列表', () => {
+  it('渲染列表 + 「常用」「为你推荐」徽标 + 近期的训练分区', () => {
     render(<ExercisePickerModal onClose={() => {}} />);
+    expect(screen.getByText('添加运动')).toBeInTheDocument();
+    expect(screen.getByText('近期的训练')).toBeInTheDocument();
+    expect(screen.getAllByText('所有运动').length).toBeGreaterThan(0);
     expect(screen.getByText('杠铃卧推')).toBeInTheDocument();
     // 智能排序前 3（卧推/引体/深蹲）各带「常用」徽标；mock 中共 6 个「为你推荐」
     expect(screen.getAllByText('常用')).toHaveLength(3);
     expect(screen.getAllByText('为你推荐')).toHaveLength(6);
   });
 
-  it('新手态：无「常用」徽标 + 引导卡', () => {
+  it('新手态：无「常用」徽标 + 引导卡 + 无近期分区', () => {
     render(<ExercisePickerModal hasHistory={false} onClose={() => {}} />);
     expect(screen.queryByText('常用')).not.toBeInTheDocument();
     expect(screen.getByText('初次训练，从热门开始')).toBeInTheDocument();
+    expect(screen.queryByText('近期的训练')).not.toBeInTheDocument();
   });
 
-  it('种类筛选：切到有氧后力量动作消失', async () => {
+  it('类型 Sheet：选「有氧」→ 显示 4 个结果 → 列表只剩有氧，胶囊回显', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
-    await user.click(screen.getByRole('tab', { name: '有氧' }));
+    await user.click(screen.getByRole('button', { name: /所有类型/ }));
+
+    // Sheet 打开：dialog + 9 类卡片
+    const dialog = screen.getByRole('dialog', { name: '类型' });
+    expect(within(dialog).getByRole('button', { name: '力量' })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '有氧' }));
+
+    // CTA 实时计数（mock 中 exerciseType=cardio 共 4 个；户外为独立类型）
+    expect(within(dialog).getByRole('button', { name: '显示 4 个结果' })).toBeInTheDocument();
+    await user.click(within(dialog).getByRole('button', { name: '显示 4 个结果' }));
+
+    // 应用后：列表只剩有氧，胶囊回显「有氧」（退出动画中的 Sheet 可能滞留 jsdom，按胶囊特征取元素）
     expect(screen.queryByText('杠铃卧推')).not.toBeInTheDocument();
     expect(screen.getByText('划船机')).toBeInTheDocument();
+    const pill = screen.getAllByRole('button', { name: '有氧' }).find(b => b.getAttribute('aria-haspopup') === 'dialog');
+    expect(pill).toHaveClass('bg-star-dark');
   });
 
-  it('肌群 chips 随区域联动：下肢 → 腿部', async () => {
+  it('肌肉 Sheet：上肢/下肢/核心分组 + 选「胸部」过滤', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
-    // 初始（全身）肌群带含「胸部」
-    const muscleTabs = () => screen.getByRole('tablist', { name: '肌群' });
-    expect(within(muscleTabs()).getByText('胸部')).toBeInTheDocument();
-    // 切到下肢 → 肌群带联动为「腿部」，不再有「胸部」
-    await user.click(screen.getByRole('tab', { name: '下肢' }));
-    expect(within(muscleTabs()).getByText('腿部')).toBeInTheDocument();
-    expect(within(muscleTabs()).queryByText('胸部')).not.toBeInTheDocument();
-    // 点「腿部」chip → 只剩腿部动作
-    await user.click(within(muscleTabs()).getByText('腿部'));
-    expect(screen.getByText('杠铃深蹲')).toBeInTheDocument();
-    expect(screen.queryByText('杠铃卧推')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /所有肌肉/ }));
+    const dialog = screen.getByRole('dialog', { name: '肌肉群' });
+    expect(within(dialog).getByText('上肢')).toBeInTheDocument();
+    expect(within(dialog).getByText('下肢')).toBeInTheDocument();
+    expect(within(dialog).getByText('核心')).toBeInTheDocument();
+
+    await user.click(within(dialog).getByRole('button', { name: '胸部' }));
+    await user.click(within(dialog).getByRole('button', { name: /显示 \d+ 个结果/ }));
+
+    expect(screen.getByText('杠铃卧推')).toBeInTheDocument();
+    expect(screen.queryByText('引体向上')).not.toBeInTheDocument();
+  });
+
+  it('器械 Sheet：清除筛选器复位胶囊与列表', async () => {
+    const user = userEvent.setup();
+    render(<ExercisePickerModal onClose={() => {}} />);
+    await user.click(screen.getByRole('button', { name: /所有器械/ }));
+    // AnimatePresence 退场元素可能滞留 jsdom，取最新挂载的 dialog
+    const dialog = () => {
+      const dialogs = screen.getAllByRole('dialog', { name: '器械' });
+      return dialogs[dialogs.length - 1];
+    };
+    await user.click(within(dialog()).getByRole('button', { name: '杠铃' }));
+    await user.click(within(dialog()).getByRole('button', { name: '显示 5 个结果' }));
+    // 用行 aria-label 断言列表（滞留退场 Sheet 的卡片文本会干扰全局 text 查询）
+    expect(screen.getByLabelText('选择 杠铃卧推')).toBeInTheDocument();
+    expect(screen.queryByLabelText('选择 划船机')).not.toBeInTheDocument();
+
+    // 重开器械 Sheet（胶囊回显「杠铃」）→ 清除筛选器 → 全量恢复
+    const pill = screen.getAllByRole('button', { name: '杠铃' }).find(b => b.getAttribute('aria-haspopup') === 'dialog');
+    await user.click(pill!);
+    await user.click(within(dialog()).getByRole('button', { name: '清除筛选器' }));
+    await user.click(within(dialog()).getByRole('button', { name: /显示 \d+ 个结果/ }));
+    expect(screen.getByLabelText('选择 杠铃卧推')).toBeInTheDocument();
+    expect(screen.getByLabelText('选择 划船机')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /所有器械/ })).toBeInTheDocument();
   });
 
   it('搜索兜底：拼音首字母 glwt 命中杠铃卧推', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
-    await user.type(screen.getByPlaceholderText(/搜索中文名、英文或拼音首字母/), 'glwt');
+    await user.type(screen.getByPlaceholderText('搜索运动'), 'glwt');
     expect(screen.getByText('杠铃卧推')).toBeInTheDocument();
     expect(screen.queryByText('引体向上')).not.toBeInTheDocument();
+    // 搜索时近期分区隐藏
+    expect(screen.queryByText('近期的训练')).not.toBeInTheDocument();
   });
 
   it('搜索兜底：英文 bench 命中', async () => {
     const user = userEvent.setup();
     render(<ExercisePickerModal onClose={() => {}} />);
-    await user.type(screen.getByPlaceholderText(/搜索中文名、英文或拼音首字母/), 'bench');
+    await user.type(screen.getByPlaceholderText('搜索运动'), 'bench');
     expect(screen.getByText('杠铃卧推')).toBeInTheDocument();
+  });
+
+  it('9 类类型标签全部可用于清单页标注（TYPE_LABELS 全集）', () => {
+    const types: PickerExerciseType[] = ['resistance', 'cardio', 'bodyweight', 'isometric', 'assisted', 'unilateral', 'weight_only', 'reps_only', 'outdoor'];
+    types.forEach(t => expect(TYPE_LABELS[t]).toBeTruthy());
   });
 });
 
