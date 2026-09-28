@@ -20,6 +20,7 @@ import {
   applyProfileProposals,
   ProposalValidationError,
 } from "../services/profileProposalService.js";
+import { notifySuggestionCacheInvalidation } from "../services/suggestions/suggestionCacheScheduler.js";
 
 export async function postApplyProfileProposals(
   req: FastifyRequest,
@@ -40,6 +41,9 @@ export async function postApplyProfileProposals(
   try {
     const repo = new UserScopedWriteRepository(getPostgresClient());
     const result = await applyProfileProposals(repo, userId, parsed.data);
+    // [B6 issue#39] 画像变更 → 静默失效建议缓存并登记空闲重算任务
+    // （fire-and-forget，纯内存登记，不阻塞本端点毫秒级响应）
+    notifySuggestionCacheInvalidation(userId, "profile_updated");
     reply.send(result);
   } catch (err) {
     if (err instanceof ProposalValidationError) {

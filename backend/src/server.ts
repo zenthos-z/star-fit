@@ -16,6 +16,7 @@ import {
 // batch4-3: wsService 现为 ChannelBroadcaster 的用户维度实例（key=userId）
 import { wsService } from "./services/channelBroadcaster.js";
 import { startMediaCleanup, deleteObject } from "./services/mediaStorage.js";
+import { startSuggestionCacheScheduler } from "./services/suggestions/suggestionCacheScheduler.js";
 import {
   uploadMedia,
   listUserMedia,
@@ -886,6 +887,10 @@ const start = async () => {
 
     // 「N 天未引用自动清理」媒体维护任务（默认 14 天，MEDIA_RETENTION_DAYS 可调）
     startMediaCleanup();
+
+    // [B6 issue#39] 建议缓存空闲重算调度器（画像/计划/训练完成心跳触发；
+    // 独立定时器队列，与 chat SSE 流隔离）。当前无后台轮询，装配点留日志。
+    startSuggestionCacheScheduler();
   } catch (err) {
     server.log.error(err);
     process.exit(1);

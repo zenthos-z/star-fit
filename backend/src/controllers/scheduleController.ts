@@ -20,6 +20,7 @@ import {
 } from "shared/contracts";
 import { getUserId, MissingUserIdError } from "../utils/requestUtils.js";
 import { getPostgresClient } from "../db/postgresql/client/postgres-client.js";
+import { notifySuggestionCacheInvalidation } from "../services/suggestions/suggestionCacheScheduler.js";
 import { createWeeklyPlanRepository } from "../db/postgresql/repository/weeklyPlan.repository.js";
 import { createUserRepository } from "../db/postgresql/repository/user.repository.js";
 import { SessionRepo } from "../services/sessionRepo.js";
@@ -165,6 +166,8 @@ export async function postApplyWeeklyPlan(
   try {
     const repo = createWeeklyPlanRepository(getPostgresClient());
     const result = await repo.applyWeeklyPlan({ user_id: userId, payload });
+    // [B6 issue#39] 计划落库 → 当日已排容量变化 → 静默登记建议缓存空闲重算
+    notifySuggestionCacheInvalidation(userId, "plan_updated");
     return reply.status(200).send({
       applied: true,
       week_id: result.plan.week_id,

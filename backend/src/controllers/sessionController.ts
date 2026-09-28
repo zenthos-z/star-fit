@@ -14,6 +14,7 @@ import { z } from "zod";
 import { getUserId } from "../utils/requestUtils.js";
 import { getPostgresClient } from "../db/postgresql/client/postgres-client.js";
 import { createHeartRateRepository } from "../db/postgresql/repository/heartRate.repository.js";
+import { notifySuggestionCacheInvalidation } from "../services/suggestions/suggestionCacheScheduler.js";
 
 // ============================================
 // Schemas
@@ -157,6 +158,10 @@ export async function postSession(
       totalSessions: sessionsCount,
     });
 
+    // [B6 issue#39] 训练完成 → 历史锚点/恢复状态变化 → 静默失效建议缓存并
+    // 登记空闲重算任务（fire-and-forget，不阻塞 201 响应）
+    notifySuggestionCacheInvalidation(userId, "session_completed");
+
     reply.status(201).send({
       ok: true,
       sessionId,
@@ -205,12 +210,10 @@ export async function postHRSamples(
   });
   const parsed = batchSchema.safeParse(request.body);
   if (!parsed.success || parsed.data.session_id !== sessionId) {
-    reply
-      .status(400)
-      .send({
-        error: "Invalid hr-samples payload",
-        details: parsed.error?.flatten(),
-      });
+    reply.status(400).send({
+      error: "Invalid hr-samples payload",
+      details: parsed.error?.flatten(),
+    });
     return;
   }
 
@@ -249,12 +252,10 @@ export async function postHRSamples(
       sessionId,
       error: (error as Error).message,
     });
-    reply
-      .status(500)
-      .send({
-        error: "Failed to persist HR samples",
-        message: (error as Error).message,
-      });
+    reply.status(500).send({
+      error: "Failed to persist HR samples",
+      message: (error as Error).message,
+    });
   }
 }
 

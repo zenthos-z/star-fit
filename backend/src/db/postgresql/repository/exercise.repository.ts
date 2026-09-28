@@ -29,6 +29,7 @@ import {
   ExerciseLibraryItemSchema,
   ExerciseDetailUpdateSchema,
   ExerciseSearchFilterSchema,
+  UUIDSchema,
   AdminExercisePatchSchema,
   AdminEditableExerciseFieldSchema,
   ExerciseFieldSourceStatusSchema,
@@ -266,6 +267,27 @@ export class ExerciseRepository extends BaseRepository {
     const rows = await this.queryMany<ExerciseRow>(
       `${ITEM_SELECT_SQL} ${where} ORDER BY name LIMIT 500`,
       params,
+    );
+    return rows.map(mapItemRow);
+  }
+
+  /**
+   * 用户可见动作库全集：公共库（owner_user_id IS NULL）∪ 本人自建动作。
+   * 建议缓存整批重算的取数口径（B6 issue#39）——绝不能把其它用户的
+   * 自建动作算进某用户的缓存（可见性边界 + 缓存行数对账都以本口径为准）。
+   */
+  async getItemsVisibleToUser(userId: string): Promise<ExerciseLibraryItem[]> {
+    if (!UUIDSchema.safeParse(userId).success) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        "userId 必须为合法 UUID",
+        { userId },
+      );
+    }
+    const rows = await this.queryMany<ExerciseRow>(
+      `${ITEM_SELECT_SQL} WHERE owner_user_id IS NULL OR owner_user_id = $userId::uuid
+       ORDER BY name LIMIT 500`,
+      { userId },
     );
     return rows.map(mapItemRow);
   }

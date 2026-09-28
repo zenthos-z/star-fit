@@ -24,6 +24,12 @@ export {
   ExerciseRepository,
   createExerciseRepository,
 } from "./exercise.repository.js";
+export {
+  SuggestionCacheRepository,
+  createSuggestionCacheRepository,
+  type SuggestionCacheWriteRow,
+  type SuggestionCacheReadEntry,
+} from "./suggestionCache.repository.js";
 
 // Re-export types for convenience
 export type {
