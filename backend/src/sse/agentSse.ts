@@ -16,8 +16,8 @@
  * `/mas/chat` or `/agent/plan` deactivation — that is R9's deletion scope.
  */
 
-import type { FastifyReply } from 'fastify';
-import type { AgentEvent } from 'shared/contracts';
+import type { FastifyReply } from "fastify";
+import type { AgentEvent } from "shared/contracts";
 
 // ---------------------------------------------------------------------------
 // sseEncode — PURE (B1, P007)
@@ -56,10 +56,10 @@ export function sseEncode(event: AgentEvent): string {
  */
 export function tokenFromChunk(chunk: unknown): string | null {
   // 1. bare string
-  if (typeof chunk === 'string') {
+  if (typeof chunk === "string") {
     return chunk.length > 0 ? chunk : null;
   }
-  if (chunk === null || typeof chunk !== 'object') {
+  if (chunk === null || typeof chunk !== "object") {
     return null;
   }
 
@@ -84,23 +84,23 @@ export function tokenFromChunk(chunk: unknown): string | null {
  * a multimodal content-block array. Tool-call blocks (no `text`) yield nothing.
  */
 function textFromMessageLike(message: unknown): string | null {
-  if (message === null || typeof message !== 'object') {
+  if (message === null || typeof message !== "object") {
     return null;
   }
   const content = (message as { content?: unknown }).content;
 
-  if (typeof content === 'string') {
+  if (typeof content === "string") {
     return content.length > 0 ? content : null;
   }
 
   if (Array.isArray(content)) {
-    let text = '';
+    let text = "";
     for (const block of content) {
       if (
         block !== null &&
-        typeof block === 'object' &&
-        (block as { type?: string }).type === 'text' &&
-        typeof (block as { text?: unknown }).text === 'string'
+        typeof block === "object" &&
+        (block as { type?: string }).type === "text" &&
+        typeof (block as { text?: unknown }).text === "string"
       ) {
         text += (block as { text: string }).text;
       }
@@ -118,24 +118,77 @@ function textFromMessageLike(message: unknown): string | null {
 
 /** SSE response headers sent on the hijacked raw response. */
 const SSE_HEADERS: Readonly<Record<string, string>> = Object.freeze({
-  'Content-Type': 'text/event-stream; charset=utf-8',
-  'Cache-Control': 'no-cache, no-transform',
-  Connection: 'keep-alive',
+  "Content-Type": "text/event-stream; charset=utf-8",
+  "Cache-Control": "no-cache, no-transform",
+  Connection: "keep-alive",
   // Disable proxy buffering (nginx and friends) so frames flush immediately.
-  'X-Accel-Buffering': 'no',
+  "X-Accel-Buffering": "no",
 });
+
+/**
+ * [B5b SSE ① / issue #38] 保活帧间隔：15s 一帧 SSE 注释（`: ping`）。
+ *
+ * 实测缺陷：GLM 长思考轮（5-6 分钟）期间无任何事件字节，iOS WKWebView
+ * 的 fetch 流被系统空闲超时掐断，前端气泡停留「正在解析数据...」假死。
+ * 注释帧对一切 SSE 解析器不可见（不带 `data:` 行），前端解析器零改动；
+ * 只要有字节到达，系统空闲计时器即被重置。
+ */
+export const SSE_PING_INTERVAL_MS = 15_000;
+
+/** 保活帧本体：SSE 注释行 + 帧终止空行（每 15s 一帧，见 SSE_PING_INTERVAL_MS）。 */
+const PING_FRAME = ": ping\n\n";
+
+/** streamAgentSSE 可注入参数（P006 惯例）：生产缺省，测试注入短间隔。 */
+export interface StreamAgentSSEOptions {
+  /** 保活帧间隔（默认 SSE_PING_INTERVAL_MS；测试注入小值避免真实等待）。 */
+  pingIntervalMs?: number;
+}
+
+/**
+ * Race the next agent event against the keepalive timer. Resolving (never
+ * rejecting) keeps the cached `pending` promise's rejection handled even when
+ * the ping wins the race (no unhandled-rejection leak on slow-failing streams).
+ */
+type RaceOutcome =
+  | { kind: "event"; result: IteratorResult<AgentEvent> }
+  | { kind: "throw"; error: unknown }
+  | { kind: "ping" };
+
+function raceEventOrPing(
+  pending: Promise<IteratorResult<AgentEvent>>,
+  pingIntervalMs: number,
+): Promise<RaceOutcome> {
+  return new Promise<RaceOutcome>((resolve) => {
+    const timer = setTimeout(() => resolve({ kind: "ping" }), pingIntervalMs);
+    // 保活定时器不阻止进程退出（常驻服务无感，测试/CLI 场景干净收尾）
+    (timer as { unref?: () => void }).unref?.();
+    pending.then(
+      (result) => {
+        clearTimeout(timer);
+        resolve({ kind: "event", result });
+      },
+      (error) => {
+        clearTimeout(timer);
+        resolve({ kind: "throw", error });
+      },
+    );
+  });
+}
 
 /**
  * Stream an {@link AgentEvent} async iterable to the client as SSE.
  *
  * Signature frozen verbatim (P010): `streamAgentSSE(reply, events)`. Any
  * MAS->Deep Agents contract drift is absorbed upstream of `events`; this
- * transport never sees kernel types.
+ * transport never sees kernel types. (B5b: optional third options arg is
+ * test-injection only — production call sites unchanged.)
  *
  * P007 skeleton:
  *   1. `reply.hijack()` — take over the raw socket; Fastify will not finalize.
  *   2. write SSE headers to `reply.raw`.
  *   3. `try` — for each event, `sseEncode` + `raw.write`; honor backpressure.
+ *      [B5b] events 与 15s 保活计时器竞速：Agent 静默期先到则写一帧
+ *      `: ping` 注释保活（同一 pending next() 保留续跑，事件不丢不重）。
  *   4. `catch` — the generator threw: emit ONE typed `error` frame, never
  *      rethrow (a thrown rejection here would crash the process / hang the
  *      socket — the exact failure P007 exists to prevent).
@@ -147,7 +200,10 @@ const SSE_HEADERS: Readonly<Record<string, string>> = Object.freeze({
 export async function streamAgentSSE(
   reply: FastifyReply,
   events: AsyncIterable<AgentEvent>,
+  opts: StreamAgentSSEOptions = {},
 ): Promise<void> {
+  const pingIntervalMs = opts.pingIntervalMs ?? SSE_PING_INTERVAL_MS;
+
   // P007 step 1: hijack so Fastify does not touch the raw stream.
   reply.hijack();
   const raw = reply.raw;
@@ -157,36 +213,57 @@ export async function streamAgentSSE(
   // CORS on the actual (post-preflight) SSE response too — without these
   // headers the stream is blocked as net::ERR_FAILED despite a 200. Mirror the
   // server.ts policy (reflect origin + credentials; never `*` with credentials).
-  const origin = (reply.request.headers.origin as string | undefined) ?? '';
+  const origin = (reply.request.headers.origin as string | undefined) ?? "";
   const headers: Record<string, string> = { ...SSE_HEADERS };
   if (origin) {
-    headers['Access-Control-Allow-Origin'] = origin;
-    headers['Access-Control-Allow-Credentials'] = 'true';
-    headers['Vary'] = 'Origin';
+    headers["Access-Control-Allow-Origin"] = origin;
+    headers["Access-Control-Allow-Credentials"] = "true";
+    headers["Vary"] = "Origin";
   }
 
   // P007 step 2: SSE headers on the raw response.
   raw.writeHead(200, headers);
 
+  /** Write one frame honoring backpressure; null when the socket is gone. */
+  const writeFrame = async (frame: string): Promise<boolean> => {
+    if ((raw as { destroyed?: boolean }).destroyed) return false;
+    const canFlush = raw.write(frame);
+    if (!canFlush) {
+      // Backpressure: wait for the stream to drain before the next frame.
+      await new Promise<void>((resolve) => {
+        raw.once("drain", () => resolve());
+      });
+    }
+    return true;
+  };
+
+  // [B5b] 竞速循环状态：缓存的 pending next() 跨 ping 轮保留（同一 promise
+  // 反复竞速，事件既不丢失也不重复消费）。
+  const iterator = events[Symbol.asyncIterator]();
+  let pending: Promise<IteratorResult<AgentEvent>> | null = null;
+
   try {
-    // P007 step 3: encode + write each event, respecting backpressure.
-    for await (const event of events) {
-      const frame = sseEncode(event);
-      const canFlush = raw.write(frame);
-      if (!canFlush) {
-        // Backpressure: wait for the stream to drain before the next frame.
-        await new Promise<void>((resolve) => {
-          raw.once('drain', () => resolve());
-        });
+    // P007 step 3 + B5b keepalive: encode + write each event; ping while idle.
+    while (true) {
+      pending ??= iterator.next();
+      const outcome = await raceEventOrPing(pending, pingIntervalMs);
+      if (outcome.kind === "ping") {
+        // Agent 静默期：写保活注释帧，pending 保留继续竞速
+        if (!(await writeFrame(PING_FRAME))) break;
+        continue;
       }
+      pending = null;
+      if (outcome.kind === "throw") throw outcome.error;
+      if (outcome.result.done) break;
+      if (!(await writeFrame(sseEncode(outcome.result.value)))) break;
     }
   } catch (err) {
     // P007 step 4: error isolation — emit a typed error frame, never rethrow.
     const errorEvent: AgentEvent = {
-      type: 'error',
+      type: "error",
       error: {
-        code: 'INTERNAL',
-        message: err instanceof Error ? err.message : 'SSE stream failed',
+        code: "INTERNAL",
+        message: err instanceof Error ? err.message : "SSE stream failed",
       },
     };
     try {

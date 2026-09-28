@@ -17,6 +17,7 @@ import { postApplyProfileProposals } from "../controllers/profileProposalControl
 import {
   getTodaySchedule,
   getScheduleSummary,
+  postApplyWeeklyPlan,
 } from "../controllers/scheduleController.js";
 
 export default async function agentRoutes(app: FastifyInstance) {
@@ -29,6 +30,9 @@ export default async function agentRoutes(app: FastifyInstance) {
   // today_entries / user_stage / onboarding 一发返回；今日三态复用 E2 口径，
   // 纯 DB 读 + 纯函数判定，AI 零参与
   app.get("/schedule/summary", getScheduleSummary);
+  // [B5b issue#38] weekly_plan 卡确认落库：确定性写入端点（无 LLM），
+  // 前端在用户点「确认启用」后直调——提案-确认架构，确认前不落库
+  app.post("/schedule/weekly-plan/apply", postApplyWeeklyPlan);
   // P010: canonical SSE chat endpoint over the frozen AgentService.chat seam.
   // Registered under the /api prefix in server.ts -> full path /api/chat.
   app.post("/chat", postChat);

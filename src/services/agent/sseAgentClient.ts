@@ -127,7 +127,21 @@ export interface AgentClientOptions {
   getHeaders?: () => Record<string, string>;
   /** Override identity resolver (defaults to geminiService.getUserId). */
   getUserId?: () => string;
+  /**
+   * [B5b SSE ②] 空闲看门狗间隔（默认 45s = 3× 后端 15s 保活帧）。任何字节
+   * （含 `: ping` 注释帧）都会重置计时；超过该间隔无字节视为连接已死，
+   * 中止 fetch 并以 `CONNECTION_LOST` 收尾。测试注入小值避免真实等待。
+   */
+  idleTimeoutMs?: number;
 }
+
+/**
+ * [B5b SSE ② / issue #38] 空闲看门狗间隔：45s = 连丢 3 个后端保活帧。
+ * 后端每 15s 发一帧 `: ping`（见 backend agentSse.ts SSE_PING_INTERVAL_MS）；
+ * 只要字节还在到达，计时器不断重置。45s 无字节说明传输层已断（iOS
+ * WKWebView 空闲超时 / 网络切换），此时应显式失败而不是永远转圈。
+ */
+export const SSE_IDLE_TIMEOUT_MS = 45_000;
 
 function toErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -144,6 +158,7 @@ export function createSseAgentClient(opts: AgentClientOptions = {}): AgentClient
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch;
   const getHeaders = opts.getHeaders ?? defaultGetHeaders;
   const getUserId = opts.getUserId ?? defaultGetUserId;
+  const idleTimeoutMs = opts.idleTimeoutMs ?? SSE_IDLE_TIMEOUT_MS;
   // URL resolved lazily so importing this module never evaluates API_BASE
   // (which touches `window`) — safe in non-DOM test environments.
   // API_BASE already includes the `/api` segment (e.g. `http://localhost:43111/api`),
@@ -158,12 +173,17 @@ export function createSseAgentClient(opts: AgentClientOptions = {}): AgentClient
       const userId = req.userId || getUserId();
       const body = JSON.stringify({ ...req, userId });
 
+      // [B5b SSE ②] 看门狗超时后中止整条 fetch（挂起的 reader.read() 随之
+      // reject/done），连接不会残留在后台。
+      const abort = new AbortController();
+
       let response: Response;
       try {
         response = await fetchImpl(resolveUrl(), {
           method: 'POST',
           headers: getHeaders(),
           body,
+          signal: abort.signal,
         });
       } catch (err) {
         yield { type: 'error', error: { code: 'UPSTREAM_TIMEOUT', message: toErrorMessage(err) } };
@@ -179,23 +199,74 @@ export function createSseAgentClient(opts: AgentClientOptions = {}): AgentClient
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
       let buffer = '';
+      // [B5b SSE ②] 是否见过语义终态：后端正常收尾必发 done 事件；流断了
+      // （字节中断/连接被掐）就不会有。据此区分「正常结束」与「断流」。
+      let sawDone = false;
+
+      /**
+       * 空闲看门狗：read() 与 idleTimeoutMs 计时器竞速。任意字节（含后端
+       * 15s `: ping` 保活注释帧）到达即重置；超时返回 {kind:'timeout'} 表示
+       * 连接已死（由 abort 兜底释放挂起的 read）。read 拒绝透传为
+       * {kind:'throw'}，交回外层 catch 统一映射。
+       */
+      type ReadOutcome =
+        | { kind: 'read'; result: ReadableStreamReadResult<Uint8Array> }
+        | { kind: 'throw'; error: unknown }
+        | { kind: 'timeout' };
+      const readWithWatchdog = (): Promise<ReadOutcome> =>
+        new Promise((resolve) => {
+          const timer = setTimeout(() => resolve({ kind: 'timeout' }), idleTimeoutMs);
+          reader.read().then(
+            (result) => {
+              clearTimeout(timer);
+              resolve({ kind: 'read', result });
+            },
+            (error) => {
+              clearTimeout(timer);
+              resolve({ kind: 'throw', error });
+            },
+          );
+        });
 
       try {
-         
         while (true) {
-          const { done, value } = await reader.read();
+          const outcome = await readWithWatchdog();
+          if (outcome.kind === 'timeout') {
+            // 45s 无任何字节（3 个保活帧全丢）→ 传输层已断，显式失败
+            abort.abort();
+            yield { type: 'error', error: { code: 'CONNECTION_LOST', message: '连接已中断，请检查网络后重试' } };
+            return;
+          }
+          if (outcome.kind === 'throw') throw outcome.error;
+          const { done, value } = outcome.result;
           if (done) break;
           buffer += decoder.decode(value, { stream: true });
           const parsed = parseSSEChunk(buffer);
           buffer = parsed.remainder;
-          for (const ev of parsed.events) yield ev;
+          for (const ev of parsed.events) {
+            if (ev.type === 'done') sawDone = true;
+            yield ev;
+          }
         }
         // Flush any trailing bytes + decoder remainder, then parse the tail.
         buffer += decoder.decode();
         const tail = parseSSEChunk(buffer + '\n\n');
-        for (const ev of tail.events) yield ev;
+        for (const ev of tail.events) {
+          if (ev.type === 'done') sawDone = true;
+          yield ev;
+        }
+        // [B5b SSE ②] 流读完但没有 done 事件 = 中途被掐断（非正常收尾）。
+        // 已有 error 收尾的（parse 出 error 事件）不重复报；否则补一个
+        // CONNECTION_LOST，让 UI 走「连接中断，点击重试」而不是干等。
+        if (!sawDone) {
+          yield { type: 'error', error: { code: 'CONNECTION_LOST', message: '回复未完整送达（连接中断）' } };
+        }
       } catch (err) {
+        // abort 触发的 read reject 在这里落地；看门狗已 yield 过 CONNECTION_LOST，
+        // 这里统一映射为 UPSTREAM_TIMEOUT 语义（调用端取第一个 error）。
         yield { type: 'error', error: { code: 'UPSTREAM_TIMEOUT', message: toErrorMessage(err) } };
+      } finally {
+        abort.abort(); // 兜底释放：生成器提前 return（消费者 break）也断开连接
       }
     },
   };

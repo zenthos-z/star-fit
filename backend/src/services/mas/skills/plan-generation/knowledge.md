@@ -324,11 +324,12 @@ plan 卡由 uiHint 校验回路（M5c）程序化校验：schema 不通过 → �
 | data  | ExercisePlan[]（≥1 个动作）                       |
 | title | 非空字符串                                        |
 
-### 9.3 weekly_plan 卡（周计划对话展示层，2026-09-26 起）
+### 9.3 weekly_plan 卡（周计划提案卡，5.0 / B5b 起）
 
-`save_weekly_plan` 落库成功后，**周计划请求一律改输出 weekly_plan 卡**（替代
-旧「plan 卡展示当日条目」的做法）；单日 / 明日计划继续用 plan_card，兼容期
-plan_card 仍被校验器接受。weekly_plan 卡展示**整周**：
+**周计划请求一律输出 weekly_plan 卡**（5.0 起为提案卡：携带 `data.apply`
+载荷，用户确认后才落库——Agent 没有写计划工具）；单日 / 明日**会话级**
+计划继续用 plan_card，兼容期 plan_card 仍被校验器接受。weekly_plan 卡展示
+**整周**：
 
 ```json
 {
@@ -355,7 +356,22 @@ plan_card 仍被校验器接受。weekly_plan 卡展示**整周**：
         ]
       },
       { "entry_date": "2026-09-22", "rest": true, "exercises": [] }
-    ]
+    ],
+    "apply": {
+      "week_id": "2026-W39",
+      "scope": "week",
+      "split": "push_pull_legs",
+      "dates": [],
+      "entries": [
+        {
+          "entry_date": "2026-09-21",
+          "exercise_id": "V1StGXR8_Z5jdHi6",
+          "target_sets": 2,
+          "target_load": { "type": "percent_1rm", "min": 70, "max": 80 },
+          "sort_order": 0
+        }
+      ]
+    }
   }
 }
 ```
@@ -365,8 +381,14 @@ plan_card 仍被校验器接受。weekly_plan 卡展示**整周**：
 - `data` 是**对象**不是数组（与 plan_card 相反）；`days` 覆盖周一至周日整周
 - 每组参数可不同（第 1 组 60kg×8 / 第 2 组 65kg×6）——按组展开正是此卡的
   意义；`exercise_id` 仍必须来自 list_exercises，禁止编造
+- **`apply` 载荷（5.0 必带，新提案）**：确认落库的唯一数据面（§11.2）。
+  scope=week 整周（split 必带）；scope=days 单日覆盖（dates 列出被替换日，
+  entries 只含该日条目）。展示层 `days[].exercises[].name` 用 **name_zh**
+  （list_exercises 直出，禁自翻译）；`sets.length` 必须与对应
+  `apply.entries[].target_sets` 一致（展示与落库同源）
 - **纯净新生成**：卡上没有进度/状态/执行率字段——那是执行层的职责
 - 休息日：`rest: true`、exercises 留空，前端弱化为灰行
+- 确认前数据库无此计划；说明文案点一句「点下方确认后生效」
 
 ### 9.4 explanation 编写指南
 
@@ -414,23 +436,46 @@ plan_card 仍被校验器接受。weekly_plan 卡展示**整周**：
 
 ---
 
-## 十一、周计划模式（持久化实体，每周一次）
+## 十一、周计划模式（提案-确认，5.0 / B5b）
 
-> 4.0 起（E3/issue #2）：计划从「每次生成」变为持久化实体。本节是
-> 落库语义的权威说明；表结构与状态机契约见
-> `shared/contracts/weekly-plan.ts`（数据契约唯一定义源）。
+> 5.0 起（B5b/issue #38）：计划仍是持久化实体，但写入改为**提案-确认**——
+> Agent 提案轮算好 entries 随卡携带，用户确认后 App 直调确定性端点落库。
+> 表结构与状态机契约见 `shared/contracts/weekly-plan.ts`（数据契约唯一定义源）。
 
-### 11.1 每周一次语义
+### 11.0 提案-确认架构（5.0 核心变化）
 
-- 每周每用户**一份**计划（`(user_id, week_id)` 唯一约束）
-- 生成前**必查** `get_current_plan`：已有 → 默认复用，按诉求调整个别
-  条目（对话式），不重新落库；`save_weekly_plan` 对已有周返回
-  `already_exists` 拒绝覆盖
-- `week_id` 缺省由服务器推导当前 ISO 周——Agent 不做任何日历算术
+```
+Agent 提案轮（编排，无写入工具）
+  → weekly_plan 卡（data.apply 载荷 = 确认落库的唯一数据面）
+  → 用户点「确认启用」
+  → App 直调 POST /api/schedule/weekly-plan/apply（无 LLM，毫秒级）
+  → 信息栏（本周计划）即刻同步刷新
+```
 
-### 11.2 落库数据形态
+- **确认之前计划绝不进数据库**（根治「计划不知什么时候就出现了」）
+- `save_weekly_plan` 写工具已移除：Agent 侧没有任何写计划的入口，
+  「先落库再告知」从此在结构上不可能
+- 确认语义：scope=week 整周 upsert（条目整体替换）；scope=days 仅替换
+  `dates` 所列日期的条目（其余六天不动）
+- 用户不确认（关掉对话/不点）= 提案自然作废，无残留数据
 
-`save_weekly_plan(split, entries[])`，每条目：
+### 11.1 周/日粒度判断（粒度 = f(原因的影响范围, 框架是否存在)）
+
+| #   | 条件                                       | 动作                                     | scope     |
+| --- | ------------------------------------------ | ---------------------------------------- | --------- |
+| 1   | 无周计划（框架不存在）                     | 一律先出整周计划（哪怕用户要「明天的」） | `week`    |
+| 2   | 框架在 + 明确点名某天 + 原因临时（雨天等） | 只改那一天                               | `days`    |
+| 3   | 框架在 + 长期框架级原因（退卡/搬家/伤病）  | 整周重算                                 | `week`    |
+| 4   | 原因不明（「改成居家练」没说为什么）       | **必须反问长期/临时，不许猜**            | —（先问） |
+| 5   | 常规「根据我的信息调整一下」               | 默认整周更新                             | `week`    |
+
+判定锚点：**周计划=训练框架（结构层），日计划=框架内某天的覆盖（内容层）**。
+框架缺失时任何计划请求先建框架（#1）；「临时/长期」看原因的影响范围而非
+措辞强度，依据不足按 #4 反问。
+
+### 11.2 落库数据形态（apply 载荷 entries[]）
+
+每条目（PlanEntryInput，契约单一真源 `shared/contracts/weekly-plan.ts`）：
 
 | 字段        | 形态                     | 说明                          |
 | ----------- | ------------------------ | ----------------------------- |
@@ -442,12 +487,14 @@ plan_card 仍被校验器接受。weekly_plan 卡展示**整周**：
 
 条目状态机（落库即 `planned`）：`planned → adjusted → completed/skipped`，
 后两态为终态。状态迁移由 Repository 强制执行（契约迁移表单一真源）。
+`week_id` 缺省由服务器推导当前 ISO 周——Agent 不做任何日历算术。
 
 ### 11.3 训练前读取路径（AI 隐形）
 
 - 今日课表走确定性 API `GET /api/schedule/today`（纯 DB 读、无 LLM）：
-  返回三态 `planned / rest_day / no_plan` + 当日条目（含动作名）
-- **已落库的计划不需要 Agent 在场**——用户问「今天练什么」时前端直读；
+  返回三态 `planned / rest_day / no_plan` + 当日条目（动作名中文优先
+  COALESCE(name_zh, name)，5.0）
+- **已确认的计划不需要 Agent 在场**——用户问「今天练什么」时前端直读；
   本技能只在「排周计划 / 换计划 / 调整条目」时介入
 
 ### 11.4 缺勤顺延（查表规则，Agent 只解释）
@@ -472,8 +519,15 @@ Agent 职责边界：解释规则 + 引导按下一次训练正常执行；**绝
 - 渐进超负荷 / deload 判定 → 同一真源（selectProgressionStrategy /
   shouldDeload）；加重步进等算术一律引用 Service 结果，Agent 不自行计算
 
+### 11.6 动作名中文优先（5.0）
+
+`list_exercises` 直出 `name_zh`（官方中文名，354/354 已回填）。面向用户的
+输出（weekly_plan 卡动作名 / 单日简述 / 正文动作名）一律用 name_zh；
+**禁止自行翻译或音译**。存储/引用层（exercise_id）与展示层（name_zh）分离，
+今日课表 API 同口径中文优先（COALESCE(name_zh, name)）。
+
 ---
 
-_最后更新时间: 2026-09-26_
-_版本: 4.0.0 - 周计划生成模式（E3/issue #2）：新增第十一节（落库契约/每周一次语义/缺勤顺延/决策表真源指针），对齐 get_current_plan + save_weekly_plan 工具链_
-_历史: 3.1.0 - 移除幻影工具文档（submit_plan/calculate_capacity/create_exercise 均已不在工具表），对齐现行 6 工具 + plan 卡直出链路；重量允许留 0（首训自选、次训锚定）_
+_最后更新时间: 2026-09-28_
+_版本: 5.0.0 - 提案-确认模式 + 粒度规则 + 中文名（B5b/issue #38）：第十一节重写（save_weekly_plan 移除 → apply 载荷确认落库；周/日粒度五规则；name_zh 中文优先）_
+_历史: 4.0.0 - 周计划生成模式（E3/issue #2）：get_current_plan + save_weekly_plan 工具链；3.1.0 - 移除幻影工具文档，plan 卡直出链路_

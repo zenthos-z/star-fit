@@ -9,9 +9,12 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (11)
+ * ## Tool set (10)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
- * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, description}].
+ * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, name_zh,
+ *                                 description}] (B5b: name_zh is the official Chinese
+ *                                 display name — user-facing plan output uses it,
+ *                                 never translate names in-model).
  *                                 The library is small enough to fit in context, so the agent
  *                                 picks actions itself. `description`
  *                                 carries pattern/targets/equipment/impact so the agent can
@@ -37,11 +40,12 @@
  *                                 per week; week_id defaults to the CURRENT
  *                                 week resolved server-side, the agent never
  *                                 does calendar math).
- * - `save_weekly_plan`    (write) persist a weekly plan (weekly_plans +
- *                                 plan_entries, atomic, via
- *                                 WeeklyPlanRepository — B1 honoured). Refuses
- *                                 to overwrite an existing week
- *                                 (already_exists) — weekly-once semantics.
+ *
+ * [B5b issue#38] `save_weekly_plan` (write) REMOVED: weekly-plan persistence is
+ * proposal-confirm now — the agent computes entries in the proposal round and
+ * carries them on the weekly_plan card (data.apply); the app writes them
+ * deterministically via POST /api/schedule/weekly-plan/apply AFTER the user
+ * confirms. Nothing lands in weekly_plans/plan_entries without that confirm.
  *
  * ## Red lines honoured
  * - **Repository boundary (B1)**: tools reach data ONLY through the Repository
@@ -98,7 +102,6 @@ import { getPostgresClient } from "../../db/postgresql/index.js";
 import { mergeHistorySources } from "./historyMerger.js";
 import { generateExerciseNanoId } from "../../utils/nanoid.js";
 import { createWeeklyPlanRepository } from "../../db/postgresql/repository/weeklyPlan.repository.js";
-import { ServiceError, ServiceErrorCode } from "../errors/ServiceError.js";
 import {
   WEEK_ID_PATTERN,
   PLAN_ENTRY_DATE_PATTERN,
@@ -117,6 +120,8 @@ type DbClient = ReturnType<typeof getPostgresClient>;
 interface ExerciseListRow {
   id: string;
   name: string;
+  /** [B5b] 中文展示名（002 列，翻译脚本已 354/354 回填；NULL 兜底英文名） */
+  name_zh: string | null;
   exercise_type: string | null;
   difficulty: string | null;
   equipment: string | null;
@@ -377,7 +382,7 @@ export class ExerciseQuery extends BaseRepository {
    */
   async listAll(): Promise<ExerciseListRow[]> {
     return this.queryMany<ExerciseListRow>(
-      `SELECT id, name, exercise_type, difficulty, equipment, category, body_part, primary_muscles
+      `SELECT id, name, name_zh, exercise_type, difficulty, equipment, category, body_part, primary_muscles
          FROM exercises
          ORDER BY name`,
     );
@@ -753,39 +758,11 @@ const weeklyPlanEntryInputSchema = z.object({
     .describe("Order within the same day (default 0)."),
 });
 
-const saveWeeklyPlanSchema = z
-  .object({
-    week_id: z
-      .string()
-      .regex(WEEK_ID_PATTERN, "ISO week YYYY-Www (e.g. 2026-W40)")
-      .optional()
-      .describe(
-        "ISO week id. OMIT it to target the CURRENT week (resolved " +
-          "server-side — never compute calendar math yourself).",
-      ),
-    split: z
-      .enum(["full_body", "upper_lower", "push_pull_legs", "hybrid", "custom"])
-      .describe(
-        "Weekly split. Derive it from the user's weekly available days + level " +
-          "per the program-progression split-selection decision table.",
-      ),
-    entries: z
-      .array(weeklyPlanEntryInputSchema)
-      .min(1)
-      .max(200)
-      .describe(
-        "All plan entries for the week (one row per exercise per day). " +
-          "Dates must cover the user's training days of that week.",
-      ),
-  })
-  .describe(
-    "Persist a weekly plan as an entity (weekly_plans + plan_entries, written " +
-      "through the WeeklyPlanRepository in one atomic transaction). Call " +
-      "get_current_plan FIRST: one plan per user per week — if the week already " +
-      "has a plan the tool REFUSES to overwrite (returns already_exists); adjust " +
-      "existing entries conversationally instead of saving a new plan. The " +
-      "server stamps user_id server-side; the agent cannot target another user.",
-  );
+// [B5b issue#38] save_weekly_plan 工具已移除：周计划写入改为提案-确认架构——
+// Agent 提案轮算好 entries 随 weekly_plan 卡携带（data.apply 载荷），用户点
+// 「确认启用」后前端直调 POST /api/schedule/weekly-plan/apply 确定性落库。
+// 确认前计划不进数据库（根治「计划不知什么时候就出现了」）。读取仍走
+// get_current_plan；调整/重算同经确认端点（scope=days / week）。
 
 // ---------------------------------------------------------------------------
 // Scoped write helpers (exposed so B2/B3 can drive the guard with real PG)
@@ -957,11 +934,14 @@ export function buildMcpToolsWith(
   const listExercises = new DynamicStructuredTool({
     name: "list_exercises",
     description:
-      "List the ENTIRE exercise library (read-only) as [{id, name, exercise_type, description}]. No arguments. " +
+      "List the ENTIRE exercise library (read-only) as [{id, name, name_zh, exercise_type, description}]. No arguments. " +
       "The library is small enough to fit in context — call this ONCE, then pick actions in-context " +
       "respecting the user equipment and any active injuries. `exercise_type` tells you which fields are required " +
       "(isometric needs duration, outdoor needs distance, resistance needs weight). " +
-      "`description` carries pattern/targets/equipment/joint-impact. Never invent an exercise that is not in the returned list.",
+      "`name_zh` is the official Chinese display name (curated library data, 100% coverage — never translate " +
+      "names yourself): user-facing output (plan cards, replies) MUST use name_zh for Chinese-speaking users; " +
+      "`name` (English) is the storage/library key. `description` carries pattern/targets/equipment/joint-impact. " +
+      "Never invent an exercise that is not in the returned list.",
     schema: listExercisesSchema,
     func: async () => {
       const exerciseQuery = new ExerciseQuery(client);
@@ -969,6 +949,9 @@ export function buildMcpToolsWith(
       const exercises = rows.map((r) => ({
         id: r.id,
         name: r.name,
+        // [B5b issue#38] 中文名随库直出（354/354 已回填）——展示层确定性
+        // 中文化，Agent 禁止自行翻译
+        name_zh: r.name_zh ?? r.name,
         exercise_type: r.exercise_type,
         description: describeExercise(r),
       }));
@@ -1195,8 +1178,11 @@ export function buildMcpToolsWith(
           found: false,
           week_id: weekId,
           message:
-            "No plan for this week yet. Generate one (load_history → list_exercises → " +
-            "save_weekly_plan) respecting the user's weekly days, equipment and injuries.",
+            "No plan for this week yet — the weekly FRAMEWORK is missing. Build one " +
+            "(load_history → list_exercises → weekly_plan card with data.apply payload, " +
+            "scope='week') respecting the user's weekly days, equipment and injuries. " +
+            "The plan persists ONLY after the user confirms the card (proposal-confirm; " +
+            "there is no save tool).",
         });
       }
       return JSON.stringify({
@@ -1210,71 +1196,8 @@ export function buildMcpToolsWith(
     },
   });
 
-  const saveWeeklyPlan = new DynamicStructuredTool({
-    name: "save_weekly_plan",
-    description:
-      "Persist the weekly plan as an entity (atomic: plan + all entries, via WeeklyPlanRepository). " +
-      "Call get_current_plan FIRST — one plan per user per week; an existing plan is NEVER overwritten " +
-      "(already_exists). Missing-entry adjustments afterwards happen conversationally, not by re-saving.",
-    schema: saveWeeklyPlanSchema,
-    func: async (input, _runManager, config) => {
-      const userId = getUserIdFromContext({
-        explicitConfig: config,
-        injectedUserId,
-      });
-      const weekId = input.week_id ?? getIsoWeekId(utcToday());
-      const planRepo = createWeeklyPlanRepository(client);
-      try {
-        const result = await planRepo.createWeeklyPlan({
-          user_id: userId,
-          week_id: weekId,
-          split: input.split,
-          status: "active" as const, // 新周计划立即生效
-          entries: input.entries.map((e) => ({
-            entry_date: e.entry_date,
-            exercise_id: e.exercise_id,
-            target_sets: e.target_sets,
-            target_load: e.target_load,
-            status: "planned" as const, // 新计划条目一律初始 planned
-            sort_order: e.sort_order ?? 0,
-          })),
-        });
-        return JSON.stringify({
-          saved: true,
-          week_id: result.plan.week_id,
-          plan_id: result.plan.id,
-          entries_count: result.entries.length,
-          message:
-            "Weekly plan persisted as an entity. Today's and future sessions read " +
-            "it deterministically from /api/schedule/today.",
-        });
-      } catch (err) {
-        // 结构化降级：already_exists（每周一次语义）与 invalid_input（Zod 拒绝）
-        // 都是 Agent 需要读懂并改道的结果，不是运行时故障 —— 记日志后返回。
-        if (
-          err instanceof ServiceError &&
-          err.code === ServiceErrorCode.ALREADY_EXISTS
-        ) {
-          return JSON.stringify({
-            saved: false,
-            reason: "already_exists",
-            week_id: weekId,
-            message:
-              "This week already has a plan (one per user per week, reuse-by-default). " +
-              "Read it with get_current_plan and adjust entries conversationally instead.",
-          });
-        }
-        console.error("[mcpTools.save_weekly_plan] failed:", err);
-        const message =
-          err instanceof Error ? err.message : "unknown validation failure";
-        return JSON.stringify({
-          saved: false,
-          reason: "invalid_input",
-          message: `Plan rejected by contract validation: ${message}. Fix the entries and retry.`,
-        });
-      }
-    },
-  });
+  // [B5b issue#38] save_weekly_plan 工具随提案-确认架构移除（见上方工具表
+  // 注释）——周计划写入只经确认端点，Agent 不再直接落库。
 
   return [
     loadHistory,
@@ -1287,7 +1210,6 @@ export function buildMcpToolsWith(
     writeMemory,
     updateProfile,
     getCurrentPlan,
-    saveWeeklyPlan,
   ];
 }
 

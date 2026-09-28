@@ -9,6 +9,7 @@ import { ExerciseRenderer } from './ExerciseRenderer';
 import type { PlanConsumeRecord } from './cards/PlanCard';
 import type { SurveySubmitRecord } from './cards/SurveyCard';
 import type { ProfileUpdateDecisionRecord } from './cards/ProfileUpdateConfirmCard';
+import type { WeeklyPlanDecisionRecord } from './cards/WeeklyPlanCard';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatMessage, ProgressItem } from '../../hooks/useAICoach';
 import type { ChatThread } from '@/storage';
@@ -268,6 +269,10 @@ interface AICoachOverlayProps {
     proposals: Array<{ field: string; value?: unknown }>,
     pendingIntent: unknown
   ) => void;
+  /** [B5b issue#38] 周计划确认决定固化：回写 chatHistory[i].uiHint.decision（随 thread 持久化） */
+  onWeeklyPlanDecision?: (msgIndex: number, record: WeeklyPlanDecisionRecord) => void;
+  /** [B5b issue#38] 周计划提案确认落库：直调 apply 端点 → 结果回填卡片 → 信息栏事件刷新 */
+  onWeeklyPlanApply?: (msgIndex: number, apply: unknown) => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   attachedContext?: any;
@@ -317,6 +322,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   onSurveySubmitted,
   onProfileDecision,
   onProfileApply,
+  onWeeklyPlanDecision,
+  onWeeklyPlanApply,
   sessionStatus,
   sessionSessionId,
   isTransitioning = false,
@@ -905,6 +912,22 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                               silentOpts
                             );
                           }
+                        } else if (uiHintType === 'weekly_plan') {
+                          // [B5b issue#38] 周计划提案确认 = 纯程序化落库（提案-确认架构）：
+                          // 确认 → 前端直调 POST /api/schedule/weekly-plan/apply（无 LLM，
+                          //   毫秒级）→ 卡片同一气泡流转为「已启用 · 信息栏已同步」
+                          //   → window 事件触发信息栏本周计划即刻刷新
+                          // 放弃 → 决定固化为 cancelled 终态，提案自然作废（无残留数据）
+                          if (payload?.action === 'confirm_apply' || payload?.action === 'cancel_apply') {
+                            onWeeklyPlanDecision?.(i, {
+                              action: payload.action,
+                              decidedAt: Date.now(),
+                              result: payload.action === 'confirm_apply' ? 'pending' : undefined,
+                            });
+                            if (payload.action === 'confirm_apply') {
+                              onWeeklyPlanApply?.(i, payload.apply);
+                            }
+                          }
                         } else if (uiHintType === 'audit_complete') {
                           // [画像更新闭环] 「查看详情」无 auditContent 时的兜底已移入卡片内：
                           // 有 updates 就地展开明细；仅当真正无内容可看时才通知父级
@@ -914,6 +937,27 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                         }
                       }}
                     />
+                  </div>
+                )}
+
+                {/* [B5b SSE ②] 断流重试：CONNECTION_LOST 定型气泡挂 retry 载荷， */}
+                {/* 一键静默重发原始消息（不再往聊天流插用户气泡，不打断上下文） */}
+                {msg.retry && !msg.isThinking && (
+                  <div className="w-full mt-2 flex justify-center">
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => {
+                        haptic('light');
+                        handleChatSubmit(undefined, msg.retry!.message, msg.retry!.scenario, { silent: true });
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-[13px] font-medium text-blue-500 active:bg-blue-50 transition-colors disabled:opacity-50"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />
+                      </svg>
+                      连接中断，点击重试
+                    </button>
                   </div>
                 )}
               </div>

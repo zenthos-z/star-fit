@@ -22,7 +22,8 @@ import { todayDateKey } from '../utils/weeklyPlanView';
 import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
 import type { SurveySubmitRecord } from '../components/execution/cards/SurveyCard';
 import type { ProfileUpdateDecisionRecord } from '../components/execution/cards/ProfileUpdateConfirmCard';
-import type { AgentScenario, UiHintCard, TodayScheduleResponse, ProfileApplyRequest, ProfilePendingIntent } from 'shared/contracts';
+import type { WeeklyPlanDecisionRecord } from '../components/execution/cards/WeeklyPlanCard';
+import type { AgentScenario, UiHintCard, TodayScheduleResponse, ProfileApplyRequest, ProfilePendingIntent, WeeklyPlanApplyPayload } from 'shared/contracts';
 import { buildProfileResumePrompt, parsePendingIntent } from '../utils/profileIntent';
 import { parseJSONSafe } from 'shared/contracts';
 import {
@@ -49,6 +50,12 @@ export interface ChatMessage {
   uiHint?: any;
   agentTrace?: string;
   explanation?: string;  // 训练计划说明（由 Agent 生成）
+  /**
+   * [B5b SSE ②] 断流重试载荷：连接中断（CONNECTION_LOST）定型气泡时挂上
+   * 原始消息 + 场景，UI 在气泡下方渲染「连接中断，点击重试」按钮，点击即
+   * 以 silent 轮重发（不往聊天流里再插用户气泡）。
+   */
+  retry?: { message: string; scenario?: string };
   _isAnalyzing?: boolean;
   _analysisComplete?: boolean;
   _sessionId?: string;
@@ -852,14 +859,22 @@ ${JSON.stringify(uploadData, null, 2)}`;
       }
 
       // 本轮流结束：定型这条消息 —— 现在才挂上卡片，卡片渲染在此刻发生
+      // [B5b SSE ②] CONNECTION_LOST：已收到的部分内容保留展示，但明确告知
+      // 连接中断并挂上重试载荷（UI 渲染「连接中断，点击重试」），不再干等。
+      const connectionLost = error?.code === 'CONNECTION_LOST';
       setChatHistory(prev => prev.map(m => (m.isThinking ? {
         role: 'ai',
-        text: error ? `[诊断] agent 返回错误 — ${error.code}: ${error.message}` : accumulated,
+        text: error
+          ? connectionLost
+            ? (accumulated ? `${accumulated}\n\n（连接中断，回复可能不完整）` : '连接中断，请点击重试。')
+            : `[诊断] agent 返回错误 — ${error.code}: ${error.message}`
+          : accumulated,
         thinkingText: thinkingAccumulated || undefined,
         uiHint: synthesizeUiHint(card),
         explanation: undefined,
         isThinking: false,
         progressItems: [],
+        retry: connectionLost ? { message: userMsg, scenario } : undefined,
       } : m)));
     } catch (err) {
       console.error("Chat Error:", err);
@@ -914,6 +929,65 @@ ${JSON.stringify(uploadData, null, 2)}`;
         : m
     )));
   }, []);
+
+  /**
+   * [B5b issue#38] 周计划确认决定固化：把确认/放弃决定写入指定消息的
+   * uiHint.decision，随 thread 持久化 → 重开对话保持「已启用/已放弃」终态，
+   * 杜绝重复确认二次写库（与画像确认同构，2026-09-14 起的决策持久化模式）。
+   */
+  const markWeeklyPlanDecision = useCallback((msgIndex: number, record: WeeklyPlanDecisionRecord) => {
+    setChatHistory(prev => prev.map((m, i) => (
+      i === msgIndex && m.uiHint?.type === 'weekly_plan'
+        ? { ...m, uiHint: { ...m.uiHint, decision: record } }
+        : m
+    )));
+  }, []);
+
+  /**
+   * [B5b issue#38] 周计划提案确认 → 纯程序化落库（提案-确认架构）：
+   * 用户在 weekly_plan 卡点「确认启用」后，前端直调确定性端点
+   * POST /api/schedule/weekly-plan/apply（无 LLM、毫秒级），结果回填卡片
+   * 终态（done/failed）；成功后广播 window 事件 `starfit:weekly-plan-applied`，
+   * 信息栏的 useWeeklyPlan 监听该事件即刻刷新——「确认即落库即刷新」。
+   * 契约红线：类型从 shared/contracts 导入；AI 零参与落库。
+   */
+  const confirmWeeklyPlanApply = async (msgIndex: number, applyRaw: unknown) => {
+    // 形态防御：apply 缺失/非对象不发起写入（旧卡无 apply = 仅展示卡）
+    const apply = (applyRaw && typeof applyRaw === 'object'
+      ? applyRaw
+      : null) as WeeklyPlanApplyPayload | null;
+    let ok = false;
+    let failMessage = '';
+    if (apply && Array.isArray(apply.entries) && apply.entries.length > 0) {
+      try {
+        const res = await fetch(`${API_BASE}/schedule/weekly-plan/apply`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(apply),
+        });
+        ok = res.ok;
+        if (!ok) {
+          failMessage = `HTTP ${res.status}`;
+          console.warn('[useAICoach] weekly-plan apply rejected:', res.status);
+        }
+      } catch (err) {
+        console.warn('[useAICoach] weekly-plan apply error:', err);
+        failMessage = err instanceof Error ? err.message : String(err);
+      }
+    } else {
+      failMessage = '提案载荷缺失';
+    }
+    // 写入结果回填卡片终态（同一气泡内流转：writing → done/failed）
+    markWeeklyPlanDecision(msgIndex, {
+      action: 'confirm_apply',
+      decidedAt: Date.now(),
+      result: ok ? 'done' : 'failed',
+      failMessage: ok ? undefined : failMessage,
+    });
+    if (!ok) return;
+    // 确认即落库即刷新：信息栏（本周计划）监听此事件立即重新拉取课表
+    window.dispatchEvent(new Event('starfit:weekly-plan-applied'));
+  };
 
   /**
    * [B5 issue#37] 画像确认纯程序化写入：用户点「确认更新」后前端直调确定性
@@ -1367,6 +1441,9 @@ ${JSON.stringify(uploadData, null, 2)}`;
     markSurveySubmitted,
     markProfileDecision,
     confirmProfileUpdate,
+    // [B5b issue#38] 周计划提案-确认：决定固化 + 确定性落库（apply 端点）
+    markWeeklyPlanDecision,
+    confirmWeeklyPlanApply,
     openAiCoach,
     chatEndRef,
     textareaRef,
