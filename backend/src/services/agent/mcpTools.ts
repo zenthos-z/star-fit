@@ -383,19 +383,6 @@ export class UserScopedWriteRepository extends BaseRepository {
  */
 export class ExerciseQuery extends BaseRepository {
   /**
-   * Return the whole exercise library (id/name/type/difficulty + 002 深化列).
-   * The library is small enough to fit in the model context, so the agent
-   * filters and picks actions in-context — no SQL filtering.
-   */
-  async listAll(): Promise<ExerciseListRow[]> {
-    return this.queryMany<ExerciseListRow>(
-      `SELECT id, name, name_zh, exercise_type, difficulty, mechanic, equipment, category, body_part, primary_muscles
-         FROM exercises
-         ORDER BY name`,
-    );
-  }
-
-  /**
    * Filtered + paginated library read (42b, issue #42). All filters are
    * optional and AND-combined; `keyword` does a case-insensitive contains
    * across name / name_zh / category / body_part / primary+secondary muscles.

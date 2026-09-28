@@ -1,6 +1,6 @@
 ---
 name: "workout-complete-handler"
-description: "训练结束后处理流程指南。当收到 workout_complete scenario 时，Agent 必须按本技能定义的顺序调用 MCP 工具：先 load_history 获取已持久化的训练数据（前端已通过 POST /api/sessions 写入），分析后决定是否更新 profile_dynamic，最后生成 survey_card。核心目标：确保 Agent 使用真实数据分析，防止幻觉；smart survey 只问关键问题，避免过度打扰用户。"
+description: "训练结束后处理流程指南。收到 workout_complete scenario 时，按本技能定义的顺序调用 MCP 工具：先 load_history 取已持久化训练数据，分析后决定是否更新 profile_dynamic，最后生成 survey_card。目标：用真实数据分析防幻觉；survey 只问关键问题，避免打扰。"
 category: "workflow"
 version: "1.0.0"
 ---

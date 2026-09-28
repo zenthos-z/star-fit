@@ -35,13 +35,13 @@
  * @module skillLoader
  */
 
-import path from 'node:path';
-import fs from 'node:fs';
-import { fileURLToPath } from 'node:url';
+import path from "node:path";
+import fs from "node:fs";
+import { fileURLToPath } from "node:url";
 
 // Native Deep Agents API (B1: native Skill/filesystem, NOT the MAS runtime).
-import { FilesystemBackend, listSkills } from 'deepagents';
-import type { FilesystemPermission } from 'deepagents';
+import { FilesystemBackend, listSkills } from "deepagents";
+import type { FilesystemPermission } from "deepagents";
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -124,7 +124,7 @@ export interface DeepAgentSkillMount {
  * Computed once at module load; all descriptors reference files under here.
  */
 const MODULE_DIR = path.dirname(fileURLToPath(import.meta.url));
-const SKILLS_ROOT = path.resolve(MODULE_DIR, '..', 'mas', 'skills');
+const SKILLS_ROOT = path.resolve(MODULE_DIR, "..", "mas", "skills");
 
 /**
  * The directory every backend path is relative to. All `readPath` / `sourcePath`
@@ -136,8 +136,8 @@ export const SKILLS_BACKEND_ROOT = SKILLS_ROOT;
 /** Convert an absolute path under SKILLS_ROOT to its POSIX `readPath`. */
 function toReadPath(absPath: string): string {
   const rel = path.relative(SKILLS_ROOT, absPath);
-  const posix = rel.split(path.sep).join('/');
-  return posix.startsWith('/') ? posix : `/${posix}`;
+  const posix = rel.split(path.sep).join("/");
+  return posix.startsWith("/") ? posix : `/${posix}`;
 }
 
 /**
@@ -155,7 +155,7 @@ function readSkillFrontmatter(
 ): { name: string; description: string } | null {
   let raw: string;
   try {
-    raw = fs.readFileSync(skillMdPath, 'utf-8');
+    raw = fs.readFileSync(skillMdPath, "utf-8");
   } catch {
     return null;
   }
@@ -165,7 +165,7 @@ function readSkillFrontmatter(
   }
   const body = fenceMatch[1];
   const get = (key: string): string | null => {
-    const m = body.match(new RegExp(`^${key}:\\s*(.+?)\\s*$`, 'm'));
+    const m = body.match(new RegExp(`^${key}:\\s*(.+?)\\s*$`, "m"));
     if (!m) {
       return null;
     }
@@ -179,8 +179,8 @@ function readSkillFrontmatter(
     }
     return v;
   };
-  const name = get('name');
-  const description = get('description');
+  const name = get("name");
+  const description = get("description");
   if (!name || !description) {
     return null;
   }
@@ -197,7 +197,11 @@ function walkMarkdown(dir: string): Array<{ absPath: string; rel: string }> {
     const abs = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       out.push(...walkMarkdown(abs));
-    } else if (entry.isFile() && entry.name.endsWith('.md') && entry.name !== 'SKILL.md') {
+    } else if (
+      entry.isFile() &&
+      entry.name.endsWith(".md") &&
+      entry.name !== "SKILL.md"
+    ) {
       out.push({ absPath: abs, rel: path.relative(dir, abs) });
     }
   }
@@ -213,7 +217,7 @@ function buildDescriptor(
   knowledgeRel: ReadonlyArray<{ rel: string; label: string }>,
 ): SkillDescriptor {
   const skillDirPath = path.join(SKILLS_ROOT, dirName);
-  const skillMdPath = path.join(skillDirPath, 'SKILL.md');
+  const skillMdPath = path.join(skillDirPath, "SKILL.md");
   const fm = readSkillFrontmatter(skillMdPath);
   if (!fm) {
     // GOLD invariant: every mounted skill must have parseable frontmatter.
@@ -223,7 +227,7 @@ function buildDescriptor(
   }
   const knowledgeFiles: KnowledgeFile[] = [];
   for (const { rel, label } of knowledgeRel) {
-    const absPath = path.join(skillDirPath, rel.split('/').join(path.sep));
+    const absPath = path.join(skillDirPath, rel.split("/").join(path.sep));
     const readPath = toReadPath(absPath);
     knowledgeFiles.push({ absPath, readPath, label });
   }
@@ -233,7 +237,7 @@ function buildDescriptor(
     skillDirPath,
     skillMdPath,
     knowledgeFiles,
-    sourcePath: toReadPath(skillDirPath) + '/',
+    sourcePath: toReadPath(skillDirPath) + "/",
   };
 }
 
@@ -244,7 +248,7 @@ function buildDescriptor(
  */
 function buildDescriptorFromDir(dirName: string): SkillDescriptor {
   const skillDirPath = path.join(SKILLS_ROOT, dirName);
-  const skillMdPath = path.join(skillDirPath, 'SKILL.md');
+  const skillMdPath = path.join(skillDirPath, "SKILL.md");
   const fm = readSkillFrontmatter(skillMdPath);
   if (!fm) {
     throw new Error(
@@ -255,7 +259,7 @@ function buildDescriptorFromDir(dirName: string): SkillDescriptor {
     ({ absPath, rel }) => ({
       absPath,
       readPath: toReadPath(absPath),
-      label: rel.split(path.sep).join('/'),
+      label: rel.split(path.sep).join("/"),
     }),
   );
   return {
@@ -264,7 +268,7 @@ function buildDescriptorFromDir(dirName: string): SkillDescriptor {
     skillDirPath,
     skillMdPath,
     knowledgeFiles,
-    sourcePath: toReadPath(skillDirPath) + '/',
+    sourcePath: toReadPath(skillDirPath) + "/",
   };
 }
 
@@ -275,34 +279,38 @@ function buildDescriptorFromDir(dirName: string): SkillDescriptor {
  * never copied. (Mounting itself is directory-driven via `loadAllSkills`, so
  * this registry no longer gates which skills mount.)
  *
- * Asset count: 1 (plan-generation) + 11 (exercise-type-guide: index + 10 types)
- * + 1 (strength-training-designer) = 13 knowledge files — the ~15 GOLD assets
- * named in the card (SKILL.md entries round it up).
+ * Asset count: 4 (plan-generation: main + 3 topic splits, 42c) + 11
+ * (exercise-type-guide: index + 10 types) + 1 (strength-training-designer) = 16
+ * knowledge files — the ~15 GOLD assets named in the card (SKILL.md entries
+ * round it up).
  */
 const GOLD_REGISTRY: Record<string, () => SkillDescriptor> = {
-  'plan-generation': () =>
-    buildDescriptor('plan-generation', [
-      { rel: 'knowledge.md', label: 'plan-generation main knowledge' },
+  "plan-generation": () =>
+    buildDescriptor("plan-generation", [
+      { rel: "knowledge.md", label: "plan-generation main knowledge" },
+      { rel: "knowledge/novice-starting.md", label: "novice starting loads" },
+      { rel: "knowledge/volume-progression.md", label: "volume progression" },
+      { rel: "knowledge/injury-adjustment.md", label: "injury adjustment" },
     ]),
-  'exercise-type-guide': () =>
-    buildDescriptor('exercise-type-guide', [
-      { rel: 'knowledge-index.md', label: 'exercise-type index' },
-      { rel: 'knowledge/resistance.md', label: 'resistance type' },
-      { rel: 'knowledge/bodyweight.md', label: 'bodyweight type' },
-      { rel: 'knowledge/isometric.md', label: 'isometric type' },
-      { rel: 'knowledge/cardio.md', label: 'cardio type' },
-      { rel: 'knowledge/outdoor.md', label: 'outdoor type' },
-      { rel: 'knowledge/unilateral.md', label: 'unilateral type' },
-      { rel: 'knowledge/assisted.md', label: 'assisted type' },
-      { rel: 'knowledge/flexibility.md', label: 'flexibility type' },
-      { rel: 'knowledge/heavy_weight.md', label: 'heavy_weight type' },
-      { rel: 'knowledge/rep_training.md', label: 'rep_training type' },
+  "exercise-type-guide": () =>
+    buildDescriptor("exercise-type-guide", [
+      { rel: "knowledge-index.md", label: "exercise-type index" },
+      { rel: "knowledge/resistance.md", label: "resistance type" },
+      { rel: "knowledge/bodyweight.md", label: "bodyweight type" },
+      { rel: "knowledge/isometric.md", label: "isometric type" },
+      { rel: "knowledge/cardio.md", label: "cardio type" },
+      { rel: "knowledge/outdoor.md", label: "outdoor type" },
+      { rel: "knowledge/unilateral.md", label: "unilateral type" },
+      { rel: "knowledge/assisted.md", label: "assisted type" },
+      { rel: "knowledge/flexibility.md", label: "flexibility type" },
+      { rel: "knowledge/heavy_weight.md", label: "heavy_weight type" },
+      { rel: "knowledge/rep_training.md", label: "rep_training type" },
     ]),
-  'strength-training-designer': () =>
-    buildDescriptor('strength-training-designer', [
+  "strength-training-designer": () =>
+    buildDescriptor("strength-training-designer", [
       {
-        rel: 'knowledge/non-big-three-guide.md',
-        label: 'non-big-three guide',
+        rel: "knowledge/non-big-three-guide.md",
+        label: "non-big-three guide",
       },
     ]),
 };
@@ -329,7 +337,7 @@ export function loadAllSkills(): SkillDescriptor[] {
     if (!entry.isDirectory()) {
       continue;
     }
-    const skillMd = path.join(SKILLS_ROOT, entry.name, 'SKILL.md');
+    const skillMd = path.join(SKILLS_ROOT, entry.name, "SKILL.md");
     if (fs.existsSync(skillMd)) {
       out.push(buildDescriptorFromDir(entry.name));
     }
@@ -388,7 +396,7 @@ export function toDeepAgentSkillMount(
   // Write/edit operations are intentionally absent => GOLD is read-only.
   const permissions: FilesystemPermission[] = descriptors.map((d) => ({
     paths: [`${d.sourcePath}**`],
-    operations: ['read'],
+    operations: ["read"],
   }));
 
   // virtualMode=true so agent readPaths (POSIX-absolute like
@@ -396,7 +404,10 @@ export function toDeepAgentSkillMount(
   // filesystem `/`. Without it the legacy mode treats absolute paths as-is and
   // `read_file('/plan-generation/knowledge.md')` would miss. This also enforces
   // path-traversal protection (no `..`/`~`, must stay within root) — GOLD safety.
-  const backend = new FilesystemBackend({ rootDir: SKILLS_ROOT, virtualMode: true });
+  const backend = new FilesystemBackend({
+    rootDir: SKILLS_ROOT,
+    virtualMode: true,
+  });
 
   return { backend, skills, permissions };
 }

@@ -44,6 +44,10 @@ import {
 // the snapshot hash here in the same change set.  History:
 //   2026-09-26  plan-generation/knowledge.md 3.1.0 → 4.0.0 (E3/issue #2:
 //               weekly-plan generation mode; section 11 added)
+//   2026-09-28  plan-generation knowledge 5.0 rewrite (#41, B5b) — snapshot
+//               refreshed in 42c (42b had left it red); 2026-09-29 42c split:
+//               knowledge.md slimmed + knowledge/{novice-starting,
+//               volume-progression,injury-adjustment}.md added
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
@@ -69,7 +73,13 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "261c355002bbac1fb3c825ba02840ec91d696edf7bb77911fa63b67da9dba270",
+    "3bdb8fedc237b6bb2cd879c7d4be16c66e0cbecb0f02000058f1dc12d9b84045",
+  "plan-generation/knowledge/injury-adjustment.md":
+    "d556d96744b2cea9404dd88a085454729ec6ce4e3060712b662692f8ff269e0a",
+  "plan-generation/knowledge/novice-starting.md":
+    "23855002deee2c0b3a6a93e7534277efe6a43349babd386d599b670ef70fe3a1",
+  "plan-generation/knowledge/volume-progression.md":
+    "10d70dc7b3a974860aab5ec02c2dbeed649a3c02662a2dcce4703d546cf0b5bb",
   "strength-training-designer/knowledge/non-big-three-guide.md":
     "2cfc4569bf8ee7adf99dd7f4a946e17f2be00c59e6c8989d6f2ed8b3b2320a82",
 };
