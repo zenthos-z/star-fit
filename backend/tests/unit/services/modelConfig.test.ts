@@ -13,7 +13,14 @@
  * controlled DB state, without changing source behavior (P009).
  */
 
-import { describe, it, expect, beforeEach, afterEach, jest } from "@jest/globals";
+import {
+  describe,
+  it,
+  expect,
+  beforeEach,
+  afterEach,
+  jest,
+} from "@jest/globals";
 
 // Mock the ConfigRepo gateway BEFORE importing the modules under test.
 jest.mock("../../../src/services/knowledgeRepo.js", () => ({
@@ -29,7 +36,14 @@ import { ConfigRepo } from "../../../src/services/knowledgeRepo.js";
 import {
   resolveDeepSeekModel,
   resolveTaskConfig,
+  resolveDefaultedProvider,
+  resolveGLMModel,
+  resolveGLMAnthropicModel,
+  resolveGLMLegacyModel,
   DEFAULT_DEEPSEEK_FLASH,
+  DEFAULT_GLM_BASE_URL,
+  DEFAULT_GLM_ANTHROPIC_BASE_URL,
+  DEFAULT_GLM_LEGACY_BASE_URL,
   UnknownProviderError,
   MissingApiKeyError,
 } from "../../../src/services/modelConfigService.js";
@@ -53,6 +67,8 @@ const ENV_KEYS = [
   "GLM_MODEL",
   "GLM_MODEL_DEFAULT",
   "GLM_BASE_URL",
+  "GLM_ANTHROPIC_BASE_URL",
+  "GLM_LEGACY_BASE_URL",
 ];
 
 let savedEnv: Record<string, string | undefined> = {};
@@ -84,7 +100,7 @@ function extractModel(m: any): string {
       m?.model ??
       m?.model_name ??
       m?.invocationParams?.()?.model ??
-      ""
+      "",
   );
 }
 
@@ -173,7 +189,7 @@ describe("M8 DeepSeek model config", () => {
       process.env.AI_PROVIDER = "deepseek";
       (ConfigRepo.getConfig as jest.Mock).mockImplementation(
         async (_userId: string, key: string) =>
-          key === "DEEPSEEK_MODEL_FLASH" ? "deepseek-db-override" : undefined
+          key === "DEEPSEEK_MODEL_FLASH" ? "deepseek-db-override" : undefined,
       );
 
       const cfg = await resolveTaskConfig("default");
@@ -198,6 +214,112 @@ describe("M8 DeepSeek model config", () => {
       process.env.GLM_API_KEY = "test-glm-key";
       const model = await loadModel();
       expect(extractModel(model)).toContain("glm-5.3-flash");
+    });
+  });
+
+  // --- B4: GLM 三端点架构（issue #35，端点勘定后） -------------------------
+  // glm(默认,coding/paas/v4) | glm-anthropic(备选,/api/anthropic) |
+  // glm-legacy(回退,api.z.ai)。三路共用 GLM_API_KEY/GLM_MODEL，baseURL 键隔离。
+  describe("B4 GLM provider family (coding default / anthropic backup / legacy fallback)", () => {
+    it("default provider is glm (no env / no DB)", async () => {
+      await expect(resolveDefaultedProvider()).resolves.toBe("glm");
+    });
+
+    it("resolveTaskConfig default resolves the GLM coding endpoint", async () => {
+      const cfg = await resolveTaskConfig("default");
+      expect(cfg.provider).toBe("glm");
+      expect(cfg.model).toBe("glm-5.3-flash");
+      expect(cfg.baseURL).toBe(DEFAULT_GLM_BASE_URL);
+      expect(cfg.baseURL).toBe("https://open.bigmodel.cn/api/coding/paas/v4");
+    });
+
+    it("loadModel() default builds ChatOpenAI against the coding endpoint", async () => {
+      process.env.GLM_API_KEY = "test-glm-key";
+      const model = (await loadModel()) as unknown as {
+        lc_kwargs?: {
+          model?: string;
+          configuration?: { baseURL?: string };
+          maxTokens?: number;
+        };
+      };
+      expect(model.lc_kwargs?.model).toBe("glm-5.3-flash");
+      expect(model.lc_kwargs?.configuration?.baseURL).toBe(
+        "https://open.bigmodel.cn/api/coding/paas/v4",
+      );
+      expect(model.lc_kwargs?.maxTokens).toBe(16384);
+    });
+
+    it("AI_PROVIDER=glm-anthropic builds ChatAnthropic against the anthropic endpoint", async () => {
+      process.env.AI_PROVIDER = "glm-anthropic";
+      process.env.GLM_API_KEY = "test-glm-key";
+      const model = (await loadModel()) as unknown as {
+        apiUrl?: string;
+        model?: string;
+        maxTokens?: number;
+      };
+      expect(model.model).toBe("glm-5.3-flash");
+      expect(model.apiUrl).toBe("https://open.bigmodel.cn/api/anthropic");
+      expect(model.maxTokens).toBe(16384);
+    });
+
+    it("GLM_BASE_URL env overrides the coding endpoint", async () => {
+      process.env.GLM_BASE_URL = "https://coding-proxy.example.com/v4";
+      const cfg = await resolveGLMModel("default");
+      expect(cfg.baseURL).toBe("https://coding-proxy.example.com/v4");
+    });
+
+    it("GLM_ANTHROPIC_BASE_URL env overrides the anthropic endpoint", async () => {
+      process.env.GLM_ANTHROPIC_BASE_URL =
+        "https://anthropic-proxy.example.com";
+      const cfg = await resolveGLMAnthropicModel("default");
+      expect(cfg.baseURL).toBe("https://anthropic-proxy.example.com");
+      expect(cfg.model).toBe("glm-5.3-flash");
+    });
+
+    it("coding GLM_BASE_URL never leaks into the anthropic path", async () => {
+      process.env.GLM_BASE_URL = "https://open.bigmodel.cn/api/paas/v4";
+      const cfg = await resolveGLMAnthropicModel("default");
+      expect(cfg.baseURL).toBe(DEFAULT_GLM_ANTHROPIC_BASE_URL);
+    });
+
+    it("coding GLM_BASE_URL never leaks into the legacy path", async () => {
+      process.env.GLM_BASE_URL = "https://open.bigmodel.cn/api/coding/paas/v4";
+      const cfg = await resolveGLMLegacyModel("default");
+      expect(cfg.baseURL).toBe(DEFAULT_GLM_LEGACY_BASE_URL);
+      expect(cfg.baseURL).toBe("https://api.z.ai/api/paas/v4");
+    });
+
+    it("AI_PROVIDER=glm-legacy builds the legacy ChatOpenAI path with GLM_LEGACY_BASE_URL", async () => {
+      process.env.AI_PROVIDER = "glm-legacy";
+      process.env.GLM_API_KEY = "test-glm-key";
+      process.env.GLM_LEGACY_BASE_URL = "https://api.z.ai/api/paas/v4";
+      const model = (await loadModel()) as unknown as {
+        lc_kwargs?: { model?: string; configuration?: { baseURL?: string } };
+      };
+      expect(model.lc_kwargs?.model).toBe("glm-5.3-flash");
+      expect(model.lc_kwargs?.configuration?.baseURL).toBe(
+        "https://api.z.ai/api/paas/v4",
+      );
+    });
+
+    it("glm with no key throws GLM_API_KEY missing", async () => {
+      process.env.AI_PROVIDER = "glm";
+      await expect(loadModel()).rejects.toThrow(/GLM_API_KEY missing/);
+    });
+
+    it("glm-anthropic with no key throws MissingApiKeyError", async () => {
+      process.env.AI_PROVIDER = "glm-anthropic";
+      await expect(loadModel()).rejects.toBeInstanceOf(MissingApiKeyError);
+    });
+
+    it("GLM_MODEL env is shared by all three endpoint paths", async () => {
+      process.env.GLM_MODEL = "glm-4.7";
+      const coding = await resolveGLMModel("default");
+      const anth = await resolveGLMAnthropicModel("default");
+      const legacy = await resolveGLMLegacyModel("default");
+      expect(coding.model).toBe("glm-4.7");
+      expect(anth.model).toBe("glm-4.7");
+      expect(legacy.model).toBe("glm-4.7");
     });
   });
 });

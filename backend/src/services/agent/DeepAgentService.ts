@@ -904,22 +904,45 @@ function extractText(chunk: unknown): string | undefined {
 }
 
 /**
- * Pull `reasoning_content` out of a `streamMode: 'messages'` chunk.
+ * Pull reasoning out of a `streamMode: 'messages'` chunk.
  *
- * thinking 开启时 DeepSeek 把推理放在响应的 reasoning_content 字段
- * （协议级与 content 分离）；ChatDeepSeek 透传到 AIMessageChunk 的
- * additional_kwargs.reasoning_content。Chunk 形态是 [chunk, metadata] 元组，
- * 与 extractText 同构。无该字段（thinking 关闭 / 非 reasoning 模型）返回
- * undefined。
+ * 两种协议形态（B4，issue #35）：
+ * 1. reasoning_content：DeepSeek / GLM coding 端点把推理放在响应的
+ *    reasoning_content 字段（协议级与 content 分离），langchain 封装透传到
+ *    AIMessageChunk 的 additional_kwargs.reasoning_content；
+ * 2. thinking 块：Anthropic Messages 协议（glm-anthropic 备选路径）把推理
+ *    放在 content 块数组里的 {type:'thinking', thinking:'…'}，ChatAnthropic
+ *    按 delta 下发同构块。
+ * Chunk 形态是 [chunk, metadata] 元组，与 extractText 同构。两者都归并成
+ * reasoning 增量（前端折叠思考区）；无推理内容返回 undefined。
  */
 function extractReasoningContent(chunk: unknown): string | undefined {
   if (!Array.isArray(chunk)) {
     return undefined;
   }
   const message = chunk[0] as
-    { additional_kwargs?: { reasoning_content?: unknown } } | undefined;
+    | {
+        additional_kwargs?: { reasoning_content?: unknown };
+        content?: unknown;
+      }
+    | undefined;
+  let reasoning = "";
   const rc = message?.additional_kwargs?.reasoning_content;
-  return typeof rc === "string" && rc.length > 0 ? rc : undefined;
+  if (typeof rc === "string") reasoning += rc;
+  const content = message?.content;
+  if (Array.isArray(content)) {
+    for (const block of content) {
+      if (
+        block &&
+        typeof block === "object" &&
+        (block as { type?: string }).type === "thinking" &&
+        typeof (block as { thinking?: unknown }).thinking === "string"
+      ) {
+        reasoning += (block as { thinking: string }).thinking;
+      }
+    }
+  }
+  return reasoning.length > 0 ? reasoning : undefined;
 }
 
 /**

@@ -2,10 +2,19 @@ import { ConfigRepo } from "./knowledgeRepo.js";
 import { ProxyAgent, request } from "undici";
 
 // L004: provider set is the single source of truth. DeepSeek added additively
-// (P009); GLM (Z.ai, OpenAI-compatible chat/completions) added as the new
-// default provider. Gemini remains an ordinary selectable option but is no
+// (P009); GLM (issue #35 / B4) is the default provider family with three
+// protocol paths: glm = Coding Plan OpenAI 兼容端点（默认）, glm-anthropic =
+// bigmodel Anthropic Messages 协议（B4 备选）, glm-legacy = z.ai OpenAI 兼容
+// 端点（旧默认回退）. Gemini remains an ordinary selectable option but is no
 // longer the default for anything.
-export const KNOWN_PROVIDERS = ["gemini", "openai", "deepseek", "glm"] as const;
+export const KNOWN_PROVIDERS = [
+  "gemini",
+  "openai",
+  "deepseek",
+  "glm",
+  "glm-anthropic",
+  "glm-legacy",
+] as const;
 export type Provider = (typeof KNOWN_PROVIDERS)[number];
 
 /**
@@ -26,6 +35,20 @@ export function isKnownProvider(provider: string): provider is Provider {
   return (KNOWN_PROVIDERS as readonly string[]).includes(provider);
 }
 
+/** GLM 家族成员（三种协议路径，共享 GLM_API_KEY 与 GLM_MODEL* 配置层级）。 */
+export function isGLMFamilyProvider(provider: string): boolean {
+  return (
+    provider === "glm" ||
+    provider === "glm-anthropic" ||
+    provider === "glm-legacy"
+  );
+}
+
+/** GLM 家族中走 Anthropic Messages 协议的成员（显式 ID，glm 不再是别名）。 */
+export function isGLMAnthropicProvider(provider: string): boolean {
+  return provider === "glm-anthropic";
+}
+
 /**
  * Raised when a provider is selected but its API key is missing (P012 vacuity
  * probe). Replaces silent fallback behavior with an explicit failure code.
@@ -38,7 +61,7 @@ export class MissingApiKeyError extends Error {
         ? "OPENAI_API_KEY"
         : provider === "deepseek"
           ? "DEEPSEEK_API_KEY"
-          : provider === "glm"
+          : isGLMFamilyProvider(provider)
             ? "GLM_API_KEY"
             : "GOOGLE_API_KEY";
     super(`${keyName} missing for provider "${provider}"`);
@@ -136,11 +159,22 @@ const DEFAULT_DEEPSEEK_BASE_URL =
 const DEEPSEEK_MODELS = [DEFAULT_DEEPSEEK_FLASH, "deepseek-v4-pro"];
 
 // ----------------------------------------------------------------------------
-// GLM (Z.ai) — the default LLM provider. OpenAI-compatible chat/completions.
-// All three defaults are overridable via env or DB config (DB > env > default).
+// GLM (智谱) — the default LLM provider family (issue #35 / B4). One key, three
+// protocol paths, each with its OWN baseURL key so DB/env overrides never leak
+// across paths:
+//   glm           → GLM_BASE_URL            默认 Coding Plan OpenAI 兼容端点
+//   glm-anthropic → GLM_ANTHROPIC_BASE_URL  bigmodel Anthropic Messages 端点（备选）
+//   glm-legacy    → GLM_LEGACY_BASE_URL     z.ai OpenAI 兼容端点（旧默认回退）
+// Model ids are shared across the three paths (GLM_MODEL* hierarchy). All
+// overridable via env or DB config (DB > env > default).
 // ----------------------------------------------------------------------------
 export const DEFAULT_GLM_MODEL = "glm-5.3-flash";
-export const DEFAULT_GLM_BASE_URL = "https://api.z.ai/api/paas/v4";
+/** GLM Coding Plan 官方 OpenAI 兼容端点（带 /coding/，同 key 实测 200）。 */
+export const DEFAULT_GLM_BASE_URL =
+  "https://open.bigmodel.cn/api/coding/paas/v4";
+export const DEFAULT_GLM_ANTHROPIC_BASE_URL =
+  "https://open.bigmodel.cn/api/anthropic";
+export const DEFAULT_GLM_LEGACY_BASE_URL = "https://api.z.ai/api/paas/v4";
 const GLM_MODELS = ["glm-5.3-flash", "glm-4.7", "glm-4.5-air"];
 
 // Default image generation config (DMX API - OpenAI compatible)
@@ -167,9 +201,11 @@ export interface GLMModelConfig {
 }
 
 /**
- * Resolve the GLM (Z.ai) model config. Hierarchy: DB (ConfigRepo) > env > default.
- * Keys: GLM_MODEL (default "glm-5.3-flash"), GLM_BASE_URL
- * (default https://api.z.ai/api/paas/v4). OpenAI-compatible chat/completions.
+ * Resolve the GLM Coding Plan (OpenAI-compat) model config — the DEFAULT path.
+ * Hierarchy: DB (ConfigRepo) > env > default. Keys: GLM_MODEL (default
+ * "glm-5.3-flash"), GLM_BASE_URL (default the Coding Plan endpoint
+ * https://open.bigmodel.cn/api/coding/paas/v4). Served via ChatOpenAI
+ * chat/completions.
  */
 export async function resolveGLMModel(
   task: string = "default",
@@ -194,6 +230,40 @@ export async function resolveGLMModel(
     process.env.GLM_BASE_URL?.trim() ||
     DEFAULT_GLM_BASE_URL;
 
+  return { model, baseURL };
+}
+
+/**
+ * Resolve the GLM Anthropic-protocol model config (B4 备选路径). Same model-id
+ * hierarchy as resolveGLMModel; only the baseURL key differs
+ * (GLM_ANTHROPIC_BASE_URL, default https://open.bigmodel.cn/api/anthropic) so
+ * coding-endpoint overrides never leak into the anthropic path.
+ */
+export async function resolveGLMAnthropicModel(
+  task: string = "default",
+): Promise<GLMModelConfig> {
+  const { model } = await resolveGLMModel(task);
+  const baseURL =
+    (await safeGetConfig("GLM_ANTHROPIC_BASE_URL")) ||
+    process.env.GLM_ANTHROPIC_BASE_URL?.trim() ||
+    DEFAULT_GLM_ANTHROPIC_BASE_URL;
+  return { model, baseURL };
+}
+
+/**
+ * Resolve the GLM legacy (z.ai OpenAI-compat) model config — the old default
+ * endpoint kept as a fallback. Model ids shared with the coding path; baseURL
+ * key GLM_LEGACY_BASE_URL (default https://api.z.ai/api/paas/v4), isolated
+ * from the coding/anthropic keys.
+ */
+export async function resolveGLMLegacyModel(
+  task: string = "default",
+): Promise<GLMModelConfig> {
+  const { model } = await resolveGLMModel(task);
+  const baseURL =
+    (await safeGetConfig("GLM_LEGACY_BASE_URL")) ||
+    process.env.GLM_LEGACY_BASE_URL?.trim() ||
+    DEFAULT_GLM_LEGACY_BASE_URL;
   return { model, baseURL };
 }
 
@@ -260,7 +330,7 @@ export async function getApiKey(provider: Provider): Promise<string> {
       ? "OPENAI_API_KEY"
       : provider === "deepseek"
         ? "DEEPSEEK_API_KEY"
-        : provider === "glm"
+        : isGLMFamilyProvider(provider)
           ? "GLM_API_KEY"
           : "GOOGLE_API_KEY";
   const dbKey = await ConfigRepo.getConfig("system", keyName);
@@ -367,9 +437,10 @@ export async function resolveTaskConfig(
       model = DEFAULT_DEEPSEEK_FLASH;
       modelSource = "default";
     }
-  } else if (provider === "glm") {
-    // GLM model: DB > env, task-scoped (GLM_MODEL_<TASK>) then global
-    // (GLM_MODEL); mirrors resolveGLMModel / DEFAULT_GLM_MODEL.
+  } else if (isGLMFamilyProvider(provider)) {
+    // GLM 家族 (glm / glm-anthropic / glm-legacy) 共用同一 model 键层级：
+    // DB > env, task-scoped (GLM_MODEL_<TASK>) then global (GLM_MODEL);
+    // mirrors resolveGLMModel / DEFAULT_GLM_MODEL.
     const taskModelDb = await safeGetConfig(`GLM_MODEL_${taskUpper}`);
     const taskModelEnv = process.env[`GLM_MODEL_${taskUpper}`]?.trim();
     const globalModelDb = await safeGetConfig("GLM_MODEL");
@@ -446,6 +517,7 @@ export async function resolveTaskConfig(
       baseURLSource = "default";
     }
   } else if (provider === "glm") {
+    // GLM coding 端点（默认路径）：GLM_BASE_URL。
     const dbBaseURL = await safeGetConfig("GLM_BASE_URL");
     if (dbBaseURL) {
       baseURL = dbBaseURL;
@@ -455,6 +527,32 @@ export async function resolveTaskConfig(
       baseURLSource = "env";
     } else {
       baseURL = DEFAULT_GLM_BASE_URL;
+      baseURLSource = "default";
+    }
+  } else if (provider === "glm-anthropic") {
+    // GLM anthropic 备选路径：GLM_ANTHROPIC_BASE_URL（与 coding 键隔离）。
+    const dbBaseURL = await safeGetConfig("GLM_ANTHROPIC_BASE_URL");
+    if (dbBaseURL) {
+      baseURL = dbBaseURL;
+      baseURLSource = "db";
+    } else if (process.env.GLM_ANTHROPIC_BASE_URL) {
+      baseURL = process.env.GLM_ANTHROPIC_BASE_URL.trim();
+      baseURLSource = "env";
+    } else {
+      baseURL = DEFAULT_GLM_ANTHROPIC_BASE_URL;
+      baseURLSource = "default";
+    }
+  } else if (provider === "glm-legacy") {
+    // GLM z.ai 回退路径：GLM_LEGACY_BASE_URL（与 coding 键隔离）。
+    const dbBaseURL = await safeGetConfig("GLM_LEGACY_BASE_URL");
+    if (dbBaseURL) {
+      baseURL = dbBaseURL;
+      baseURLSource = "db";
+    } else if (process.env.GLM_LEGACY_BASE_URL) {
+      baseURL = process.env.GLM_LEGACY_BASE_URL.trim();
+      baseURLSource = "env";
+    } else {
+      baseURL = DEFAULT_GLM_LEGACY_BASE_URL;
       baseURLSource = "default";
     }
   }
@@ -505,7 +603,7 @@ export async function updateTaskConfig(
   } else if (config.provider === "deepseek") {
     const modelDbKey = `DEEPSEEK_MODEL_${taskUpper}`;
     await ConfigRepo.setConfig("system", modelDbKey, config.model);
-  } else if (config.provider === "glm") {
+  } else if (isGLMFamilyProvider(config.provider)) {
     const modelDbKey = `GLM_MODEL_${taskUpper}`;
     await ConfigRepo.setConfig("system", modelDbKey, config.model);
   } else {
@@ -513,13 +611,22 @@ export async function updateTaskConfig(
     await ConfigRepo.setConfig("system", modelDbKey, config.model);
   }
 
-  // Update Base URL for OpenAI-compatible providers (OpenAI / DeepSeek / GLM)
+  // Update Base URL — 每个 GLM 协议路径写自己的 key（coding/anthropic/legacy
+  // 互不串线），OpenAI/DeepSeek 各自维持原键。
   if (config.provider === "openai" && config.baseURL) {
     await ConfigRepo.setConfig("system", "OPENAI_BASE_URL", config.baseURL);
   } else if (config.provider === "deepseek" && config.baseURL) {
     await ConfigRepo.setConfig("system", "DEEPSEEK_BASE_URL", config.baseURL);
   } else if (config.provider === "glm" && config.baseURL) {
     await ConfigRepo.setConfig("system", "GLM_BASE_URL", config.baseURL);
+  } else if (config.provider === "glm-anthropic" && config.baseURL) {
+    await ConfigRepo.setConfig(
+      "system",
+      "GLM_ANTHROPIC_BASE_URL",
+      config.baseURL,
+    );
+  } else if (config.provider === "glm-legacy" && config.baseURL) {
+    await ConfigRepo.setConfig("system", "GLM_LEGACY_BASE_URL", config.baseURL);
   }
 }
 
@@ -534,20 +641,57 @@ export async function testConnection(config: ModelConfig): Promise<{
   const start = Date.now();
 
   try {
+    // GLM anthropic 协议路径（B4 备选）：x-api-key + anthropic-version 鉴权，
+    // 与 ChatAnthropic 同协议；默认指向 bigmodel /api/anthropic。
+    if (isGLMAnthropicProvider(config.provider)) {
+      const apiKey = await getApiKey(config.provider);
+      if (!apiKey) {
+        return { success: false, error: "GLM API Key not configured" };
+      }
+      const baseURL = config.baseURL || DEFAULT_GLM_ANTHROPIC_BASE_URL;
+      const endpoint = `${baseURL.replace(/\/+$/, "")}/v1/messages`;
+      const response = await request(endpoint, {
+        method: "POST",
+        headers: {
+          "x-api-key": apiKey,
+          "anthropic-version": "2023-06-01",
+          "Content-Type": "application/json",
+        },
+        headersTimeout: 15000,
+        bodyTimeout: 15000,
+        body: JSON.stringify({
+          model: config.model,
+          max_tokens: 8,
+          messages: [{ role: "user", content: "ping" }],
+        }),
+      });
+      if (response.statusCode >= 400) {
+        const body = await response.body.text();
+        let errorMsg = `HTTP ${response.statusCode}`;
+        try {
+          const json = JSON.parse(body);
+          errorMsg = json.error?.message || json.error || errorMsg;
+        } catch {}
+        return { success: false, error: errorMsg };
+      }
+      return { success: true, latency: Date.now() - start };
+    }
+
     if (
       config.provider === "openai" ||
       config.provider === "deepseek" ||
-      config.provider === "glm"
+      isGLMFamilyProvider(config.provider)
     ) {
       const isDeepSeek = config.provider === "deepseek";
-      const isGLM = config.provider === "glm";
+      const isGLMCoding = config.provider === "glm";
+      const isGLMLegacy = config.provider === "glm-legacy";
       const apiKey = await getApiKey(config.provider);
       if (!apiKey) {
         return {
           success: false,
           error: isDeepSeek
             ? "DeepSeek API Key not configured"
-            : isGLM
+            : isGLMCoding || isGLMLegacy
               ? "GLM API Key not configured"
               : "OpenAI API Key not configured",
         };
@@ -555,9 +699,11 @@ export async function testConnection(config: ModelConfig): Promise<{
 
       const defaultBaseURL = isDeepSeek
         ? DEFAULT_DEEPSEEK_BASE_URL
-        : isGLM
+        : isGLMCoding
           ? DEFAULT_GLM_BASE_URL
-          : DEFAULT_BASE_URL;
+          : isGLMLegacy
+            ? DEFAULT_GLM_LEGACY_BASE_URL
+            : DEFAULT_BASE_URL;
       const baseURL = config.baseURL || defaultBaseURL;
       const endpoint = `${baseURL}/chat/completions`;
 
@@ -628,7 +774,7 @@ export async function testConnection(config: ModelConfig): Promise<{
 export function getAvailableModels(provider: Provider): string[] {
   if (provider === "gemini") return GEMINI_MODELS;
   if (provider === "deepseek") return DEEPSEEK_MODELS;
-  if (provider === "glm") return GLM_MODELS;
+  if (isGLMFamilyProvider(provider)) return GLM_MODELS;
   return OPENAI_MODELS;
 }
 

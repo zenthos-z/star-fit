@@ -16,7 +16,8 @@
  *                                 picks actions itself. `description`
  *                                 carries pattern/targets/equipment/impact so the agent can
  *                                 respect the user equipment + injuries in-context.
- * - `get_exercise_detail` (read)  full record of one exercise (attributes, tutorials, content)
+ * - `get_exercise_detail` (read)  full record of one exercise (deepened
+ *                                 teaching columns, tutorials, content)
  * - `write_session`       (write) append a completed session to history_summary
  * - `write_memory`        (write) keyed free-text memory note under profile_dynamic.memories
  * - `update_profile`      (write) structured update of profile_dynamic
@@ -24,12 +25,13 @@
  *                                 + profile_static.psychological
  *                                 (neurotype / risk_preference / accountability)
  * - `create_exercise`     (write) insert a USER-BOUND custom exercise into the
- *                                 library. User-binding rides in
- *                                 `attributes.owner_user_id` (HC-2: no schema
- *                                 change) — the row stays invisible to other
- *                                 users' queries and the admin console filters
- *                                 can adopt it later. A NanoID is generated
- *                                 server-side (never LLM-supplied).
+ *                                 library. User-binding rides the dedicated
+ *                                 `owner_user_id` column (promoted from the
+ *                                 old attributes JSONB in 002) — the row stays
+ *                                 invisible to other users' queries and the
+ *                                 admin console filters can adopt it later. A
+ *                                 NanoID is generated server-side (never
+ *                                 LLM-supplied).
  * - `get_current_plan`    (read)  the user's persisted weekly plan (E3: plans
  *                                 are entities, reuse-by-default — one per user
  *                                 per week; week_id defaults to the CURRENT
@@ -111,13 +113,16 @@ import { utcToday } from "../schedule/scheduleService.js";
 /** The PostgresClient type, derived from the accessor to avoid an extra import. */
 type DbClient = ReturnType<typeof getPostgresClient>;
 
-/** One exercises row for the list tool (raw attributes are synthesized into a description). */
+/** One exercises row for the list tool (new 002 columns are synthesized into a description). */
 interface ExerciseListRow {
   id: string;
   name: string;
   exercise_type: string | null;
   difficulty: string | null;
-  attributes: Record<string, unknown> | null;
+  equipment: string | null;
+  category: string | null;
+  body_part: string | null;
+  primary_muscles: string[] | null;
 }
 
 /** Full exercise row for the detail tool. */
@@ -127,7 +132,6 @@ interface ExerciseDetailRow {
   name_zh: string | null;
   exercise_type: string | null;
   difficulty: string | null;
-  attributes: unknown;
   tutorials: unknown;
   content_html: string | null;
   // ---- A2/A3 深化列（A4：get_exercise_detail 一并透出，Agent 教学问答直读库数据）----
@@ -367,22 +371,22 @@ export class UserScopedWriteRepository extends BaseRepository {
  */
 export class ExerciseQuery extends BaseRepository {
   /**
-   * Return the whole exercise library (id/name/type/difficulty/attributes). The
-   * library is small enough to fit in the model context, so the agent filters
-   * and picks actions in-context — no SQL filtering.
+   * Return the whole exercise library (id/name/type/difficulty + 002 深化列).
+   * The library is small enough to fit in the model context, so the agent
+   * filters and picks actions in-context — no SQL filtering.
    */
   async listAll(): Promise<ExerciseListRow[]> {
     return this.queryMany<ExerciseListRow>(
-      `SELECT id, name, exercise_type, difficulty, attributes
+      `SELECT id, name, exercise_type, difficulty, equipment, category, body_part, primary_muscles
          FROM exercises
          ORDER BY name`,
     );
   }
 
-  /** Full record for one exercise by id (attributes, tutorials, content_html, deepened teaching columns). */
+  /** Full record for one exercise by id (tutorials, content_html, deepened teaching columns). */
   async findByIdFull(id: string): Promise<ExerciseDetailRow | null> {
     return this.queryOne<ExerciseDetailRow>(
-      `SELECT id, name, name_zh, exercise_type, difficulty, attributes, tutorials, content_html,
+      `SELECT id, name, name_zh, exercise_type, difficulty, tutorials, content_html,
               equipment, category, body_part, primary_muscles, secondary_muscles,
               force_type, mechanic, instructions, form_cues, common_mistakes, breathing
          FROM exercises
@@ -405,26 +409,30 @@ export class ExerciseQuery extends BaseRepository {
   }
 
   /**
-   * Insert a user-bound custom exercise. Ownership rides inside the
-   * attributes JSONB (`owner_user_id`) — HC-2: no schema change, the existing
-   * table serves per-user customs with zero migration.
+   * Insert a user-bound custom exercise. Ownership rides the dedicated
+   * `owner_user_id` column (promoted from the old attributes JSONB in 002).
+   * The 002 deepening columns are deliberately left at defaults: they carry
+   * CHECK/enum-controlled vocabularies (primary_muscles ⊆ 17-muscle snake_case
+   * word list, equipment/category are enums) that free-form agent input would
+   * violate — agent-supplied targets/description live in the tool response and
+   * the tutorial (content_html), not in the vocab columns.
    */
   async insertUserExercise(row: {
     id: string;
     name: string;
     exercise_type: string;
-    attributes: Record<string, unknown>;
+    owner_user_id: string;
     content_html: string | null;
     modified_by: string;
   }): Promise<void> {
     await this.execute(
-      `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, content_html, modified_by, updated_at)
-       VALUES ($id, $name, $exerciseType, 'beginner', $attributes, $contentHtml, $modifiedBy, NOW())`,
+      `INSERT INTO exercises (id, name, exercise_type, difficulty, owner_user_id, content_html, modified_by, updated_at)
+       VALUES ($id, $name, $exerciseType, 'beginner', $ownerUserId, $contentHtml, $modifiedBy, NOW())`,
       {
         id: row.id,
         name: row.name,
         exerciseType: row.exercise_type,
-        attributes: JSON.stringify(row.attributes),
+        ownerUserId: row.owner_user_id,
         contentHtml: row.content_html,
         modifiedBy: row.modified_by,
       },
@@ -476,7 +484,7 @@ const getExerciseDetailSchema = z
     id: z.string().min(1).max(24).describe("Exact exercise id."),
   })
   .describe(
-    "Fetch the full record of one exercise (attributes, tutorials, content_html). Read-only.",
+    "Fetch the full record of one exercise (deepened teaching columns, tutorials, content_html). Read-only.",
   );
 
 const getSessionHrCurveSchema = z
@@ -615,7 +623,7 @@ const createExerciseSchema = z
   })
   .passthrough()
   .describe(
-    "Create a NEW user-bound exercise when the library has no suitable match. The exercise is visible ONLY to the calling user (bound via attributes.owner_user_id server-side). The id is generated server-side and returned — use it in plan cards. Check list_exercises FIRST; do not create a near-duplicate of an existing exercise.",
+    "Create a NEW user-bound exercise when the library has no suitable match. The exercise is visible ONLY to the calling user (bound server-side via the owner_user_id column). The id is generated server-side and returned — use it in plan cards. Check list_exercises FIRST; do not create a near-duplicate of an existing exercise.",
   );
 
 const updateProfileSchema = z
@@ -971,8 +979,8 @@ export function buildMcpToolsWith(
   const getExerciseDetail = new DynamicStructuredTool({
     name: "get_exercise_detail",
     description:
-      "Fetch the full record of one exercise by id (attributes incl. equipment/targets/impact, tutorials, content_html, " +
-      "plus deepened teaching columns: primary/secondary_muscles, instructions, form_cues, common_mistakes, breathing). " +
+      "Fetch the full record of one exercise by id (deepened teaching columns: equipment/category/body_part, primary/secondary_muscles, " +
+      "instructions, form_cues, common_mistakes, breathing; plus tutorials, content_html). " +
       "Read-only. Optional drill-down after list_exercises when you need a candidate tutorials/content_html " +
       "or to confirm impact_level on an injured joint. Answer teaching questions (steps/form/mistakes) " +
       "from the returned library fields instead of inventing them.",
@@ -1082,21 +1090,18 @@ export function buildMcpToolsWith(
         });
       }
 
-      // Server-side NanoID (never LLM-supplied) + user binding in attributes.
+      // Server-side NanoID (never LLM-supplied) + user binding via the
+      // owner_user_id column (002 promoted it out of the dropped attributes
+      // JSONB). Free-form agent input (targets/equipment/description) is NOT
+      // persisted into the vocab-constrained 002 columns — it rides back in
+      // this response so the agent can describe the move in its own cards.
       const id = generateExerciseNanoId();
-      const attributes: Record<string, unknown> = {
-        owner_user_id: userId,
-        custom: true,
-        created_via: "agent",
-        targets: { primary: input.targets_primary ?? [] },
-        equipment_required: input.equipment_required ?? [],
-      };
 
       await exerciseQuery.insertUserExercise({
         id,
         name: input.name,
         exercise_type: input.exercise_type,
-        attributes,
+        owner_user_id: userId,
         // Tutorial persisted into content_html so ExerciseTutorialModal renders
         // it with the same priority as coach/admin-generated tutorials
         // (content_html is the top slot in the modal's source priority).
@@ -1109,9 +1114,14 @@ export function buildMcpToolsWith(
         id,
         name: input.name,
         exercise_type: input.exercise_type,
+        description: input.description ?? "",
+        targets_primary: input.targets_primary ?? [],
+        equipment_required: input.equipment_required ?? [],
         visibility: "user_only",
         message:
-          "Exercise created and bound to the current user. Use this id in plan cards.",
+          "Exercise created and bound to the current user. Use this id in plan cards. " +
+          "The library stores only the tutorial for customs — describe targets/equipment " +
+          "yourself when referencing this id.",
       });
     },
   });
@@ -1309,41 +1319,24 @@ function trimSessions(
 }
 
 /**
- * Synthesize a compact one-line description from an exercise's attributes so the
+ * Synthesize a compact one-line description from an exercise's 002 深化列 so the
  * agent can pick safe actions from the full list in-context. Carries exactly the
- * constraint-relevant fields: type/difficulty, movement pattern, target muscles,
- * required equipment (bodyweight when none), and any notable joint impact (>=5).
+ * constraint-relevant fields: type/difficulty, equipment, body part, and target
+ * muscles (bodyweight when no equipment).
  *
- * Robust to partial/missing attributes — every field is optional.
+ * Robust to partial/missing columns — every field is optional.
  */
 function describeExercise(row: ExerciseListRow): string {
-  const attr = (row.attributes ?? {}) as Record<string, unknown>;
   const parts: string[] = [];
   if (row.exercise_type) parts.push(String(row.exercise_type));
   if (row.difficulty) parts.push(String(row.difficulty));
-  const pattern = attr.pattern;
-  if (typeof pattern === "string" && pattern) parts.push(`pattern:${pattern}`);
-  const targets = (attr.targets as { primary?: unknown } | undefined)?.primary;
-  if (Array.isArray(targets) && targets.length > 0) {
+  if (row.equipment) parts.push(`equipment:${row.equipment}`);
+  if (row.body_part) parts.push(`part:${row.body_part}`);
+  if (Array.isArray(row.primary_muscles) && row.primary_muscles.length > 0) {
     parts.push(
-      `targets:${targets.filter((t) => typeof t === "string").join("+")}`,
+      `targets:${row.primary_muscles.filter((t) => typeof t === "string").join("+")}`,
     );
   }
-  const equip = attr.equipment_required;
-  if (Array.isArray(equip) && equip.length > 0) {
-    parts.push(
-      `equipment:${equip.filter((e) => typeof e === "string").join("+")}`,
-    );
-  } else {
-    parts.push("equipment:bodyweight");
-  }
-  const impact = attr.impact_level;
-  if (impact && typeof impact === "object") {
-    const notable = Object.entries(impact as Record<string, unknown>)
-      .filter(([, v]) => typeof v === "number" && v >= 5)
-      .map(([k, v]) => `${k}:${v}`)
-      .join(",");
-    if (notable) parts.push(`impact:${notable}`);
-  }
+  if (!row.equipment) parts.push("equipment:bodyweight");
   return parts.join(" | ");
 }
