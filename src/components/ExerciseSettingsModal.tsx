@@ -7,7 +7,10 @@ import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '@/constant
 import { v4 as uuidv4 } from 'uuid';
 import { Timer, MapPin, Watch, Heart, Flame, Zap, Trophy, Gauge, Navigation } from 'lucide-react';
 import ExercisePickerModal from './picker/ExercisePickerModal';
-import { pickerItemToLibrarySelect } from './picker/pickerAdapter';
+import BatchAddBanner from './picker/BatchAddBanner';
+import { pickerItemToBatchPayload, pickerItemToLibrarySelect, createLibraryId } from './picker/pickerAdapter';
+import type { PickerSelectionItem } from './picker/pickerData';
+import { useBatchExerciseCreate } from '../hooks/useBatchExerciseCreate';
 import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } from '../services/suggestionService';
 import { guessCardioSubtype } from '@/utils/exerciseLogic';
 import { DeviationLogger } from '../services/logging/DeviationLogger';
@@ -255,6 +258,22 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   smartFillSlot,
   externalApiRef
 }) => {
+  // A31 购物车批量添加（issue #31）：confirm 多选时首项回填表单，其余项
+  // App 层循环现有单条添加 API 逐条入库（进度反馈 + 失败单条重试）。
+  const batchCreate = useBatchExerciseCreate();
+  const handlePickerConfirm = (items: PickerSelectionItem[]) => {
+    const first = items[0];
+    if (!first) {
+      onLibraryOpenChange(false);
+      return;
+    }
+    const sel = pickerItemToLibrarySelect(first);
+    handleLibrarySelect(sel.id, sel.name, sel.type, sel.bodyCategory, sel.muscles, sel.equipment, sel.nameEn);
+    // 其余项批量入库（此前被静默丢弃的已知取舍，本批补齐）
+    if (items.length > 1) {
+      batchCreate.runBatch(items.slice(1).map(pickerItemToBatchPayload));
+    }
+  };
 
   // Convert ExerciseAction type to ExerciseType (now unified lowercase, no conversion needed)
   const normalizeType = (actionType: string): ExerciseType => {
@@ -899,13 +918,18 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
     // Backend Persistence for New Exercises
     if (isCreating) {
         try {
+            // A31（issue #31）：占位 id（''）过不了 exercises.id CHECK（12-24 字符），
+            // 创建态统一生成合法库 id；响应码校验补齐（此前 4xx/5xx 静默漏过）。
+            const libraryId = exercise.id && exercise.id.length >= 12 && exercise.id.length <= 24
+                ? exercise.id
+                : createLibraryId();
             // Map primaryMuscles to target muscle zones
             const targetMuscles: string[] = primaryMuscles.length > 0 ? primaryMuscles : ['胸部'];
-            await fetch('/api/exercises', {
+            const response = await fetch('/api/exercises', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    id: exercise.id,
+                    id: libraryId,
                     name,
                     exercise_type: type as any,
                     targets: JSON.stringify({ primary: targetMuscles, secondary: [] }),
@@ -914,6 +938,9 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
                     assets: {}
                 })
             });
+            if (!response.ok) {
+                console.error("Failed to persist exercise to backend", response.status);
+            }
         } catch (e) {
             console.error("Failed to persist exercise to backend", e);
             // Continue anyway to save locally
@@ -1077,18 +1104,12 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
         /* A8A9 接线：动作库换新选择器（筛选器/3D 封面/购物车多选，PR #30）。
            回调适配：onConfirm 为购物车多选（PickerSelectionItem[]），主流程创建
            语义为单动作回填——取数组首项经 pickerAdapter 映射回旧 onSelect 原语，
-           其余项忽略（批量添加需 App 层循环，已知取舍）；创建态返回 = 取消创建。 */
+           其余项批量入库（A31：App 层循环单条添加 API + 进度/重试横幅）；
+           创建态返回 = 取消创建。 */
         <ExercisePickerModal
           key="library"
-          onConfirm={items => {
-            const first = items[0];
-            if (!first) {
-              onLibraryOpenChange(false);
-              return;
-            }
-            const sel = pickerItemToLibrarySelect(first);
-            handleLibrarySelect(sel.id, sel.name, sel.type, sel.bodyCategory, sel.muscles, sel.equipment, sel.nameEn);
-          }}
+          onConfirm={handlePickerConfirm}
+          userId={userId}
           onClose={() => {
             // 白屏根因修复（D）：确认选动作后再点返回，此前会走 onCancelCreate
             // 把 pendingExercise 一并清掉 → 配置面板整体卸载 → 主流程白屏。
@@ -1659,6 +1680,13 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
           </motion.div>
         </motion.div>
       )}
+
+      {/* A31 购物车批量添加进度横幅（confirm 多选后展示；失败可单条重试） */}
+      <BatchAddBanner
+        state={batchCreate.state}
+        onRetry={batchCreate.retryFailed}
+        onDismiss={batchCreate.dismiss}
+      />
     </>
   );
 };

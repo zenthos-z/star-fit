@@ -158,8 +158,8 @@ describe('weeklyCardDayToVM / weeklyCardRows', () => {
             exercise_id: 'V1StGXR8_Z5jdHi6',
             name: '杠铃深蹲',
             sets: [
-              { set: 1, weight: 60, reps: 8 },
-              { set: 2, weight: 65, reps: 6 },
+              { set: 1, weight: 60, reps: 8, set_type: 'working' },
+              { set: 2, weight: 65, reps: 6, set_type: 'working' },
             ],
           },
         ],

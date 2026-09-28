@@ -293,6 +293,38 @@ export class ExerciseRepository extends BaseRepository {
   }
 
   /**
+   * 智能排序库投影（issue #31 / GET /api/exercises/smart-sort）：
+   * 全库 id + 分区判定所需最小列（name / name_zh / body_part / primary_muscles），
+   * 按库自然序（created_at, id——A3 导入序即前端 mock rank 基线）。
+   * primary_muscles 供分区判定的肌群兜底（POST /exercises 建的动作无 body_part，
+   * 仅 targets.primary 可判区——与契约 MUSCLE_REGION「与 body_part 解耦」口径对齐）。
+   * 纯读投影，不走 ExerciseLibraryItemSchema 全列校验（列集最小化，防全量
+   * 深化列校验拖排序热路径）。
+   */
+  async listSortProjection(): Promise<
+    Array<{
+      id: string;
+      name: string;
+      name_zh: string | null;
+      body_part: string | null;
+      primary_muscles: string[] | null;
+    }>
+  > {
+    const rows = await this.queryMany<{
+      id: string;
+      name: string;
+      name_zh: string | null;
+      body_part: string | null;
+      primary_muscles: string[] | null;
+    }>(
+      `SELECT id, name, name_zh, body_part, primary_muscles
+       FROM exercises
+       ORDER BY created_at, id`,
+    );
+    return rows;
+  }
+
+  /**
    * A3 导入管道写入入口：整体替换公共动作库（可重复执行）。
    *
    * 单事务内：先 DELETE 全部公共库行（owner_user_id IS NULL，用户自建动作

@@ -431,9 +431,9 @@ describe('PickerConfigSheet · 参数配置（嵌套真实 ExerciseSettingsModal
     await user.click(screen.getByRole('button', { name: '确认添加动作' }));
     expect(onChange).toHaveBeenCalledTimes(1);
     const saved = onChange.mock.calls[0][0] as PickerSelectionItem;
-    // 组数不变（3 组），仅第 1 组类型改写；targetRpe 来自链路 A resolve（mock 固定 7）
+    // 组数不变（3 组），仅第 1 组类型改写（set_type 契约值 snake_case）；targetRpe 来自链路 A resolve（mock 固定 7）
     expect(saved.sets).toHaveLength(3);
-    expect(saved.sets[0].role).toBe('rampUp');
+    expect(saved.sets[0].role).toBe('ramp_up');
     expect(saved.sets[1].role).toBe('working');
     expect(saved.targetRpe).toBe(7);
   });
