@@ -945,6 +945,13 @@ export {
   ExerciseDetailUpdateSchema,
   ExerciseSearchFilterSchema,
 
+  // 管理台动作编辑（A15-1，issue #15 人工修改入口）
+  ADMIN_EDITABLE_EXERCISE_FIELDS,
+  AdminEditableExerciseFieldSchema,
+  AdminExercisePatchSchema,
+  ExerciseSourceStatusInputSchema,
+  ExerciseFieldSourceStatusSchema,
+
   // instructions_zh 结构化中文教学（A6 翻译管道，issue #19）
   INSTRUCTIONS_ZH_SECTIONS,
   InstructionsZhSectionsSchema,
@@ -966,6 +973,10 @@ export {
   type ExerciseDetailUpdate,
   type ExerciseSearchFilter,
   type InstructionsZhSections,
+  type AdminEditableExerciseField,
+  type AdminExercisePatch,
+  type ExerciseSourceStatusInput,
+  type ExerciseFieldSourceStatus,
 } from './exercise-library.js';
 
 // ============================================================================
