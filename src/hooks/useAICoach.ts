@@ -8,6 +8,16 @@ import { buildSessionPayload } from '../utils/workoutSummary';
 // cards, with no awareness of the backend agent implementation.
 import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/agent/sseAgentClient';
 import { resolveCoachPrefill } from '../utils/coachPrefill';
+import {
+  resolveFirstUseTriage,
+  resolveUserHasHistory,
+  PLAN_GUIDE_TEXT,
+  NEWBIE_SURVEY_TEXT,
+  NEWBIE_SURVEY_QUESTIONS,
+  type ScheduleStatus,
+} from '../utils/startOnboarding';
+import { storageGet, storageSet } from '@/storage';
+import { Keys } from '@/storage/schemas';
 import { todayDateKey } from '../utils/weeklyPlanView';
 import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
 import type { SurveySubmitRecord } from '../components/execution/cards/SurveyCard';
@@ -962,6 +972,85 @@ ${JSON.stringify(uploadData, null, 2)}`;
     if (chatMessage.trim()) setEntryPlaceholder('');
   }, [chatMessage]);
 
+  /**
+   * [B3 issue#23] 首次使用预调研分流（仅第一次，可跳过）：
+   * 手动打开 AI 教练（无附件）且会话为空时判定——
+   * 有训练历史 → 老用户不打扰；无历史+周计划 → 引导发送资料/截图；
+   * 纯新手 → survey_card 画像调研卡（走 uiHint 多态回路，SurveyCard 渲染）。
+   * 标志先行落 storage（跳过=不强制交互，也只弹这一次）。
+   * [fix #23] 判定改用户维度：首次标志按 userId 落键（同设备切换新用户重新
+   * 分流）；训练历史优先取后端该用户记录数（本地历史是设备维度，含他人记录）。
+   */
+  const maybeRunFirstUseTriage = useCallback(async () => {
+    try {
+      const triageFlagKey = Keys.firstUseCoachTriage(getUserId());
+      if (await storageGet<boolean>(triageFlagKey)) return;
+      await storageSet(triageFlagKey, true);
+      // 只在空会话注入：已有对话（切线程恢复/竞态窗口内开聊）不打扰
+      if (chatHistoryRef.current.length > 0) return;
+      // [fix #23] 训练历史用户维度：后端该用户记录数（/sessions/recent 的
+      // count，users 表按 userId 隔离）；不可达回退本地设备历史（精度损失
+      // 见 resolveUserHasHistory：同设备他人历史会误判老用户）
+      let backendSessionCount: number | null = null;
+      try {
+        const res = await fetch(`${API_BASE}/sessions/recent?limit=1`, {
+          headers: getHeaders(),
+        });
+        if (res.ok) {
+          const raw = parseJSONSafe<{ count?: unknown }>(await res.text(), 'firstUseTriage');
+          if (raw && typeof raw.count === 'number') backendSessionCount = raw.count;
+        }
+      } catch { /* 后端不可达 → count 置空，走本地设备历史回退 */ }
+      let deviceHistoryCount = 0;
+      if (backendSessionCount === null) {
+        try {
+          const localHistory = await loadHistory();
+          deviceHistoryCount = Array.isArray(localHistory) ? localHistory.length : 0;
+        } catch { /* IDB 不可用 → 按无记录 */ }
+      }
+      const hasHistory = resolveUserHasHistory({ backendSessionCount, deviceHistoryCount });
+      if (hasHistory) return;
+      // 周计划判定：/schedule/today（形态防御同 prefillCoachEntry）
+      let scheduleStatus: ScheduleStatus = null;
+      try {
+        const res = await fetch(`${API_BASE}/schedule/today?date=${todayDateKey()}`, {
+          headers: getHeaders(),
+        });
+        const raw = res.ok
+          ? parseJSONSafe<TodayScheduleResponse>(await res.text(), 'firstUseTriage')
+          : null;
+        scheduleStatus =
+          raw && (raw.status === 'planned' || raw.status === 'rest_day' || raw.status === 'no_plan')
+            ? raw.status
+            : null;
+      } catch { /* 后端不可达 → 按无计划（纯新手分支） */ }
+
+      const triage = resolveFirstUseTriage(hasHistory, scheduleStatus);
+      if (triage === 'none') return;
+      if (triage === 'plan_guide') {
+        setChatHistory(prev => [...prev, {
+          role: 'ai',
+          text: PLAN_GUIDE_TEXT,
+          uiHint: undefined,
+        } as ChatMessage]);
+      } else {
+        setChatHistory(prev => [...prev, {
+          role: 'ai',
+          text: NEWBIE_SURVEY_TEXT,
+          uiHint: {
+            type: 'survey_card',
+            data: {
+              title: '训练画像调研',
+              questions: NEWBIE_SURVEY_QUESTIONS,
+            },
+          },
+        } as ChatMessage]);
+      }
+    } catch (err) {
+      console.warn('[useAICoach] first-use triage skipped:', err);
+    }
+  }, []);
+
   const openAiCoach = async (attachment?: any) => {
 
     console.log('[useAICoach] openAiCoach called with attachment:', attachment);
@@ -976,6 +1065,8 @@ ${JSON.stringify(uploadData, null, 2)}`;
     // [B1 issue#5] 入口预填 placeholder（fire-and-forget，不阻塞开浮层）：
     // 无附件=手动进入按场景预填；带附件（workout_complete/教学页）=让位并清残留
     void prefillCoachEntry();
+    // [B3 issue#23] 首次使用预调研（仅手动入口；附件路径如训练完成分析不受干扰）
+    if (!attachment) void maybeRunFirstUseTriage();
 
     if (attachment) {
       // workout_complete / workout_summary 是内部触发（训练结束自动分析），
