@@ -86,6 +86,7 @@ import {
   updateExercise as updateExerciseById,
   deleteExercise as deleteExerciseById,
   getExerciseStats,
+  getSmartSort,
 } from "./controllers/exerciseController.js";
 import {
   getUserProfile,
@@ -762,6 +763,7 @@ const start = async () => {
         api.get("/exercises/target/:target", getExercisesByTarget);
         api.get("/exercises/difficulty/:difficulty", getExercisesByDifficulty);
         api.get("/exercises/by-equipment", getExercisesByEquipment);
+        api.get("/exercises/smart-sort", getSmartSort);
         api.get("/exercises/:id", getExerciseById);
         api.post("/exercises", createExercise);
         api.put("/exercises/:id", updateExerciseById);

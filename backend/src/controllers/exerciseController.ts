@@ -9,6 +9,7 @@
  * - PUT /api/exercises/:id - 更新动作（管理员）
  * - DELETE /api/exercises/:id - 删除动作（管理员）
  * - GET /api/exercises/stats - 获取统计信息
+ * - GET /api/exercises/smart-sort - picker 智能排序（后端真源，issue #31）
  */
 
 import { FastifyRequest, FastifyReply } from "fastify";
@@ -16,6 +17,7 @@ import {
   ExerciseLibraryService,
   type Exercise,
 } from "../services/exerciseLibraryService.js";
+import { ExerciseSortService } from "../services/exerciseSortService.js";
 import { parseJSONSafe } from "../types/validation.js";
 import { getNowISO } from "../utils/timestamp.js";
 import { assembleTutorialMd } from "../services/tutorialAssembler.js";
@@ -54,6 +56,33 @@ function withTutorialView(ex: Exercise) {
 // ============================================
 // Handlers
 // ============================================
+
+/**
+ * picker 智能排序（issue #31：排序真源在后端 + 近期分区去重）。
+ *
+ * GET /api/exercises/smart-sort
+ * 用户解析：?userId= 优先，缺省回落 X-User-Id 头（惯例同既有路由）；
+ * 缺失/非法时服务返回纯库序基线（不 4xx——排序属呈现增强，失败不阻断选动作）。
+ */
+export async function getSmartSort(
+  request: FastifyRequest<{ Querystring: { userId?: string } }>,
+  reply: FastifyReply,
+): Promise<void> {
+  try {
+    const userId =
+      request.query?.userId ||
+      (typeof request.headers["x-user-id"] === "string"
+        ? request.headers["x-user-id"]
+        : undefined);
+    const sort = await ExerciseSortService.getSmartSort(userId);
+    reply.send(sort);
+  } catch (error) {
+    reply.status(500).send({
+      error: "Failed to compute smart sort",
+      details: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 /**
  * 获取所有动作

@@ -389,7 +389,35 @@ export function getIsoWeekId(dateStr: string): WeekId {
  * 后端校验回路（M5b）与本前端渲染共用本契约。
  */
 
-/** 单组目标：weight/reps/duration 按动作类型至少给一项（或 note 说明）。 */
+/**
+ * set_type 组类型契约（issue #31 / data-contract-check 流程扩展）。
+ *
+ * 枚举全集盘点自 picker 实际用法（ExercisePickerModal / PickerConfigSheet /
+ * pickerAdapter 的组角色标注），非闭门造枚举：
+ *   warmup     热身组
+ *   working    正式组（= straight set 直排组；旧数据缺省值）
+ *   ramp_up    递增组（前端旧值 rampUp，契约统一 snake_case）
+ *   ramp_down  递减组（drop set；前端旧值 rampDown）
+ *   amrap      AMRAP 组（尽力组）
+ * 缺省 working 兼容存量数据（无 set_type 的旧组读出即正式组）。
+ */
+export const SET_TYPE_VALUES = [
+  'warmup',
+  'working',
+  'ramp_up',
+  'ramp_down',
+  'amrap',
+] as const;
+
+export const SetTypeSchema = z.enum(SET_TYPE_VALUES);
+
+export type SetType = z.infer<typeof SetTypeSchema>;
+
+/** 旧数据缺省组类型（正式组；任务书「默认 straight」在库内口径即 working） */
+export const DEFAULT_SET_TYPE: SetType = 'working';
+
+/** 单组目标：weight/reps/duration 按动作类型至少给一项（或 note 说明）；
+ *  set_type 缺省 working（存量组数据无该字段，解析时补缺省——向后兼容）。 */
 export const WeeklyPlanSetSchema = z
   .object({
     set: z.number().int().positive(),
@@ -397,6 +425,7 @@ export const WeeklyPlanSetSchema = z
     reps: z.number().int().positive().optional(),
     duration: z.number().positive().optional(), // 秒（isometric/cardio）
     note: z.string().optional(),
+    set_type: SetTypeSchema.optional().default(DEFAULT_SET_TYPE),
   })
   .superRefine((s, ctx) => {
     const hasMetric =

@@ -24,6 +24,8 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence, Reorder, useDragControls, useMotionValue, animate } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { haptic } from '../../lib/nativeHaptics';
+import { ExerciseService } from '../../services/api/ExerciseServiceV2';
+import type { SmartSortResponse } from 'shared/contracts';
 import {
   MOCK_EXERCISES,
   NEWBIE_GUIDE,
@@ -64,6 +66,8 @@ export interface ExercisePickerModalProps {
   defaultSelectedIds?: string[];
   /** 演示/恢复场景：初始视图 */
   initialScreen?: 'browse' | 'cart';
+  /** 用户 UUID（智能排序后端真源按用户近期训练计算；缺省走服务端基线） */
+  userId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -424,6 +428,7 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   onConfirm,
   defaultSelectedIds = [],
   initialScreen = 'browse',
+  userId,
 }) => {
   const [screen, setScreen] = useState<'browse' | 'cart'>(initialScreen);
   const [searchTerm, setSearchTerm] = useState('');
@@ -449,14 +454,47 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
       .map(ex => ({ exercise: ex, sets: [], targetRpe: 7 }));
   });
 
+  /** 智能排序（A31 后端真源，issue #31）：近期训练过的动作按分区去重后置顶。
+   *  加载失败（离线等）静默回落 mock 预置序——排序属呈现增强，不阻断选动作。 */
+  const [sortData, setSortData] = useState<SmartSortResponse | null>(null);
+  const [recentIds, setRecentIds] = useState<string[]>(RECENT_IDS);
+  useEffect(() => {
+    if (!hasHistory) return;
+    let cancelled = false;
+    ExerciseService.getSmartSort(userId || undefined)
+      .then(res => {
+        if (cancelled) return;
+        setSortData(res);
+        if (res.recent_exercise_ids.length > 0) setRecentIds(res.recent_exercise_ids);
+      })
+      .catch(() => {
+        /* 离线兜底：保持 mock 序（RECENT_IDS） */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasHistory, userId]);
+
+  /** 后端排序应用到全库：ranked_ids 位置覆盖 rank（库外 id 保留 mock 序兜底） */
+  const exercises = useMemo(() => {
+    if (!sortData) return MOCK_EXERCISES;
+    const pos = new Map(sortData.ranked_ids.map((id, i) => [id, i + 1]));
+    return MOCK_EXERCISES
+      .map(ex => {
+        const p = pos.get(ex.id);
+        return p === undefined ? ex : { ...ex, rank: p };
+      })
+      .sort((a, b) => a.rank - b.rank);
+  }, [sortData]);
+
   const filtered = useMemo(
-    () => filterAndSortExercises(MOCK_EXERCISES, filters, searchTerm, hasHistory),
-    [filters, searchTerm, hasHistory],
+    () => filterAndSortExercises(exercises, filters, searchTerm, hasHistory),
+    [exercises, filters, searchTerm, hasHistory],
   );
   const recentExercises = useMemo(() => {
-    const byId = new Map(MOCK_EXERCISES.map(ex => [ex.id, ex]));
-    return RECENT_IDS.map(id => byId.get(id)).filter((ex): ex is PickerExercise => !!ex);
-  }, []);
+    const byId = new Map(exercises.map(ex => [ex.id, ex]));
+    return recentIds.map(id => byId.get(id)).filter((ex): ex is PickerExercise => !!ex);
+  }, [exercises, recentIds]);
   const selectedIds = useMemo(() => new Set(selected.map(i => i.exercise.id)), [selected]);
 
   const filtersEmpty = isFiltersEmpty(filters);
@@ -480,12 +518,12 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   const sheetResultCount = useMemo(() => {
     if (!sheetDim) return 0;
     return filterAndSortExercises(
-      MOCK_EXERCISES,
+      exercises,
       { ...filters, [sheetDim]: sheetDraft },
       searchTerm,
       hasHistory,
     ).length;
-  }, [sheetDim, sheetDraft, filters, searchTerm, hasHistory]);
+  }, [sheetDim, sheetDraft, filters, searchTerm, hasHistory, exercises]);
   const toggleDraft = (value: string) => {
     haptic('light');
     setSheetDraft(prev => (prev.includes(value) ? prev.filter(v => v !== value) : [...prev, value]));

@@ -76,3 +76,41 @@ export function pickerItemToLibrarySelect(item: PickerSelectionItem): LibrarySel
     nameEn: exercise.nameEn,
   };
 }
+
+// ---------------------------------------------------------------------------
+// 批量创建载荷（A31 购物车批量添加，issue #31）
+// ---------------------------------------------------------------------------
+
+/**
+ * 动作库行 id（12-24 字符，对齐 exercises.id 约束）。
+ * uuid（36 字符）超长，取 hex 前 20 位；冲突概率忽略，唯一性由库层兜底。
+ */
+export function createLibraryId(): string {
+  return crypto.randomUUID().replace(/-/g, '').slice(0, 20);
+}
+
+/** POST /api/exercises（现有单条添加 API）的请求体形态（ExerciseServiceV2.Exercise 同构） */
+export interface BatchCreatePayload {
+  id: string;
+  name: string;
+  exercise_type: import('../../services/api/ExerciseServiceV2').ExerciseType;
+  targets: string;
+  equipment_required: string;
+  difficulty: import('../../services/api/ExerciseServiceV2').Difficulty;
+  modified_by: 'system';
+}
+
+/** 购物车条目 → 单条添加载荷（与 ExerciseSettingsModal.handleSave 的持久化字段口径一致：
+ *  英文规范名 + 17 肌群 slug + 器械 slug；id 由 App 层生成——库内已有行不覆盖） */
+export function pickerItemToBatchPayload(item: PickerSelectionItem): BatchCreatePayload {
+  const { exercise } = item;
+  return {
+    id: createLibraryId(),
+    name: exercise.nameEn,
+    exercise_type: toLegacyType(exercise.exerciseType) as BatchCreatePayload['exercise_type'],
+    targets: JSON.stringify({ primary: exercise.primaryMuscles, secondary: exercise.secondaryMuscles }),
+    equipment_required: JSON.stringify([exercise.equipment]),
+    difficulty: (exercise.difficulty || 'beginner') as BatchCreatePayload['difficulty'],
+    modified_by: 'system',
+  };
+}

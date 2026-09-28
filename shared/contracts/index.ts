@@ -1249,6 +1249,8 @@ export {
   // Constants
   PLAN_ENTRY_STATUSES,
   PLAN_ENTRY_STATUS_TRANSITIONS,
+  SET_TYPE_VALUES,
+  DEFAULT_SET_TYPE,
 
   // Schemas
   WeekIdSchema,
@@ -1266,6 +1268,7 @@ export {
   TodayScheduleEntrySchema,
   TodayScheduleResponseSchema,
   FitnessLevelSchema,
+  SetTypeSchema,
   WeeklyPlanSetSchema,
   WeeklyPlanExerciseSchema,
   WeeklyPlanDaySchema,
@@ -1289,6 +1292,7 @@ export {
   type TodayScheduleEntry,
   type TodayScheduleResponse,
   type FitnessLevel,
+  type SetType,
   type WeeklyPlanSet,
   type WeeklyPlanExercise,
   type WeeklyPlanDay,
@@ -1341,3 +1345,29 @@ export {
   type ProfileApplyResponse,
   type ProfilePendingIntent,
 } from './profile-proposals.js';
+
+// ============================================================================
+// Exercise Sort Contracts (picker 智能排序后端真源 + 近期分区去重 — issue #31)
+// ============================================================================
+
+export {
+  // Constants
+  EXERCISE_REGIONS,
+  BODY_PART_REGION,
+  MUSCLE_REGION,
+  SMART_SORT_RECENT_SESSION_LIMIT,
+  SMART_SORT_RECENT_EXERCISE_LIMIT,
+
+  // Schemas
+  SmartSortResponseSchema,
+
+  // Types
+  type ExerciseRegion,
+  type SmartSortResponse,
+  type RecentTrainedEntry,
+  type DedupedRecent,
+
+  // Functions
+  dedupeRecentRegions,
+  rankWithRecent,
+} from './exercise-sort.js';

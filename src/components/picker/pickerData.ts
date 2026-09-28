@@ -12,6 +12,8 @@
  */
 
 import { EQUIPMENT_LABELS_ZH } from 'shared/contracts';
+import { BODY_PART_REGION, MUSCLE_REGION } from 'shared/contracts';
+import type { SetType } from 'shared/contracts';
 import { muscleLabelZh } from '../../lib/muscleMap';
 import { PICKER_LIBRARY } from './pickerLibraryData';
 
@@ -35,8 +37,12 @@ export type PickerExerciseType =
 /** 区域分组（肌肉 Sheet 分组口径；cardio=有氧全身） */
 export type PickerRegion = 'upper' | 'lower' | 'core' | 'cardio';
 
-/** 组类型标注（协议扩展点：后端契约暂未收录 set_role，接入时以 shared/contracts 扩展为准） */
-export type PickerSetRole = 'warmup' | 'working' | 'rampUp' | 'rampDown' | 'amrap';
+/**
+ * 组类型标注（A31 契约扩展：真源 shared/contracts SetType，issue #31）。
+ * 前端旧值 rampUp/rampDown 已随契约统一为 snake_case（ramp_up/ramp_down）；
+ * 语义不变：热身/正式/递增/递减/AMRAP。
+ */
+export type PickerSetRole = SetType;
 
 /** 生产库 exercises 行（pickerLibraryData.ts 同构形状） */
 export interface PickerLibraryEntry {
@@ -77,6 +83,8 @@ export interface PickerExercise {
   equipment: string;
   /** 器械中文（展示） */
   equipmentLabel: string;
+  /** 难度（beginner/intermediate/advanced；批量创建载荷消费） */
+  difficulty: string;
   /** 英文名小写（搜索兜底） */
   pinyin: string;
   /** 英文名首字母（搜索兜底；中文拼音索引待服务端下发） */
@@ -150,19 +158,19 @@ export const REGION_LABELS: Record<PickerRegion, string> = {
 export const ROLE_LABELS: Record<PickerSetRole, string> = {
   warmup: '热身',
   working: '正式',
-  rampUp: '递增',
-  rampDown: '递减',
+  ramp_up: '递增',
+  ramp_down: '递减',
   amrap: 'AMRAP',
 };
 
-export const ROLE_ORDER: PickerSetRole[] = ['warmup', 'working', 'rampUp', 'rampDown', 'amrap'];
+export const ROLE_ORDER: PickerSetRole[] = ['warmup', 'working', 'ramp_up', 'ramp_down', 'amrap'];
 
 /** 组类型徽标配色（小面积点缀；AMRAP 用 star-accent 黄绿） */
 export const ROLE_BADGE_CLASS: Record<PickerSetRole, string> = {
   warmup: 'bg-blue-50 text-blue-500',
   working: 'bg-gray-100 text-gray-500',
-  rampUp: 'bg-green-50 text-green-600',
-  rampDown: 'bg-orange-50 text-orange-500',
+  ramp_up: 'bg-green-50 text-green-600',
+  ramp_down: 'bg-orange-50 text-orange-500',
   amrap: 'bg-[#BCEF08] text-star-dark',
 };
 
@@ -206,17 +214,7 @@ const DB_TYPE_MAP: Record<string, PickerExerciseType> = {
   outdoor: 'outdoor',
 };
 
-const BODY_PART_REGION: Record<string, PickerRegion> = {
-  back: 'upper',
-  shoulders: 'upper',
-  chest: 'upper',
-  upper_arms: 'upper',
-  lower_arms: 'upper',
-  upper_legs: 'lower',
-  lower_legs: 'lower',
-  hips: 'lower',
-  waist: 'core',
-};
+const BODY_PART_REGION_MAP = BODY_PART_REGION as Record<string, PickerRegion>;
 
 function initialsOfEn(name: string): string {
   return name
@@ -246,13 +244,14 @@ export function buildPickerExercises(library: PickerLibraryEntry[]): PickerExerc
       name: e.nameZh.trim() || e.name,
       nameEn: e.name,
       exerciseType: type,
-      region: BODY_PART_REGION[e.bodyPart] ?? 'cardio',
+      region: BODY_PART_REGION_MAP[e.bodyPart] ?? 'cardio',
       muscle: primaryZh[0] ?? '其他',
       muscles: musclesZh,
       primaryMuscles: e.primaryMuscles,
       secondaryMuscles: e.secondaryMuscles,
       equipment: e.equipment,
       equipmentLabel: (EQUIPMENT_LABELS_ZH as Record<string, string>)[e.equipment] ?? e.equipment,
+      difficulty: e.difficulty,
       pinyin: e.name.toLowerCase(),
       pinyinInitials: initialsOfEn(e.name),
       rank: i + 1,
@@ -289,16 +288,8 @@ export function equipmentLabelOf(slug: string): string {
   return (EQUIPMENT_LABELS_ZH as Record<string, string>)[slug] ?? slug;
 }
 
-/** 17 词表肌群 → 所属区域（肌肉 Sheet 分组真源：按肌群自身身体区域，非条目 body_part，
- *  避免条目归类与肌群解剖区域冲突导致同一肌群卡片出现在多个分组） */
-const MUSCLE_REGION: Record<string, PickerRegion> = {
-  chest: 'upper', lats: 'upper', middle_back: 'upper', lower_back: 'upper', traps: 'upper',
-  shoulders: 'upper', biceps: 'upper', triceps: 'upper', forearms: 'upper', neck: 'upper',
-  quadriceps: 'lower', hamstrings: 'lower', calves: 'lower', glutes: 'lower', abductors: 'lower', adductors: 'lower',
-  abdominals: 'core',
-};
-
-/** 肌肉 Sheet 分组：肌群按自身区域归组，组内按主发力条目数降序 */
+/** 肌肉 Sheet 分组：肌群按自身区域归组，组内按主发力条目数降序
+ *  （MUSCLE_REGION 真源已收口 shared/contracts——与后端近期分区判定共用一份映射） */
 export const MUSCLE_SHEET_GROUPS: Array<{ label: string; muscles: string[] }> =
   (['upper', 'lower', 'core'] as PickerRegion[])
     .map(region => {

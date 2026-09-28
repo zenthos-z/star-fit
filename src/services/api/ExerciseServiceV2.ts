@@ -9,6 +9,7 @@
  */
 
 import { parseJSONSafe } from 'shared/contracts';
+import type { SmartSortResponse } from 'shared/contracts';
 
 // Re-export API_BASE and helper functions from the existing service
 import { API_BASE, getHeaders } from '../geminiService';
@@ -196,6 +197,8 @@ export interface ExerciseServiceV2 {
   updateExercise(update: ExerciseUpdate): Promise<ParsedExercise>;
   deleteExercise(id: string): Promise<void>;
   getExerciseStats(): Promise<{ total: number; byType: Record<string, number>; byDifficulty: Record<string, number> }>;
+  /** picker 智能排序（后端真源，issue #31）：近期分区去重后的展示排序 */
+  getSmartSort(userId?: string): Promise<SmartSortResponse>;
 }
 
 /**
@@ -384,6 +387,22 @@ class ExerciseServiceV2Impl implements ExerciseServiceV2 {
       byType: Record<string, number>;
       byDifficulty: Record<string, number>;
     }>(response, 'getExerciseStats');
+  }
+
+  /**
+   * picker 智能排序（issue #31）：后端为排序真源——近期训练过的动作按分区
+   * 去重后置顶（同分区只计最新），其余保持库序。
+   * @param userId 用户 UUID（可选；缺省由 X-User-Id 头或服务端基线兜底）
+   */
+  async getSmartSort(userId?: string): Promise<SmartSortResponse> {
+    const qs = userId ? `?userId=${encodeURIComponent(userId)}` : '';
+    const url = buildUrl(`/exercises/smart-sort${qs}`);
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: getHeaders({}, false)
+    });
+
+    return await handleResponse<SmartSortResponse>(response, 'getSmartSort');
   }
 }
 
