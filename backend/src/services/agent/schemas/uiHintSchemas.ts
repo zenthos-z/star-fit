@@ -490,8 +490,9 @@ export const UIHintSchema = z.discriminatedUnion("type", [
     /** 'next_day' = 用户要求制定「明天/第二天」的计划（2026-09-14 明日卡） */
     target: z.literal("next_day").optional(),
   }),
-  // weekly_plan（对话周计划卡，issue #9 / D2）：整周展示层，数据真源仍是
-  // weekly_plan/plan_entries 持久实体（save_weekly_plan 落库后输出）
+  // weekly_plan（对话周计划卡，issue #9 / D2）：整周提案卡（B5b 提案-确认，
+  // data.apply 为确认落库唯一数据面）；save_weekly_plan 工具已随提案-确认
+  // 架构移除，落库由 App 直调 POST /api/schedule/weekly-plan/apply 完成
   z.object({
     type: z.literal("weekly_plan"),
     data: WeeklyPlanCardDataSchema,
