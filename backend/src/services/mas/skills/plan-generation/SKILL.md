@@ -68,11 +68,11 @@ inputType: text|number|select|checkbox, required?, options: [{label, value}]}]�
 
 ## 工具列表
 
-| 工具             | 说明                                                                 | 参数                          | 类别 |
-| ---------------- | -------------------------------------------------------------------- | ----------------------------- | ---- |
-| load_history     | 加载用户历史数据和负荷锚点                                           | `include_profile` 等可选      | 数据 |
-| list_exercises   | 加载完整动作库 [{id, name, **name_zh**, exercise_type, description}] | 无                            | 数据 |
-| get_current_plan | 读本周（或指定周）已持久化的周计划（框架判定第一步）                 | `week_id` 可选（缺省=当前周） | 数据 |
+| 工具             | 说明                                                                                                                                                      | 参数                                                                                           | 类别 |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------- | ---- |
+| load_history     | 加载用户历史数据和负荷锚点                                                                                                                                | `include_profile` 等可选                                                                       | 数据 |
+| list_exercises   | 按 body_part/equipment/keyword **过滤查询**动作库（分页：默认 30 条/次，返回带 total/has_more）；行含 {id, name, **name_zh**, exercise_type, description} | `body_part`、`equipment`、`keyword`、`limit`、`offset`（建议按目标肌群逐部位查，不做全量拉取） | 数据 |
+| get_current_plan | 读本周（或指定周）已持久化的周计划（框架判定第一步）                                                                                                      | `week_id` 可选（缺省=当前周）                                                                  | 数据 |
 
 **注意**:
 
@@ -142,7 +142,8 @@ get_current_plan（先查：本周已有计划？——框架判定）
   └─ found: false（或框架级重算 #3）↓
 load_history（画像/锚点/伤病/器械 → 硬约束）
   ↓
-list_exercises（动作库，按器械/伤病过滤；取 name_zh 作展示名）
+list_exercises（两步查询：计划覆盖的每个部位各调一次 body_part 过滤；
+  返回页里按器械/伤病过滤；取 name_zh 作展示名；has_more=false 即停）
   ↓
 program-progression 技能（分化决策表 + 容量知识 → 一周编排）
   ↓
@@ -159,7 +160,8 @@ program-progression 技能（分化决策表 + 容量知识 → 一周编排）
   ↓
 get_current_plan（框架在？→ 在：读出该周条目）
   ↓
-load_history（如需）+ list_exercises（居家器械过滤）
+load_history（如需）+ list_exercises（按被点名日所需部位 body_part 过滤，
+  返回页里再按居家器械过滤）
   ↓
 只重排被点名那天的动作 → weekly_plan 卡仍展示整周
 （days 覆盖 7 天，未动日子原样）+ data.apply{scope:'days',

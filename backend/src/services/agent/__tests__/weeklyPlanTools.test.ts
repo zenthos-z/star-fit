@@ -146,9 +146,11 @@ describe("weekly plan apply path — real PG", () => {
          VALUES ($id, 'wp-apply-test-user', '3.0.0')`,
         { id: userId },
       );
+      // 002 retired the attributes JSONB — seed without it (test-schema drift
+      // repair, 42b drive-by).
       await client.query(
-        `INSERT INTO exercises (id, name, exercise_type, difficulty, attributes, tutorials)
-         VALUES ($id, $name, 'resistance', 'intermediate', '{}'::jsonb, '{}'::jsonb)`,
+        `INSERT INTO exercises (id, name, exercise_type, difficulty, tutorials)
+         VALUES ($id, $name, 'resistance', 'intermediate', '{}'::jsonb)`,
         { id: EXERCISE_ID, name: `wp-apply-bench-${NOW}` },
       );
     }
@@ -294,7 +296,11 @@ describe("weekly plan apply path — real PG", () => {
             ],
           }),
         }),
-      (err: unknown) => err instanceof ServiceError,
+      // Zod 契约校验走 validateOrThrow → ValidationError（框架级拒绝才是
+      // ServiceError，见上例；此断言曾因 before-hook 漂移被掩盖，42b 修复）。
+      // 按 name 断言：shared/contracts（tsx 源码态）与 shared/dist（repo 直引）
+      // 是两个类实例，instanceof 不可靠。
+      (err: unknown) => (err as Error).name === "ValidationError",
     );
   });
 

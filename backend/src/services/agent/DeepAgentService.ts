@@ -37,10 +37,17 @@
  * here — M5 wraps it, INT AC4 verifies it.
  */
 
-import { createDeepAgent, type DeepAgent } from "deepagents";
-import type { AIMessageChunk } from "@langchain/core/messages";
-import { HumanMessage } from "@langchain/core/messages";
-import { createMiddleware } from "langchain";
+import {
+  createDeepAgent,
+  type DeepAgent,
+  TASK_SYSTEM_PROMPT,
+} from "deepagents";
+import { AIMessageChunk } from "@langchain/core/messages";
+import { HumanMessage, SystemMessage } from "@langchain/core/messages";
+import {
+  createMiddleware,
+  TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT,
+} from "langchain";
 
 import type { AgentEvent, ChatRequest } from "shared/contracts";
 import type { AgentService } from "./AgentService.js";
@@ -236,10 +243,12 @@ const BASE_SYSTEM_PROMPT = [
   "You also have domain data tools (load_history, list_exercises,",
   "get_exercise_detail, write_session, update_profile, write_memory). Use them",
   "to ground answers in THIS user real data and the real exercise library — see",
-  "the fitness-data-tools skill for when/how. list_exercises returns the WHOLE",
-  "library (small enough to fit in context) — call it once, then pick safe",
-  "actions in-context. Never invent exercises that are not in the library;",
-  "always respect the user equipment + active limitations.",
+  "the fitness-data-tools skill for when/how. list_exercises is paginated:",
+  "default 30 rows per call — filter with body_part / equipment / keyword",
+  "(one call per needed muscle group) instead of paging through the whole",
+  "library; the response carries total / has_more. Never invent exercises",
+  "that are not in the library; always respect the user equipment + active",
+  "limitations.",
 ].join("\n");
 
 /**
@@ -447,7 +456,12 @@ export class DeepAgentService implements AgentService {
     const model = hasImage
       ? await loadVisionModel()
       : await loadModel(scenario ?? "default");
-    const middleware = hasImage ? undefined : [stripImageMiddleware];
+    // 42b (issue #42)：框架死重裁剪中间件对文本/带图两种 agent 都挂——
+    // subagent(task)/todo(write_todos) 与只读场景用不到的 edit_file/write_file
+    // schema 不再进模型上下文，TASK/todo 系统提示同步剥离（见该中间件注释）。
+    const middleware = hasImage
+      ? [frameworkTrimMiddleware]
+      : [stripImageMiddleware, frameworkTrimMiddleware];
 
     // P006: checkpointer injected from M-RT (agent_runtime schema). Ensure the
     // schema exists before the graph first reads/writes checkpoint state.
@@ -467,7 +481,8 @@ export class DeepAgentService implements AgentService {
       model,
       tools,
       systemPrompt,
-      // 文本轮洗历史图块（见 stripImageMiddleware 注释）；带图轮不需要。
+      // 文本轮洗历史图块（stripImageMiddleware）；两种 agent 都裁框架死重
+      // （frameworkTrimMiddleware，见其注释）。
       middleware,
       // DeepSeek V4 (current default provider) rejects structured-output
       // `response_format`; the plan card is driven by the M5a skill in the
@@ -1109,6 +1124,80 @@ const stripImageMiddleware = createMiddleware({
     return touched
       ? handler({ ...request, messages: cleaned })
       : handler(request);
+  },
+});
+
+// ---------------------------------------------------------------------------
+// 框架死重裁剪（42b，issue #42）
+// ---------------------------------------------------------------------------
+
+/**
+ * 本项目零使用的 deepagents 框架件（grep 全仓验证，2026-09-28）：subagent
+ * （task 工具 + general-purpose 子智能体 + TASK_SYSTEM_PROMPT 2,194 字符）与
+ * todo（write_todos 工具 + todo 系统提示）。单 Agent 架构（修订①）下两者均
+ * 无调用方；general-purpose 子智能体只能经 task 工具触达，工具不入上下文即
+ * 不可达。edit_file/write_file 在 GOLD 只读权限下（skillLoader permissions
+ * 仅 read）本就无法执行，但框架只挡执行不挡展示——schema 仍占上下文，一并裁。
+ * read_file / grep / glob / ls 保留（progressive disclosure 的技能正文依赖它们）。
+ *
+ * 实现机制：deepagents 的 createDeepAgent 不暴露关闭这两个默认中间件的参数，
+ * 且 SubAgentMiddleware 属于 REQUIRED_MIDDLEWARE_NAMES 不可排除；但自定义
+ * middleware 在数组末位 = wrapModelCall 链最内层，晚于全部框架注入执行——
+ * 在此把裁剪目标从最终请求里摘除（与库自身 _ToolExclusionMiddleware 同款手法）。
+ * 若未来 deepagents 升级改变注入文本/工具名，断言测试（tests + probe）会红。
+ */
+const FRAMEWORK_TRIM_TOOL_NAMES: ReadonlySet<string> = new Set([
+  "task",
+  "write_todos",
+  "edit_file",
+  "write_file",
+]);
+
+/** 导出给探针（scripts/system-area-probe.mjs）复用同一份裁剪逻辑测量 AFTER 口径。 */
+export const frameworkTrimMiddleware = createMiddleware({
+  name: "frameworkDeadweightTrim",
+  wrapModelCall: async (request, handler) => {
+    const tools = (request.tools ?? []).filter(
+      (t) => !FRAMEWORK_TRIM_TOOL_NAMES.has((t as { name: string }).name),
+    );
+    const text = request.systemMessage?.text ?? "";
+    // 两种 join 形态都剥（探针实测 2026-09-28）：todoListMiddleware 以
+    // "\n\n" + 常量全文 concat；SubAgentMiddleware 把 TASK_SYSTEM_PROMPT
+    // 无分隔符直拼在文末（紧贴 filesystem 工具清单，不带 \n\n）。
+    // 常量为 2,000+ 字符的独有 blob，裸 replace 无误伤风险。
+    const trimmed = text
+      .replace(`\n\n${TASK_SYSTEM_PROMPT}`, "")
+      .replace(TASK_SYSTEM_PROMPT, "")
+      .replace(`\n\n${TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT}`, "")
+      .replace(TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT, "");
+    const touched = tools.length !== (request.tools ?? []).length;
+    const req2 =
+      touched || trimmed !== text
+        ? {
+            ...request,
+            tools,
+            ...(trimmed !== text
+              ? { systemMessage: new SystemMessage(trimmed) }
+              : null),
+          }
+        : request;
+    const res = await handler(req2);
+    // GLM 的 OpenAI 兼容流偶发尾包（空 content / 无 role 的末 chunk）会把聚合
+    // 结果映射成 ChatMessageChunk —— 它不是 AIMessage 子类，AgentNode 的
+    // wrapModelCall 返回值校验（AIMessage|Command|structuredResponse）会以
+    // "got object" 拒绝（2026-09-28 E2E 实测 2/4 轮命中，与 llm.ts 注释里
+    // maxTokens 规避的 args 截断是同族 provider 互操作问题）。本中间件位于
+    // wrapModelCall 链最内层、最先见到模型返回——在此把字段同构的
+    // ChatMessageChunk 重水化回 AIMessageChunk，语义零改动，只补类型。
+    if (
+      res != null &&
+      typeof res === "object" &&
+      (res as { constructor?: { name?: string } }).constructor?.name ===
+        "ChatMessageChunk"
+    ) {
+      return new AIMessageChunk({ ...(res as object) });
+    }
+    return res;
   },
 });
 

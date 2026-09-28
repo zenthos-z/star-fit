@@ -88,7 +88,7 @@ read_file("/exercise-type-guide/knowledge/rep_training.md") // 次数训练
 
 ```
 1. 用户需求 "练胸"
-2. list_exercises (拿全量动作库，在上下文里筛胸部动作)
+2. list_exercises ({body_part: "chest"} 按部位过滤查询，返回页里筛)
 3. get_exercise_type_knowledge({type: "resistance"}) → 了解 resistance 类型需要 weight 字段
 4. load_history (获取历史负荷锚点)
 5. 生成包含 weight 字段的动作计划

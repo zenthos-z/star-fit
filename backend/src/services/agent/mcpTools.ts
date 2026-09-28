@@ -11,12 +11,14 @@
  *
  * ## Tool set (10)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
- * - `list_exercises`      (read)  the WHOLE exercise library as [{id, name, name_zh,
- *                                 description}] (B5b: name_zh is the official Chinese
- *                                 display name — user-facing plan output uses it,
- *                                 never translate names in-model).
- *                                 The library is small enough to fit in context, so the agent
- *                                 picks actions itself. `description`
+ * - `list_exercises`      (read)  the exercise library, FILTERED + PAGINATED (42b,
+ *                                 issue #42): optional body_part / equipment /
+ *                                 keyword filters, limit (default 30) + offset;
+ *                                 response carries total / has_more. Each row is
+ *                                 {id, name, name_zh, exercise_type, description}
+ *                                 (B5b: name_zh is the official Chinese display
+ *                                 name — user-facing plan output uses it, never
+ *                                 translate names in-model). `description`
  *                                 carries pattern/targets/equipment/impact so the agent can
  *                                 respect the user equipment + injuries in-context.
  * - `get_exercise_detail` (read)  full record of one exercise (deepened
@@ -127,6 +129,8 @@ interface ExerciseListRow {
   name_zh: string | null;
   exercise_type: string | null;
   difficulty: string | null;
+  /** 002 深化列：compound/isolation（行级 description 一并携带，供计划编排筛选用） */
+  mechanic: string | null;
   equipment: string | null;
   category: string | null;
   body_part: string | null;
@@ -385,10 +389,55 @@ export class ExerciseQuery extends BaseRepository {
    */
   async listAll(): Promise<ExerciseListRow[]> {
     return this.queryMany<ExerciseListRow>(
-      `SELECT id, name, name_zh, exercise_type, difficulty, equipment, category, body_part, primary_muscles
+      `SELECT id, name, name_zh, exercise_type, difficulty, mechanic, equipment, category, body_part, primary_muscles
          FROM exercises
          ORDER BY name`,
     );
+  }
+
+  /**
+   * Filtered + paginated library read (42b, issue #42). All filters are
+   * optional and AND-combined; `keyword` does a case-insensitive contains
+   * across name / name_zh / category / body_part / primary+secondary muscles.
+   * Returns the matching page plus `total` so the tool can compute has_more —
+   * the agent filters by body_part per muscle group instead of paging blindly.
+   */
+  async listPage(filters: {
+    body_part?: string;
+    equipment?: string;
+    keyword?: string;
+    limit: number;
+    offset: number;
+  }): Promise<{ rows: ExerciseListRow[]; total: number }> {
+    const kw = filters.keyword ? `%${filters.keyword}%` : null;
+    // body_part/equipment/category 是 enum 类型 —— ILIKE 前须 ::text 显式转列。
+    const where = `
+      WHERE ($bodyPart::text IS NULL OR body_part::text ILIKE '%' || $bodyPart || '%')
+        AND ($equipment::text IS NULL OR equipment::text ILIKE '%' || $equipment || '%')
+        AND ($kw::text IS NULL OR name ILIKE $kw OR name_zh ILIKE $kw
+             OR category::text ILIKE $kw OR body_part::text ILIKE $kw
+             OR array_to_string(primary_muscles, ',') ILIKE $kw
+             OR array_to_string(secondary_muscles, ',') ILIKE $kw)`;
+    const params = {
+      bodyPart: filters.body_part ?? null,
+      equipment: filters.equipment ?? null,
+      kw,
+      limit: filters.limit,
+      offset: filters.offset,
+    };
+    const rows = await this.queryMany<ExerciseListRow>(
+      `SELECT id, name, name_zh, exercise_type, difficulty, mechanic, equipment, category, body_part, primary_muscles
+         FROM exercises
+         ${where}
+         ORDER BY name
+         LIMIT $limit OFFSET $offset`,
+      params,
+    );
+    const countRow = await this.queryOne<{ total: string | number }>(
+      `SELECT count(*) AS total FROM exercises ${where}`,
+      params,
+    );
+    return { rows, total: Number(countRow?.total ?? 0) };
   }
 
   /** Full record for one exercise by id (tutorials, content_html, deepened teaching columns). */
@@ -478,13 +527,55 @@ const loadHistorySchema = z
   );
 
 const listExercisesSchema = z
-  .object({})
+  .object({
+    body_part: z
+      .string()
+      .max(40)
+      .optional()
+      .describe(
+        'Filter by body part (case-insensitive contains): "chest", "back", "shoulders", "waist", "upper_arms", "lower_arms", "upper_legs", "lower_legs", "hips", "cardio". PREFERRED filter for plan flows — one call per needed muscle group.',
+      ),
+    equipment: z
+      .string()
+      .max(40)
+      .optional()
+      .describe(
+        'Filter by equipment (case-insensitive contains): "barbell", "dumbbell", "machine", "cable", "band", "bodyweight", "kettlebell", "stability_ball", "medicine_ball".',
+      ),
+    keyword: z
+      .string()
+      .max(60)
+      .optional()
+      .describe(
+        'Free-text search across name / name_zh / category / body_part / muscles, e.g. "squat", "卧推", "glutes".',
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .default(30)
+      .describe(
+        "Page size (default 30, max 100). Prefer body_part/equipment/keyword filters over paging.",
+      ),
+    offset: z
+      .number()
+      .int()
+      .min(0)
+      .default(0)
+      .describe(
+        "Rows to skip (default 0). Page with offset only when has_more=true.",
+      ),
+  })
   .describe(
-    "List the ENTIRE exercise library as [{id, name, description}]. No filters, no arguments — " +
-      "the library is small enough to fit in context. Read it ONCE, then pick actions in-context " +
-      "respecting the user equipment and any active injuries (from load_history). `description` " +
-      "carries pattern / targets / equipment / joint-impact so you can choose safe actions directly. " +
-      "Never invent an exercise that is not in the returned list.",
+    "Browse the exercise library with filters + pagination (read-only). The full library " +
+      "(~355 moves) NEVER fits in one call: default page is 30 rows. Returns {total, count, " +
+      "offset, limit, has_more, exercises:[{id, name, name_zh, exercise_type, description}]}. " +
+      "Filter first (body_part / equipment / keyword), page only when has_more=true. " +
+      "`name_zh` is the official Chinese display name (user-facing output MUST use it; never " +
+      "translate names yourself); `description` carries pattern / targets / equipment / " +
+      "joint-impact so you can respect the user equipment and active injuries. Never invent " +
+      "an exercise that is not in a returned page.",
   );
 
 const getExerciseDetailSchema = z
@@ -937,28 +1028,45 @@ export function buildMcpToolsWith(
   const listExercises = new DynamicStructuredTool({
     name: "list_exercises",
     description:
-      "List the ENTIRE exercise library (read-only) as [{id, name, name_zh, exercise_type, description}]. No arguments. " +
-      "The library is small enough to fit in context — call this ONCE, then pick actions in-context " +
-      "respecting the user equipment and any active injuries. `exercise_type` tells you which fields are required " +
-      "(isometric needs duration, outdoor needs distance, resistance needs weight). " +
-      "`name_zh` is the official Chinese display name (curated library data, 100% coverage — never translate " +
-      "names yourself): user-facing output (plan cards, replies) MUST use name_zh for Chinese-speaking users; " +
-      "`name` (English) is the storage/library key. `description` carries pattern/targets/equipment/joint-impact. " +
-      "Never invent an exercise that is not in the returned list.",
+      "Browse the exercise library with filters + pagination (read-only): {body_part, equipment, " +
+      "keyword, limit (default 30, max 100), offset}. The full library (~355) NEVER fits in one " +
+      "call — filter first (plan flows: one body_part per needed muscle group), page with offset " +
+      "only when has_more=true. Returns {total, count, offset, limit, has_more, exercises:[{id, " +
+      "name, name_zh, exercise_type, description}]}. `exercise_type` tells you which fields are " +
+      "required (isometric needs duration, outdoor needs distance, resistance needs weight). " +
+      "`name_zh` is the official Chinese display name (never translate names yourself — " +
+      "user-facing output MUST use it); `description` carries pattern/targets/equipment/joint-impact. " +
+      "Never invent an exercise that is not in a returned page.",
     schema: listExercisesSchema,
-    func: async () => {
+    func: async (input) => {
       const exerciseQuery = new ExerciseQuery(client);
-      const rows = await exerciseQuery.listAll();
+      const limit = input.limit ?? 30;
+      const offset = input.offset ?? 0;
+      const { rows, total } = await exerciseQuery.listPage({
+        body_part: input.body_part,
+        equipment: input.equipment,
+        keyword: input.keyword,
+        limit,
+        offset,
+      });
       const exercises = rows.map((r) => ({
         id: r.id,
         name: r.name,
-        // [B5b issue#38] 中文名随库直出（354/354 已回填）——展示层确定性
-        // 中文化，Agent 禁止自行翻译
+        // [B5b issue#38] 中文名随库直出——展示层确定性中文化，Agent 禁止自行翻译
         name_zh: r.name_zh ?? r.name,
         exercise_type: r.exercise_type,
         description: describeExercise(r),
       }));
-      return JSON.stringify({ count: exercises.length, exercises });
+      // 42b (issue #42): total + has_more 告知 Agent 还有下一页可翻；
+      // count 是本页行数（兼容旧字段语义：count = 本页 exercises 数）。
+      return JSON.stringify({
+        total,
+        count: exercises.length,
+        offset,
+        limit,
+        has_more: offset + exercises.length < total,
+        exercises,
+      });
     },
   });
 
@@ -1248,8 +1356,8 @@ function trimSessions(
 /**
  * Synthesize a compact one-line description from an exercise's 002 深化列 so the
  * agent can pick safe actions from the full list in-context. Carries exactly the
- * constraint-relevant fields: type/difficulty, equipment, body part, and target
- * muscles (bodyweight when no equipment).
+ * constraint-relevant fields: type/difficulty, mechanic, equipment, body part,
+ * and target muscles (bodyweight when no equipment).
  *
  * Robust to partial/missing columns — every field is optional.
  */
@@ -1257,6 +1365,7 @@ function describeExercise(row: ExerciseListRow): string {
   const parts: string[] = [];
   if (row.exercise_type) parts.push(String(row.exercise_type));
   if (row.difficulty) parts.push(String(row.difficulty));
+  if (row.mechanic) parts.push(String(row.mechanic));
   if (row.equipment) parts.push(`equipment:${row.equipment}`);
   if (row.body_part) parts.push(`part:${row.body_part}`);
   if (Array.isArray(row.primary_muscles) && row.primary_muscles.length > 0) {
