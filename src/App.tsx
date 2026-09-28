@@ -16,6 +16,9 @@ import { startLiveActivity, pauseLiveActivity, endLiveActivity } from './lib/liv
 import TimeEditor from './components/TimeEditor';
 import MainTabBar, { MainTab } from './components/MainTabBar';
 import ExerciseSettingsModal from './components/ExerciseSettingsModal';
+import ExercisePickerModal from './components/picker/ExercisePickerModal';
+import BatchAddBanner from './components/picker/BatchAddBanner';
+import { usePickerEntryConfirm } from './hooks/usePickerEntryConfirm';
 import { ExerciseAction } from './types/protocol';
 
 import { ExerciseTutorialModal } from './components/execution/ExerciseTutorialModal';
@@ -457,6 +460,10 @@ const App: React.FC = () => {
   const [tutorialExerciseId, setTutorialExerciseId] = useState<string | null>(null);
   const [nextPlan, setNextPlan] = useState<any[] | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
+  // A10（issue #32）：picker 直连入口场景。batch=训练前/主页空状态挑选（批量添加进会话）；
+  // append=训练中「+」加动作（追加队尾）。single-replace 不走此路径（配置页内换动作，
+  // 由 ExerciseSettingsModal 库视图 mode="single-replace" 承接）。
+  const [pickerEntry, setPickerEntry] = useState<{ mode: 'batch' | 'append' } | null>(null);
   const [toast, setToast] = useState<{ msg: string; visible: boolean }>({ msg: '', visible: false });
   const lastBackPressRef = useRef<number>(0);
 
@@ -788,6 +795,8 @@ const App: React.FC = () => {
       // Priority: Highest to Lowest (Modal stack)
       if (reorderMode) {
         setReorderMode(null);
+      } else if (pickerEntry) {
+        setPickerEntry(null);
       } else if (isLibraryOpen) {
         setIsLibraryOpen(false);
       } else if (tutorialExerciseId) {
@@ -830,6 +839,7 @@ const App: React.FC = () => {
     };
   }, [
     reorderMode,
+    pickerEntry,
     isLibraryOpen,
     tutorialExerciseId,
     showSettingsId,
@@ -914,20 +924,20 @@ const App: React.FC = () => {
     }, 0);
   };
 
-  const handleAddSingleExercise = () => {
-    // Create placeholder exercise - user must select from library
-    const newEx: Exercise = {
-        id: '', // Empty id until user selects from library
-        libraryId: '',
-        name: '', // Empty name triggers auto-open library in modal
-        type: 'resistance',
-        sets: [{id: uuidv4(), reps: 10, weight: 0, completed: false}],
-        targetRpe: 8,
-        unilateral: false
-    }
-    setPendingExercise(newEx);
-    setIsLibraryOpen(true);
+  const handleAddSingleExercise = (mode: 'batch' | 'append' = 'append') => {
+    // A10（issue #32）：动作库挑选改为 picker 直连——入口场景参数决定模式
+    //（batch=批量添加进会话 / append=追加队尾），确认经 usePickerEntryConfirm
+    // 一次性落会话 + 批量入库，不再经 pendingExercise 占位表单逐条配置。
+    setPickerEntry({ mode });
   };
+
+  // A10：picker 直连确认——队尾追加（batch/append 同一落账语义，保持清单顺序）
+  // + 批量入库（#48 循环单条 POST，进度/失败重试走 BatchAddBanner）。
+  const pickerEntryConfirm = usePickerEntryConfirm({
+    onExercisesAdded: exercises => {
+      setSession(prev => ({ ...prev, exercises: [...prev.exercises, ...exercises] }));
+    },
+  });
 
   const handleImportNextPlan = () => {
     if (!nextPlan || !Array.isArray(nextPlan) || nextPlan.length === 0) {
@@ -1394,7 +1404,7 @@ const App: React.FC = () => {
           {session.exercises.length > 0 && (
             <div className="mt-8 flex justify-center pb-8">
                <button
-                 onClick={handleAddSingleExercise}
+                 onClick={() => handleAddSingleExercise('append')}
                  aria-label="添加动作"
                  className="flex items-center justify-center w-11 h-11 rounded-full bg-gray-200 text-blue-500 active:bg-gray-300 active:scale-95 transition-all group"
                >
@@ -1438,7 +1448,8 @@ const App: React.FC = () => {
             startOptions={buildStartMenuOptions(
               Boolean(nextPlan && Array.isArray(nextPlan) && nextPlan.length > 0),
               {
-                onPickLibrary: handleAddSingleExercise,
+                // A10（issue #32）：开始菜单「挑选动作」= 训练前/主页空状态批量场景
+                onPickLibrary: () => handleAddSingleExercise('batch'),
                 onOpenCoach: () => {
                   // 菜单关闭动画先走，再开 AI 浮层（与返回键时序一致的错峰）
                   setTimeout(() => openAiCoach(), 150);
@@ -1680,6 +1691,28 @@ const App: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* A10（issue #32）：picker 直连入口（batch=训练前批量挑选 / append=训练中加动作）。
+          确认=队尾追加进会话 + 批量入库（失败重试经底部 BatchAddBanner，常驻根层级
+          以在 picker 关闭后继续呈现进度）。 */}
+      {pickerEntry && (
+        <ExercisePickerModal
+          key={`picker-entry-${pickerEntry.mode}`}
+          mode={pickerEntry.mode}
+          userId={userId}
+          onClose={() => setPickerEntry(null)}
+          onConfirm={items => {
+            pickerEntryConfirm.confirm(items);
+            setPickerEntry(null);
+          }}
+        />
+      )}
+
+      <BatchAddBanner
+        state={pickerEntryConfirm.state}
+        onRetry={pickerEntryConfirm.retryFailed}
+        onDismiss={pickerEntryConfirm.dismiss}
+      />
 
       {/* AICoachOverlay moved to AnimatePresence container */}
 

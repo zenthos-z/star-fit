@@ -74,6 +74,7 @@ if (videoMode) {
     <React.StrictMode>
       <ExercisePickerModal
         hasHistory={hasHistory}
+        mode="batch"
         initialScreen={screen}
         defaultSelectedIds={sel}
         onClose={() => {}}

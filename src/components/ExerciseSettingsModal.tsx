@@ -7,10 +7,8 @@ import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '@/constant
 import { v4 as uuidv4 } from 'uuid';
 import { Timer, MapPin, Watch, Heart, Flame, Zap, Trophy, Gauge, Navigation } from 'lucide-react';
 import ExercisePickerModal from './picker/ExercisePickerModal';
-import BatchAddBanner from './picker/BatchAddBanner';
-import { pickerItemToBatchPayload, pickerItemToLibrarySelect, createLibraryId } from './picker/pickerAdapter';
+import { pickerItemToLibrarySelect, createLibraryId } from './picker/pickerAdapter';
 import type { PickerSelectionItem } from './picker/pickerData';
-import { useBatchExerciseCreate } from '../hooks/useBatchExerciseCreate';
 import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } from '../services/suggestionService';
 import { guessCardioSubtype } from '@/utils/exerciseLogic';
 import { DeviationLogger } from '../services/logging/DeviationLogger';
@@ -258,9 +256,9 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   smartFillSlot,
   externalApiRef
 }) => {
-  // A31 购物车批量添加（issue #31）：confirm 多选时首项回填表单，其余项
-  // App 层循环现有单条添加 API 逐条入库（进度反馈 + 失败单条重试）。
-  const batchCreate = useBatchExerciseCreate();
+  // A10（issue #32）：本组件的库视图固定 single-replace 场景——配置页内换动作，
+  // 选 1 个即回填表单（单选语义由 picker 的 mode 状态机保证）；训练前批量挑选
+  // 与训练中加动作走 App 层 pickerEntry 直连（usePickerEntryConfirm），不经过本表单。
   const handlePickerConfirm = (items: PickerSelectionItem[]) => {
     const first = items[0];
     if (!first) {
@@ -269,10 +267,6 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
     }
     const sel = pickerItemToLibrarySelect(first);
     handleLibrarySelect(sel.id, sel.name, sel.type, sel.bodyCategory, sel.muscles, sel.equipment, sel.nameEn);
-    // 其余项批量入库（此前被静默丢弃的已知取舍，本批补齐）
-    if (items.length > 1) {
-      batchCreate.runBatch(items.slice(1).map(pickerItemToBatchPayload));
-    }
   };
 
   // Convert ExerciseAction type to ExerciseType (now unified lowercase, no conversion needed)
@@ -1101,13 +1095,12 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
   return (
     <>
       {isLibraryOpen ? (
-        /* A8A9 接线：动作库换新选择器（筛选器/3D 封面/购物车多选，PR #30）。
-           回调适配：onConfirm 为购物车多选（PickerSelectionItem[]），主流程创建
-           语义为单动作回填——取数组首项经 pickerAdapter 映射回旧 onSelect 原语，
-           其余项批量入库（A31：App 层循环单条添加 API + 进度/重试横幅）；
-           创建态返回 = 取消创建。 */
+        /* A10 接线（issue #32）：配置页库视图 = single-replace 场景——单选，
+           确认「替换X」即回填表单；不再展示购物车多选（批量/追加场景走
+           App 层 pickerEntry 直连 ExercisePickerModal）。创建态返回 = 取消创建。 */
         <ExercisePickerModal
           key="library"
+          mode="single-replace"
           onConfirm={handlePickerConfirm}
           userId={userId}
           onClose={() => {
@@ -1681,12 +1674,6 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
         </motion.div>
       )}
 
-      {/* A31 购物车批量添加进度横幅（confirm 多选后展示；失败可单条重试） */}
-      <BatchAddBanner
-        state={batchCreate.state}
-        onRetry={batchCreate.retryFailed}
-        onDismiss={batchCreate.dismiss}
-      />
     </>
   );
 };
