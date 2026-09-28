@@ -75,10 +75,18 @@ const GALLERY_MESSAGES: Partial<ChatMessage>[] = [
     message: '教练希望更新你的训练画像，请确认以下改动。',
     trigger: 'day_end',
     proposals: [
-      { field: 'load_anchors', label: '负荷锚点', change: '卧推基准组 57.5kg → 60kg', value: { bench: 60 } },
-      { field: 'recovery_state', label: '恢复状态', change: '睡眠不足，恢复评分下调' },
+      { field: 'load_anchors', label: '负荷锚点', change: '卧推基准组 57.5kg → 60kg', value: { bench_press: { type: 'resistance', best_weight: 60, best_reps: 8 } } },
+      { field: 'recovery_state', label: '恢复状态', change: '睡眠不足，恢复评分下调', value: { total_score: 55 } },
     ],
   }),
+  wrapUiHint('profile_update_confirm', {
+    message: '已根据你的确认完成写入，接着为你调整周计划。',
+    trigger: 'key_parameter_change',
+    proposals: [
+      { field: 'active_limitations', label: '活动限制', change: '新增右肩限制，严重度 4/10，7 天后自动过期', value: [{ part: 'right_shoulder', severity: 4 }] },
+    ],
+    pending_intent: { user_message: '根据我的信息调整一下周计划', summary: '结合新的活动限制调整本周周计划', scenario: 'plan' },
+  }, { decision: { action: 'confirm_update', decidedAt: Date.now(), result: 'done' } }),
   wrapUiHint('hitl_confirm', { sub_type: 'weight_confirm', data: { reason: '深蹲重量 105kg 超过基准 15%，需要你确认。' } }),
   wrapUiHint('summary_card', {
     stats: { totalVolume: 6240, setsCount: 18, durationMinutes: 52 },

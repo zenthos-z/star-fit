@@ -5,11 +5,15 @@ import { ChatCardShell, ChatPrimaryButton, ChatSecondaryButton } from './ChatCar
 /**
  * ProfileUpdateConfirmCard (profile_update_confirm) - 用户画像更新确认气泡
  *
- * docs/profile-update-frontend-spec.md §3:
- * Agent 在 day_end / injury_report / key_parameter_change 时机主动提议更新画像，
- * 本卡片渲染提案列表（label + change 逐条，value 可折叠）并给出确认/取消双按钮。
- * 点击后气泡冻结为已选状态，防止重复提交。确认/取消均由父级
- * （AICoachOverlay onConfirm）发起 scenario=update_profile 的执行轮。
+ * docs/profile-update-frontend-spec.md §3 + [B5 issue#37] 两气泡合一：
+ * 「确认画像更新」与「画像更新完成」在同一条消息内流转，不再新开气泡。
+ * 按钮状态机：初始「确认更新」→ 点击进入加载态（按钮不可再点，写入中…）→
+ * 确定性写入（前端直调 POST /api/profile/apply-proposals，无 LLM、毫秒级）
+ * → 成功变「已更新」（终态）/ 失败变「更新未完成」（可重试）。
+ * 写入成功且卡片带待续意图（pending_intent）时，父级自动续跑用户原始意图。
+ *
+ * 决定记录（decision）持久化在 ChatMessage.uiHint 上（切话题/重启不回弹，
+ * 2026-09-14）；result 子状态由写入端点结果回填（pending/done/failed）。
  *
  * 视觉语言与 AuditCompleteCard 统一：
  * 白底圆角卡 + bg-star-dark 深色头部 + star-accent 主操作按钮。
@@ -19,6 +23,7 @@ interface ProfileUpdateProposal {
   field: 'load_anchors' | 'active_limitations' | 'recovery_state' | 'memories';
   label: string;
   change: string;
+  /** [B5] 最终值（Agent 提案轮算好，确认后由系统确定性写入） */
   value?: unknown;
 }
 
@@ -32,6 +37,12 @@ interface ProfileUpdateConfirmCardProps {
       proposals: ProfileUpdateProposal[];
       confirmLabel?: string;
       cancelLabel?: string;
+      /** [B5 issue#37] 待续意图：写入完成后据此续跑用户原始请求 */
+      pending_intent?: {
+        user_message: string;
+        summary: string;
+        scenario?: 'chat' | 'plan';
+      };
     };
     /** 决定记录（持久化在 ChatMessage.uiHint 上，切话题/重启不回弹，2026-09-14） */
     decision?: ProfileUpdateDecisionRecord;
@@ -46,11 +57,16 @@ interface ProfileUpdateConfirmCardProps {
 export interface ProfileUpdateDecisionRecord {
   action: 'confirm_update' | 'cancel_update';
   decidedAt: number;      // epoch ms
-  /** 写库结果（确认时由消费端回填）：done=成功 / failed=失败 / pending=未知 */
+  /** 写库结果（确认时由消费端回填）：done=成功 / failed=失败 / pending=写入中 */
   result?: 'done' | 'failed' | 'pending';
 }
 
-type Decision = 'idle' | 'confirmed' | 'cancelled';
+/**
+ * 卡片相位（[B5] 同一气泡内的完整流转）：
+ * idle（可确认/可取消）→ writing（确定性写入中）→ done（终态「已更新」）
+ * / failed（写入失败，可重试）；cancelled（取消终态）。
+ */
+type Phase = 'idle' | 'writing' | 'done' | 'failed' | 'cancelled';
 
 const TRIGGER_BADGE: Record<string, { label: string; className: string }> = {
   day_end: { label: '今日总结', className: 'bg-blue-50 text-blue-600' },
@@ -71,14 +87,8 @@ const getFieldColor = (field: string) => {
 };
 
 export const ProfileUpdateConfirmCard: React.FC<ProfileUpdateConfirmCardProps> = ({ uiHint, onConfirm }) => {
-  const [decision, setDecision] = useState<Decision>('idle');
+  const [decision, setDecision] = useState<'idle' | 'confirmed' | 'cancelled'>('idle');
   const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
-
-  // 状态固化：持久化的决定记录优先于内存态（重开对话/切话题不回弹为可点卡片）
-  const persistedDecision = uiHint?.decision;
-  const effectiveDecision: Decision = persistedDecision
-    ? (persistedDecision.action === 'confirm_update' ? 'confirmed' : 'cancelled')
-    : decision;
 
   const { title, message, proposals, confirmLabel, cancelLabel, triggerBadge } = useMemo(() => {
     const raw = (uiHint?.data || {}) as ProfileUpdateConfirmCardProps['uiHint']['data'];
@@ -96,23 +106,38 @@ export const ProfileUpdateConfirmCard: React.FC<ProfileUpdateConfirmCardProps> =
     };
   }, [uiHint?.data]);
 
-  const frozen = effectiveDecision !== 'idle';
+  // 相位合成：持久化决定优先（写入结果由消费端回填），内存态覆盖点击后的
+  // 短暂间隙（decision 固化传播到 props 前）。failed 可重试（回到可点）。
+  const persistedDecision = uiHint?.decision;
+  const phase: Phase = useMemo(() => {
+    if (persistedDecision) {
+      if (persistedDecision.action === 'cancel_update') return 'cancelled';
+      if (persistedDecision.result === 'done') return 'done';
+      if (persistedDecision.result === 'failed') return 'failed';
+      return 'writing'; // confirm_update + pending/未知 → 写入中
+    }
+    if (decision === 'confirmed') return 'writing';
+    if (decision === 'cancelled') return 'cancelled';
+    return 'idle';
+  }, [persistedDecision, decision]);
+
+  const canAct = phase === 'idle' || phase === 'failed';
 
   const handleConfirm = () => {
-    if (frozen || !onConfirm) return;
+    if (!canAct || !onConfirm) return;
     setDecision('confirmed');
     onConfirm({ action: 'confirm_update', proposals });
   };
 
   const handleCancel = () => {
-    if (frozen || !onConfirm) return;
+    if (!canAct || !onConfirm) return;
     setDecision('cancelled');
     onConfirm({ action: 'cancel_update', proposals });
   };
 
   return (
     <ChatCardShell
-      className={frozen ? 'opacity-90' : ''}
+      className={phase === 'done' || phase === 'cancelled' ? 'opacity-90' : ''}
     >
       {/* Header - 统一深色头 + 空心小蓝圈 */}
       <ChatCardHeader
@@ -183,52 +208,66 @@ export const ProfileUpdateConfirmCard: React.FC<ProfileUpdateConfirmCardProps> =
         )}
       </div>
 
-      {/* Action buttons - 冻结态：选中高亮、另一按钮禁用；持久化决定带结果标注 */}
-      <div className="p-5 pt-0 flex items-center gap-3">
-        {persistedDecision ? (
-          <div className="flex-1 flex items-center justify-center gap-2 py-2.5">
-            <span className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
-              persistedDecision.result === 'failed'
-                ? 'bg-rose-50 text-rose-500'
-                : persistedDecision.action === 'confirm_update'
-                  ? 'bg-emerald-50 text-emerald-500'
-                  : 'bg-gray-100 text-gray-500'
-            }`}>
-              {persistedDecision.result === 'failed' ? (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
+      {/* Action area - 相位状态机（[B5] 同一气泡内流转）：
+          writing：主按钮转加载态（写入中…，不可再点），取消一并禁用
+          done / cancelled：终态状态行（不再渲染按钮）
+          failed：状态行提示失败 + 按钮组重现（可重试 / 可放弃） */}
+      {phase === 'writing' ? (
+        <div className="p-5 pt-0 flex items-center gap-3">
+          <ChatSecondaryButton className="flex-1 opacity-50" disabled>
+            {cancelLabel}
+          </ChatSecondaryButton>
+          <ChatPrimaryButton className="flex-1 opacity-70" disabled>
+            <span className="inline-flex items-center justify-center gap-2">
+              <svg className="w-4 h-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+              </svg>
+              更新中…
+            </span>
+          </ChatPrimaryButton>
+        </div>
+      ) : phase === 'done' || phase === 'cancelled' ? (
+        <div className="p-5 pt-0 flex items-center justify-center gap-2 py-2.5">
+          <span className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 ${
+            phase === 'cancelled' ? 'bg-gray-100 text-gray-500' : 'bg-emerald-50 text-emerald-500'
+          }`}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+              <polyline points="20 6 9 17 4 12" />
+            </svg>
+          </span>
+          <p className="text-[15px] font-semibold text-gray-900">
+            {phase === 'done' ? '画像已更新' : '已保留原状，未修改'}
+          </p>
+        </div>
+      ) : (
+        <div className="p-5 pt-0 flex flex-col gap-2">
+          {phase === 'failed' && (
+            <div className="flex items-center justify-center gap-2 py-1.5">
+              <span className="w-5 h-5 rounded-full bg-rose-50 text-rose-500 flex items-center justify-center shrink-0">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round">
                   <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
                 </svg>
-              ) : (
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
-                  <polyline points="20 6 9 17 4 12" />
-                </svg>
-              )}
-            </span>
-            <p className="text-[15px] font-semibold text-gray-900">
-              {persistedDecision.action === 'confirm_update'
-                ? (persistedDecision.result === 'failed' ? '更新未完成' : '画像已更新')
-                : '已保留原状，未修改'}
-            </p>
-          </div>
-        ) : (
-          <>
+              </span>
+              <p className="text-[13px] font-medium text-rose-500">更新未完成，可重试</p>
+            </div>
+          )}
+          <div className="flex items-center gap-3">
             <ChatSecondaryButton
               className="flex-1"
               onClick={handleCancel}
-              disabled={frozen}
             >
-              {decision === 'cancelled' ? '已保留原状' : cancelLabel}
+              {phase === 'failed' ? '暂不更新' : (decision === 'cancelled' ? '已保留原状' : cancelLabel)}
             </ChatSecondaryButton>
             <ChatPrimaryButton
-              className={`flex-1 ${decision === 'confirmed' ? '!bg-emerald-600' : frozen ? 'opacity-50' : ''}`}
+              className="flex-1"
               onClick={handleConfirm}
-              disabled={frozen}
             >
-              {decision === 'confirmed' ? '✓ 已更新' : confirmLabel}
+              {phase === 'failed' ? '重试更新' : confirmLabel}
             </ChatPrimaryButton>
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
     </ChatCardShell>
   );
 };

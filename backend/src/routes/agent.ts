@@ -13,6 +13,7 @@ import {
   postHRSamples,
 } from "../controllers/sessionController.js";
 import { postSuggestions } from "../controllers/suggestionController.js";
+import { postApplyProfileProposals } from "../controllers/profileProposalController.js";
 import {
   getTodaySchedule,
   getScheduleSummary,
@@ -49,6 +50,10 @@ export default async function agentRoutes(app: FastifyInstance) {
 
   // 动作建议值（混合模式：公式基准 + 可选 Agent 有界调整；Agent 故障降级 formula）
   app.post("/suggestions", postSuggestions);
+
+  // [B5 issue#37] 画像确认纯程序化写入：profile_update_confirm 卡片确认后
+  // 前端直调（确定性端点，无 LLM）。毫秒级落库后前端才触发续跑主线。
+  app.post("/profile/apply-proposals", postApplyProfileProposals);
 
   // Debug / Admin
   app.post("/admin/resolve-context", resolveContext);

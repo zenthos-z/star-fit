@@ -660,6 +660,7 @@ const App: React.FC = () => {
       markPlanConsumed,
       markSurveySubmitted,
       markProfileDecision,
+      confirmProfileUpdate,
       openAiCoach,
       chatEndRef,
       textareaRef,
@@ -1570,6 +1571,7 @@ const App: React.FC = () => {
                 onPlanConsumed={markPlanConsumed}
                 onSurveySubmitted={markSurveySubmitted}
                 onProfileDecision={markProfileDecision}
+                onProfileApply={confirmProfileUpdate}
                 chatEndRef={chatEndRef}
                 textareaRef={textareaRef}
                 attachedContext={attachedContext}

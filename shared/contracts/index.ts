@@ -1287,3 +1287,23 @@ export {
   type ScheduleOnboarding,
   type ScheduleSummaryResponse,
 } from './schedule-summary.js';
+
+// ============================================================================
+// Profile Proposals Contracts (画像确认纯程序化写入 — B5 / issue #37)
+// ============================================================================
+
+export {
+  // Schemas
+  ProfileProposalFieldSchema,
+  ProfileApplyProposalSchema,
+  ProfileApplyRequestSchema,
+  ProfileApplyResponseSchema,
+  ProfilePendingIntentSchema,
+
+  // Types
+  type ProfileProposalField,
+  type ProfileApplyProposal,
+  type ProfileApplyRequest,
+  type ProfileApplyResponse,
+  type ProfilePendingIntent,
+} from './profile-proposals.js';
