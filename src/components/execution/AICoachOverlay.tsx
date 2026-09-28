@@ -806,21 +806,13 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                         style={{ touchAction: 'manipulation' }}
                       />
                     )}
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                    >
-                      {String(msg.text || (msg.uiHint ? "教练为您生成了以下交互卡片：" : "正在解析数据..."))}
-                    </ReactMarkdown>
+                    <MessageMarkdown
+                      text={String(msg.text || (msg.uiHint ? "教练为您生成了以下交互卡片：" : "正在解析数据..."))}
+                    />
                     {/* 训练计划说明（explanation）- 由 Agent 生成 */}
                     {msg.explanation && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                        >
-                          {msg.explanation}
-                        </ReactMarkdown>
+                        <MessageMarkdown text={msg.explanation} />
                       </div>
                     )}
                   </div>
@@ -1255,7 +1247,22 @@ const ReasoningTrace: React.FC<{ trace?: string }> = ({ trace }) => {
  * - 流式生成中自动展开实时预览，结束后自动收起；
  * - 用户手动展开/收起后尊重用户选择。
  */
-const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text, streaming }) => {
+/**
+ * [B5b 返工·白屏修复] 正文 Markdown 渲染 memo 化：text 不变时跳过整棵
+ * remark/rehype 重新解析。流式期间正文随 streamProgress 200ms 节流到达，
+ * 定型后 text 稳定，其余消息的 setState 不再连带重解析长正文。
+ */
+const MessageMarkdown = React.memo(function MessageMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+      {text}
+    </ReactMarkdown>
+  );
+});
+
+// [B5b 返工·白屏修复] memo 化：text 来自 streamProgress 尾部窗口（≤4000 字符），
+// 相同 props 直接跳过重渲染，避免聊天列表其它消息的 setState 连带重解析。
+const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = React.memo(function ThinkingBlock({ text, streaming }) {
   const [manuallyToggled, setManuallyToggled] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -1308,7 +1315,7 @@ const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text,
       </motion.div>
     </div>
   );
-};
+});
 
 const WelcomeScreen: React.FC<{ onLogoTap?: () => void; onLogoTapEnd?: () => void }> = ({ onLogoTap, onLogoTapEnd }) => (
   // min-h-full 而非 flex-1：父容器是 absolute inset-0 的滚动容器，
