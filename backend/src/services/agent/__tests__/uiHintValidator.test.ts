@@ -105,6 +105,8 @@ const VALID_CARDS: Record<string, unknown> = {
           field: "active_limitations",
           label: "活动限制",
           change: "新增右肩限制，严重度 4/10，7 天后自动过期",
+          // B5/issue #37：提案必须携带最终值 value（确认后由 App 确定性写入）
+          value: [{ part: "right_shoulder", severity: 4 }],
         },
       ],
     },

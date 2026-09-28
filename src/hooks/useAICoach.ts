@@ -22,7 +22,8 @@ import { todayDateKey } from '../utils/weeklyPlanView';
 import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
 import type { SurveySubmitRecord } from '../components/execution/cards/SurveyCard';
 import type { ProfileUpdateDecisionRecord } from '../components/execution/cards/ProfileUpdateConfirmCard';
-import type { AgentScenario, UiHintCard, TodayScheduleResponse } from 'shared/contracts';
+import type { AgentScenario, UiHintCard, TodayScheduleResponse, ProfileApplyRequest, ProfilePendingIntent } from 'shared/contracts';
+import { buildProfileResumePrompt, parsePendingIntent } from '../utils/profileIntent';
 import { parseJSONSafe } from 'shared/contracts';
 import {
   saveChatThreadList,
@@ -915,6 +916,52 @@ ${JSON.stringify(uploadData, null, 2)}`;
   }, []);
 
   /**
+   * [B5 issue#37] 画像确认纯程序化写入：用户点「确认更新」后前端直调确定性
+   * 写入端点（POST /api/profile/apply-proposals，无 LLM、毫秒级），结果回填
+   * 卡片终态（done/failed）；写入成功且卡片带待续意图（pending_intent）时，
+   * 把原始意图组装成续跑指令发给 Agent 自动恢复主线（用户无需再催）。
+   * 契约红线：类型从 shared/contracts 导入；数据写入走 Service 确定性端点，
+   * AI 零参与（Agent 只在提案轮产出过判断型最终值）。
+   */
+  const confirmProfileUpdate = async (
+    msgIndex: number,
+    proposals: Array<{ field: string; value?: unknown }>,
+    pendingIntentRaw: unknown,
+  ) => {
+    const body: ProfileApplyRequest = {
+      proposals: proposals
+        .filter((p) => p && typeof p.field === 'string')
+        .map((p) => ({ field: p.field as ProfileApplyRequest['proposals'][number]['field'], value: p.value })),
+    };
+    let ok = false;
+    try {
+      const res = await fetch(`${API_BASE}/profile/apply-proposals`, {
+        method: 'POST',
+        headers: getHeaders(),
+        body: JSON.stringify(body),
+      });
+      ok = res.ok;
+      if (!ok) {
+        console.warn('[useAICoach] profile apply rejected:', res.status);
+      }
+    } catch (err) {
+      console.warn('[useAICoach] profile apply error:', err);
+    }
+    // 写入结果回填卡片终态（同一气泡内流转：writing → done/failed）
+    markProfileDecision(msgIndex, {
+      action: 'confirm_update',
+      decidedAt: Date.now(),
+      result: ok ? 'done' : 'failed',
+    });
+    if (!ok) return;
+    // 写入完成 → 续跑主线（有待续意图才发；day_end 等无主任务场景到「已更新」即止）
+    const intent: ProfilePendingIntent | null = parsePendingIntent(pendingIntentRaw);
+    if (intent) {
+      handleChatSubmit(undefined, buildProfileResumePrompt(intent), intent.scenario, { silent: true });
+    }
+  };
+
+  /**
    * [B1 issue#5 返工] 入口预填（placeholder 语义）：手动打开 AI 教练时按三场景
    * 把建议文案写入输入框 placeholder——
    *   A 有周计划且今日有条目 → 今日计划摘要（E2 确定性课表 API 组装）
@@ -1319,6 +1366,7 @@ ${JSON.stringify(uploadData, null, 2)}`;
     markPlanConsumed,
     markSurveySubmitted,
     markProfileDecision,
+    confirmProfileUpdate,
     openAiCoach,
     chatEndRef,
     textareaRef,

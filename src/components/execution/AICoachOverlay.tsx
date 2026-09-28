@@ -262,6 +262,12 @@ interface AICoachOverlayProps {
   onSurveySubmitted?: (msgIndex: number, record: SurveySubmitRecord) => void;
   /** 画像更新决定固化：把决定回写到 chatHistory[i].uiHint.decision（随 thread 持久化） */
   onProfileDecision?: (msgIndex: number, record: ProfileUpdateDecisionRecord) => void;
+  /** [B5 issue#37] 画像确认纯程序化写入：直调确定性端点 → 结果回填卡片 → 有待续意图则续跑主线 */
+  onProfileApply?: (
+    msgIndex: number,
+    proposals: Array<{ field: string; value?: unknown }>,
+    pendingIntent: unknown
+  ) => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   attachedContext?: any;
@@ -310,6 +316,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   onPlanConsumed,
   onSurveySubmitted,
   onProfileDecision,
+  onProfileApply,
   sessionStatus,
   sessionSessionId,
   isTransitioning = false,
@@ -871,12 +878,13 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                             console.log('[SavePoster] Workout summary save requested', msg.uiHint.data);
                           }
                         } else if (uiHintType === 'profile_update_confirm') {
-                          // [画像更新闭环] docs/profile-update-frontend-spec.md §3.3
-                          // 确认/取消均为静默回传：指令不进聊天流，用户只看到 Agent 回复
-                          // 确认 → scenario=update_profile 执行轮（携带 proposals 原文）→
-                          //   Agent 写库后回 audit_complete 卡片（含「查看详情」）
-                          // 取消 → scenario=chat 纯文本确认轮，不做任何写入
+                          // [B5 issue#37] 画像确认 = 纯程序化写入（不再是 Agent 执行轮）：
+                          // 确认 → 前端直调确定性写入端点（无 LLM，毫秒级）→ 卡片在同一
+                          //   气泡内流转为「已更新」→ 有待续意图（pending_intent）时自动
+                          //   续跑主线（原始意图作为新一轮对话输入发给 Agent）
+                          // 取消 → 意图任务清除，scenario=chat 静默简短确认轮，不做任何写入
                           const proposals = Array.isArray(payload?.proposals) ? payload.proposals : [];
+                          const pendingIntent = (msg.uiHint?.data as Record<string, unknown> | undefined)?.pending_intent;
                           const silentOpts = { silent: true };
                           // 决定固化：点击瞬间写入持久化状态，杜绝重启/切话题后重复确认二次写库
                           if (onProfileDecision) {
@@ -887,15 +895,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                             });
                           }
                           if (payload?.action === 'confirm_update') {
-                            const proposalsText = proposals.map((p: any) =>
-                              `${p.label}(${p.field}): ${p.change}` + (p.value !== undefined ? ` 新值: ${JSON.stringify(p.value)}` : '')
-                            ).join('；');
-                            handleChatSubmit(
-                              undefined,
-                              `已确认画像更新，请按以下提案执行：${proposalsText}`,
-                              'update_profile',
-                              silentOpts
-                            );
+                            onProfileApply?.(i, proposals, pendingIntent);
                           } else if (payload?.action === 'cancel_update') {
                             const fields = proposals.map((p: any) => p.field).join('、');
                             handleChatSubmit(

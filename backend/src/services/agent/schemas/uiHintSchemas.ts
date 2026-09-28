@@ -16,6 +16,7 @@ import {
   WeeklyPlanExerciseSchema,
   WeeklyPlanDaySchema,
   WeeklyPlanCardDataSchema,
+  ProfilePendingIntentSchema,
 } from "shared/contracts";
 export {
   WeeklyPlanSetSchema,
@@ -300,20 +301,73 @@ export type DeviationCardData = z.infer<typeof DeviationCardDataSchema>;
 /**
  * One PROPOSED profile change inside a profile_update_confirm card.
  * `field` uses the profile_dynamic keys the `update_profile` MCP tool writes;
- * `change` is a short human-readable description of the intended edit; the
- * optional `value` preview is the proposed new value (or a summary fragment).
+ * `change` is a short human-readable description of the intended edit.
+ *
+ * [B5 issue#37] `value` is REQUIRED and holds the FINAL machine-applicable
+ * value, computed in the proposal turn: the app applies it deterministically
+ * on bubble-confirm (POST /api/profile/apply-proposals, no second LLM round).
+ * Shape per field (deep validation happens at the write endpoint):
+ *  - load_anchors      → non-empty object map { exerciseKey: anchorObj }
+ *  - active_limitations → non-empty array of NEW entries [{ part, severity }]
+ *  - recovery_state    → object with total_score
+ *  - memories          → non-empty object map { key: string content }
  */
-export const ProfileUpdateProposalSchema = z.object({
-  field: z.enum([
-    "load_anchors",
-    "active_limitations",
-    "recovery_state",
-    "memories",
-  ]),
-  label: z.string().min(1, "Proposal label cannot be empty"),
-  change: z.string().min(1, "Proposal change description cannot be empty"),
-  value: z.unknown().optional(),
-});
+export const ProfileUpdateProposalSchema = z
+  .object({
+    field: z.enum([
+      "load_anchors",
+      "active_limitations",
+      "recovery_state",
+      "memories",
+    ]),
+    label: z.string().min(1, "Proposal label cannot be empty"),
+    change: z.string().min(1, "Proposal change description cannot be empty"),
+    value: z.unknown(),
+  })
+  .superRefine((p, ctx) => {
+    const v = p.value;
+    const isPlainObject =
+      typeof v === "object" && v !== null && !Array.isArray(v);
+    const bad = (message: string) =>
+      ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["value"], message });
+    if (v === undefined) {
+      bad(
+        "value is required — the app applies it deterministically on confirm",
+      );
+      return;
+    }
+    switch (p.field) {
+      case "load_anchors":
+        if (!isPlainObject || Object.keys(v as object).length === 0) {
+          bad(
+            "load_anchors value must be a non-empty object map { exerciseKey: anchorObj }",
+          );
+        }
+        break;
+      case "active_limitations":
+        if (!Array.isArray(v) || v.length === 0) {
+          bad(
+            "active_limitations value must be a non-empty array of NEW entries [{ part, severity }]",
+          );
+        }
+        break;
+      case "recovery_state":
+        if (
+          !isPlainObject ||
+          typeof (v as Record<string, unknown>).total_score !== "number"
+        ) {
+          bad(
+            "recovery_state value must be an object with numeric total_score",
+          );
+        }
+        break;
+      case "memories":
+        if (!isPlainObject || Object.keys(v as object).length === 0) {
+          bad("memories value must be a non-empty object map { key: content }");
+        }
+        break;
+    }
+  });
 
 export type ProfileUpdateProposal = z.infer<typeof ProfileUpdateProposalSchema>;
 
@@ -338,6 +392,10 @@ export const ProfileUpdateConfirmDataSchema = z.object({
   proposals: z
     .array(ProfileUpdateProposalSchema)
     .min(1, "At least one proposal is required"),
+  /** [B5 issue#37] 待续意图：弹卡打断了用户的主任务（如「调整一下周计划」）时，
+   *  Agent 在同一轮记录用户原话+任务摘要；前端确定性写入完成后据此自动续跑主线。
+   *  无主任务的触发（day_end 收尾等）省略。 */
+  pending_intent: ProfilePendingIntentSchema.optional(),
   confirmLabel: z.string().default("确认更新"),
   cancelLabel: z.string().default("暂不更新"),
 });
@@ -545,6 +603,7 @@ export function getFallbackUIHint(type: UIHintType): UIHint {
             field: "recovery_state",
             label: "恢复状态",
             change: "根据今日训练负荷调整恢复评分",
+            value: { total_score: 55 },
           },
         ],
         confirmLabel: "确认更新",
