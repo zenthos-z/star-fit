@@ -37,6 +37,15 @@ export function useWeeklyPlan(): WeeklyPlanState {
 
   const refresh = useCallback(() => setTick((t) => t + 1), []);
 
+  // [B5b issue#38] 确认即落库即刷新：对话里的 weekly_plan 卡确认落库成功后，
+  // useAICoach 广播 `starfit:weekly-plan-applied`，本 hook 监听并立即重拉本周
+  // 课表——用户从「确认」到「信息栏可见」零等待（实测痛点：不知何时更新的）。
+  useEffect(() => {
+    const onApplied = () => refresh();
+    window.addEventListener('starfit:weekly-plan-applied', onApplied);
+    return () => window.removeEventListener('starfit:weekly-plan-applied', onApplied);
+  }, [refresh]);
+
   useEffect(() => {
     let cancelled = false;
     (async () => {

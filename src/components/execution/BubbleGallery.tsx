@@ -48,6 +48,17 @@ const GALLERY_MESSAGES: Partial<ChatMessage>[] = [
         ],
       },
     ],
+    // [B5b] 画廊预览带 apply 载荷 → 展示确认按钮组（提案-确认形态）
+    apply: {
+      scope: 'week',
+      split: 'push_pull_legs',
+      dates: [],
+      entries: [
+        { entry_date: '2026-09-21', exercise_id: 'V1StGXR8_Z5jdHi6', target_sets: 2, target_load: { type: 'rpe', min: 7, max: 8 }, sort_order: 0 },
+        { entry_date: '2026-09-21', exercise_id: 'a1b2c3d4e5f6', target_sets: 2, target_load: { type: 'rpe', min: 7, max: 8 }, sort_order: 1 },
+        { entry_date: '2026-09-23', exercise_id: 'b2c3d4e5f6a1', target_sets: 1, target_load: { type: 'rpe', min: 7, max: 8 }, sort_order: 0 },
+      ],
+    },
   }),
   wrapUiHint('survey_card', {
     title: '练后调研（多题）',

@@ -1106,11 +1106,14 @@ export type UiHintCard = z.infer<typeof UiHintCardSchema>;
 
 /**
  * AgentErrorCode — terminal failure categories surfaced across the seam.
+ * CONNECTION_LOST（B5b / issue #38）：SSE 传输中断——流空闲超时（后端保活帧
+ * 缺席）或连接在 done 前被掐断；前端据此渲染「连接中断，点击重试」。
  */
 export const AgentErrorCodeSchema = z.enum([
   'MODEL_ERROR',
   'VALIDATION_ERROR',
   'UPSTREAM_TIMEOUT',
+  'CONNECTION_LOST',
   'INTERNAL',
 ]);
 export type AgentErrorCode = z.infer<typeof AgentErrorCodeSchema>;
@@ -1251,6 +1254,8 @@ export {
   WeeklyPlanExerciseSchema,
   WeeklyPlanDaySchema,
   WeeklyPlanCardDataSchema,
+  WeeklyPlanApplyPayloadSchema,
+  WeeklyPlanApplyInputSchema,
 
   // Types
   type WeekId,
@@ -1272,6 +1277,8 @@ export {
   type WeeklyPlanExercise,
   type WeeklyPlanDay,
   type WeeklyPlanCardData,
+  type WeeklyPlanApplyPayload,
+  type WeeklyPlanApplyInput,
 
   // Functions
   canTransitionPlanEntryStatus,

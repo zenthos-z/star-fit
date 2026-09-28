@@ -13,7 +13,10 @@
  *  - 状态机：PLAN_ENTRY_STATUS_TRANSITIONS（契约单一真源）在更新前强制
  */
 
-import { PostgresClient } from "../client/postgres-client.js";
+import {
+  PostgresClient,
+  TransactionClient,
+} from "../client/postgres-client.js";
 import { BaseRepository } from "./base.repository.js";
 import {
   ServiceError,
@@ -22,6 +25,7 @@ import {
 import {
   validateOrThrow,
   CreateWeeklyPlanInputSchema,
+  WeeklyPlanApplyInputSchema,
   WeeklyPlanSchema,
   PlanEntrySchema,
   TodayScheduleEntrySchema,
@@ -31,6 +35,7 @@ import {
   UUIDSchema,
   canTransitionPlanEntryStatus,
   type CreateWeeklyPlanInput,
+  type WeeklyPlanApplyInput,
   type WeeklyPlan,
   type PlanEntry,
   type PlanEntryStatus,
@@ -91,6 +96,48 @@ function mapPlanRow(row: WeeklyPlanRow): WeeklyPlan {
       updated_at: row.updated_at.toISOString(),
     },
     "WeeklyPlanRepository.mapPlanRow",
+  );
+}
+
+/**
+ * 条目批量落库（事务内）：单命名参数 + jsonb_to_recordset。
+ * createWeeklyPlan 与 applyWeeklyPlan 共用（B5b），保证两条写入路径同一形态。
+ */
+async function insertPlanEntries(
+  tx: TransactionClient,
+  weeklyPlanId: string,
+  userId: string,
+  entries: CreateWeeklyPlanInput["entries"],
+): Promise<void> {
+  if (entries.length === 0) return;
+  const rows = entries.map((e) => ({
+    weekly_plan_id: weeklyPlanId,
+    user_id: userId,
+    entry_date: e.entry_date,
+    exercise_id: e.exercise_id,
+    target_sets: e.target_sets,
+    target_load_type: e.target_load.type,
+    target_load_min: e.target_load.min,
+    target_load_max: e.target_load.max,
+    status: e.status,
+    sort_order: e.sort_order,
+  }));
+  await tx.query(
+    `INSERT INTO plan_entries (
+       weekly_plan_id, user_id, entry_date, exercise_id,
+       target_sets, target_load_type, target_load_min, target_load_max,
+       status, sort_order
+     )
+     SELECT t.weekly_plan_id::uuid, t.user_id::uuid, t.entry_date::date, t.exercise_id::text,
+            t.target_sets::int, t.target_load_type::public.plan_load_type,
+            t.target_load_min::numeric, t.target_load_max::numeric,
+            t.status::public.plan_entry_status, t.sort_order::int
+     FROM jsonb_to_recordset($entries::jsonb) AS t(
+       weekly_plan_id text, user_id text, entry_date text, exercise_id text,
+       target_sets int, target_load_type text,
+       target_load_min numeric, target_load_max numeric,
+       status text, sort_order int)`,
+    { entries: JSON.stringify(rows) },
   );
 }
 
@@ -196,38 +243,8 @@ export class WeeklyPlanRepository extends BaseRepository {
         );
       }
 
-      if (data.entries.length > 0) {
-        // 条目批量落库：单命名参数 + jsonb_to_recordset（heartRate.insertBatch 同款惯例）
-        const rows = data.entries.map((e) => ({
-          weekly_plan_id: planRow.id,
-          user_id: data.user_id,
-          entry_date: e.entry_date,
-          exercise_id: e.exercise_id,
-          target_sets: e.target_sets,
-          target_load_type: e.target_load.type,
-          target_load_min: e.target_load.min,
-          target_load_max: e.target_load.max,
-          status: e.status,
-          sort_order: e.sort_order,
-        }));
-        await tx.query(
-          `INSERT INTO plan_entries (
-             weekly_plan_id, user_id, entry_date, exercise_id,
-             target_sets, target_load_type, target_load_min, target_load_max,
-             status, sort_order
-           )
-           SELECT t.weekly_plan_id::uuid, t.user_id::uuid, t.entry_date::date, t.exercise_id::text,
-                  t.target_sets::int, t.target_load_type::public.plan_load_type,
-                  t.target_load_min::numeric, t.target_load_max::numeric,
-                  t.status::public.plan_entry_status, t.sort_order::int
-           FROM jsonb_to_recordset($entries::jsonb) AS t(
-             weekly_plan_id text, user_id text, entry_date text, exercise_id text,
-             target_sets int, target_load_type text,
-             target_load_min numeric, target_load_max numeric,
-             status text, sort_order int)`,
-          { entries: JSON.stringify(rows) },
-        );
-      }
+      // 条目批量落库（jsonb_to_recordset 惯例抽为共享 helper，B5b 与 apply 共用）
+      await insertPlanEntries(tx, planRow.id, data.user_id, data.entries);
 
       return { plan: planRow };
     });
@@ -243,6 +260,107 @@ export class WeeklyPlanRepository extends BaseRepository {
     );
 
     return { plan: planRecord, entries: entryRows.map(mapEntryRow) };
+  }
+
+  /**
+   * [B5b issue#38] 确认落库：weekly_plan 卡「确认启用」后的确定性写入路径。
+   *
+   * AI 零参与写入时刻——entries 在 Agent 提案轮算好、随卡带给前端，用户
+   * 确认后前端直调 POST /api/schedule/weekly-plan/apply 走本方法。这是周计划
+   * 的唯一确认落库入口（save_weekly_plan Agent 工具已随提案-确认架构移除）。
+   *
+   * scope 语义（周/日粒度判断规则的落库面，见 plan-generation SKILL.md）：
+   *  - week  整周 upsert：weekly_plans 行按 (user_id, week_id) upsert（split
+   *          更新、status 重置 active），该周条目整体替换——新框架创建 /
+   *          框架级原因整周重算 / 常规整周更新同走此路径。
+   *  - days  单日覆盖：要求该周已有计划行，仅替换 dates 所列日期的条目
+   *          （临时原因只改某天，如雨天改居家）。
+   *
+   * 事务原子：upsert/删除/插入任一步失败整体回滚，无半写状态。
+   * 返回落库后的完整周计划（回读 DB 生成的 id / 时间戳）。
+   */
+  async applyWeeklyPlan(
+    input: WeeklyPlanApplyInput,
+  ): Promise<WeeklyPlanWithEntries> {
+    const data = validateOrThrow(
+      WeeklyPlanApplyInputSchema,
+      input,
+      "WeeklyPlanRepository.applyWeeklyPlan",
+    );
+    const { user_id, payload } = data;
+    if (!payload.week_id) {
+      // 契约允许缺省（当前周），但 Repository 层要求具体值——由控制器在
+      // 调用前以 getIsoWeekId(utcToday()) 解析注入（日历算术单一真源）。
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        "applyWeeklyPlan: payload.week_id 必须由调用方解析为具体 ISO 周",
+        { user_id },
+      );
+    }
+    const weekId = payload.week_id;
+
+    const plan = await this.client.transaction(async (tx) => {
+      let planRow: WeeklyPlanRow | undefined;
+      if (payload.scope === "week") {
+        // 整周 upsert：行不存在则建，存在则更新 split 并重置 active
+        planRow = await tx.queryOne<WeeklyPlanRow>(
+          `INSERT INTO weekly_plans (user_id, week_id, split, status)
+           VALUES ($userId::uuid, $weekId, $split::public.weekly_plan_split, 'active')
+           ON CONFLICT (user_id, week_id) DO UPDATE
+             SET split = EXCLUDED.split, status = 'active', updated_at = NOW()
+           RETURNING id, user_id, week_id, split, status, created_at, updated_at`,
+          { userId: user_id, weekId, split: payload.split },
+        );
+        if (!planRow) {
+          throw new ServiceError(
+            ServiceErrorCode.UNKNOWN_ERROR,
+            `applyWeeklyPlan(scope=week) upsert 未返回行：${user_id} ${weekId}`,
+            { user_id, week_id: weekId },
+          );
+        }
+        // 该周条目整体替换（整周重算的旧条目必须清空，防残留）
+        await tx.query(
+          `DELETE FROM plan_entries WHERE weekly_plan_id = $planId::uuid`,
+          { planId: planRow.id },
+        );
+      } else {
+        // 单日覆盖：计划行必须已存在（框架先行——无框架一律先出整周计划）
+        planRow = await tx.queryOne<WeeklyPlanRow>(
+          `SELECT id, user_id, week_id, split, status, created_at, updated_at
+           FROM weekly_plans
+           WHERE user_id = $userId::uuid AND week_id = $weekId
+           FOR UPDATE`,
+          { userId: user_id, weekId },
+        );
+        if (!planRow) {
+          throw new ServiceError(
+            ServiceErrorCode.BUSINESS_RULE_VIOLATION,
+            `scope=days 要求该周已有周计划（${weekId}）——无框架时先确认整周计划`,
+            { user_id, week_id: weekId },
+          );
+        }
+        // 仅删除被覆盖日期的条目（契约 superRefine 已保证 entries ⊆ dates）
+        await tx.query(
+          `DELETE FROM plan_entries
+           WHERE weekly_plan_id = $planId::uuid
+             AND entry_date::text = ANY($dates::text[])`,
+          { planId: planRow.id, dates: payload.dates },
+        );
+      }
+
+      await insertPlanEntries(tx, planRow.id, user_id, payload.entries);
+      return mapPlanRow(planRow);
+    });
+
+    // 回读条目（与 createWeeklyPlan 同口径）
+    const entryRows = await this.queryMany<PlanEntryRow>(
+      `${ENTRY_SELECT_SQL}
+       WHERE weekly_plan_id = $weeklyPlanId
+       ORDER BY entry_date ASC, sort_order ASC`,
+      { weeklyPlanId: plan.id },
+    );
+
+    return { plan, entries: entryRows.map(mapEntryRow) };
   }
 
   /**
@@ -350,6 +468,8 @@ export class WeeklyPlanRepository extends BaseRepository {
    * 按用户 + 日历日查当日条目（JOIN exercises 取动作名）——E2「今天练什么」路径。
    * 走 idx_plan_entries_user_date 索引（user_id, entry_date）；exercises.name
    * 非空 + FK 级联（ON DELETE CASCADE）保证 INNER JOIN 不丢行、不null名。
+   * [B5b issue#38] 动作名中文优先：COALESCE(NULLIF(name_zh,''), name)——354 条
+   * name_zh 已全量回填，存量英文名兜底；展示层确定性中文化，无 AI 参与。
    * 返回按 sort_order 升序的展示形态（TodayScheduleEntry）。
    */
   async getTodayEntriesWithExercise(
@@ -373,7 +493,8 @@ export class WeeklyPlanRepository extends BaseRepository {
 
     const rows = await this.queryMany<TodayEntryJoinRow>(
       `SELECT
-         pe.id AS entry_id, pe.exercise_id, e.name AS exercise_name,
+         pe.id AS entry_id, pe.exercise_id,
+         COALESCE(NULLIF(e.name_zh, ''), e.name) AS exercise_name,
          pe.target_sets,
          pe.target_load_type, pe.target_load_min, pe.target_load_max,
          pe.status, pe.sort_order

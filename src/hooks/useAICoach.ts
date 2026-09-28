@@ -7,6 +7,7 @@ import { buildSessionPayload } from '../utils/workoutSummary';
 // seam; this hook consumes the SSE stream and synthesizes renderable uiHint
 // cards, with no awareness of the backend agent implementation.
 import { agentClient, consumeAgentStream, synthesizeUiHint } from '../services/agent/sseAgentClient';
+import { createStreamProgressEmitter } from './streamProgress';
 import { resolveCoachPrefill } from '../utils/coachPrefill';
 import {
   resolveFirstUseTriage,
@@ -22,7 +23,8 @@ import { todayDateKey } from '../utils/weeklyPlanView';
 import type { PlanConsumeRecord } from '../components/execution/cards/PlanCard';
 import type { SurveySubmitRecord } from '../components/execution/cards/SurveyCard';
 import type { ProfileUpdateDecisionRecord } from '../components/execution/cards/ProfileUpdateConfirmCard';
-import type { AgentScenario, UiHintCard, TodayScheduleResponse, ProfileApplyRequest, ProfilePendingIntent } from 'shared/contracts';
+import type { WeeklyPlanDecisionRecord } from '../components/execution/cards/WeeklyPlanCard';
+import type { AgentScenario, UiHintCard, TodayScheduleResponse, ProfileApplyRequest, ProfilePendingIntent, WeeklyPlanApplyPayload } from 'shared/contracts';
 import { buildProfileResumePrompt, parsePendingIntent } from '../utils/profileIntent';
 import { parseJSONSafe } from 'shared/contracts';
 import {
@@ -49,6 +51,12 @@ export interface ChatMessage {
   uiHint?: any;
   agentTrace?: string;
   explanation?: string;  // 训练计划说明（由 Agent 生成）
+  /**
+   * [B5b SSE ②] 断流重试载荷：连接中断（CONNECTION_LOST）定型气泡时挂上
+   * 原始消息 + 场景，UI 在气泡下方渲染「连接中断，点击重试」按钮，点击即
+   * 以 silent 轮重发（不往聊天流里再插用户气泡）。
+   */
+  retry?: { message: string; scenario?: string };
   _isAnalyzing?: boolean;
   _analysisComplete?: boolean;
   _sessionId?: string;
@@ -587,10 +595,16 @@ ${JSON.stringify(uploadData, null, 2)}`;
         // thinking/token 事件 → 提交后空白气泡干等 40s+ 才一次性弹出回复。
         // 与普通聊天分支（handleChatSubmit 主路径）对齐：token 逐字进正文、
         // thinking 进折叠思考区、uiHint 暂存到流结束才挂载渲染。
+        // [B5b 返工·白屏修复] 同主路径：streamProgress 尾部窗口 + 200ms 节流。
         let accumulated = '';
-        let thinkingAccumulated = '';
+        let thinkingWindow = '';
         let card: UiHintCard | undefined;
         let streamError: { code: string; message: string } | undefined;
+        const progress = createStreamProgressEmitter(patch => {
+          accumulated = patch.text;
+          thinkingWindow = patch.thinkingText;
+          setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, text: patch.text, thinkingText: patch.thinkingText || undefined } : m)));
+        });
 
         for await (const ev of agentClient.chat({
           userId: getUserId(),
@@ -607,20 +621,16 @@ ${JSON.stringify(uploadData, null, 2)}`;
           }
         })) {
           if (ev.type === 'token' && ev.text) {
-            accumulated += ev.text;
-            setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, text: accumulated } : m)));
+            progress.onToken(ev.text);
           } else if (ev.type === 'thinking' && ev.text) {
-            const isBlockNarration = ev.text.includes('\n');
-            thinkingAccumulated = isBlockNarration
-              ? (thinkingAccumulated ? `${thinkingAccumulated}\n\n${ev.text}` : ev.text)
-              : thinkingAccumulated + ev.text;
-            setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, thinkingText: thinkingAccumulated } : m)));
+            progress.onThinking(ev.text);
           } else if (ev.type === 'uiHint' && ev.card) {
             card = ev.card; // 暂存，流结束后才渲染
           } else if (ev.type === 'error' && ev.error && !streamError) {
             streamError = { code: ev.error.code, message: ev.error.message };
           }
         }
+        progress.flush();
 
         console.log('[useAICoach] Survey upload response card:', card);
 
@@ -642,7 +652,7 @@ ${JSON.stringify(uploadData, null, 2)}`;
           text: streamError
             ? `上传失败，请重试。[${streamError.code}: ${streamError.message}]`
             : (accumulated || "感谢您的反馈。"),
-          thinkingText: thinkingAccumulated || undefined,
+          thinkingText: thinkingWindow || undefined,
           uiHint,
           explanation: undefined,
           isThinking: false,
@@ -816,10 +826,19 @@ ${JSON.stringify(uploadData, null, 2)}`;
       //  extractUiHintEvents 剥成单独的 uiHint 事件），逐字追加到 thinking 气泡即时显示；
       //  uiHint 卡片**只暂存、不渲染**——卡片必须加载完整才能显示，故流过程中这条消息
       //  的 uiHint 始终为 undefined，直到本轮流结束定型时才挂上 card 触发渲染。
+      // [B5b 返工·白屏修复] 进度走 streamProgress：thinking 只保留尾部窗口、
+      //  setState 200ms 节流。GLM 深思考轮 2 万+ delta 逐帧 setChatHistory 会
+      //  跑满 JS 线程导致 WKWebView 白屏（模拟器实测）。轮次结束的定型写不受
+      //  节流影响，正文仍为全量。
       let accumulated = '';
-      let thinkingAccumulated = '';
+      let thinkingWindow = '';
       let card: UiHintCard | undefined;
       let error: { code: string; message: string } | undefined;
+      const progress = createStreamProgressEmitter(patch => {
+        accumulated = patch.text;
+        thinkingWindow = patch.thinkingText;
+        setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, text: patch.text, thinkingText: patch.thinkingText || undefined } : m)));
+      });
 
       for await (const ev of agentClient.chat({
         userId: getUserId(),
@@ -830,36 +849,37 @@ ${JSON.stringify(uploadData, null, 2)}`;
         metadata: sendAttachment ? { intent_context: sendAttachment } : undefined,
       })) {
         if (ev.type === 'token' && ev.text) {
-          accumulated += ev.text;
           // 逐字追加：只更新 thinking 气泡的 text；uiHint 保持 undefined（不渲染卡片）
-          setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, text: accumulated } : m)));
+          progress.onToken(ev.text);
         } else if (ev.type === 'thinking' && ev.text) {
           // 被质量门打回轮次的自我修订文本 → 折叠思考区，不进正文。
-          // 后端 thinking 有两类：①reasoning_content 逐 delta 小片段（直接拼接，
-          // 加空行会把一句推理切成 n 段）；②叙事文本整段（如工具调用前的 narration，
-          // 自带段落分隔，用空行拼接区分来源）。
-          // 判据：片段内含换行 → 视为整段叙事；否则按 delta 无缝续接。
-          const isBlockNarration = ev.text.includes('\n');
-          thinkingAccumulated = isBlockNarration
-            ? (thinkingAccumulated ? `${thinkingAccumulated}\n\n${ev.text}` : ev.text)
-            : thinkingAccumulated + ev.text;
-          setChatHistory(prev => prev.map(m => (m.isThinking ? { ...m, thinkingText: thinkingAccumulated } : m)));
+          // 尾部窗口语义（拼接的空行分隔规则见 streamProgress.appendThinkingWindow）。
+          progress.onThinking(ev.text);
         } else if (ev.type === 'uiHint' && ev.card) {
           card = ev.card; // 暂存，流结束后才渲染
         } else if (ev.type === 'error' && ev.error && !error) {
           error = { code: ev.error.code, message: ev.error.message };
         }
       }
+      progress.flush();
 
       // 本轮流结束：定型这条消息 —— 现在才挂上卡片，卡片渲染在此刻发生
+      // [B5b SSE ②] CONNECTION_LOST：已收到的部分内容保留展示，但明确告知
+      // 连接中断并挂上重试载荷（UI 渲染「连接中断，点击重试」），不再干等。
+      const connectionLost = error?.code === 'CONNECTION_LOST';
       setChatHistory(prev => prev.map(m => (m.isThinking ? {
         role: 'ai',
-        text: error ? `[诊断] agent 返回错误 — ${error.code}: ${error.message}` : accumulated,
-        thinkingText: thinkingAccumulated || undefined,
+        text: error
+          ? connectionLost
+            ? (accumulated ? `${accumulated}\n\n（连接中断，回复可能不完整）` : '连接中断，请点击重试。')
+            : `[诊断] agent 返回错误 — ${error.code}: ${error.message}`
+          : accumulated,
+        thinkingText: thinkingWindow || undefined,
         uiHint: synthesizeUiHint(card),
         explanation: undefined,
         isThinking: false,
         progressItems: [],
+        retry: connectionLost ? { message: userMsg, scenario } : undefined,
       } : m)));
     } catch (err) {
       console.error("Chat Error:", err);
@@ -914,6 +934,65 @@ ${JSON.stringify(uploadData, null, 2)}`;
         : m
     )));
   }, []);
+
+  /**
+   * [B5b issue#38] 周计划确认决定固化：把确认/放弃决定写入指定消息的
+   * uiHint.decision，随 thread 持久化 → 重开对话保持「已启用/已放弃」终态，
+   * 杜绝重复确认二次写库（与画像确认同构，2026-09-14 起的决策持久化模式）。
+   */
+  const markWeeklyPlanDecision = useCallback((msgIndex: number, record: WeeklyPlanDecisionRecord) => {
+    setChatHistory(prev => prev.map((m, i) => (
+      i === msgIndex && m.uiHint?.type === 'weekly_plan'
+        ? { ...m, uiHint: { ...m.uiHint, decision: record } }
+        : m
+    )));
+  }, []);
+
+  /**
+   * [B5b issue#38] 周计划提案确认 → 纯程序化落库（提案-确认架构）：
+   * 用户在 weekly_plan 卡点「确认启用」后，前端直调确定性端点
+   * POST /api/schedule/weekly-plan/apply（无 LLM、毫秒级），结果回填卡片
+   * 终态（done/failed）；成功后广播 window 事件 `starfit:weekly-plan-applied`，
+   * 信息栏的 useWeeklyPlan 监听该事件即刻刷新——「确认即落库即刷新」。
+   * 契约红线：类型从 shared/contracts 导入；AI 零参与落库。
+   */
+  const confirmWeeklyPlanApply = async (msgIndex: number, applyRaw: unknown) => {
+    // 形态防御：apply 缺失/非对象不发起写入（旧卡无 apply = 仅展示卡）
+    const apply = (applyRaw && typeof applyRaw === 'object'
+      ? applyRaw
+      : null) as WeeklyPlanApplyPayload | null;
+    let ok = false;
+    let failMessage = '';
+    if (apply && Array.isArray(apply.entries) && apply.entries.length > 0) {
+      try {
+        const res = await fetch(`${API_BASE}/schedule/weekly-plan/apply`, {
+          method: 'POST',
+          headers: getHeaders(),
+          body: JSON.stringify(apply),
+        });
+        ok = res.ok;
+        if (!ok) {
+          failMessage = `HTTP ${res.status}`;
+          console.warn('[useAICoach] weekly-plan apply rejected:', res.status);
+        }
+      } catch (err) {
+        console.warn('[useAICoach] weekly-plan apply error:', err);
+        failMessage = err instanceof Error ? err.message : String(err);
+      }
+    } else {
+      failMessage = '提案载荷缺失';
+    }
+    // 写入结果回填卡片终态（同一气泡内流转：writing → done/failed）
+    markWeeklyPlanDecision(msgIndex, {
+      action: 'confirm_apply',
+      decidedAt: Date.now(),
+      result: ok ? 'done' : 'failed',
+      failMessage: ok ? undefined : failMessage,
+    });
+    if (!ok) return;
+    // 确认即落库即刷新：信息栏（本周计划）监听此事件立即重新拉取课表
+    window.dispatchEvent(new Event('starfit:weekly-plan-applied'));
+  };
 
   /**
    * [B5 issue#37] 画像确认纯程序化写入：用户点「确认更新」后前端直调确定性
@@ -1367,6 +1446,9 @@ ${JSON.stringify(uploadData, null, 2)}`;
     markSurveySubmitted,
     markProfileDecision,
     confirmProfileUpdate,
+    // [B5b issue#38] 周计划提案-确认：决定固化 + 确定性落库（apply 端点）
+    markWeeklyPlanDecision,
+    confirmWeeklyPlanApply,
     openAiCoach,
     chatEndRef,
     textareaRef,

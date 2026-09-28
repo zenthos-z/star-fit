@@ -661,6 +661,8 @@ const App: React.FC = () => {
       markSurveySubmitted,
       markProfileDecision,
       confirmProfileUpdate,
+      markWeeklyPlanDecision,
+      confirmWeeklyPlanApply,
       openAiCoach,
       chatEndRef,
       textareaRef,
@@ -1572,6 +1574,9 @@ const App: React.FC = () => {
                 onSurveySubmitted={markSurveySubmitted}
                 onProfileDecision={markProfileDecision}
                 onProfileApply={confirmProfileUpdate}
+                // [B5b issue#38] 周计划提案-确认：决定固化 + 确定性落库（apply 端点）
+                onWeeklyPlanDecision={markWeeklyPlanDecision}
+                onWeeklyPlanApply={confirmWeeklyPlanApply}
                 chatEndRef={chatEndRef}
                 textareaRef={textareaRef}
                 attachedContext={attachedContext}
