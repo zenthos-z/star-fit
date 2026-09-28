@@ -15,6 +15,11 @@
  *     （可调序/移除），每动作只显参数摘要一行；参数详情由 PickerConfigSheet
  *     复用 ExerciseSettingsModal 形态承载。
  *
+ * A10（issue #32）：入口/出口场景区分——mode 场景参数驱动交互状态机：
+ *     single-replace=单选回填（购物车流程隐藏）；batch=多选批量添加；
+ *     append=多选追加队尾。确认按钮文案与行为严格对应（PICKER_MODE_CONFIRM），
+ *     空选择=确认禁用态（悬浮条常驻）。
+ *
  * 样式锚点：src/components/ExerciseLibraryModal.tsx（star-gray 底、白卡
  * rounded-[20px]、17px medium 列表标题、吸顶头、backdrop-blur）。
  * 数据：全部 mock（pickerData.ts），无 API 调用；对接后端时仅替换数据源。
@@ -29,11 +34,13 @@ import type { SmartSortResponse } from 'shared/contracts';
 import {
   MOCK_EXERCISES,
   NEWBIE_GUIDE,
+  PICKER_MODE_CONFIRM,
   PROTOCOL_TYPE,
   RECENT_IDS,
   SOFT_LIMIT_COUNT,
   TYPE_LABELS,
   equipmentLabelOf,
+  type PickerEntryMode,
   type PickerExercise,
   type PickerExerciseType,
   type PickerSelectionItem,
@@ -62,6 +69,11 @@ export interface ExercisePickerModalProps {
   onClose: () => void;
   /** 清单页「完成」回调（回传最终顺序与配置） */
   onConfirm?: (items: PickerSelectionItem[]) => void;
+  /**
+   * A10 入口场景（issue #32）：single-replace=单选回填（购物车流程隐藏）；
+   * batch=多选批量添加（默认）；append=多选追加队尾。文案见 PICKER_MODE_CONFIRM。
+   */
+  mode?: PickerEntryMode;
   /** 演示/恢复场景：初始已选动作 id 列表 */
   defaultSelectedIds?: string[];
   /** 演示/恢复场景：初始视图 */
@@ -426,11 +438,14 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   hasHistory = true,
   onClose,
   onConfirm,
+  mode = 'batch',
   defaultSelectedIds = [],
   initialScreen = 'browse',
   userId,
 }) => {
-  const [screen, setScreen] = useState<'browse' | 'cart'>(initialScreen);
+  /** A10：single-replace 为单选模式且无清单页（购物车流程按场景隐藏） */
+  const singleOnly = mode === 'single-replace';
+  const [screen, setScreen] = useState<'browse' | 'cart'>(singleOnly ? 'browse' : initialScreen);
   const [searchTerm, setSearchTerm] = useState('');
   const [filters, setFilters] = useState<PickerFilters>(EMPTY_FILTERS);
   const [sheetDim, setSheetDim] = useState<PickerFilterDim | null>(null);
@@ -448,7 +463,7 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   const [selected, setSelected] = useState<PickerSelectionItem[]>(() => {
     if (defaultSelectedIds.length === 0) return [];
     const byId = new Map(MOCK_EXERCISES.map(ex => [ex.id, ex]));
-    return defaultSelectedIds
+    return (singleOnly ? defaultSelectedIds.slice(0, 1) : defaultSelectedIds)
       .map(id => byId.get(id))
       .filter((ex): ex is PickerExercise => !!ex)
       .map(ex => ({ exercise: ex, sets: [], targetRpe: 7 }));
@@ -540,13 +555,15 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
   };
 
   /** A9：行圈选——连续添加不关弹窗。参数建议统一挂 SuggestionService（链路 A）：
-      先占位（空组），resolve 回来后由统一 effect 填入（见下方 effect）。 */
+      先占位（空组），resolve 回来后由统一 effect 填入（见下方 effect）。
+      A10：single-replace 收敛为单选——新选中替换既有选择（替换语义，见 issue #32）。 */
   const toggleSelect = (ex: PickerExercise) => {
     haptic('light');
     setSelected(prev => {
       if (prev.some(item => item.exercise.id === ex.id)) {
         return prev.filter(item => item.exercise.id !== ex.id);
       }
+      if (singleOnly) return [{ exercise: ex, sets: [], targetRpe: 7 }];
       return [...prev, { exercise: ex, sets: [], targetRpe: 7 }];
     });
   };
@@ -605,12 +622,22 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
     setSelected(prev => prev.map((item, i) => (i === idx ? next : item)));
   };
 
+  /** A10：确认按钮=空选择禁用（禁用态不触发回调），文案严格对应场景模式 */
+  const confirmCopy = PICKER_MODE_CONFIRM[mode];
+  const confirmDisabled = selected.length === 0;
+  const confirmLabel = confirmDisabled
+    ? confirmCopy.emptyLabel
+    : mode === 'single-replace'
+      ? confirmCopy.label(1, selected[0].exercise.name)
+      : confirmCopy.label(selected.length);
+
   const handleConfirm = () => {
+    if (confirmDisabled) return;
     haptic('medium');
     onConfirm?.(selected);
   };
 
-  const showSoftLimitHint = selected.length >= SOFT_LIMIT_COUNT;
+  const showSoftLimitHint = !singleOnly && selected.length >= SOFT_LIMIT_COUNT;
 
   /** 筛选胶囊回显文案 */
   const pillLabels: Record<PickerFilterDim, string> = {
@@ -692,10 +719,14 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
     );
   };
 
-  /** 底部悬浮条（A9 实时计数 + 去配置/完成） */
-  const renderFloatingBar = (mode: 'browse' | 'cart') => (
+  /**
+   * 底部悬浮条（A9 实时计数；A10 起常驻——空选择=确认禁用态，issue #32）。
+   * 右钮按场景分流：多选模式浏览页=去配置（清单页承载参数配置），清单页/单选模式
+   * =模式确认钮（文案见 PICKER_MODE_CONFIRM，行为与文案严格一致）。
+   */
+  const renderFloatingBar = (screenKey: 'browse' | 'cart') => (
     <div className="absolute bottom-0 inset-x-0 z-30 px-4" style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}>
-      {/* 选满 9 个的琥珀色软提示（≤8 建议，不硬拦） */}
+      {/* 选满 9 个的琥珀色软提示（≤8 建议，不硬拦；单选模式不适用） */}
       <AnimatePresence>
         {showSoftLimitHint && (
           <motion.div
@@ -708,40 +739,44 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
           </motion.div>
         )}
       </AnimatePresence>
-      <AnimatePresence>
-        {selected.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 24 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 24 }}
-            transition={{ type: 'tween', duration: 0.2, ease: 'easeOut' }}
-            className="bg-white/95 backdrop-blur-md rounded-full shadow-lg border border-gray-100 pl-5 pr-2 py-2 flex items-center justify-between"
+      <motion.div
+        initial={{ opacity: 0, y: 24 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ type: 'tween', duration: 0.2, ease: 'easeOut' }}
+        className="bg-white/95 backdrop-blur-md rounded-full shadow-lg border border-gray-100 pl-5 pr-2 py-2 flex items-center justify-between"
+      >
+        {singleOnly ? (
+          <span className="text-[15px] font-semibold text-star-dark text-left">
+            已选 <span className="text-blue-500 font-bold tabular-nums">{selected.length}</span> 个动作
+          </span>
+        ) : (
+          <button
+            onClick={() => screenKey === 'browse' && setScreen('cart')}
+            className="text-[15px] font-semibold text-star-dark text-left"
+            aria-label="查看已选清单"
           >
-            <button
-              onClick={() => mode === 'browse' && setScreen('cart')}
-              className="text-[15px] font-semibold text-star-dark text-left"
-              aria-label="查看已选清单"
-            >
-              已选 <span className="text-blue-500 font-bold tabular-nums">{selected.length}</span> 个动作
-            </button>
-            {mode === 'browse' ? (
-              <button
-                onClick={() => { haptic('medium'); setScreen('cart'); }}
-                className="bg-blue-500 active:bg-blue-600 text-white text-[15px] font-semibold px-5 h-10 rounded-full active:scale-95 transition-all"
-              >
-                去配置
-              </button>
-            ) : (
-              <button
-                onClick={handleConfirm}
-                className="bg-blue-500 active:bg-blue-600 text-white text-[15px] font-semibold px-5 h-10 rounded-full active:scale-95 transition-all"
-              >
-                开始训练
-              </button>
-            )}
-          </motion.div>
+            已选 <span className="text-blue-500 font-bold tabular-nums">{selected.length}</span> 个动作
+          </button>
         )}
-      </AnimatePresence>
+        {screenKey === 'browse' && !singleOnly ? (
+          <button
+            onClick={() => { haptic('medium'); setScreen('cart'); }}
+            disabled={confirmDisabled}
+            className="bg-blue-500 active:bg-blue-600 text-white text-[15px] font-semibold px-5 h-10 rounded-full active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
+          >
+            去配置
+          </button>
+        ) : (
+          <button
+            onClick={handleConfirm}
+            disabled={confirmDisabled}
+            aria-label={confirmLabel}
+            className="bg-blue-500 active:bg-blue-600 text-white text-[15px] font-semibold px-5 h-10 rounded-full active:scale-95 transition-all disabled:opacity-40 disabled:active:scale-100"
+          >
+            {confirmLabel}
+          </button>
+        )}
+      </motion.div>
     </div>
   );
 
@@ -982,6 +1017,6 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
 
 // 供演示页复用的类型/常量出口（业务接入不需要）
 export { MOCK_EXERCISES as pickerDemoExercises };
-export type { PickerSelectionItem, PickerExercise, PickerExerciseType };
+export type { PickerEntryMode, PickerSelectionItem, PickerExercise, PickerExerciseType };
 
 export default ExercisePickerModal;

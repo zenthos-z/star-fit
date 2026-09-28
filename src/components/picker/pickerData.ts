@@ -177,6 +177,28 @@ export const ROLE_BADGE_CLASS: Record<PickerSetRole, string> = {
 /** 单次训练建议上限（选满 9 个时出琥珀色软提示，不硬拦） */
 export const SOFT_LIMIT_COUNT = 9;
 
+// ---------------------------------------------------------------------------
+// A10 入口/出口场景（issue #32）
+// ---------------------------------------------------------------------------
+
+/**
+ * 进入 picker 的场景参数 → 交互模式状态机：
+ * - single-replace  配置页内换动作：单选，确认=回填表单（购物车流程隐藏）
+ * - batch           训练前/主页空状态挑选（计划编辑批量）：多选+清单页，确认=批量添加进会话
+ * - append          训练中加动作：多选+清单页，确认=追加到当前队列队尾（保持清单顺序）
+ */
+export type PickerEntryMode = 'single-replace' | 'batch' | 'append';
+
+/**
+ * A10 模式 × 确认按钮文案对应表（行为与文案严格一致；空选择用通用文案并禁用）。
+ * single-replace 文案带动作名（替换X），batch/append 带计数。
+ */
+export const PICKER_MODE_CONFIRM: Record<PickerEntryMode, { label: (count: number, name?: string) => string; emptyLabel: string }> = {
+  'single-replace': { label: (_count, name) => `替换${name ?? ''}`, emptyLabel: '替换动作' },
+  batch: { label: count => `添加${count}个`, emptyLabel: '添加动作' },
+  append: { label: count => `追加${count}个到队尾`, emptyLabel: '追加到队尾' },
+};
+
 /** 新手态引导卡文案（无训练历史时的热门排序降级说明） */
 export const NEWBIE_GUIDE = {
   title: '初次训练，从热门开始',

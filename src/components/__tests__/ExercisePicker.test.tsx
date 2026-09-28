@@ -340,13 +340,16 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     render(<ExercisePickerModal onClose={() => {}} />);
     const a = byId(RECENT_IDS[0]);
     await user.click(screen.getByLabelText(`教程 ${a.name}`));
-    // 行未被圈选
-    expect(screen.queryByText('已选', { exact: false })).not.toBeInTheDocument();
+    // 行未被圈选（A10 起悬浮条常驻：空选择=计数 0 + 去配置禁用态表达）
+    const counter = screen.getByLabelText('查看已选清单');
+    expect(counter.textContent).toContain('0');
+    expect(screen.getByRole('button', { name: '去配置' })).toBeDisabled();
     // ExerciseTutorialModal 真组件已打开（其头部关闭钮是列表页没有的控件）
     expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
-    // 关闭教程（真组件有关闭退场动画，waitFor 等待卸载）
+    // 关闭教程（真组件有关闭退场动画，waitFor 等待卸载；jsdom 动画收尾约 1s，
+    // A10 起悬浮条常驻令套件负载略增，1s 默认超时踩线 → 显式放宽到 3s）
     await user.click(screen.getByRole('button', { name: '关闭' }));
-    await waitFor(() => expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: '关闭' })).not.toBeInTheDocument(), { timeout: 3000 });
   });
 
   it('清单页独立卡片：短按进配置/长按拖拽语义分离 + 智能填充徽标 + 直接移除', async () => {

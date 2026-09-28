@@ -11,6 +11,7 @@
 
 import type { SuggestionValues } from 'shared/contracts';
 
+import type { Exercise } from '../../types/legacy';
 import { createDraftId, type PickerDraftSet } from './pickerLogic';
 import type { PickerExerciseType, PickerSelectionItem } from './pickerData';
 
@@ -112,5 +113,49 @@ export function pickerItemToBatchPayload(item: PickerSelectionItem): BatchCreate
     equipment_required: JSON.stringify([exercise.equipment]),
     difficulty: (exercise.difficulty || 'beginner') as BatchCreatePayload['difficulty'],
     modified_by: 'system',
+  };
+}
+
+// ---------------------------------------------------------------------------
+// 会话直连（A10 batch/append 确认，issue #32）
+// ---------------------------------------------------------------------------
+
+/**
+ * 购物车条目 → 会话 Exercise（batch/append 确认时直接追加进 session.exercises，
+ * 跳过逐条配置表单——参数已在清单页经链路 A 填充/可调）。
+ * 字段口径对齐 ExerciseSettingsModal.handleSave → App.onSave 的落账形态：
+ * name 存中文展示名（A6）、type 走 legacy 映射、组序即清单顺序；
+ * id 由调用方传入并要求与批量入库载荷同源（对齐「session Exercise.id = 库 id」约定）。
+ */
+export function pickerItemToSessionExercise(item: PickerSelectionItem, id: string): Exercise {
+  const { exercise, sets, targetRpe } = item;
+  const legacyType = toLegacyType(exercise.exerciseType);
+  return {
+    id,
+    libraryId: id,
+    name: exercise.name,
+    type: legacyType as Exercise['type'],
+    sets: sets.map(s => ({
+      id: s.id,
+      reps: s.reps,
+      weight: s.weight,
+      duration: s.durationSec > 0 ? s.durationSec : undefined,
+      completed: false,
+      status: 'PLANNED' as const,
+    })),
+    targetRpe,
+    primaryMuscles: exercise.muscles,
+    equipment: exercise.equipmentLabel,
+    bodyCategory: exercise.muscle,
+    metadata: {
+      libraryId: id,
+      name: exercise.name,
+      nameEn: exercise.nameEn,
+      targetRpe,
+      originalType: legacyType,
+      primaryMuscles: exercise.muscles,
+      equipment: exercise.equipmentLabel,
+      bodyCategory: exercise.muscle,
+    },
   };
 }
