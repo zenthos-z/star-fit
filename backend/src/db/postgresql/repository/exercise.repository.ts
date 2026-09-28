@@ -30,9 +30,15 @@ import {
   ExerciseDetailUpdateSchema,
   ExerciseSearchFilterSchema,
   UUIDSchema,
+  AdminExercisePatchSchema,
+  AdminEditableExerciseFieldSchema,
+  ExerciseFieldSourceStatusSchema,
   type ExerciseLibraryItem,
   type ExerciseDetailUpdate,
   type ExerciseSearchFilter,
+  type AdminExercisePatch,
+  type AdminEditableExerciseField,
+  type ExerciseFieldSourceStatus,
 } from "../../../../../shared/dist/contracts/index.js";
 
 /** exercises 原始行（pg 驱动形态：timestamptz → Date；text[] → string[]；jsonb → 对象） */
@@ -470,6 +476,138 @@ export class ExerciseRepository extends BaseRepository {
       params,
     );
     return row ? mapItemRow(row) : null;
+  }
+
+  // ==========================================================================
+  // 管理台动作编辑（A15-1，issue #15 收窄后人工修改入口）
+  // ==========================================================================
+
+  /** UPDATE ... RETURNING 列清单（与 ITEM_SELECT_SQL 对齐） */
+  private static readonly RETURNING_SQL = `
+       RETURNING
+         id, name, name_zh, exercise_type, difficulty,
+         equipment, category, body_part,
+         primary_muscles, secondary_muscles, force_type, mechanic,
+         instructions, form_cues, common_mistakes, breathing, aliases, instructions_zh,
+         image_refs, video_urls, poster_url, owner_user_id,
+         content_html, tutorials, tags_json, assets_json,
+         modified_by, modified_at, created_at, updated_at`;
+
+  /**
+   * 管理台编辑写入（白名单：name/name_zh/category/body_part/primary_muscles/
+   * equipment）。与 updateDetail 的差异：允许改 name（库唯一键，重名冲突由
+   * 调用方按 exercises_name_key 23505 映射 409）；禁止字段由 strict Schema
+   * 入库前拒绝。同时刷新 modified_by='admin' / modified_at（updated_at 走
+   * 触发器）。返回更新后完整行；动作不存在 → null。
+   */
+  async adminUpdate(
+    id: string,
+    patch: AdminExercisePatch,
+  ): Promise<ExerciseLibraryItem | null> {
+    if (typeof id !== "string" || id.length < 12 || id.length > 24) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `id 必须为 NanoID（12-24 字符，当前: ${id}）`,
+        { id },
+      );
+    }
+    // 入库前契约校验（strict 白名单 + 至少一字段，失败即抛）
+    const data = validateOrThrow(
+      AdminExercisePatchSchema,
+      patch,
+      "ExerciseRepository.adminUpdate",
+    );
+
+    // 字段 → SET 片段白名单（防注入边界；枚举列显式 cast，text[] 同）
+    const SET_FRAGMENTS: Record<string, string> = {
+      name: "name = $name",
+      name_zh: "name_zh = $name_zh",
+      category: "category = $category::public.exercise_category",
+      body_part: "body_part = $body_part::public.exercise_body_part",
+      primary_muscles: "primary_muscles = $primary_muscles::text[]",
+      equipment: "equipment = $equipment::public.exercise_equipment",
+    };
+
+    const sets: string[] = [];
+    const params: Record<string, unknown> = {};
+    for (const [field, value] of Object.entries(data)) {
+      const fragment = SET_FRAGMENTS[field];
+      if (!fragment) {
+        throw new ServiceError(
+          ServiceErrorCode.INVALID_PARAMS,
+          `管理台不可编辑字段: ${field}`,
+          { field },
+        );
+      }
+      sets.push(fragment);
+      params[field] = value;
+    }
+    sets.push(`modified_by = $modifiedBy::public.modified_by_type`);
+    sets.push(`modified_at = now()`);
+    params.id = id;
+    params.modifiedBy = "admin";
+
+    const row = await this.queryOne<ExerciseRow>(
+      `UPDATE exercises SET ${sets.join(", ")}
+       WHERE id = $id${ExerciseRepository.RETURNING_SQL}`,
+      params,
+    );
+    return row ? mapItemRow(row) : null;
+  }
+
+  /**
+   * 标记字段「人工已核」（A15-1 source-status，空字段 AI 补全管道前置依据）。
+   *
+   * 现状（2026-09-28 确认）：exercises 表无 source_metadata 列（本批禁动
+   * schema、不加迁移），借用现有 JSONB 列 tags_json 的 `source_metadata`
+   * 命名空间：tags_json = { "source_metadata": { "<field>": {verified_by, at} } }。
+   * jsonb_set 单语句原子合并，不读改写（防并发丢标记）。
+   *
+   * 元数据写入不动 modified_by / modified_at（非内容修改；updated_at 触发器
+   * 仍会刷新）。返回更新后完整行 + 写入的标记；动作不存在 → null。
+   */
+  async markFieldSourceVerified(
+    id: string,
+    field: AdminEditableExerciseField,
+  ): Promise<{
+    exercise: ExerciseLibraryItem;
+    status: ExerciseFieldSourceStatus;
+  } | null> {
+    if (typeof id !== "string" || id.length < 12 || id.length > 24) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `id 必须为 NanoID（12-24 字符，当前: ${id}）`,
+        { id },
+      );
+    }
+    // field 经枚举白名单校验（SQL path 防注入边界），失败即抛
+    const verifiedField = validateOrThrow(
+      AdminEditableExerciseFieldSchema,
+      field,
+      "ExerciseRepository.markFieldSourceVerified.field",
+    );
+    const status: ExerciseFieldSourceStatus = {
+      verified_by: "admin",
+      at: new Date().toISOString(),
+    };
+    const statusValidated = validateOrThrow(
+      ExerciseFieldSourceStatusSchema,
+      status,
+      "ExerciseRepository.markFieldSourceVerified.status",
+    );
+
+    const row = await this.queryOne<ExerciseRow>(
+      // 注：本库 PG 16.14 实测 jsonb_set 对「目标缺中间键的二级路径」返回原值
+      // （单级路径正常），故用浅合并 || 单级构造，语义等同原子 upsert。
+      `UPDATE exercises
+       SET tags_json = COALESCE(tags_json, '{}'::jsonb) || jsonb_build_object(
+             'source_metadata',
+             COALESCE(tags_json->'source_metadata', '{}'::jsonb) || jsonb_build_object($field::text, $status::jsonb)
+           )
+       WHERE id = $id${ExerciseRepository.RETURNING_SQL}`,
+      { id, field: verifiedField, status: JSON.stringify(statusValidated) },
+    );
+    return row ? { exercise: mapItemRow(row), status: statusValidated } : null;
   }
 }
 

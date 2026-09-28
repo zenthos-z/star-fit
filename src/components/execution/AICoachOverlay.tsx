@@ -9,6 +9,7 @@ import { ExerciseRenderer } from './ExerciseRenderer';
 import type { PlanConsumeRecord } from './cards/PlanCard';
 import type { SurveySubmitRecord } from './cards/SurveyCard';
 import type { ProfileUpdateDecisionRecord } from './cards/ProfileUpdateConfirmCard';
+import type { WeeklyPlanDecisionRecord } from './cards/WeeklyPlanCard';
 import { ChatHistoryPanel } from './ChatHistoryPanel';
 import { ChatMessage, ProgressItem } from '../../hooks/useAICoach';
 import type { ChatThread } from '@/storage';
@@ -268,6 +269,10 @@ interface AICoachOverlayProps {
     proposals: Array<{ field: string; value?: unknown }>,
     pendingIntent: unknown
   ) => void;
+  /** [B5b issue#38] 周计划确认决定固化：回写 chatHistory[i].uiHint.decision（随 thread 持久化） */
+  onWeeklyPlanDecision?: (msgIndex: number, record: WeeklyPlanDecisionRecord) => void;
+  /** [B5b issue#38] 周计划提案确认落库：直调 apply 端点 → 结果回填卡片 → 信息栏事件刷新 */
+  onWeeklyPlanApply?: (msgIndex: number, apply: unknown) => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
   attachedContext?: any;
@@ -317,6 +322,8 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   onSurveySubmitted,
   onProfileDecision,
   onProfileApply,
+  onWeeklyPlanDecision,
+  onWeeklyPlanApply,
   sessionStatus,
   sessionSessionId,
   isTransitioning = false,
@@ -799,21 +806,13 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                         style={{ touchAction: 'manipulation' }}
                       />
                     )}
-                    <ReactMarkdown
-                      remarkPlugins={[remarkGfm, remarkMath]}
-                      rehypePlugins={[rehypeKatex]}
-                    >
-                      {String(msg.text || (msg.uiHint ? "教练为您生成了以下交互卡片：" : "正在解析数据..."))}
-                    </ReactMarkdown>
+                    <MessageMarkdown
+                      text={String(msg.text || (msg.uiHint ? "教练为您生成了以下交互卡片：" : "正在解析数据..."))}
+                    />
                     {/* 训练计划说明（explanation）- 由 Agent 生成 */}
                     {msg.explanation && (
                       <div className="mt-4 pt-4 border-t border-gray-100">
-                        <ReactMarkdown
-                          remarkPlugins={[remarkGfm, remarkMath]}
-                          rehypePlugins={[rehypeKatex]}
-                        >
-                          {msg.explanation}
-                        </ReactMarkdown>
+                        <MessageMarkdown text={msg.explanation} />
                       </div>
                     )}
                   </div>
@@ -905,6 +904,22 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                               silentOpts
                             );
                           }
+                        } else if (uiHintType === 'weekly_plan') {
+                          // [B5b issue#38] 周计划提案确认 = 纯程序化落库（提案-确认架构）：
+                          // 确认 → 前端直调 POST /api/schedule/weekly-plan/apply（无 LLM，
+                          //   毫秒级）→ 卡片同一气泡流转为「已启用 · 信息栏已同步」
+                          //   → window 事件触发信息栏本周计划即刻刷新
+                          // 放弃 → 决定固化为 cancelled 终态，提案自然作废（无残留数据）
+                          if (payload?.action === 'confirm_apply' || payload?.action === 'cancel_apply') {
+                            onWeeklyPlanDecision?.(i, {
+                              action: payload.action,
+                              decidedAt: Date.now(),
+                              result: payload.action === 'confirm_apply' ? 'pending' : undefined,
+                            });
+                            if (payload.action === 'confirm_apply') {
+                              onWeeklyPlanApply?.(i, payload.apply);
+                            }
+                          }
                         } else if (uiHintType === 'audit_complete') {
                           // [画像更新闭环] 「查看详情」无 auditContent 时的兜底已移入卡片内：
                           // 有 updates 就地展开明细；仅当真正无内容可看时才通知父级
@@ -914,6 +929,27 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
                         }
                       }}
                     />
+                  </div>
+                )}
+
+                {/* [B5b SSE ②] 断流重试：CONNECTION_LOST 定型气泡挂 retry 载荷， */}
+                {/* 一键静默重发原始消息（不再往聊天流插用户气泡，不打断上下文） */}
+                {msg.retry && !msg.isThinking && (
+                  <div className="w-full mt-2 flex justify-center">
+                    <button
+                      type="button"
+                      disabled={isLoading}
+                      onClick={() => {
+                        haptic('light');
+                        handleChatSubmit(undefined, msg.retry!.message, msg.retry!.scenario, { silent: true });
+                      }}
+                      className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-white px-4 py-1.5 text-[13px] font-medium text-blue-500 active:bg-blue-50 transition-colors disabled:opacity-50"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                        <path d="M21 12a9 9 0 1 1-2.64-6.36" /><polyline points="21 3 21 9 15 9" />
+                      </svg>
+                      连接中断，点击重试
+                    </button>
                   </div>
                 )}
               </div>
@@ -1211,7 +1247,22 @@ const ReasoningTrace: React.FC<{ trace?: string }> = ({ trace }) => {
  * - 流式生成中自动展开实时预览，结束后自动收起；
  * - 用户手动展开/收起后尊重用户选择。
  */
-const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text, streaming }) => {
+/**
+ * [B5b 返工·白屏修复] 正文 Markdown 渲染 memo 化：text 不变时跳过整棵
+ * remark/rehype 重新解析。流式期间正文随 streamProgress 200ms 节流到达，
+ * 定型后 text 稳定，其余消息的 setState 不再连带重解析长正文。
+ */
+const MessageMarkdown = React.memo(function MessageMarkdown({ text }: { text: string }) {
+  return (
+    <ReactMarkdown remarkPlugins={[remarkGfm, remarkMath]} rehypePlugins={[rehypeKatex]}>
+      {text}
+    </ReactMarkdown>
+  );
+});
+
+// [B5b 返工·白屏修复] memo 化：text 来自 streamProgress 尾部窗口（≤4000 字符），
+// 相同 props 直接跳过重渲染，避免聊天列表其它消息的 setState 连带重解析。
+const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = React.memo(function ThinkingBlock({ text, streaming }) {
   const [manuallyToggled, setManuallyToggled] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const bodyRef = useRef<HTMLDivElement>(null);
@@ -1264,7 +1315,7 @@ const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = ({ text,
       </motion.div>
     </div>
   );
-};
+});
 
 const WelcomeScreen: React.FC<{ onLogoTap?: () => void; onLogoTapEnd?: () => void }> = ({ onLogoTap, onLogoTapEnd }) => (
   // min-h-full 而非 flex-1：父容器是 absolute inset-0 的滚动容器，

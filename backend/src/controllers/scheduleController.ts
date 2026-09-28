@@ -13,14 +13,20 @@
  */
 
 import type { FastifyReply, FastifyRequest } from "fastify";
-import { PLAN_ENTRY_DATE_PATTERN } from "shared/contracts";
+import {
+  PLAN_ENTRY_DATE_PATTERN,
+  WeeklyPlanApplyPayloadSchema,
+  getIsoWeekId,
+} from "shared/contracts";
 import { getUserId, MissingUserIdError } from "../utils/requestUtils.js";
 import { getPostgresClient } from "../db/postgresql/client/postgres-client.js";
+import { notifySuggestionCacheInvalidation } from "../services/suggestions/suggestionCacheScheduler.js";
 import { createWeeklyPlanRepository } from "../db/postgresql/repository/weeklyPlan.repository.js";
 import { createUserRepository } from "../db/postgresql/repository/user.repository.js";
 import { SessionRepo } from "../services/sessionRepo.js";
 import {
   ScheduleService,
+  utcToday,
   type SchedulePlanRepoPort,
 } from "../services/schedule/scheduleService.js";
 import {
@@ -122,5 +128,73 @@ export async function getScheduleSummary(
     }
     req.log.error({ err }, "schedule_summary_failed");
     return reply.status(500).send({ error: "Failed to load schedule summary" });
+  }
+}
+
+/**
+ * POST /api/schedule/weekly-plan/apply - weekly_plan 卡确认落库（B5b / issue #38）。
+ *
+ * 确定性写入端点（对齐 B5a apply-proposals 模式）：前端在用户点「确认启用」后
+ * 直调，把 Agent 提案轮算好、随卡携带的 entries 落库——无 LLM、无 Agent 执行轮。
+ * 确认前计划不进数据库（提案-确认架构取代 Agent 直接 save_weekly_plan）。
+ *
+ * scope=week：整周 upsert（weekly_plans 行 + 条目整体替换）；
+ * scope=days：单日覆盖（要求该周已有计划，仅替换 dates 所列日期的条目）。
+ * 响应携带落库摘要，前端据此回填卡片终态并刷新信息栏。
+ */
+export async function postApplyWeeklyPlan(
+  req: FastifyRequest,
+  reply: FastifyReply,
+) {
+  const userId = getUserId(req);
+  const parsed = WeeklyPlanApplyPayloadSchema.safeParse(req.body ?? {});
+  if (!parsed.success) {
+    return reply.status(400).send({
+      error: "Invalid request body",
+      details: parsed.error.issues.map(
+        (i) => `${i.path.join(".") || "<root>"}: ${i.message}`,
+      ),
+    });
+  }
+
+  // week_id 缺省 = 当前周（服务器推导单一真源：getIsoWeekId ∘ utcToday）
+  const payload = {
+    ...parsed.data,
+    week_id: parsed.data.week_id ?? getIsoWeekId(utcToday()),
+  };
+
+  try {
+    const repo = createWeeklyPlanRepository(getPostgresClient());
+    const result = await repo.applyWeeklyPlan({ user_id: userId, payload });
+    // [B6 issue#39] 计划落库 → 当日已排容量变化 → 静默登记建议缓存空闲重算
+    notifySuggestionCacheInvalidation(userId, "plan_updated");
+    return reply.status(200).send({
+      applied: true,
+      week_id: result.plan.week_id,
+      plan_id: result.plan.id,
+      split: result.plan.split,
+      scope: payload.scope,
+      entries_count: result.entries.length,
+      // 前端消费提示：信息栏（本周计划）此刻已可见新计划
+      message:
+        payload.scope === "week"
+          ? "周计划已落库生效，信息栏已同步"
+          : "日计划已覆盖生效，信息栏已同步",
+    });
+  } catch (err) {
+    if (err instanceof MissingUserIdError) throw err;
+    if (err instanceof ServiceError) {
+      if (err.code === ServiceErrorCode.INVALID_PARAMS) {
+        return reply.status(400).send({ error: err.message });
+      }
+      if (err.code === ServiceErrorCode.BUSINESS_RULE_VIOLATION) {
+        // scope=days 但该周无框架：409 语义冲突（前端提示需先确认整周计划）
+        return reply.status(409).send({ error: err.message });
+      }
+      req.log.error({ err }, "weekly_plan_apply_service_error");
+      return reply.status(500).send({ error: err.message });
+    }
+    req.log.error({ err }, "weekly_plan_apply_failed");
+    return reply.status(500).send({ error: "Failed to apply weekly plan" });
   }
 }

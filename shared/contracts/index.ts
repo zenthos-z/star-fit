@@ -945,6 +945,13 @@ export {
   ExerciseDetailUpdateSchema,
   ExerciseSearchFilterSchema,
 
+  // 管理台动作编辑（A15-1，issue #15 人工修改入口）
+  ADMIN_EDITABLE_EXERCISE_FIELDS,
+  AdminEditableExerciseFieldSchema,
+  AdminExercisePatchSchema,
+  ExerciseSourceStatusInputSchema,
+  ExerciseFieldSourceStatusSchema,
+
   // instructions_zh 结构化中文教学（A6 翻译管道，issue #19）
   INSTRUCTIONS_ZH_SECTIONS,
   InstructionsZhSectionsSchema,
@@ -966,6 +973,10 @@ export {
   type ExerciseDetailUpdate,
   type ExerciseSearchFilter,
   type InstructionsZhSections,
+  type AdminEditableExerciseField,
+  type AdminExercisePatch,
+  type ExerciseSourceStatusInput,
+  type ExerciseFieldSourceStatus,
 } from './exercise-library.js';
 
 // ============================================================================
@@ -1095,11 +1106,14 @@ export type UiHintCard = z.infer<typeof UiHintCardSchema>;
 
 /**
  * AgentErrorCode — terminal failure categories surfaced across the seam.
+ * CONNECTION_LOST（B5b / issue #38）：SSE 传输中断——流空闲超时（后端保活帧
+ * 缺席）或连接在 done 前被掐断；前端据此渲染「连接中断，点击重试」。
  */
 export const AgentErrorCodeSchema = z.enum([
   'MODEL_ERROR',
   'VALIDATION_ERROR',
   'UPSTREAM_TIMEOUT',
+  'CONNECTION_LOST',
   'INTERNAL',
 ]);
 export type AgentErrorCode = z.infer<typeof AgentErrorCodeSchema>;
@@ -1256,6 +1270,8 @@ export {
   WeeklyPlanExerciseSchema,
   WeeklyPlanDaySchema,
   WeeklyPlanCardDataSchema,
+  WeeklyPlanApplyPayloadSchema,
+  WeeklyPlanApplyInputSchema,
 
   // Types
   type WeekId,
@@ -1277,6 +1293,8 @@ export {
   type WeeklyPlanExercise,
   type WeeklyPlanDay,
   type WeeklyPlanCardData,
+  type WeeklyPlanApplyPayload,
+  type WeeklyPlanApplyInput,
 
   // Functions
   canTransitionPlanEntryStatus,

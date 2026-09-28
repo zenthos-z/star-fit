@@ -128,6 +128,16 @@ async function getBaseURL(): Promise<string> {
 }
 
 /**
+ * [B5b SSE ③ / issue #38] 快车道场景集：这些场景关闭 GLM 思考
+ * （thinking: disabled）缩短轮次时长。MVP 场景级开关——workout_complete
+ * 汇报/数据写入类轮次不需要长思考链（实测 GLM 深思考轮 5-6 分钟，
+ * iOS WKWebView 空闲连接被系统掐断的主因之一）。
+ */
+export const THINKING_DISABLED_SCENARIOS: ReadonlySet<string> = new Set([
+  "workout_complete",
+]);
+
+/**
  * Load a langchain BaseChatModel for a scenario.
  *
  * Default provider is glm — GLM Coding Plan OpenAI 兼容端点
@@ -137,8 +147,9 @@ async function getBaseURL(): Promise<string> {
  * OpenAI 兼容端点。deepseek / gemini / openai are honored when configured
  * via DB/env. thinking：glm 流式自带 additional_kwargs.reasoning_content
  * （DeepAgentService 分流进 thinking 事件，无需额外 kwargs）；deepseek 走
- * ChatDeepSeek 协议级 reasoning_content。Unknown provider / missing API key
- * fail explicitly (no silent fallback).
+ * ChatDeepSeek 协议级 reasoning_content。快车道场景（THINKING_DISABLED_
+ * SCENARIOS，B5b）GLM 显式携带 thinking:{type:'disabled'}。Unknown provider
+ * / missing API key fail explicitly (no silent fallback).
  */
 export async function loadModel(
   scenario: Scenario = "default",
@@ -161,17 +172,24 @@ export async function loadModel(
       throw new MissingApiKeyError(provider);
     }
     const { ChatOpenAI } = await import("@langchain/openai");
-    // GLM is OpenAI-compatible. No thinking kwargs — GLM-5.3-flash streams
-    // reasoning_content into additional_kwargs on its own and tool calls work
-    // without extra request-body fields. maxTokens 16384 keeps long tool-call
-    // argument JSON clear of the OpenAI-SDK default cap (mid-args truncation
-    // otherwise breaks the deepagents AgentNode AIMessage validation).
+    // GLM is OpenAI-compatible. No thinking kwargs by default — GLM-5.3-flash
+    // streams reasoning_content into additional_kwargs on its own and tool
+    // calls work without extra request-body fields. maxTokens 16384 keeps long
+    // tool-call argument JSON clear of the OpenAI-SDK default cap (mid-args
+    // truncation otherwise breaks the deepagents AgentNode AIMessage
+    // validation). Fast-lane scenarios (B5b) explicitly disable thinking via
+    // modelKwargs (merged into the request body) — GLM supports the
+    // `thinking` parameter on the OpenAI-compatible endpoint.
+    const disableThinking = THINKING_DISABLED_SCENARIOS.has(scenario);
     return new ChatOpenAI({
       model: resolved.model || DEFAULT_GLM_MODEL,
       apiKey,
       configuration: { baseURL: resolved.baseURL },
       temperature: 1.0,
       maxTokens: 16384,
+      ...(disableThinking
+        ? { modelKwargs: { thinking: { type: "disabled" } } }
+        : {}),
     });
   }
 

@@ -35,7 +35,13 @@ import { getNowISO } from "../utils/timestamp.js";
 import { wsService } from "../services/channelBroadcaster.js";
 import { PromptEngineCore } from "../services/promptEngineCore.js";
 import { parseJSONSafe } from "../types/validation.js";
-import { ValidationError } from "../utils/errorHandler.js";
+import { ValidationError, DatabaseError } from "../utils/errorHandler.js";
+import { ServiceError } from "../services/errors/ServiceError.js";
+import {
+  AdminExercisePatchSchema,
+  ExerciseSourceStatusInputSchema,
+  type AdminEditableExerciseField,
+} from "../../../shared/dist/contracts/index.js";
 import {
   getAllConfigs,
   resolveTaskConfig,
@@ -2759,5 +2765,116 @@ export const updateUserDisplayName = async (
   } catch (e: any) {
     console.error("[AdminAPI] Update display name error:", e);
     return reply.status(500).send({ success: false, error: e.message });
+  }
+};
+
+// ============================================================================
+// Admin Exercise Editing（A15-1，issue #15 收窄后管理台人工修改入口）
+// ============================================================================
+
+/**
+ * 解析动作编辑 API 的仓库实例（Repository 红线：所有 exercises 读写经
+ * ExerciseRepository，不直连库）。
+ */
+async function getExerciseRepository() {
+  const { getPostgresClient } =
+    await import("../db/postgresql/client/postgres-client.js");
+  const { createExerciseRepository } =
+    await import("../db/postgresql/repository/exercise.repository.js");
+  return createExerciseRepository(getPostgresClient());
+}
+
+/** 编辑链路错误 → HTTP 状态（zod/参数 → 400，name 重名 → 409，其余 → 500） */
+function exerciseEditErrorStatus(
+  e: unknown,
+): { status: number; message: string } | null {
+  if (e instanceof ServiceError) {
+    return { status: 400, message: e.message };
+  }
+  // exercises_name_key 唯一约束冲突（pg 错误经 DatabaseError.context.error 透传）
+  if (
+    e instanceof DatabaseError &&
+    (e.context as any)?.error?.code === "23505"
+  ) {
+    return { status: 409, message: "动作英文名已存在（name 唯一）" };
+  }
+  return null;
+}
+
+/**
+ * PATCH /api/admin/exercises/:id — 管理台人工编辑动作白名单字段
+ * （name/name_zh/category/body_part/primary_muscles/equipment）。
+ * zod strict 校验（白名单外字段 400）；返回更新后完整行（契约形态）。
+ */
+export const adminPatchExercise = async (
+  req: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const { id } = req.params as { id: string };
+  const parsed = AdminExercisePatchSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return reply.status(400).send({
+      error: "Invalid exercise patch",
+      details: parsed.error.issues,
+    });
+  }
+
+  try {
+    const repo = await getExerciseRepository();
+    const updated = await repo.adminUpdate(id, parsed.data);
+    if (!updated) {
+      return reply.status(404).send({ error: "Exercise not found" });
+    }
+    return reply.send({ success: true, data: updated });
+  } catch (e: unknown) {
+    const mapped = exerciseEditErrorStatus(e);
+    if (mapped) {
+      return reply.status(mapped.status).send({ error: mapped.message });
+    }
+    req.log.error(e, "admin_patch_exercise_failed");
+    return reply.status(500).send({
+      error: e instanceof Error ? e.message : "Failed to update exercise",
+    });
+  }
+};
+
+/**
+ * PUT /api/admin/exercises/:id/source-status — 标记字段「人工已核」
+ * （空字段 AI 补全管道前置：AI 只补空、不覆盖人工已核值的判据）。
+ * 落 tags_json.source_metadata JSONB；返回写入标记 + 更新后完整行。
+ */
+export const adminSetExerciseSourceStatus = async (
+  req: FastifyRequest,
+  reply: FastifyReply,
+) => {
+  const { id } = req.params as { id: string };
+  const parsed = ExerciseSourceStatusInputSchema.safeParse(req.body);
+  if (!parsed.success) {
+    return reply.status(400).send({
+      error: "Invalid source-status input",
+      details: parsed.error.issues,
+    });
+  }
+
+  try {
+    const repo = await getExerciseRepository();
+    const field = parsed.data.field as AdminEditableExerciseField;
+    const result = await repo.markFieldSourceVerified(id, field);
+    if (!result) {
+      return reply.status(404).send({ error: "Exercise not found" });
+    }
+    return reply.send({
+      success: true,
+      data: { field, status: result.status, exercise: result.exercise },
+    });
+  } catch (e: unknown) {
+    const mapped = exerciseEditErrorStatus(e);
+    if (mapped) {
+      return reply.status(mapped.status).send({ error: mapped.message });
+    }
+    req.log.error(e, "admin_set_exercise_source_status_failed");
+    return reply.status(500).send({
+      error: e instanceof Error ? e.message : "Failed to set source status",
+    });
   }
 };

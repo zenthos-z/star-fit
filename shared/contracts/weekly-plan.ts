@@ -433,12 +433,103 @@ export const WeeklyPlanDaySchema = z.object({
 
 export type WeeklyPlanDay = z.infer<typeof WeeklyPlanDaySchema>;
 
+// ============================================================================
+// 确认落库载荷 (Apply Payload) — B5b / issue #38
+// ============================================================================
+
+/**
+ * weekly_plan 卡的确认落库载荷（提案轮由 Agent 算好，确认后由前端直调
+ * 确定性端点写入，AI 零参与写入时刻）。
+ *
+ * scope 语义（周/日粒度判断规则的落库面）：
+ *  - week  整周：upsert 周计划行（split 更新）+ 替换该周全部条目
+ *               （新框架 / 框架级原因整周重算 / 常规整周更新）
+ *  - days  单日覆盖：只替换 dates 所列日期的条目（临时原因只改某天，
+ *               如雨天改居家；要求该周已有计划行）
+ *
+ * week_id 缺省 = 当前周（服务器推导，Agent 不做日历算术）。
+ */
+export const WeeklyPlanApplyPayloadSchema = z
+  .object({
+    week_id: WeekIdSchema.optional(),
+    scope: z.enum(['week', 'days']),
+    /** scope=week 必填（整周 upsert 需要分化）；scope=days 忽略 */
+    split: WeeklyPlanSplitSchema.optional(),
+    /** scope=days 必填：被覆盖的日历日（该周内）；scope=week 忽略 */
+    dates: z
+      .array(z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'dates 内元素必须为 YYYY-MM-DD'))
+      .max(7)
+      .default([]),
+    /** 落库条目（PlanEntryInput 形态；status/sort_order 缺省 planned/0） */
+    entries: z.array(PlanEntryInputSchema).max(200).default([]),
+  })
+  .superRefine((p, ctx) => {
+    if (p.scope === 'week') {
+      if (!p.split) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'scope=week（整周）必须携带 split',
+          path: ['split'],
+        });
+      }
+    } else {
+      if (p.dates.length === 0) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: 'scope=days（单日覆盖）必须携带 dates（被替换的日期）',
+          path: ['dates'],
+        });
+      }
+    }
+    if (p.entries.length === 0) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: 'entries 不能为空（至少一条计划条目）',
+        path: ['entries'],
+      });
+    }
+    // scope=days：条目日期必须全部落在 dates 内（落库面=被替换面，防漏删/误删）
+    if (p.scope === 'days') {
+      const dateSet = new Set(p.dates);
+      for (const e of p.entries) {
+        if (!dateSet.has(e.entry_date)) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: `scope=days 时条目日期 ${e.entry_date} 必须包含在 dates 内`,
+            path: ['entries'],
+          });
+        }
+      }
+    }
+  });
+
+export type WeeklyPlanApplyPayload = z.infer<typeof WeeklyPlanApplyPayloadSchema>;
+
+/**
+ * POST /api/schedule/weekly-plan/apply 请求体（server 侧完整输入）：
+ * payload + user_id（由 X-User-Id 注入，客户端不可伪造）。Repository 落库前
+ * 以本 Schema 校验（Zod 失败即抛，红线：禁止静默吞错）。
+ */
+export const WeeklyPlanApplyInputSchema = z.object({
+  user_id: z.string().uuid(),
+  payload: WeeklyPlanApplyPayloadSchema,
+});
+
+export type WeeklyPlanApplyInput = z.infer<typeof WeeklyPlanApplyInputSchema>;
+
 /** weekly_plan 卡 data：展示文案 + 整周 days（≥1 天，覆盖周一至周日为宜）。 */
 export const WeeklyPlanCardDataSchema = z.object({
   week_label: z.string().min(1), // 「第 2 周」
   phase_label: z.string().optional(), // 「力量块」
   split_summary: z.string().min(1), // 「推拉腿 · 每周 3 练 · 主项渐进 +1 档」
   days: z.array(WeeklyPlanDaySchema).min(1),
+  /**
+   * [B5b issue#38] 确认落库载荷：Agent 提案轮算好最终 entries，随卡携带；
+   * 用户点「确认」后前端直调确定性写入端点（POST /api/schedule/weekly-plan/apply，
+   * 无 LLM）落库——确认前计划不进数据库（对齐 B5a profile 提案-确认模式）。
+   * 缺省 = 纯展示卡（兼容存量线程的已落库周计划展示）。
+   */
+  apply: WeeklyPlanApplyPayloadSchema.optional(),
 });
 
 export type WeeklyPlanCardData = z.infer<typeof WeeklyPlanCardDataSchema>;

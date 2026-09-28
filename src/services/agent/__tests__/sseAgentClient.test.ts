@@ -193,6 +193,83 @@ describe('createSseAgentClient (B3 — SSE fixture → AgentEvent)', () => {
   });
 });
 
+describe('createSseAgentClient (B5b SSE ② — idle watchdog / CONNECTION_LOST)', () => {
+  const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+  /** Collect chat() events with a custom response body (for stall simulations). */
+  async function drainWithBody(body: ReadableStream<Uint8Array>, idleTimeoutMs: number): Promise<AgentEvent[]> {
+    const client = createSseAgentClient({
+      fetchImpl: (async () => ({ ok: true, status: 200, body })) as unknown as typeof fetch,
+      url: '/api/chat',
+      getHeaders: noHeaders,
+      getUserId: fixedUser,
+      idleTimeoutMs,
+    });
+    const out: AgentEvent[] = [];
+    for await (const ev of client.chat({ userId: fixedUser(), message: 'x', threadId: 'thread_test_1' })) {
+      out.push(ev);
+    }
+    return out;
+  }
+
+  it('a stalled stream (no bytes for idleTimeoutMs) yields a terminal CONNECTION_LOST', async () => {
+    const encoder = new TextEncoder();
+    // Stream delivers one token, then goes silent forever (never closes — the
+    // exact shape of a WKWebView idle-kill mid-turn).
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(frame({ type: 'token', text: 'partial' })));
+        // no further enqueues, no close
+      },
+    });
+    const out = await drainWithBody(body, 25);
+    expect(out.map(e => e.type)).toEqual(['token', 'error']);
+    expect(out[1].error?.code).toBe('CONNECTION_LOST');
+  });
+
+  it('keepalive comment frames (`: ping`) reset the watchdog — no false disconnect', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        controller.enqueue(encoder.encode(frame({ type: 'token', text: 'a' })));
+        // 3× "ping every 20ms" while idleTimeoutMs=60ms: bytes keep arriving,
+        // watchdog must NOT fire.
+        for (let i = 0; i < 3; i++) {
+          await sleep(20);
+          controller.enqueue(encoder.encode(': ping\n\n'));
+        }
+        controller.enqueue(encoder.encode(frame({ type: 'done' })));
+        controller.close();
+      },
+    });
+    const out = await drainWithBody(body, 60);
+    expect(out.map(e => e.type)).toEqual(['token', 'done']);
+    // comment frames produce no events at all (parser skips them)
+  });
+
+  it('a stream that ends WITHOUT a done event is reported as CONNECTION_LOST', async () => {
+    const encoder = new TextEncoder();
+    const body = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(encoder.encode(frame({ type: 'token', text: 'cut-off' })));
+        controller.close(); // byte stream closed mid-turn — no done frame
+      },
+    });
+    const out = await drainWithBody(body, 1000);
+    expect(out.map(e => e.type)).toEqual(['token', 'error']);
+    expect(out[1].error?.code).toBe('CONNECTION_LOST');
+  });
+
+  it('a normal stream (with done) does NOT emit CONNECTION_LOST', async () => {
+    const { out } = await drain({ message: 'x' }, [
+      frame({ type: 'token', text: 'ok' }),
+      frame({ type: 'done' }),
+    ]);
+    expect(out.map(e => e.type)).toEqual(['token', 'done']);
+    expect(out.some(e => e.error?.code === 'CONNECTION_LOST')).toBe(false);
+  });
+});
+
 describe('consumeAgentStream', () => {
   it('concatenates tokens, keeps the last card, surfaces error', async () => {
     async function* gen(): AsyncIterable<AgentEvent> {

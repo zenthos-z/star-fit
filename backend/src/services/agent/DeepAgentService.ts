@@ -154,6 +154,60 @@ const BASE_SYSTEM_PROMPT = [
   "means the profile is ALREADY updated — continue the user's original task",
   "instead of updating the profile again.",
   "",
+  "## Weekly-plan proposal rules (proposal-confirm — B5b, ANY scenario)",
+  "Weekly plans are PROPOSALS now: there is NO save tool. Compute the full",
+  "entries in this turn, emit a weekly_plan card whose data.apply carries them",
+  "(scope/split/dates/entries), and the app persists them deterministically",
+  "ONLY after the user taps confirm on the card. Nothing lands in the DB",
+  "before that confirm — so never say 已保存/已生效 for a plan you just",
+  "proposed; say 确认后生效.",
+  "Granularity = f(reason's blast radius, framework exists?). ALWAYS call",
+  "get_current_plan first:",
+  "1. NO plan this week → ALWAYS propose the whole week first (scope='week'),",
+  "   even if the user asked for 明天/下一次 — a day plan lives INSIDE the",
+  "   weekly framework. PRECONDITION (survey-first gate): this rule assumes",
+  "   the plan prerequisites are known. For a brand-new user with an EMPTY",
+  "   profile (goal/experience/equipment/frequency mostly unknown after",
+  "   load_history), collect them FIRST with a fenced survey_card card",
+  '   (```json, type "survey") — NEVER a plain-text question list, and',
+  "   NEVER a week built on assumed defaults (档案空就按最保守自重排一周",
+  "   AND asking the 6 questions in prose are BOTH violations: the app can",
+  "   only render interactive surveys from the card). survey_card data",
+  "   shape: {title, questions: [{id, question, inputType: text|number|",
+  "   select|checkbox, required?, options: [{label, value}]}]}. Rule 1",
+  "   applies on the next turn, after the survey answers return. The",
+  "   survey turn is not a weekly-plan proposal turn — but its own delivery",
+  "   IS the survey_card, also never prose-only.",
+  "2. Framework exists + user names a specific day + the reason is TEMPORARY",
+  "   (rain → home workout for one day, no time today) → adjust ONLY that",
+  "   day: card still shows the whole week, but data.apply uses scope='days',",
+  "   dates=[that day], entries only for that day.",
+  "3. Framework exists + reason is LONG-TERM/frame-level (gym membership",
+  "   cancelled, moved home, injury lasting weeks) → recompute the whole",
+  "   week (scope='week'; reuse completed-entry evidence from the old plan).",
+  "4. Reason UNCLEAR (改成居家练 with no why) → ASK FIRST: 长期还是这几天?",
+  "   Never guess — one clarifying question, then rule 2 or 3. A duration",
+  "   cue MUST be explicit in the user's own words (today/tomorrow/这两天/",
+  "   下雨/出差几天 = temporary; 退卡/搬家/以后/长期/没健身房了 = long-term).",
+  "   改成居家练 / 换个练法 with NO cue = rule 4: reply with the question",
+  "   ONLY — emitting any plan card in that turn is a rule violation, even",
+  "   if the guess feels obvious (在 preamble 里替用户假定长期是典型错例).",
+  "5. Generic 根据我的信息调整一下 → whole-week update (scope='week').",
+  "Card data.apply entries use PlanEntryInput shape (entry_date /",
+  "exercise_id / target_sets / target_load {type,min,max} / sort_order?);",
+  "exercise_id from list_exercises; days[].exercises[].sets.length must equal",
+  "the matching apply entry's target_sets (display and persistence share one",
+  "source). week_id omitted = current week (server resolves it).",
+  "apply.split MUST be one of EXACTLY: full_body | upper_lower |",
+  "push_pull_legs | hybrid | custom (a strict enum — anything else is",
+  "rejected). A weekly-plan request is NEVER answered prose-only: every turn",
+  "that proposes or adjusts a week MUST contain the fenced weekly_plan card",
+  "in the final reply — a prose summary of the plan is a failed delivery,",
+  "because the app can only persist what the card carries.",
+  "Exercise display names in cards and replies use name_zh from",
+  "list_exercises — the curated Chinese names. NEVER translate exercise names",
+  "yourself; name (English) is a storage key, not a display name.",
+  "",
   "## Output length & formatting",
   "NON-CARD PROSE LIMIT: plain explanations and chat replies that contain no",
   "structured card MUST stay under 200 Chinese characters per reply. This is a",
@@ -363,12 +417,25 @@ const PLAN_SCENARIO_QUICKREF = [
   '  sets 1-20, reps integer 1-200 (never "8-12" string), weight >= 0.',
   "- weight 0 ONLY for bodyweight moves; resistance moves without an anchor",
   "  get starter loads above (weight=0 resistance is rejected -> 30-90s retry).",
-  "- After save_weekly_plan succeeds for a weekly-plan request, emit a",
-  "  weekly_plan card (data = object with week_label / split_summary / days[],",
-  "  per-set params allowed) instead of a plan_card — the app renders the whole",
-  "  week from it. Single-day / tomorrow plans keep using plan_card.",
+  "- WEEKLY-PLAN REQUESTS (给我排一周/这周的计划, 换计划, 整周调整): emit a",
+  "  weekly_plan card (data = object with week_label / split_summary / days[]",
+  "  covering the whole week, per-set params allowed) — NOT a plan_card. The",
+  "  card MUST carry data.apply (proposal payload: scope/split/entries, see",
+  "  weekly-plan proposal rules in the base prompt). There is NO save tool:",
+  "  the plan persists only after the user confirms the card.",
+  "  apply.split legal values ONLY: full_body | upper_lower | push_pull_legs",
+  "  | hybrid | custom. NEVER answer a weekly-plan request prose-only —",
+  "  sketching the card in thinking is not delivery; the fenced weekly_plan",
+  "  card MUST appear in the final reply.",
+  "- AMBIGUOUS adjust requests (改成居家练/换个练法 with NO explicit duration",
+  "  cue in the user's own words): ASK 长期还是这几天 — card output FORBIDDEN",
+  "  in that turn (base-prompt rule 4; silently assuming 长期 is the",
+  "  canonical violation).",
+  "- Single-day / tomorrow SESSION plans keep using plan_card.",
   '- Tomorrow/next-day requests MUST set top-level "target": "next_day";',
   "  and EVERY tomorrow-plan turn must emit a plan_card (never prose-only).",
+  "- Exercise names in user-facing cards/replies use name_zh from",
+  "  list_exercises (Chinese-first display names — never translate yourself).",
   "- No submit_plan/calculate_capacity tools exist — emit the plan card",
   "  directly in the reply as a ```json fenced block.",
   "- explanation non-empty; respect equipment + active limitations (hard).",
@@ -480,8 +547,11 @@ export class DeepAgentService implements AgentService {
     scenario?: string,
     hasImage = false,
   ): Promise<CompiledStatefulAgent> {
-    // P006: model loaded via loadModel (no provider hardcoded). 'default' is
-    // equivalent to chat/plan/tutorial in current config (same provider+model).
+    // P006: model loaded via loadModel (no provider hardcoded). scenario now
+    // flows through (was hardcoded 'default'): task-scoped model config keys
+    // (GLM_MODEL_<TASK>) resolve per scenario, and fast-lane scenarios
+    // (workout_complete — B5b SSE ③) get GLM thinking disabled to shorten
+    // turn latency. chat/plan/tutorial remain equivalent to 'default'.
     // hasImage → 多模态视觉模型（doubao-seed-2.1-turbo @ ark），图片直接进模型。
     // 文本模型（DeepSeek）不吃图：thread 的 checkpoint 里会留着带图轮次的
     // image_url 块，若不清洗，带图轮之后的下一个纯文本轮会 400
@@ -489,7 +559,7 @@ export class DeepAgentService implements AgentService {
     // 把历史消息里的 image 块替换为文字占位（checkpoint 保留原图不丢上下文）。
     const model = hasImage
       ? await loadVisionModel()
-      : await loadModel("default");
+      : await loadModel(scenario ?? "default");
     const middleware = hasImage ? undefined : [stripImageMiddleware];
 
     // P006: checkpointer injected from M-RT (agent_runtime schema). Ensure the
