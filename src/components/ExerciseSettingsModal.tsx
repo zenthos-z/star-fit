@@ -431,6 +431,14 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
           setAiSuggestion(null);
           return;
       }
+      // B6 秒回（issue #39）：缓存镜像同步读出，命中零等待上屏（不等 800ms
+      // 防抖，与购物车预填同源同一份对账缓存）；miss 才走防抖三级链
+      const instant = SuggestionService.resolveSync(name, type, targetRpe);
+      if (instant) {
+          setAiSuggestion(instant);
+          setIsCalculating(false);
+          return;
+      }
       let cancelled = false;
       const timer = setTimeout(async () => {
           setIsCalculating(true);

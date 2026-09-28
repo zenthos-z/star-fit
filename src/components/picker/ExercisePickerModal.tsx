@@ -577,13 +577,26 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
     }
   };
 
-  /** 参数建议统一挂 SuggestionService（链路 A，issue #31）：
-      清单中出现空组占位条目时按 name/type 走 resolve（缓存→后端→本地启发式），
-      回来后填入 sets/targetRpe；defaultSelectedIds 恢复场景同样覆盖。 */
+  /** 参数建议统一挂 SuggestionService（链路 A，issue #31；B6 秒回 issue #39）：
+      清单中出现空组占位条目时先 resolveSync 从本地缓存镜像同步读出（零等待），
+      miss 再按 name/type 走 resolve（缓存→后端→本地启发式，miss 时服务层自动
+      异步对账补齐整批），回来后填入 sets/targetRpe；defaultSelectedIds 恢复
+      场景同样覆盖。两读点（此处与动作设置「应用建议」）同源同一份对账缓存。 */
   useEffect(() => {
     for (const item of selected) {
       const ex = item.exercise;
-      if (item.sets.length > 0 || resolvingRef.current.has(ex.id)) continue;
+      if (item.sets.length > 0) continue;
+      // B6 秒回：镜像命中即同步填入（与 resolve 同条目同导出链，零网络）
+      const synced = SuggestionService.resolveSync(ex.name, toLegacyType(ex.exerciseType), 7);
+      if (synced) {
+        setSelected(prev => prev.map(it =>
+          it.exercise.id === ex.id && it.sets.length === 0
+            ? { ...it, sets: valuesToDraftSets(synced.values), targetRpe: synced.values.target_rpe ?? it.targetRpe }
+            : it,
+        ));
+        continue;
+      }
+      if (resolvingRef.current.has(ex.id)) continue;
       resolvingRef.current.add(ex.id);
       SuggestionService.resolve(ex.name, toLegacyType(ex.exerciseType), 7)
         .then(res => {
