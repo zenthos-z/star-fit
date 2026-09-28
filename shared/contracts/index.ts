@@ -1208,6 +1208,22 @@ export {
 } from './suggestions.js';
 
 // ============================================================================
+// Suggestion Cache Contracts (建议参数缓存对账 — issue #39 B6)
+// ============================================================================
+
+export {
+  // Schemas
+  SuggestionPlanContextSchema,
+  CachedSuggestionSchema,
+  SuggestionCacheResponseSchema,
+
+  // Types
+  type SuggestionPlanContext,
+  type CachedSuggestion,
+  type SuggestionCacheResponse,
+} from './suggestion-cache.js';
+
+// ============================================================================
 // Weekly Plan Contracts (周计划持久化实体 — issue #10)
 // ============================================================================
 

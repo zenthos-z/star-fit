@@ -105,6 +105,9 @@ import {
   getIsoWeekId,
 } from "shared/contracts";
 import { utcToday } from "../schedule/scheduleService.js";
+// [B6 issue#39] 写路径心跳：画像/计划/训练完成 → 静默登记建议缓存空闲重算
+// （notify 为纯内存操作，绝不阻塞工具返回；重算由独立调度器执行）
+import { notifySuggestionCacheInvalidation } from "../suggestions/suggestionCacheScheduler.js";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1138,6 +1141,7 @@ export function buildMcpToolsWith(
       });
       const writeRepo = new UserScopedWriteRepository(client);
       const res = await writeSessionForUser(writeRepo, userId, userId, input);
+      notifySuggestionCacheInvalidation(userId, "session_completed");
       return JSON.stringify(res);
     },
   });
@@ -1171,6 +1175,7 @@ export function buildMcpToolsWith(
       });
       const writeRepo = new UserScopedWriteRepository(client);
       const res = await updateProfileForUser(writeRepo, userId, userId, input);
+      notifySuggestionCacheInvalidation(userId, "profile_updated");
       return JSON.stringify(res);
     },
   });
@@ -1239,6 +1244,8 @@ export function buildMcpToolsWith(
             sort_order: e.sort_order ?? 0,
           })),
         });
+        // [B6 issue#39] 计划落库 → 当日已排容量变化 → 静默登记建议缓存空闲重算
+        notifySuggestionCacheInvalidation(userId, "plan_updated");
         return JSON.stringify({
           saved: true,
           week_id: result.plan.week_id,

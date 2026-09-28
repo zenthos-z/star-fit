@@ -8,6 +8,7 @@ import { getUserId } from "../utils/requestUtils.js";
 import { extractUiHintEvents } from "../services/agent/uiHintExtractor.js";
 import { chatWithValidationLoop } from "../services/agent/uiHintValidationLoop.js";
 import { ConfigRepo } from "../services/knowledgeRepo.js";
+import { withChatTracking } from "../services/suggestions/activeChatTracker.js";
 
 // P010: /api/chat crosses ONLY the frozen `AgentService.chat(req): AsyncIterable<AgentEvent>`
 // seam. The MAS->Deep Agents kernel swap is absorbed inside that seam; this
@@ -143,7 +144,11 @@ export async function postChat(
   const service = await resolveAgentService();
   const events = service.chat(chatRequest);
 
+  // [B6 issue#39] 对话活跃标记：空闲重算任务在 chat SSE 进行期间延后执行
+  // （不抢占对话流）。包裹层零改动流式语义，迭代结束自动解除标记。
+  const tracked = withChatTracking(userId, events);
+
   // Return the streaming promise so Fastify does not finalize before the stream
   // ends; streamAgentSSE hijacks the reply and owns raw.end().
-  return streamAgentSSE(reply, events);
+  return streamAgentSSE(reply, tracked);
 }

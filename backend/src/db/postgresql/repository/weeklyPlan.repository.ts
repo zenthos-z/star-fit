@@ -388,6 +388,62 @@ export class WeeklyPlanRepository extends BaseRepository {
   }
 
   /**
+   * 按用户 + 日历日查当日条目的计划上下文聚合原料（JOIN exercises 取
+   * primary_muscles / exercise_type）——B6 建议缓存「当日已排容量→肌群疲劳
+   * 叠加降载」的读取路径（issue #39）。
+   *
+   * skipped 条目不计（未排量不产生疲劳调度）；返回按 sort_order 升序，
+   * 顺序即同肌群 prior 位次的判定依据。纯 DB 读，无 LLM。
+   */
+  async getTodayMuscleContextEntries(
+    userId: string,
+    entryDate: string,
+  ): Promise<
+    Array<{
+      exercise_id: string;
+      exercise_name: string;
+      exercise_type: string;
+      primary_muscles: string[];
+      target_sets: number;
+      sort_order: number;
+    }>
+  > {
+    if (!UUIDSchema.safeParse(userId).success) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `userId 必须为 UUID（当前: ${userId}）`,
+        { userId },
+      );
+    }
+    if (!PLAN_ENTRY_DATE_PATTERN.test(entryDate)) {
+      throw new ServiceError(
+        ServiceErrorCode.INVALID_PARAMS,
+        `entryDate 必须为 YYYY-MM-DD（当前: ${entryDate}）`,
+        { entryDate },
+      );
+    }
+
+    return this.queryMany<{
+      exercise_id: string;
+      exercise_name: string;
+      exercise_type: string;
+      primary_muscles: string[];
+      target_sets: number;
+      sort_order: number;
+    }>(
+      `SELECT
+         pe.exercise_id, e.name AS exercise_name, e.exercise_type,
+         e.primary_muscles, pe.target_sets, pe.sort_order
+       FROM plan_entries pe
+       JOIN exercises e ON e.id = pe.exercise_id
+       WHERE pe.user_id = $userId::uuid AND pe.entry_date = $entryDate::date
+         AND pe.status <> 'skipped'::public.plan_entry_status
+       ORDER BY pe.sort_order ASC`,
+      { userId, entryDate },
+    );
+  }
+
+  /**
    * 更新条目状态（planned→adjusted→completed/skipped）。
    *
    * 返回更新后的条目；条目不存在或不属于该用户 → null（用户隔离查询）。
