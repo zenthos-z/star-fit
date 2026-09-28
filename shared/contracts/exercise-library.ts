@@ -735,3 +735,80 @@ export const ExerciseSearchFilterSchema = z.object({
 });
 
 export type ExerciseSearchFilter = z.infer<typeof ExerciseSearchFilterSchema>;
+
+// ============================================================================
+// 管理台动作编辑 (A15-1 Admin Exercise Editing — issue #15 收窄后人工修改入口)
+// ============================================================================
+
+/**
+ * 管理台可编辑字段白名单（issue #15：AI 不自主修改动作库，唯一入口为管理台人工编辑）。
+ *
+ * 任务书原始清单含 description，但 exercises 表无该列（2026-09-28 psql 确认），
+ * 且本批禁动表 schema 不加迁移，故不纳入——strict 校验下作为未知字段拒绝。
+ * name 为库唯一键：更新走管理台专用入口（重名 → 唯一约束冲突），与
+ * ExerciseDetailUpdateSchema 的「id/name 不可经此更新」边界互不冲突。
+ */
+export const ADMIN_EDITABLE_EXERCISE_FIELDS = [
+  'name',
+  'name_zh',
+  'category',
+  'body_part',
+  'primary_muscles',
+  'equipment',
+] as const;
+
+export const AdminEditableExerciseFieldSchema = z.enum(
+  ADMIN_EDITABLE_EXERCISE_FIELDS,
+);
+
+export type AdminEditableExerciseField = z.infer<
+  typeof AdminEditableExerciseFieldSchema
+>;
+
+/**
+ * 管理台 PATCH 输入——strict 模式：白名单外字段（含 description 等无列字段）
+ * 一律 400 拒绝，不静默丢弃。至少一个字段；null = 清空该列（name 除外）。
+ */
+export const AdminExercisePatchSchema = z
+  .object({
+    name: z.string().trim().min(1).max(200).optional(),
+    name_zh: z.string().nullable().optional(),
+    category: ExerciseCategorySchema.nullable().optional(),
+    body_part: ExerciseBodyPartSchema.nullable().optional(),
+    primary_muscles: z.array(ExerciseMuscleSchema).min(1).optional(),
+    equipment: ExerciseEquipmentSchema.nullable().optional(),
+  })
+  .strict()
+  .refine((patch) => Object.keys(patch).length > 0, {
+    message: '管理台编辑输入至少包含一个白名单字段',
+  });
+
+export type AdminExercisePatch = z.infer<typeof AdminExercisePatchSchema>;
+
+/**
+ * 单字段来源标记（PUT source-status 输入）：标记某字段「人工已核」，
+ * 为后续空字段 AI 补全管道（只补空、不覆盖人工已核值）留判据。
+ */
+export const ExerciseSourceStatusInputSchema = z
+  .object({
+    field: AdminEditableExerciseFieldSchema,
+  })
+  .strict();
+
+export type ExerciseSourceStatusInput = z.infer<
+  typeof ExerciseSourceStatusInputSchema
+>;
+
+/**
+ * 字段级来源记录（落库形态）。exercises 无 source_metadata 列（禁动 schema、
+ * 不加迁移），借用现有 JSONB 列 tags_json 的 `source_metadata` 命名空间存储：
+ * tags_json = { "source_metadata": { "<field>": { verified_by, at } } }。
+ */
+export const ExerciseFieldSourceStatusSchema = z.object({
+  verified_by: z.string().min(1), // 标记人（本批恒为 'admin'）
+  at: z.string().min(1),          // ISO 时间戳
+});
+
+export type ExerciseFieldSourceStatus = z.infer<
+  typeof ExerciseFieldSourceStatusSchema
+>;

@@ -65,7 +65,10 @@ import {
   getImageGenConfig,
   updateImageGenConfig,
   testImageGenConnection,
+  adminPatchExercise,
+  adminSetExerciseSourceStatus,
 } from "./controllers/adminController.js";
+import { requireAdminAuth } from "./utils/adminAuth.js";
 import {
   getLatestTraining,
   getServerInfo,
@@ -230,7 +233,7 @@ const start = async () => {
         // Allow all origins for now to avoid mobile issues
         cb(null, true);
       },
-      methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+      methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
       allowedHeaders: [
         "Content-Type",
         "Authorization",
@@ -239,6 +242,7 @@ const start = async () => {
         "Origin",
         "X-User-Id",
         "X-Access-Token",
+        "X-Admin-Token",
       ],
       credentials: true,
       preflight: true,
@@ -795,6 +799,19 @@ const start = async () => {
         api.delete(
           "/admin/users/:userId/limitations/:part",
           removeUserLimitation,
+        );
+
+        // Admin Exercise Editing (A15-1, issue #15 — 管理台人工修改入口；
+        // AI 不自主修改动作库，此处仅管理员令牌可达)
+        api.patch(
+          "/admin/exercises/:id",
+          { preHandler: requireAdminAuth },
+          adminPatchExercise,
+        );
+        api.put(
+          "/admin/exercises/:id/source-status",
+          { preHandler: requireAdminAuth },
+          adminSetExerciseSourceStatus,
         );
 
         // Video Routes (New)
