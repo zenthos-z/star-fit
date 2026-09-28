@@ -94,13 +94,22 @@ export type SuggestionCacheEntry = {
   source: 'formula' | 'hybrid';
   generated_at: number;
   context_fingerprint: string;
+  /** B6：当日计划疲劳降载元数据（随 GET /suggestions/cache 下发，本地 derive 保真用） */
+  plan_context?: {
+    factor: number;
+    prior_same_muscle_exercises: number;
+    muscle?: string;
+    today_planned_sets: number;
+  };
 };
 
 export interface SuggestionCacheMeta {
   version: number;
   lastSyncTime: number;
-  /** 服务端 context_fingerprint（goal/伤病/锚点变化即失效） */
+  /** 服务端 context_fingerprint（goal/伤病/锚点变化即失效；B6 对账回传凭据） */
   contextFingerprint?: string;
+  /** B6：对账批次的基线 RPE（GET 响应 baseline_rpe；条目级 baseline_rpe 仍为准） */
+  baselineRpe?: number;
   /** 生成时的训练目标（本地 derive 的 reps 区间用） */
   goal?: string;
   count: number;

@@ -10,22 +10,27 @@ import userEvent from '@testing-library/user-event';
 import { vi } from 'vitest';
 import { muscleLabelZh } from '../../lib/muscleMap';
 
-// 参数建议统一走 SuggestionService（链路 A）：测试环境 mock resolve 为确定性值，
-// 断言「清单参数 == 配置页建议值」的同源语义。
+// 参数建议统一走 SuggestionService（链路 A）：测试环境 mock resolve/resolveSync
+// 为确定性值，断言「清单参数 == 配置页建议值」的同源语义。
 // vi.mock 工厂在模块导入期执行，mock 引用必须经 vi.hoisted 提升，否则 TDZ 报错
 // 且 mock 静默不生效（回退真实启发式）。
-const { resolveMock } = vi.hoisted(() => ({
+const { resolveMock, resolveSyncMock } = vi.hoisted(() => ({
   resolveMock: vi.fn(async (_name: string, _type: string, _rpe: number) => ({
     values: { weight: 60, reps: 10, set_count: 3, target_rpe: 7 },
     source: 'heuristic' as const,
     generatedAt: Date.now(),
   })),
+  // B6 秒回镜像：默认 null（miss → 回退 resolve 异步链），命中用例单独注入
+  resolveSyncMock: vi.fn((): { values: Record<string, number>; source: 'cache' } | null => null),
 }));
 vi.mock('../../services/suggestionService', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../../services/suggestionService')>();
   return {
     ...actual,
-    SuggestionService: Object.assign(actual.SuggestionService, { resolve: resolveMock }),
+    SuggestionService: Object.assign(actual.SuggestionService, {
+      resolve: resolveMock,
+      resolveSync: resolveSyncMock,
+    }),
   };
 });
 import ExercisePickerModal from '../picker/ExercisePickerModal';
@@ -388,6 +393,49 @@ describe('ExercisePickerModal · A9 购物车多选', () => {
     const banned = new RegExp('统' + '一|每' + '组不同');
     expect(screen.queryByText(banned)).not.toBeInTheDocument();
     expect(document.body.querySelector('img')).toBeNull();
+  });
+});
+
+describe('ExercisePickerModal · B6 秒回预填与 miss 回退（issue #39）', () => {
+  it('缓存命中：resolveSync 同步读出直接填入（resolve 零调用），与「应用建议」同源同值', async () => {
+    resolveMock.mockClear(); // vi.fn 调用历史跨用例累积，只看本用例
+    resolveSyncMock.mockReturnValueOnce({
+      // 与「应用建议」读点消费的同一份对账缓存条目（同源）
+      values: { weight: 80, reps: 8, set_count: 3, target_rpe: 7 },
+      source: 'cache',
+    });
+    const user = userEvent.setup();
+    render(<ExercisePickerModal onClose={() => {}} />);
+    const a = byId(RECENT_IDS[0]);
+    await user.click(screen.getByLabelText(`选择 ${a.name}`));
+    await user.click(screen.getByRole('button', { name: '去配置' }));
+
+    // 秒回：摘要 == resolveSync 值的确定性渲染（3组×8 · 80kg），零网络零防抖
+    expect(screen.getAllByText('3组×8 · 80kg · RPE 7').length).toBeGreaterThan(0);
+    expect(resolveMock).not.toHaveBeenCalled(); // 未走异步链
+  });
+
+  it('缓存 miss：resolveSync 返回 null → 回退 resolve 异步链填充；等待期清单不阻塞（空组占位仅 RPE）', async () => {
+    resolveSyncMock.mockReturnValue(null);
+    let release!: (v: unknown) => void;
+    resolveMock.mockImplementationOnce(
+      () => new Promise((res) => { release = res; }), // 人为挂起：验证占位不阻塞
+    );
+    const user = userEvent.setup();
+    render(<ExercisePickerModal onClose={() => {}} />);
+    const a = byId(RECENT_IDS[0]);
+    await user.click(screen.getByLabelText(`选择 ${a.name}`));
+    await user.click(screen.getByRole('button', { name: '去配置' }));
+
+    // 等待期：清单照常渲染，占位条目仅显示 RPE
+    expect(screen.getByText('RPE 7')).toBeInTheDocument();
+
+    release({
+      values: { weight: 60, reps: 10, set_count: 3, target_rpe: 7 },
+      source: 'heuristic',
+      generatedAt: Date.now(),
+    });
+    await waitFor(() => expect(screen.getByText('3组×10 · 60kg · RPE 7')).toBeInTheDocument());
   });
 });
 
