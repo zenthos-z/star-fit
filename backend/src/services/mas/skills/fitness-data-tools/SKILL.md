@@ -1,6 +1,6 @@
 ---
 name: "fitness-data-tools"
-description: "健身训练数据工具指南。当需要读取或更新用户训练数据时必须先读本技能：生成训练计划前必须 load_history 取 profile_dynamic（负荷锚点/活动限制/恢复状态是计划硬约束），用 list_exercises 按部位/器械/关键词过滤查询动作库（分页工具，默认 30 条/次——按目标肌群逐部位查询，不做全量拉取），get_exercise_detail 确认细节；训练结束后必须 write_session 记录并 update_profile 据表现更新负荷锚点/限制/恢复。涉及用户数据读写、训练计划、训练后总结、动作推荐、用户画像更新、历史查询时一律适用。即使你已知道工具名，调用前仍应确认参数与时机约束。"
+description: "健身训练数据工具指南。读取或更新用户训练数据前必先读本技能：生成计划前必先 load_history（负荷锚点/活动限制/恢复状态是硬约束），list_exercises 按部位/器械/关键词分页过滤（默认 30 条/次，不做全量拉取），get_exercise_detail 确认细节；训练后 write_session + update_profile 更新锚点/限制/恢复。涉及数据读写、计划、训练后总结、动作推荐、画像更新、历史查询时适用。"
 ---
 
 # 健身训练数据工具指南 (fitness-data-tools)
