@@ -17,8 +17,8 @@
    - `profile_dynamic.recovery_state`：`{ total_score:80, last_assessed:"..." }`
    - `profile_static.fitness_level`：`"INTERMEDIATE"`
 
-2. `list_exercises({})`
-   → 得到全量动作库 `[{id,name,description}]`。在上下文里筛：只留 `equipment:dumbbell` 或 `equipment:bodyweight` 的，再排除 `impact:knee:N` 里 N 偏高的，最终挑出低膝冲击、哑铃可做的下肢动作（Goblet Squat / DB RDL / Bulgarian Split ...）。
+2. `list_exercises({ body_part: "upper_legs" })`（下肢日两步查询的第一步；需要臀可补 `{ body_part: "hips" }`）
+   → 得到 `{total, has_more, exercises:[{id,name,name_zh,description}]}`。在返回页里筛：只留 `equipment:dumbbell` 或 `equipment:bodyweight` 的，再排除 `impact:knee:N` 里 N 偏高的，最终挑出低膝冲击、哑铃可做的下肢动作（Goblet Squat / DB RDL / Bulgarian Split ...）。
 
 3. `get_exercise_detail({ id: "<Bulgarian Split 的 id>" })`
    → 核对 `attributes.impact_level.knee=3`（可接受）、`equipment_required=["dumbbell"]`、有 `tutorials.video`。
@@ -55,6 +55,6 @@
 
 **用户**：「罗马尼亚硬拉主要练哪？我腰不好能做吗？」
 
-1. `list_exercises({})` → 在返回列表里按 name 找到 "Romanian Deadlift" 的 id
+1. `list_exercises({ keyword: "Romanian Deadlift" })` → 在返回页里找到该动作的 id
 2. `get_exercise_detail({ id })` → `attributes.targets.primary=["hamstrings","glutes"]`，`impact_level.back=5`
 3. 回答：主要练腘绳肌+臀；腰部冲击 5/10，腰不好需控制重量、保持脊柱中立，或选冲击更低的变体。
