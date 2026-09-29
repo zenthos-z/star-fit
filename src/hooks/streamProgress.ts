@@ -36,6 +36,18 @@ export function appendThinkingWindow(windowText: string, chunk: string): string 
   return `…${joined.slice(joined.length - THINKING_WINDOW_CHARS)}`;
 }
 
+/**
+ * 渲染层兜底夹紧（issue #55）：把任意来源的 thinking 全文截到尾部窗口。
+ * 流式路径已经由 appendThinkingWindow 保证有界；此函数给「绕过 emitter
+ * 的渲染路径」（历史存量消息、admin 调试台直累加等）一道硬闸，保证
+ * DOM 文本节点永不超窗。
+ */
+export function clampThinkingWindow(text: string | undefined): string {
+  if (!text) return '';
+  if (text.length <= THINKING_WINDOW_CHARS) return text;
+  return `…${text.slice(text.length - THINKING_WINDOW_CHARS)}`;
+}
+
 /** 流式进度补丁：写到正在流式渲染的 thinking 气泡上。 */
 export interface StreamProgressPatch {
   text: string;

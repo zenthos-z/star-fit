@@ -673,6 +673,7 @@ const App: React.FC = () => {
       openAiCoach,
       chatEndRef,
       textareaRef,
+      isUserScrollingRef,
       attachedContext,
       setAttachedContext,
       // [NEW] Thread management
@@ -1590,6 +1591,7 @@ const App: React.FC = () => {
                 onWeeklyPlanApply={confirmWeeklyPlanApply}
                 chatEndRef={chatEndRef}
                 textareaRef={textareaRef}
+                isUserScrollingRef={isUserScrollingRef}
                 attachedContext={attachedContext}
                 setAttachedContext={setAttachedContext}
                 onRemoveAttachment={() => setAttachedContext(null)}

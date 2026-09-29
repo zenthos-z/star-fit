@@ -415,9 +415,17 @@ export const useAICoach = (
   }, [isAiOverlayOpen, currentThreadId, chatHistory.length]);
 
   // [SCROLL_FIX] Scroll on new message (only if already at bottom)
+  // [issue #55-2] 两处修正：
+  // 1. 容器定位改用 closest('[data-chat-scroll-container]')——旧 parentElement
+  //    是内容包裹层（高度自适应、永不溢出），isNearBottom 恒真 → 流式期间
+  //    每 200ms 一次 setState 都强拽页面到底部（「思考链加载中锁死滚动」根因之一）。
+  // 2. isUserScrollingRef 守卫：用户上滑让位后（由 AICoachOverlay 的容器
+  //    scroll 监听写入）不再自动贴底，回到底部自动恢复——双保险，scrollToBottom
+  //    内部还有同一守卫。
   useEffect(() => {
     if (isAiOverlayOpen && isScrollReadyRef.current && chatHistory.length > 0) {
-      const container = chatEndRef.current?.parentElement;
+      if (isUserScrollingRef.current) return; // 用户让位中：不抢占手势
+      const container = (chatEndRef.current?.closest('[data-chat-scroll-container]') as HTMLElement | null) ?? chatEndRef.current?.parentElement;
       if (container) {
         const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
         if (isNearBottom) {
