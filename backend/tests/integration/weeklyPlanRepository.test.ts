@@ -246,4 +246,147 @@ describeOrSkip("WeeklyPlanRepository (real PG)", () => {
       } as never),
     ).rejects.toThrow();
   });
+
+  // ------------------------------------------------------------------
+  // T9 / issue #66：结构化契约 day_focus / rationale / category / sets
+  // ------------------------------------------------------------------
+  const weekIdT9 = isoWeekId(new Date(now + 15 * 86400000)); // 独立周，避开套件主周
+  const weekIdT9Legacy = isoWeekId(new Date(now + 22 * 86400000));
+
+  it("applyWeeklyPlan persists T9 structured fields and reads them back (proposal-confirm data face)", async () => {
+    const repo = createWeeklyPlanRepository(getPostgresClient());
+    const day = entryDateFor(weekIdT9, 1);
+    const rationale = "推日：复合动作打底，末端轻量肩部收尾防伤病";
+    const applied = await repo.applyWeeklyPlan({
+      user_id: userId,
+      payload: {
+        week_id: weekIdT9,
+        scope: "week",
+        split: "push_pull_legs",
+        dates: [],
+        entries: [
+          {
+            entry_date: day,
+            exercise_id: exerciseId,
+            target_sets: 1,
+            target_load: { type: "rpe", min: 4, max: 5 },
+            sort_order: 0,
+            day_focus: "胸肩三头",
+            rationale,
+            category: "warmup",
+            sets: [{ set_no: 1, reps: 15, rpe: 4 }],
+          },
+          {
+            entry_date: day,
+            exercise_id: exerciseId,
+            target_sets: 3,
+            target_load: { type: "percent_1rm", min: 70, max: 80 },
+            sort_order: 1,
+            day_focus: "胸肩三头",
+            rationale,
+            category: "main",
+            sets: [
+              { set_no: 1, weight_kg: 60, reps: 8, rpe: 7 },
+              { set_no: 2, weight_kg: 62.5, reps: 8, rpe: 7.5 },
+              { set_no: 3, weight_kg: 65, reps: 6, rpe: 8 },
+            ],
+          },
+        ],
+      },
+    });
+
+    // 落库回读：结构化四件套全字段往返
+    expect(applied.entries).toHaveLength(2);
+    const [warmup, main] = applied.entries;
+    expect(warmup.day_focus).toBe("胸肩三头");
+    expect(warmup.rationale).toBe(rationale);
+    expect(warmup.category).toBe("warmup");
+    expect(warmup.sets).toEqual([{ set_no: 1, reps: 15, rpe: 4 }]);
+    expect(main.category).toBe("main");
+    expect(main.sets).toEqual([
+      { set_no: 1, weight_kg: 60, reps: 8, rpe: 7 },
+      { set_no: 2, weight_kg: 62.5, reps: 8, rpe: 7.5 },
+      { set_no: 3, weight_kg: 65, reps: 6, rpe: 8 },
+    ]);
+
+    // 读路径与写路径一致（getWeeklyPlanByUserAndWeek 回读）
+    const fetched = await repo.getWeeklyPlanByUserAndWeek(userId, weekIdT9);
+    expect(fetched!.entries).toHaveLength(2);
+    expect(fetched!.entries[0].day_focus).toBe("胸肩三头");
+    expect(fetched!.entries[0].sets?.[0].rpe).toBe(4);
+    expect(fetched!.entries[1].sets?.[2].weight_kg).toBe(65);
+
+    // 今日课表读路径：category 直出、sets 随行
+    const today = await repo.getTodayEntriesWithExercise(userId, day);
+    expect(today).toHaveLength(2);
+    expect(today[0].category).toBe("warmup");
+    expect(today[0].day_focus).toBe("胸肩三头");
+    expect(today[0].rationale).toBe(rationale);
+    expect(today[1].category).toBe("main");
+    expect(today[1].sets?.[1].weight_kg).toBe(62.5);
+  });
+
+  it("applyWeeklyPlan rejects sets/target_sets mismatch at the contract gate", async () => {
+    const repo = createWeeklyPlanRepository(getPostgresClient());
+    await expect(
+      repo.applyWeeklyPlan({
+        user_id: userId,
+        payload: {
+          week_id: weekIdT9,
+          scope: "days",
+          dates: [entryDateFor(weekIdT9, 2)],
+          entries: [
+            {
+              entry_date: entryDateFor(weekIdT9, 2),
+              exercise_id: exerciseId,
+              target_sets: 3,
+              target_load: { type: "rpe", min: 7, max: 8 },
+              category: "main",
+              // 只给 2 组 → 与 target_sets=3 不齐，契约 superRefine 拒绝
+              sets: [
+                { set_no: 1, weight_kg: 60, reps: 8, rpe: 7 },
+                { set_no: 2, weight_kg: 65, reps: 6, rpe: 8 },
+              ],
+            },
+          ],
+        },
+      }),
+    ).rejects.toThrow(/sets 组数/);
+  });
+
+  it("legacy entries (pre-T9 payload, no structured fields) persist as NULL and today view falls back to main", async () => {
+    const repo = createWeeklyPlanRepository(getPostgresClient());
+    const day = entryDateFor(weekIdT9Legacy, 3);
+    const applied = await repo.applyWeeklyPlan({
+      user_id: userId,
+      payload: {
+        week_id: weekIdT9Legacy,
+        scope: "week",
+        split: "full_body",
+        dates: [],
+        entries: [
+          {
+            entry_date: day,
+            exercise_id: exerciseId,
+            target_sets: 4,
+            target_load: { type: "rpe", min: 7, max: 8 },
+            // 无 day_focus / rationale / category / sets —— 存量载荷形态
+          },
+        ],
+      },
+    });
+
+    // 实体读路径：新列为 NULL（旧行形态），不炸
+    expect(applied.entries[0].day_focus).toBeNull();
+    expect(applied.entries[0].rationale).toBeNull();
+    expect(applied.entries[0].category).toBeNull();
+    expect(applied.entries[0].sets).toBeNull();
+
+    // 展示读路径：category 回落推导为 'main'（旧计划回落渲染）
+    const today = await repo.getTodayEntriesWithExercise(userId, day);
+    expect(today).toHaveLength(1);
+    expect(today[0].category).toBe("main");
+    expect(today[0].day_focus).toBeNull();
+    expect(today[0].sets).toBeNull();
+  });
 });

@@ -19,8 +19,12 @@
  * 字段形态对齐 PostgreSQL 表 weekly_plans / plan_entries
  * （迁移 backend/src/db/postgresql/migrations/001_weekly_plans.sql）。
  *
- * @version 1.0.0
+ * @version 1.1.0
  * @created 2026-09-26
+ * @history 1.1.0 2026-09-30 T9/#66 结构化契约：plan_entries 增加
+ *          day_focus / rationale / category(warmup|main|cooldown) /
+ *          sets 逐组处方（{set_no, weight_kg?, reps, rpe}）；全列可空，
+ *          旧计划读取回落（category→main，sets→target_sets×target_load）。
  */
 
 import { z } from 'zod';
@@ -160,6 +164,107 @@ export const TargetLoadSchema = z
 export type TargetLoad = z.infer<typeof TargetLoadSchema>;
 
 // ============================================================================
+// 结构化计划字段 (Structured Plan Fields) — T9 / issue #66
+// ============================================================================
+
+/**
+ * 条目段位枚举：warmup 热身 / main 正式 / cooldown 收尾拉伸。
+ * 三段式课表（热身→正式→收尾）的落库载体；同日内顺序由 sort_order 承载
+ * （warmup 段靠前、cooldown 段靠后），category 标注段位语义。
+ * 旧数据无该列（NULL）→ 读取侧经 resolvePlanEntryCategory 回落 'main'。
+ */
+export const PLAN_ENTRY_CATEGORY_VALUES = ['warmup', 'main', 'cooldown'] as const;
+
+export const PlanEntryCategorySchema = z.enum(PLAN_ENTRY_CATEGORY_VALUES);
+
+export type PlanEntryCategory = z.infer<typeof PlanEntryCategorySchema>;
+
+/** 旧数据回落段位：无 category 的存量条目一律视作正式段（不炸、不猜热身） */
+export const DEFAULT_PLAN_ENTRY_CATEGORY: PlanEntryCategory = 'main';
+
+/**
+ * 旧数据回落推导：category 为空（存量计划）时视作 'main'。
+ * 展示层（TodayScheduleEntry 等）出库前调用，保证前端永远拿到三枚举之一。
+ */
+export function resolvePlanEntryCategory(
+  category: PlanEntryCategory | null | undefined,
+): PlanEntryCategory {
+  return category ?? DEFAULT_PLAN_ENTRY_CATEGORY;
+}
+
+/**
+ * 逐组处方单组（T9 / issue #66）：
+ *  - set_no   组号，从 1 连续编号（跨字段约束：sets 在位时 1..N 与 target_sets 对齐）
+ *  - weight_kg 该组目标重量 kg；可省（自重/弹力带/计时类动作）
+ *  - reps     该组目标次数（正整数）
+ *  - rpe      该组主观强度（0-10，支持 0.5 步进）——逐组可不同（金字塔/递减）
+ * 与 target_load（条目级区间）分工：target_load 是「条目级负荷锚」，
+ * sets 是「逐组展开的处方明细」；两者同源生成（sets 各组 rpe 应落在区间内，
+ * 由生成侧技能保证，契约不重复校验——避免 Service 替 AI 做算术反被咬）。
+ */
+export const PlanSetPrescriptionSchema = z.object({
+  set_no: z.number().int().positive(),
+  weight_kg: z.number().optional(), // kg；assisted 沿用负值辅助约定
+  reps: z.number().int().positive(),
+  rpe: z.number().min(0).max(10),
+});
+
+export type PlanSetPrescription = z.infer<typeof PlanSetPrescriptionSchema>;
+
+/**
+ * 结构化字段跨字段校验（PlanEntrySchema / PlanEntryInputSchema 共用）：
+ * sets 在位时必须与 target_sets 对齐（组数相等 + set_no 恰为 1..N 连续）。
+ * 展示卡硬规则「sets.length = target_sets」在落库面的强制执行。
+ */
+function refinePlanEntryStructuredFields<
+  T extends {
+    target_sets: number;
+    sets?: PlanSetPrescription[] | null;
+  },
+>(entry: T, ctx: z.RefinementCtx): void {
+  const { sets, target_sets } = entry;
+  if (sets === undefined || sets === null) return; // 旧数据/未携带：允许
+  if (sets.length !== target_sets) {
+    ctx.addIssue({
+      code: z.ZodIssueCode.custom,
+      message: `sets 组数 (${sets.length}) 必须等于 target_sets (${target_sets})`,
+      path: ['sets'],
+    });
+    return;
+  }
+  for (let i = 0; i < sets.length; i++) {
+    if (sets[i].set_no !== i + 1) {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: `sets[${i}].set_no 必须为 ${i + 1}（从 1 连续编号，当前: ${sets[i].set_no}）`,
+        path: ['sets', i, 'set_no'],
+      });
+      return;
+    }
+  }
+}
+
+/** 结构化日/组字段片段（行形态：库列可空，出库带 null） */
+const planEntryStructuredRowFields = {
+  /** 当日聚焦短标签（腿/胸/背/肩/全身…）——同日条目冗余同值（无日表的降级设计） */
+  day_focus: z.string().nullable(),
+  /** 当日说明（安排原因/目标/注意要点）——同日条目冗余同值 */
+  rationale: z.string().nullable(),
+  /** 段位（warmup/main/cooldown）；旧数据 NULL → 读取侧回落 'main' */
+  category: PlanEntryCategorySchema.nullable(),
+  /** 逐组处方（T9）；旧数据 NULL → 消费方回落 target_sets × target_load 展示 */
+  sets: z.array(PlanSetPrescriptionSchema).nullable(),
+};
+
+/** 结构化日/组字段片段（输入形态：全部可选，存量提案载荷不带也过） */
+const planEntryStructuredInputFields = {
+  day_focus: z.string().optional(),
+  rationale: z.string().optional(),
+  category: PlanEntryCategorySchema.optional(),
+  sets: z.array(PlanSetPrescriptionSchema).optional(),
+};
+
+// ============================================================================
 // 实体 (Database Row Shape)
 // ============================================================================
 
@@ -189,20 +294,26 @@ export type WeeklyPlan = z.infer<typeof WeeklyPlanSchema>;
  * exercise_id 为 NanoID（12-24 字符），引用 exercises.id。
  * 目标负荷在应用层为嵌套对象 target_load，数据库为
  * target_load_type / target_load_min / target_load_max 三列（Repository 负责映射）。
+ * [T9 #66] 结构化字段 day_focus / rationale / category / sets：库列全部可空
+ * （004 迁移），旧行读出为 null——category 由读取侧 resolvePlanEntryCategory
+ * 回落 'main'，sets 为 null 时消费方回落 target_sets × target_load 展示。
  */
-export const PlanEntrySchema = z.object({
-  id: z.string().uuid(),
-  weekly_plan_id: z.string().uuid(),
-  user_id: z.string().uuid(), // 冗余用户列：按用户隔离查询，不依赖联表
-  entry_date: z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'entry_date 必须为 YYYY-MM-DD'),
-  exercise_id: z.string().min(12).max(24), // NanoID（对齐 ExerciseSchema.id）
-  target_sets: z.number().int().positive(),
-  target_load: TargetLoadSchema,
-  status: PlanEntryStatusSchema,
-  sort_order: z.number().int().min(0).default(0), // 同日内条目排序
-  created_at: z.string().datetime(),
-  updated_at: z.string().datetime(),
-});
+export const PlanEntrySchema = z
+  .object({
+    id: z.string().uuid(),
+    weekly_plan_id: z.string().uuid(),
+    user_id: z.string().uuid(), // 冗余用户列：按用户隔离查询，不依赖联表
+    entry_date: z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'entry_date 必须为 YYYY-MM-DD'),
+    exercise_id: z.string().min(12).max(24), // NanoID（对齐 ExerciseSchema.id）
+    target_sets: z.number().int().positive(),
+    target_load: TargetLoadSchema,
+    status: PlanEntryStatusSchema,
+    sort_order: z.number().int().min(0).default(0), // 同日内条目排序
+    created_at: z.string().datetime(),
+    updated_at: z.string().datetime(),
+    ...planEntryStructuredRowFields,
+  })
+  .superRefine(refinePlanEntryStructuredFields);
 
 export type PlanEntry = z.infer<typeof PlanEntrySchema>;
 
@@ -223,15 +334,20 @@ export type WeeklyPlanWithEntries = z.infer<typeof WeeklyPlanWithEntriesSchema>;
 /**
  * 单条目创建输入：不含 id / weekly_plan_id / user_id（由计划创建统一注入），
  * status / sort_order 缺省（planned / 0）。
+ * [T9 #66] 结构化字段全部可选：存量提案载荷（无这些字段）照常通过；
+ * 新生成计划按 plan-generation 技能模板一次成型携带全字段。
  */
-export const PlanEntryInputSchema = z.object({
-  entry_date: z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'entry_date 必须为 YYYY-MM-DD'),
-  exercise_id: z.string().min(12).max(24), // NanoID（对齐 ExerciseSchema.id）
-  target_sets: z.number().int().positive(),
-  target_load: TargetLoadSchema,
-  status: PlanEntryStatusSchema, // 缺省 planned
-  sort_order: z.number().int().min(0).default(0),
-});
+export const PlanEntryInputSchema = z
+  .object({
+    entry_date: z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'entry_date 必须为 YYYY-MM-DD'),
+    exercise_id: z.string().min(12).max(24), // NanoID（对齐 ExerciseSchema.id）
+    target_sets: z.number().int().positive(),
+    target_load: TargetLoadSchema,
+    status: PlanEntryStatusSchema, // 缺省 planned
+    sort_order: z.number().int().min(0).default(0),
+    ...planEntryStructuredInputFields,
+  })
+  .superRefine(refinePlanEntryStructuredFields);
 
 export type PlanEntryInput = z.infer<typeof PlanEntryInputSchema>;
 
@@ -272,6 +388,11 @@ export type TodayScheduleStatus = z.infer<typeof TodayScheduleStatusSchema>;
  * 字段语义与 PlanEntrySchema 对齐，差异点：
  *  - 条目主键以 entry_id 暴露（与 exercise_id 区分，前端按它寻址条目状态）
  *  - exercise_name 来自 join（exercises.name NOT NULL，INNER JOIN 安全）
+ *  - [T9 #66] 结构化字段 category 已过回落推导（旧数据 NULL → 'main'），
+ *    day_focus / rationale / sets 随行透出（详情页三段分组与逐组处方的
+ *    读取面；旧计划 sets=null，前端回落 target_sets × target_load 展示）。
+ *    本批（契约批）四个新字段在**类型层可选**（后端出库恒携带——repo 映射
+ *    必填生成；可选仅为存量前端 fixture 零改动），详情页 UI 批落地时收紧。
  */
 export const TodayScheduleEntrySchema = z.object({
   entry_id: z.string().uuid(),
@@ -281,6 +402,10 @@ export const TodayScheduleEntrySchema = z.object({
   target_load: TargetLoadSchema,
   status: PlanEntryStatusSchema,
   sort_order: z.number().int().min(0),
+  day_focus: z.string().nullable().optional(),
+  rationale: z.string().nullable().optional(),
+  category: PlanEntryCategorySchema.optional(), // 出库即回落推导后值（'main' 兜底）
+  sets: z.array(PlanSetPrescriptionSchema).nullable().optional(),
 });
 
 export type TodayScheduleEntry = z.infer<typeof TodayScheduleEntrySchema>;
@@ -447,6 +572,11 @@ export const WeeklyPlanExerciseSchema = z.object({
   name: z.string().min(1),
   sets: z.array(WeeklyPlanSetSchema).min(1),
   note: z.string().optional(),
+  /**
+   * [T9 #66] 段位（warmup/main/cooldown）——三段式课表的展示分组依据，
+   * 与 apply.entries[].category 同源；可选（存量卡无此字段，展示归 main 组）。
+   */
+  category: PlanEntryCategorySchema.optional(),
 });
 
 export type WeeklyPlanExercise = z.infer<typeof WeeklyPlanExerciseSchema>;
@@ -456,6 +586,11 @@ export const WeeklyPlanDaySchema = z.object({
   entry_date: z.string().regex(PLAN_ENTRY_DATE_PATTERN, 'entry_date 必须为 YYYY-MM-DD'),
   split_label: z.string().optional(), // 分化日短标签（推/拉/腿/上/下…）
   focus: z.string().optional(), // 肌群说明（胸肩三头…）
+  /**
+   * [T9 #66] 当日说明（安排原因/目标/注意要点），与 apply.entries[].rationale
+   * 同源；可选（存量卡无此字段）。
+   */
+  rationale: z.string().optional(),
   rest: z.boolean().default(false),
   exercises: z.array(WeeklyPlanExerciseSchema).default([]),
 });

@@ -28,16 +28,21 @@ import {
   WeeklyPlanApplyInputSchema,
   WeeklyPlanSchema,
   PlanEntrySchema,
+  PlanEntryCategorySchema,
+  PlanSetPrescriptionSchema,
   TodayScheduleEntrySchema,
   WeekIdSchema,
   PlanEntryStatusSchema,
   PLAN_ENTRY_DATE_PATTERN,
   UUIDSchema,
   canTransitionPlanEntryStatus,
+  resolvePlanEntryCategory,
   type CreateWeeklyPlanInput,
   type WeeklyPlanApplyInput,
   type WeeklyPlan,
   type PlanEntry,
+  type PlanEntryCategory,
+  type PlanSetPrescription,
   type PlanEntryStatus,
   type WeeklyPlanWithEntries,
   type TodayScheduleEntry,
@@ -54,7 +59,8 @@ interface WeeklyPlanRow {
   updated_at: Date;
 }
 
-/** plan_entries 原始行（entry_date 经 to_char 取回为 YYYY-MM-DD 文本；numeric → string） */
+/** plan_entries 原始行（entry_date 经 to_char 取回为 YYYY-MM-DD 文本；numeric → string；
+ *  sets 为 jsonb，pg 驱动已预解析为 JS 数组；[T9 #66] 结构化列可空） */
 interface PlanEntryRow {
   id: string;
   weekly_plan_id: string;
@@ -67,6 +73,10 @@ interface PlanEntryRow {
   target_load_max: string;
   status: string;
   sort_order: number;
+  day_focus: string | null;
+  rationale: string | null;
+  category: string | null;
+  sets: PlanSetPrescription[] | null;
   created_at: Date;
   updated_at: Date;
 }
@@ -78,7 +88,9 @@ const ENTRY_SELECT_SQL = `
     to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
     exercise_id, target_sets,
     target_load_type, target_load_min, target_load_max,
-    status, sort_order, created_at, updated_at
+    status, sort_order,
+    day_focus, rationale, category, sets,
+    created_at, updated_at
   FROM plan_entries
 `;
 
@@ -110,6 +122,8 @@ async function insertPlanEntries(
   entries: CreateWeeklyPlanInput["entries"],
 ): Promise<void> {
   if (entries.length === 0) return;
+  // [T9 #66] 结构化字段 day_focus/rationale/category/sets 可选透传；
+  // 未携带（存量提案载荷）落 NULL，读取侧回落。
   const rows = entries.map((e) => ({
     weekly_plan_id: weeklyPlanId,
     user_id: userId,
@@ -121,27 +135,36 @@ async function insertPlanEntries(
     target_load_max: e.target_load.max,
     status: e.status,
     sort_order: e.sort_order,
+    day_focus: e.day_focus ?? null,
+    rationale: e.rationale ?? null,
+    category: e.category ?? null,
+    sets: e.sets ?? null,
   }));
   await tx.query(
     `INSERT INTO plan_entries (
        weekly_plan_id, user_id, entry_date, exercise_id,
        target_sets, target_load_type, target_load_min, target_load_max,
-       status, sort_order
+       status, sort_order, day_focus, rationale, category, sets
      )
      SELECT t.weekly_plan_id::uuid, t.user_id::uuid, t.entry_date::date, t.exercise_id::text,
             t.target_sets::int, t.target_load_type::public.plan_load_type,
             t.target_load_min::numeric, t.target_load_max::numeric,
-            t.status::public.plan_entry_status, t.sort_order::int
+            t.status::public.plan_entry_status, t.sort_order::int,
+            t.day_focus::text, t.rationale::text,
+            t.category::public.plan_entry_category, t.sets::jsonb
      FROM jsonb_to_recordset($entries::jsonb) AS t(
        weekly_plan_id text, user_id text, entry_date text, exercise_id text,
        target_sets int, target_load_type text,
        target_load_min numeric, target_load_max numeric,
-       status text, sort_order int)`,
+       status text, sort_order int,
+       day_focus text, rationale text, category text, sets jsonb)`,
     { entries: JSON.stringify(rows) },
   );
 }
 
-/** plan_entries 行 → 契约形态（三列负荷 → 嵌套 target_load；出库校验，失败即抛） */
+/** plan_entries 行 → 契约形态（三列负荷 → 嵌套 target_load；出库校验，失败即抛）。
+ *  [T9 #66] 结构化列直通（sets 为 pg 预解析的 jsonb 数组，形态由
+ *  PlanEntrySchema 内 PlanSetPrescriptionSchema 强校验——脏数据即抛，不静默）。 */
 function mapEntryRow(row: PlanEntryRow): PlanEntry {
   return validateOrThrow(
     PlanEntrySchema,
@@ -159,6 +182,10 @@ function mapEntryRow(row: PlanEntryRow): PlanEntry {
       },
       status: row.status,
       sort_order: row.sort_order,
+      day_focus: row.day_focus,
+      rationale: row.rationale,
+      category: row.category,
+      sets: row.sets,
       created_at: row.created_at.toISOString(),
       updated_at: row.updated_at.toISOString(),
     },
@@ -166,7 +193,8 @@ function mapEntryRow(row: PlanEntryRow): PlanEntry {
   );
 }
 
-/** 今日课表 join 行（plan_entries × exercises.name；numeric → string） */
+/** 今日课表 join 行（plan_entries × exercises.name；numeric → string；
+ *  [T9 #66] 结构化列随行——sets 为 pg 预解析 jsonb） */
 interface TodayEntryJoinRow {
   entry_id: string;
   exercise_id: string;
@@ -177,9 +205,15 @@ interface TodayEntryJoinRow {
   target_load_max: string;
   status: string;
   sort_order: number;
+  day_focus: string | null;
+  rationale: string | null;
+  category: string | null;
+  sets: PlanSetPrescription[] | null;
 }
 
-/** 今日课表 join 行 → 契约形态（出库校验，失败即抛） */
+/** 今日课表 join 行 → 契约形态（出库校验，失败即抛）。
+ *  [T9 #66] category 出库即回落推导（旧数据 NULL → 'main'，契约单一真源
+ *  resolvePlanEntryCategory），展示层永见三枚举之一。 */
 function mapTodayEntryRow(row: TodayEntryJoinRow): TodayScheduleEntry {
   return validateOrThrow(
     TodayScheduleEntrySchema,
@@ -195,6 +229,14 @@ function mapTodayEntryRow(row: TodayEntryJoinRow): TodayScheduleEntry {
       },
       status: row.status,
       sort_order: row.sort_order,
+      day_focus: row.day_focus,
+      rationale: row.rationale,
+      category: resolvePlanEntryCategory(
+        row.category === null
+          ? null
+          : PlanEntryCategorySchema.parse(row.category),
+      ),
+      sets: row.sets,
     },
     "WeeklyPlanRepository.mapTodayEntryRow",
   );
@@ -497,7 +539,8 @@ export class WeeklyPlanRepository extends BaseRepository {
          COALESCE(NULLIF(e.name_zh, ''), e.name) AS exercise_name,
          pe.target_sets,
          pe.target_load_type, pe.target_load_min, pe.target_load_max,
-         pe.status, pe.sort_order
+         pe.status, pe.sort_order,
+         pe.day_focus, pe.rationale, pe.category, pe.sets
        FROM plan_entries pe
        JOIN exercises e ON e.id = pe.exercise_id
        WHERE pe.user_id = $userId::uuid AND pe.entry_date = $entryDate::date
@@ -628,7 +671,9 @@ export class WeeklyPlanRepository extends BaseRepository {
          to_char(entry_date, 'YYYY-MM-DD') AS entry_date,
          exercise_id, target_sets,
          target_load_type, target_load_min, target_load_max,
-         status, sort_order, created_at, updated_at`,
+         status, sort_order,
+         day_focus, rationale, category, sets,
+         created_at, updated_at`,
       { entryId, userId, status: nextStatus },
     );
 

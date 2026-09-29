@@ -51,6 +51,12 @@ import {
 //   2026-09-29  plan-generation knowledge 5.3.0 (T2/issue #54): §1.4 选动作
 //               工具链 find_exercises（≤3 次收敛）+ id 真源表述同步——SHA 按
 //               磁盘实值重算（42c 教训）
+//   2026-09-30  plan-generation knowledge 5.4.0 (T9/issue #66): §9.3 结构化
+//               四件套模板（day_focus/rationale/category/sets 逐组处方）+
+//               §11.1 粒度判定表自 SKILL.md 迁入——SHA 按磁盘实值重算
+//   2026-09-30  plan-generation knowledge 5.4.1 (T9 剧本回放返工): §9.3 增
+//               「思考不预写出卡内容 / 出卡轮零工具」防膨胀要点（回放实测
+//               卡片随工具轮消息被流层吞进思考）——SHA 按磁盘实值重算
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
@@ -76,7 +82,7 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "e2a6e547a528d9df85f2c9db3ef1d71926434833d56dbbde7b60df8c24cf3a30",
+    "afd9c8b6490b09b85dfd288cdf39b23b4fc3a107c05301ece5abcd474abc03ed",
   "plan-generation/knowledge/injury-adjustment.md":
     "d556d96744b2cea9404dd88a085454729ec6ce4e3060712b662692f8ff269e0a",
   "plan-generation/knowledge/novice-starting.md":
