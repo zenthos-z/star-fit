@@ -7,7 +7,7 @@ import { EXERCISE_TYPES_CONFIG, DEFAULT_BODYWEIGHT, RPE_ZONES } from '@/constant
 import { v4 as uuidv4 } from 'uuid';
 import { Timer, MapPin, Watch, Heart, Flame, Zap, Trophy, Gauge, Navigation } from 'lucide-react';
 import ExercisePickerModal from './picker/ExercisePickerModal';
-import { pickerItemToLibrarySelect, createLibraryId } from './picker/pickerAdapter';
+import { pickerItemToLibrarySelect, createLibraryId, resolveLegacyActionType } from './picker/pickerAdapter';
 import type { PickerSelectionItem } from './picker/pickerData';
 import { SuggestionService, type ResolvedSuggestion, type SuggestionSource } from '../services/suggestionService';
 import { guessCardioSubtype } from '@/utils/exerciseLogic';
@@ -271,16 +271,9 @@ const ExerciseSettingsModal: React.FC<ExerciseSettingsModalProps> = ({
 
   // Convert ExerciseAction type to ExerciseType (now unified lowercase, no conversion needed)
   const normalizeType = (actionType: string): ExerciseType => {
-    // Since protocol now uses lowercase matching ExerciseType, validate directly
-    const validTypes: ExerciseType[] = ['resistance', 'cardio', 'bodyweight', 'isometric', 'assisted', 'unilateral', 'weight_only', 'reps_only', 'outdoor'];
-    if (validTypes.includes(actionType as ExerciseType)) {
-      return actionType as ExerciseType;
-    }
-    // Fallback to originalType from metadata if available
-    if (exercise.metadata?.originalType && validTypes.includes(exercise.metadata.originalType as ExerciseType)) {
-      return exercise.metadata.originalType as ExerciseType;
-    }
-    return 'resistance'; // Ultimate fallback
+    // issue #58：词表与兜底链抽到 pickerAdapter.resolveLegacyActionType（真源），
+    // 本组件与单测/清单预填共用同一实现，两读点 type 入参不再分叉
+    return resolveLegacyActionType(actionType, exercise.metadata?.originalType) as ExerciseType;
   };
 
   // Original values tracking (for deviation detection)
