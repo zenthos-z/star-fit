@@ -10,6 +10,7 @@ import { MuscleMapSection } from './MuscleMapSection';
 import { setTabBarHidden } from '../../lib/nativeTabBar';
 import { transitions } from '../../lib/animations';
 import { haptic } from '../../lib/nativeHaptics';
+import { preconnectAssetOrigin } from '../../lib/assetPreconnect';
 import {
   pickTutorialContent,
   stripDecorativeEmoji,
@@ -276,6 +277,16 @@ export const ExerciseTutorialModal: React.FC<ExerciseTutorialModalProps> = ({
     loadTutorial();
     return () => { mounted = false; };
   }, [exercise.exerciseId, (exercise as any).name, exercise.type]);
+
+  // 资产源预热（T6）：教程数据到达即对封面/视频源提前建连（DNS+TCP+TLS），
+  // 与正文阅读时间重叠摊平冷握手（实测 0.6–2.7s/次）；点「观看演示」时
+  // 视频首字节等待显著缩短。幂等：同一源只预热一次。
+  useEffect(() => {
+    if (!exerciseData) return;
+    if (coverUrl) preconnectAssetOrigin(coverUrl);
+    getVideos().forEach(v => preconnectAssetOrigin(getFullUrl(v.url)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- 派生值随 exerciseData 变化
+  }, [exerciseData]);
 
   const handleGenerateAiTutorial = () => {
     const exerciseName = getExerciseName();

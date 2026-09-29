@@ -18,6 +18,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { API_BASE } from '../../services/geminiService';
 import { VideoSource } from '../../types/video';
 import { haptic } from '../../lib/nativeHaptics';
+import { preconnectAssetOrigin } from '../../lib/assetPreconnect';
 
 interface VideoPlayerModalProps {
   isOpen: boolean;
@@ -43,6 +44,9 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 }) => {
   const [index, setIndex] = useState(0);
   const [playing, setPlaying] = useState(false);
+  // 缓冲态（T6）：慢链路（实测资产源 ~125KB/s）下播放必遇 waiting/stalled，
+  // 无反馈的冻结帧正是「加载慢」的体感来源——给出转圈 + 「缓冲中」提示
+  const [buffering, setBuffering] = useState(false);
   const [uiVisible, setUiVisible] = useState(true);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
@@ -59,6 +63,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       document.body.style.overflow = 'hidden';
       setIndex(0);
       setPlaying(false);
+      setBuffering(false);
       setCurrentTime(0);
       setDuration(0);
       setUiVisible(true);
@@ -69,6 +74,16 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
       document.body.style.overflow = '';
     };
   }, [isOpen]);
+
+  // 资产源预热（T6）：打开即建连（DNS+TCP+TLS），点播放时省掉冷握手
+  // （实测 0.6–2.7s/次）；幂等，同一源只预热一次，与教程页预热互相去重。
+  useEffect(() => {
+    if (!isOpen) return;
+    videos.forEach(v => {
+      preconnectAssetOrigin(getFullUrl(v.url));
+      if (v.poster) preconnectAssetOrigin(getFullUrl(v.poster));
+    });
+  }, [isOpen, videos]);
 
   // Esc 关闭 / 全屏态同步
   useEffect(() => {
@@ -139,6 +154,7 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     setIndex(i);
     setCurrentTime(0);
     setDuration(0);
+    setBuffering(false);
     setUiVisible(true);
   };
 
@@ -189,7 +205,24 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
           onTimeUpdate={e => setCurrentTime(e.currentTarget.currentTime)}
           onDurationChange={e => setDuration(e.currentTarget.duration)}
           onLoadedMetadata={e => setDuration(e.currentTarget.duration)}
+          /* 缓冲反馈（T6）：waiting=播着播着下一帧没就绪；stalled=网络供不上。
+             起播即缓冲时中央钮已被 playing 态隐藏，必须靠这层转圈兜住反馈。 */
+          onWaiting={() => setBuffering(true)}
+          onStalled={() => setBuffering(playing)}
+          onPlaying={() => setBuffering(false)}
+          onCanPlay={() => setBuffering(false)}
         />
+
+        {/* 中央缓冲转圈（T6）：慢链路下等待数据时的显式反馈；不挡点击，
+            用户仍可点画面暂停 */}
+        {buffering && (
+          <div className="absolute z-10 flex flex-col items-center gap-2 pointer-events-none">
+            <div className="w-14 h-14 rounded-full bg-black/55 backdrop-blur border border-white/20 flex items-center justify-center">
+              <div className="w-7 h-7 border-[3px] border-white/30 border-t-white rounded-full animate-spin" />
+            </div>
+            <span className="text-xs font-medium text-white/80 drop-shadow">缓冲中…</span>
+          </div>
+        )}
 
         {/* 中央大播放钮 */}
         {!playing && (
