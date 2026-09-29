@@ -29,6 +29,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { motion, AnimatePresence, Reorder, useDragControls, useMotionValue, animate } from 'framer-motion';
 import { Search } from 'lucide-react';
 import { haptic } from '../../lib/nativeHaptics';
+import { setTabBarHidden } from '../../lib/nativeTabBar';
 import { ExerciseService } from '../../services/api/ExerciseServiceV2';
 import type { SmartSortResponse } from 'shared/contracts';
 import {
@@ -468,6 +469,14 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
       .filter((ex): ex is PickerExercise => !!ex)
       .map(ex => ({ exercise: ex, sets: [], targetRpe: 7 }));
   });
+
+  // iOS sheet 规范：动作库全屏呈现时盖住原生 tab bar，关闭恢复（引用计数）。
+  // #57 回归修复：A10 把库从 ExerciseSettingsModal（自带隐藏）内嵌改为本组件
+  // 直连挂载后，隐藏逻辑未随迁 → tab bar 复现，遮挡底部购物车悬浮条。
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
 
   /** 智能排序（A31 后端真源，issue #31）：近期训练过的动作按分区去重后置顶。
    *  加载失败（离线等）静默回落 mock 预置序——排序属呈现增强，不阻断选动作。 */
