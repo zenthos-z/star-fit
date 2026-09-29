@@ -73,8 +73,9 @@ const REVIEW_DOC_PATH = resolve(
 );
 
 /** 内容翻译并发与批大小（bigmodel RPM 限流实测：单条并发 8 持续 429、并发 3 吞吐
- *  ~1.7 条/分；批处理把请求数降为 1/批大小后 3 并发稳定，429 由退避兜底） */
-const CONTENT_CONCURRENCY = 3;
+ *  ~1.7 条/分；批处理把请求数降为 1/批大小后 3 并发稳定，429 由退避兜底。
+ *  2026-09-29 CodingPlan 路由实测零 429，并发提到 6 提吞吐——429 仍由退避兜底） */
+const CONTENT_CONCURRENCY = 6;
 const CONTENT_BATCH_SIZE = 5;
 
 const args = process.argv.slice(2);
@@ -182,7 +183,11 @@ async function main(): Promise<void> {
       fail((error as Error).message);
     }
     console.log(
-      `✓ LLM 通道：${channel.baseUrl}（模型 ${channel.model}，Anthropic Messages 兼容）`,
+      `✓ LLM 通道：${channel.baseUrl}（模型 ${channel.model}，${
+        channel.protocol === "openai"
+          ? "OpenAI Chat Completions 协议"
+          : "Anthropic Messages 兼容协议"
+      }）`,
     );
 
     // ---- 4. 名称翻译：定名层精确命中优先，未命中 LLM 批量兜底 ----
