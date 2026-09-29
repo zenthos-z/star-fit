@@ -9,11 +9,18 @@ if (!rootElement) {
 }
 
 const root = ReactDOM.createRoot(rootElement);
-root.render(
-  <React.StrictMode>
-    <App />
-  </React.StrictMode>
-);
+
+// T1 调试入口（issue #53）：?debug=1 + DEV 构建 → 数据直灌调试台替换 App 渲染。
+// 动态 import 使生产构建（DEV=false）整条分支成死代码，src/debug 不进产物。
+if (import.meta.env.DEV && new URLSearchParams(window.location.search).has('debug')) {
+  void import('./debug').then(m => m.mountDebugApp(root));
+} else {
+  root.render(
+    <React.StrictMode>
+      <App />
+    </React.StrictMode>
+  );
+}
 
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
