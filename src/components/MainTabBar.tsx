@@ -85,7 +85,8 @@ const MainTabBar: React.FC<MainTabBarProps> = ({ tab, onSelect, hidden }) => {
   // ★z-[105]（2026-09-17 安卓 web 实锤修复）：History/Settings 全屏路由是 z-[100]，
   // 原 z-40 的 tab bar 被整页盖住 → 安卓 web 看不到底部菜单、无法切 tab。
   // 105 > 100（tab 页之上可见）且 < 110/140（AI sheet、锁定屏之下被盖，符合 sheet 盖 tab 规范）。
-  // hidden 语义与 iOS 原生对齐：结算页/AI 浮层打开时隐藏（App.tsx 传入）。
+  // hidden 语义与 iOS 原生对齐：结算页/AI 浮层/教程/动作库 picker 打开时隐藏
+  // （App.tsx 传入；#57 回归修复补入动作库）。
   if (hidden) return null;
   return createPortal(
     <nav

@@ -1463,10 +1463,13 @@ const App: React.FC = () => {
 
           {/* 空状态「导入计划」旧悬浮钮已删：功能吸收进 TimerCapsule 分裂菜单（B3 起为「开始今日训练」） */}
 
+          {/* #57：动作库（picker 全屏）不开 tab bar——iOS 原生侧由
+              ExercisePickerModal 内 setTabBarHidden 承担，此处管 CSS 回落端
+              （z-105 tab bar 会盖住 z-70 picker 与购物车悬浮条） */}
           <MainTabBar
               tab={mainTab}
               onSelect={handleTabSelect}
-              hidden={(currentRoute as AppRoute) === AppRoute.SETTLEMENT || isAiOverlayOpen || Boolean(tutorialExerciseId)}
+              hidden={(currentRoute as AppRoute) === AppRoute.SETTLEMENT || isAiOverlayOpen || Boolean(tutorialExerciseId) || Boolean(pickerEntry)}
           />
         </div>
       </motion.div>
