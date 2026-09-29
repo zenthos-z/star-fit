@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   readonly VITE_WS_URL?: string;
   readonly VITE_BUILD_TS?: string;
   readonly VITE_PKG_VERSION?: string;
+  /** Vite 注入的构建模式标志（dev=true / build=false）；T1 调试入口门控用 */
+  readonly DEV: boolean;
 }
 
 interface ImportMeta {
