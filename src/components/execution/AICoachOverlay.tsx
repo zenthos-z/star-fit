@@ -25,6 +25,8 @@ import {
 } from '../../lib/speechInput';
 import { BubbleGallery, GALLERY_MESSAGES } from './BubbleGallery';
 import { useBackendHealth } from '../../services/connectivity';
+import { ThinkingBlock } from './ThinkingBlock';
+import { updateScrollFollow } from '../../hooks/chatScrollFollow';
 
 interface MessageProgressIndicatorProps {
   items: ProgressItem[];
@@ -275,6 +277,10 @@ interface AICoachOverlayProps {
   onWeeklyPlanApply?: (msgIndex: number, apply: unknown) => void;
   chatEndRef: React.RefObject<HTMLDivElement>;
   textareaRef: React.RefObject<HTMLTextAreaElement>;
+  /** [issue #55-2] 滚动跟随/让位状态（useAICoach 持有，scrollToBottom 守卫读取）：
+   *  本组件在聊天容器上监听 scroll 并写入；用户上滑离开底部 → true（暂停自动贴底），
+   *  回到底部 → false（恢复跟随）。 */
+  isUserScrollingRef: React.RefObject<boolean>;
   attachedContext?: any;
   setAttachedContext?: (ctx: any) => void;
   onRemoveAttachment?: () => void;
@@ -314,6 +320,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   handleConfirmPlan,
   chatEndRef,
   textareaRef,
+  isUserScrollingRef,
   attachedContext,
   setAttachedContext,
   onRemoveAttachment,
@@ -524,6 +531,19 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
     const container = (el.closest('[data-chat-scroll-container]') as HTMLElement | null) ?? el.parentElement;
     if (container) container.scrollTop = container.scrollHeight; // 同步直赋，必达
   }, [isOpen, kbHeight, chatEndRef]);
+
+  // [issue #55-2] 滚动跟随/让位（ChatGPT 式）：聊天容器 scroll 时刷新跟随状态。
+  // 用户上滑离开底部 → isUserScrollingRef=true → 流式期间 useAICoach 的
+  // scrollToBottom 守卫生效（不再抢占手势）；用户回到底部 → false → 恢复跟随。
+  // 程序化贴底触发的 scroll 事件距离≈0，天然写回 false，不会误判为用户让位。
+  const chatScrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el || !isUserScrollingRef) return;
+    const onScroll = () => updateScrollFollow(el, isUserScrollingRef);
+    el.addEventListener('scroll', onScroll, { passive: true });
+    return () => el.removeEventListener('scroll', onScroll);
+  }, [isUserScrollingRef]);
 
   // 同步 chatHistory 到 chatHistoryWithProgress，保留已有的 progressItems
   useEffect(() => {
@@ -747,6 +767,7 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
           与输入栏（规则①）同时长同曲线，保证最新消息始终贴在输入栏上方可见 */}
       <div
         data-chat-scroll-container
+        ref={chatScrollRef}
         style={{
           transition: 'transform 250ms ease-out',
           transform: kbHeight > 0 ? `translateY(-${kbHeight}px)` : 'translateY(0)'
@@ -1260,62 +1281,8 @@ const MessageMarkdown = React.memo(function MessageMarkdown({ text }: { text: st
   );
 });
 
-// [B5b 返工·白屏修复] memo 化：text 来自 streamProgress 尾部窗口（≤4000 字符），
-// 相同 props 直接跳过重渲染，避免聊天列表其它消息的 setState 连带重解析。
-const ThinkingBlock: React.FC<{ text?: string; streaming?: boolean }> = React.memo(function ThinkingBlock({ text, streaming }) {
-  const [manuallyToggled, setManuallyToggled] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  const bodyRef = useRef<HTMLDivElement>(null);
-
-  // 思考窗口限高 4 行（用户拍板 2026-09-18）：流式时固定在小窗内滚动、始终展示最新 4 行，
-  // 不随思考增长撑满屏幕；手动展开后不自动滚（尊重用户阅读位置）。
-  useEffect(() => {
-    if (streaming && !manuallyToggled && bodyRef.current) {
-      bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    }
-  }, [text, streaming, manuallyToggled]);
-
-  if (!text) return null;
-
-  // 流式中默认展开；结束后默认收起；用户手动操作后以用户为准
-  const isOpen = manuallyToggled ? expanded : streaming;
-
-  return (
-    <div className="mb-3 w-full max-w-[92%]">
-      <button
-        onClick={() => { setManuallyToggled(true); setExpanded(!isOpen); }}
-        className="flex items-center gap-2 px-3 py-1.5 bg-gray-50/80 backdrop-blur-sm border border-gray-100 rounded-lg hover:bg-gray-100/80 transition-colors active:scale-[0.98]"
-      >
-        {streaming ? (
-          <div className="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse shadow-[0_0_8px_rgba(59,130,246,0.5)]" />
-        ) : (
-          <svg className="w-3 h-3 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
-          </svg>
-        )}
-        <span className="text-[10px] font-bold text-gray-400 tracking-wide">
-          {streaming ? '思考中…' : '已深度思考（点击展开）'}
-        </span>
-        <svg
-          className={`w-3 h-3 text-gray-300 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`}
-          fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-        </svg>
-      </button>
-      <motion.div
-        initial={false}
-        animate={{ height: isOpen ? 'auto' : 0, opacity: isOpen ? 1 : 0 }}
-        transition={{ duration: 0.2, ease: 'easeOut' }}
-        className="overflow-hidden"
-      >
-        <div ref={bodyRef} className="mt-2 px-4 py-3 bg-gray-50/50 border-l-2 border-gray-200 rounded-r-lg text-xs leading-relaxed text-gray-500 whitespace-pre-wrap max-h-[7.5rem] overflow-y-auto">
-          {text}
-        </div>
-      </motion.div>
-    </div>
-  );
-});
+// [issue #55] ThinkingBlock 抽出为独立组件（含溢出兜底/滚动让位/横向锁死三修），
+// 便于组件级测试与复用；行为与原内联实现兼容，见 ./ThinkingBlock.tsx 顶部注释。
 
 const WelcomeScreen: React.FC<{ onLogoTap?: () => void; onLogoTapEnd?: () => void }> = ({ onLogoTap, onLogoTapEnd }) => (
   // min-h-full 而非 flex-1：父容器是 absolute inset-0 的滚动容器，

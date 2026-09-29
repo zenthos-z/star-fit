@@ -19,6 +19,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Send, X, Sparkles, Paperclip } from 'lucide-react';
 import { adminAgentChat } from '../../services/adminAgentClient';
+import { clampThinkingWindow } from '../../../../hooks/streamProgress';
 import {
   useAgentContextAttachments,
   agentContextStore,
@@ -279,7 +280,11 @@ export const UserAgentChat: React.FC<UserAgentChatProps> = ({ targetUserId, targ
                   {m.role === 'ai' && m.thinkingText && (
                     <details className="mt-1">
                       <summary className="text-[10px] text-gray-400 cursor-pointer select-none">Agent 自审过程</summary>
-                      <p className="text-[10px] text-gray-400 whitespace-pre-wrap break-words [overflow-wrap:anywhere] mt-1">{m.thinkingText}</p>
+                      {/* [issue #55-1] admin 路径为直累加（不经 streamProgress 尾窗），
+                          渲染层夹紧到尾部窗口 + 容器限高，防超长自审撑爆面板 */}
+                      <p className="text-[10px] text-gray-400 whitespace-pre-wrap break-words [overflow-wrap:anywhere] mt-1 max-h-40 overflow-y-auto overflow-x-hidden">
+                        {clampThinkingWindow(m.thinkingText)}
+                      </p>
                     </details>
                   )}
                 </div>
