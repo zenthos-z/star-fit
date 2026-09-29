@@ -48,6 +48,9 @@ import {
 //               refreshed in 42c (42b had left it red); 2026-09-29 42c split:
 //               knowledge.md slimmed + knowledge/{novice-starting,
 //               volume-progression,injury-adjustment}.md added
+//   2026-09-29  plan-generation knowledge 5.3.0 (T2/issue #54): §1.4 选动作
+//               工具链 find_exercises（≤3 次收敛）+ id 真源表述同步——SHA 按
+//               磁盘实值重算（42c 教训）
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
@@ -73,7 +76,7 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "3bdb8fedc237b6bb2cd879c7d4be16c66e0cbecb0f02000058f1dc12d9b84045",
+    "e2a6e547a528d9df85f2c9db3ef1d71926434833d56dbbde7b60df8c24cf3a30",
   "plan-generation/knowledge/injury-adjustment.md":
     "d556d96744b2cea9404dd88a085454729ec6ce4e3060712b662692f8ff269e0a",
   "plan-generation/knowledge/novice-starting.md":

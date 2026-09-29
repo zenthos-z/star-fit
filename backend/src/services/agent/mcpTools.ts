@@ -9,7 +9,7 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (10)
+ * ## Tool set (11)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the exercise library, FILTERED + PAGINATED (42b,
  *                                 issue #42): optional body_part / equipment /
@@ -21,6 +21,15 @@
  *                                 translate names in-model). `description`
  *                                 carries pattern/targets/equipment/impact so the agent can
  *                                 respect the user equipment + injuries in-context.
+ * - `find_exercises`      (read)  COMBINED-criteria search + RANKED short list
+ *                                 (T2, issue #54): muscle_groups[] (primary/
+ *                                 secondary) + optional movement_pattern (server-
+ *                                 derived from category+name) / equipment[] /
+ *                                 difficulty / exclude_ids[] / limit (default 10).
+ *                                 Rows ranked by target-muscle match; total=0
+ *                                 returns a relax_hint naming the single
+ *                                 dimension to drop. No offset — plan flows
+ *                                 converge in ≤3 calls instead of paging.
  * - `get_exercise_detail` (read)  full record of one exercise (deepened
  *                                 teaching columns, tutorials, content)
  * - `write_session`       (write) append a completed session to history_summary
@@ -108,6 +117,9 @@ import {
   WEEK_ID_PATTERN,
   PLAN_ENTRY_DATE_PATTERN,
   getIsoWeekId,
+  // T2 (issue #54): find_exercises 参数词表直接复用数据契约真源（17 肌群 / 15 器材）
+  ExerciseMuscleSchema,
+  ExerciseEquipmentSchema,
 } from "shared/contracts";
 import { utcToday } from "../schedule/scheduleService.js";
 // [B6 issue#39] 写路径心跳：画像/计划/训练完成 → 静默登记建议缓存空闲重算
@@ -377,6 +389,87 @@ export class UserScopedWriteRepository extends BaseRepository {
   }
 }
 
+// ---------------------------------------------------------------------------
+// movement_pattern 派生（T2 / issue #54）
+// ---------------------------------------------------------------------------
+
+/**
+ * 动作模式词表（find_exercises 的 movement_pattern 参数；随库派生）。
+ * push/pull/squat/hinge/carry/core 为力量计划推拉蹲铰链行走核心六模式，
+ * cardio/stretch 为有氧与拉伸两个非力量桶，NULL = 未归类（孤立配件动作）。
+ */
+export const MOVEMENT_PATTERN_VALUES = [
+  "push",
+  "pull",
+  "squat",
+  "hinge",
+  "carry",
+  "core",
+  "cardio",
+  "stretch",
+] as const;
+
+export type MovementPattern = (typeof MOVEMENT_PATTERN_VALUES)[number];
+
+/**
+ * movement_pattern 派生 SQL 片段（查询期派生，一次性口径——真源即本片段）。
+ *
+ * exercises 表没有动作模式列（HC-2 不加列、不回填）：模式由现有列
+ * category + name/name_zh + force_type 在查询期派生，A3 再导入的新动作
+ * 自动随库生效，无迁移漂移风险。2026-09-29 全库 369 行实测标定
+ * （push 84 / pull 78 / core 59 / stretch 55 / NULL 33 / squat 24 /
+ * hinge 22 / cardio 11 / carry 3）。
+ *
+ * 派生规则（首个命中生效；匹配文本 = lower(name || ' ' || name_zh)）：
+ *   1. category='cardio'     → cardio
+ *   2. category='stretching' → stretch
+ *   3. carry  ：walk / carry / 农夫 / 行走
+ *   4. core   ：crunch / sit-up / plank / leg raise / twist / rotation /
+ *              rollout / v-up / jackknife / side bend / standing lift /
+ *              卷腹 / 仰卧起坐 / 平板支撑 / 举腿 / 虫 / 转体 / 扭转 / 侧弯
+ *              （用 standing lift 而非裸 lift——裸 lift 误吞 dead**lift**；
+ *              用平板支撑而非平板——平板杠铃卧推=平凳卧推）
+ *   5. squat  ：squat / lunge / step-up / leg press / wall sit / pistol /
+ *              sissy / 蹲 / 弓步（leg press 先于 push 分支拦截）
+ *   6. hinge  ：deadlift / bridge / hyperextension / back·hip extension /
+ *              pull-through / swing / good morning / hip thrust / rear kick /
+ *              硬拉 / 臀桥 / 桥 / 髋伸展
+ *   7. push   ：push / press / fly / dip / slam / throw / front·lateral raise /
+ *              triceps extension / pushdown / kickback / 推 / 飞鸟 / 臂屈伸 / 下压
+ *   8. pull   ：pull-up / chin-up / pulldown / row / curl / shrug / rear delt /
+ *              inverted / t-bar / 引体 / 下拉 / 划船 / 弯举 / 耸肩 / 后束
+ *              （中文词表禁裸「拉」——阿特拉斯石球等音译误吞）
+ *   9. force_type 兜底（push/pull；static→core；全库仅 36/369 行有值）
+ *  10. 其余 → NULL（孤立配件：提踵/髋外展内收/腿屈伸/壶铃花式等；
+ *      计划编排用 muscle_groups 维度覆盖，不强行归类）
+ */
+export const MOVEMENT_PATTERN_SQL = `CASE
+      WHEN category::text = 'cardio' THEN 'cardio'
+      WHEN category::text = 'stretching' THEN 'stretch'
+      WHEN lower(name || ' ' || coalesce(name_zh, '')) ~ '(walk|carry|农夫|行走)' THEN 'carry'
+      WHEN lower(name || ' ' || coalesce(name_zh, '')) ~ '(crunch|sit.?up|plank|leg raise|hip raise|hip lift|rollout|ab roller|hollow|dead.?bug|v.?up|jackknife|twist|rotation|otis|hundred|corkscrew|scissor|standing lift|bicycle|superman|side bend|卷腹|仰卧起坐|平板支撑|举腿|虫|转体|扭转|侧弯)' THEN 'core'
+      WHEN lower(name || ' ' || coalesce(name_zh, '')) ~ '(squat|lunge|step.?up|leg press|wall sit|pistol|sissy|蹲|弓步)' THEN 'squat'
+      WHEN lower(name || ' ' || coalesce(name_zh, '')) ~ '(deadlift|good morning|hip thrust|bridge|hyperextension|back extension|hip extension|pull.?through|swing|romanian|rear kick|硬拉|臀桥|桥|髋伸展)' THEN 'hinge'
+      WHEN lower(name || ' ' || coalesce(name_zh, '')) ~ '(push|press|fly|dip|slam|throw|front raise|lateral raise|triceps extension|pushdown|kickback|推|飞鸟|臂屈伸|下压)' THEN 'push'
+      WHEN lower(name || ' ' || coalesce(name_zh, '')) ~ '(pull.?up|chin.?up|pulldown|row|curl|shrug|face.?pull|rear delt|rear lateral|inverted|t.?bar|引体|下拉|划船|弯举|耸肩|后束)' THEN 'pull'
+      WHEN force_type::text = 'push' THEN 'push'
+      WHEN force_type::text = 'pull' THEN 'pull'
+      WHEN force_type::text = 'static' THEN 'core'
+      ELSE NULL END`;
+
+/**
+ * One ranked exercise row for find_exercises (superset of ExerciseListRow).
+ */
+export interface RankedExerciseRow extends ExerciseListRow {
+  secondary_muscles: string[] | null;
+  /** 服务端派生的动作模式（NULL = 未归类配件）。 */
+  movement_pattern: string | null;
+  /** 精排得分：主肌群命中×3 + 协同肌群命中×1。 */
+  score: number;
+  /** 主肌群命中数（排序主键；>0 即 matched=primary）。 */
+  primary_matches: number;
+}
+
 /**
  * Read-only accessor for the `exercises` table (HC-2: thin read-only wrapper;
  * no `ExerciseRepository` exists yet). SELECT only — no writes.
@@ -425,6 +518,102 @@ export class ExerciseQuery extends BaseRepository {
       params,
     );
     return { rows, total: Number(countRow?.total ?? 0) };
+  }
+
+  /**
+   * COMBINED-criteria search + RANKED short list (T2, issue #54). All filters
+   * AND-combined; rows scored by target-muscle match (primary hits ×3 +
+   * secondary hits ×1) so the agent gets a ready-to-use short list instead of
+   * paging the whole library. `movement_pattern` filters on the query-time
+   * derivation in MOVEMENT_PATTERN_SQL (no schema column — HC-2).
+   */
+  async findRanked(filters: {
+    muscle_groups: string[];
+    movement_pattern?: string;
+    equipment?: string[];
+    difficulty?: string;
+    exclude_ids?: string[];
+    limit: number;
+  }): Promise<{ rows: RankedExerciseRow[]; total: number }> {
+    const { where, params } = buildFindConditions(filters);
+    params.limit = filters.limit;
+    const scoreExpr = `
+        (SELECT count(*) FROM unnest(primary_muscles) AS m
+          WHERE m = ANY($muscleGroups::text[])) * 3
+        + (SELECT count(*) FROM unnest(secondary_muscles) AS m
+          WHERE m = ANY($muscleGroups::text[]))`;
+    const rows = await this.queryMany<RankedExerciseRow>(
+      `SELECT id, name, name_zh, exercise_type, difficulty, mechanic, equipment,
+              category, body_part, primary_muscles, secondary_muscles,
+              ${MOVEMENT_PATTERN_SQL} AS movement_pattern,
+              (SELECT count(*) FROM unnest(primary_muscles) AS m
+                WHERE m = ANY($muscleGroups::text[])) AS primary_matches,
+              ${scoreExpr} AS score
+         FROM exercises
+         ${where}
+         ORDER BY score DESC, name
+         LIMIT $limit`,
+      params,
+    );
+    const countRow = await this.queryOne<{ total: string | number }>(
+      `SELECT count(*) AS total FROM exercises ${where}`,
+      params,
+    );
+    return { rows, total: Number(countRow?.total ?? 0) };
+  }
+
+  /**
+   * Empty-result guidance (T2, issue #54): re-count with EACH optional
+   * dimension dropped one at a time, so the agent knows exactly which single
+   * relaxation yields hits (instead of guessing across more paging calls).
+   * Keys are present only for the dimensions that were actually applied.
+   */
+  async relaxCounts(filters: {
+    muscle_groups: string[];
+    movement_pattern?: string;
+    equipment?: string[];
+    difficulty?: string;
+    exclude_ids?: string[];
+  }): Promise<{
+    drop_movement_pattern?: number;
+    drop_difficulty?: number;
+    drop_equipment?: number;
+    drop_muscle_groups?: number;
+  }> {
+    const hint: Awaited<ReturnType<ExerciseQuery["relaxCounts"]>> = {};
+    const variants: Array<{
+      key:
+        | "drop_movement_pattern"
+        | "drop_difficulty"
+        | "drop_equipment"
+        | "drop_muscle_groups";
+      patch: Partial<typeof filters>;
+    }> = [];
+    if (filters.movement_pattern) {
+      variants.push({
+        key: "drop_movement_pattern",
+        patch: { movement_pattern: undefined },
+      });
+    }
+    if (filters.difficulty) {
+      variants.push({
+        key: "drop_difficulty",
+        patch: { difficulty: undefined },
+      });
+    }
+    if (filters.equipment) {
+      variants.push({ key: "drop_equipment", patch: { equipment: undefined } });
+    }
+    variants.push({ key: "drop_muscle_groups", patch: { muscle_groups: [] } });
+    for (const { key, patch } of variants) {
+      const { where, params } = buildFindConditions({ ...filters, ...patch });
+      const row = await this.queryOne<{ total: string | number }>(
+        `SELECT count(*) AS total FROM exercises ${where}`,
+        params,
+      );
+      hint[key] = Number(row?.total ?? 0);
+    }
+    return hint;
   }
 
   /** Full record for one exercise by id (tutorials, content_html, deepened teaching columns). */
@@ -482,6 +671,61 @@ export class ExerciseQuery extends BaseRepository {
       },
     );
   }
+}
+
+// ---------------------------------------------------------------------------
+// find_exercises filter composition (T2 / issue #54)
+// ---------------------------------------------------------------------------
+
+/** Shared filter shape for findRanked / relaxCounts (limit handled by caller). */
+interface FindFilters {
+  muscle_groups: string[];
+  movement_pattern?: string;
+  equipment?: string[];
+  difficulty?: string;
+  exclude_ids?: string[];
+}
+
+/**
+ AND-compose the find_exercises conditions. All dimensions are optional except
+ the muscle groups; `drop_muscle_groups` relax-passes an empty array, so the
+ muscle condition is the only conditional-required one.
+ */
+function buildFindConditions(f: FindFilters): {
+  where: string;
+  params: Record<string, unknown>;
+} {
+  const conditions: string[] = [];
+  const params: Record<string, unknown> = { muscleGroups: f.muscle_groups };
+  if (f.muscle_groups.length > 0) {
+    // 主/协同肌群任一命中（&& 数组重叠，两列均有 GIN 索引）。
+    conditions.push(
+      "(primary_muscles && $muscleGroups::text[] OR secondary_muscles && $muscleGroups::text[])",
+    );
+  }
+  if (f.movement_pattern) {
+    conditions.push(`(${MOVEMENT_PATTERN_SQL}) = $movementPattern`);
+    params.movementPattern = f.movement_pattern;
+  }
+  if (f.equipment && f.equipment.length > 0) {
+    // equipment IS NULL = 002 口径的「未知器材」，展示层一律视同 bodyweight
+    // （describeExercise 同口径）——用户可用器械含 bodyweight 时一并计入。
+    conditions.push(
+      "(equipment::text = ANY($equipments::text[]) OR (equipment IS NULL AND 'bodyweight' = ANY($equipments::text[])))",
+    );
+    params.equipments = f.equipment;
+  }
+  if (f.difficulty) {
+    conditions.push("difficulty::text = $difficulty");
+    params.difficulty = f.difficulty;
+  }
+  if (f.exclude_ids && f.exclude_ids.length > 0) {
+    conditions.push("id::text != ALL($excludeIds::text[])");
+    params.excludeIds = f.exclude_ids;
+  }
+  const where =
+    conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+  return { where, params };
 }
 
 // ---------------------------------------------------------------------------
@@ -562,7 +806,70 @@ const listExercisesSchema = z
       "`name_zh` is the official Chinese display name (user-facing output MUST use it; never " +
       "translate names yourself); `description` carries pattern / targets / equipment / " +
       "joint-impact so you can respect the user equipment and active injuries. Never invent " +
-      "an exercise that is not in a returned page.",
+      "an exercise that is not in a returned page. " +
+      "For plan/选动作 flows prefer find_exercises (combined criteria, ranked short list).",
+  );
+
+const findExercisesSchema = z
+  .object({
+    muscle_groups: z
+      .array(ExerciseMuscleSchema)
+      .min(1)
+      .max(6)
+      .describe(
+        "Target muscles (1-6, 17-muscle controlled vocab). Primary-OR-secondary match; " +
+          "rows whose PRIMARY muscles hit rank first (score = primary×3 + secondary×1).",
+      ),
+    movement_pattern: z
+      .enum(MOVEMENT_PATTERN_VALUES)
+      .optional()
+      .describe(
+        "Server-derived movement pattern: push/pull/squat/hinge/carry/core (strength " +
+          "patterns, derived from name+category+force) / cardio / stretch. " +
+          "NULL-classified accessory moves are excluded by this filter — omit it when " +
+          "hunting accessories (calf raises, hip abduction...).",
+      ),
+    equipment: z
+      .array(ExerciseEquipmentSchema)
+      .min(1)
+      .max(5)
+      .optional()
+      .describe(
+        "User-available equipment (up to 5 of the 15-vocab). Rows whose primary equipment " +
+          "is in the list match; NULL-equipment rows count as bodyweight.",
+      ),
+    difficulty: z
+      .enum(["beginner", "intermediate", "advanced"])
+      .optional()
+      .describe(
+        "User fitness level (DB difficulty_level; novice ≈ beginner). Exact match — " +
+          "beginner plans should pass beginner.",
+      ),
+    exclude_ids: z
+      .array(z.string().min(1).max(24))
+      .max(50)
+      .optional()
+      .describe(
+        "Exercise ids to EXCLUDE (already planned this week / user dislikes). Keep total " +
+          "filters in mind: excluding from a small pool may zero out results.",
+      ),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(30)
+      .default(10)
+      .describe(
+        "Short-list size (default 10, max 30). A ranked TOP slice — no pagination, no offset.",
+      ),
+  })
+  .describe(
+    "Combined-criteria exercise search returning a RANKED short list (read-only). Plan-flow " +
+      "replacement for per-body-part paging: one call narrows 肌群×模式×器械×难度 at once. " +
+      "Returns {total, count, limit, filters_applied, exercises:[{id, name, name_zh, " +
+      "exercise_type, difficulty, equipment, movement_pattern, matched, description}]} — " +
+      "total = whole-library matches before the limit slice. total=0 → relax_hint counts " +
+      "which SINGLE dimension to drop (try the highest-yield one). Converge in ≤3 calls.",
   );
 
 const getExerciseDetailSchema = z
@@ -1057,6 +1364,80 @@ export function buildMcpToolsWith(
     },
   });
 
+  // [T2 issue#54] 组合筛选 + 精排短列表：计划流「选动作」的主工具——
+  // 一次调用同时收窄 肌群×模式×器械×难度，按目标肌群命中度精排；
+  // 空结果带 relax_hint（逐维度放宽计数），替代翻页遍历。
+  const findExercises = new DynamicStructuredTool({
+    name: "find_exercises",
+    description:
+      "Search the exercise library by COMBINED training criteria and get a RANKED short list " +
+      "(read-only). Plan/选动作 flows: PREFER this over list_exercises — one call narrows " +
+      "muscle×pattern×equipment×difficulty at once and ranks by target-muscle match " +
+      "(primary hits first). Returns {total, count, limit, filters_applied, exercises:[{id, " +
+      "name, name_zh, exercise_type, difficulty, equipment, movement_pattern, matched, " +
+      "description}]}; total = whole-library matches BEFORE the limit slice. total=0 → " +
+      "relax_hint names the SINGLE dimension to drop (pick its highest count). Converge in " +
+      "≤3 calls: relax one dimension per retry — this tool has NO pagination. " +
+      "movement_pattern excludes NULL-classified accessories (calf raises, hip " +
+      "abduction...): omit the pattern filter when hunting accessories.",
+    schema: findExercisesSchema,
+    func: async (input) => {
+      const exerciseQuery = new ExerciseQuery(client);
+      const filters = {
+        muscle_groups: input.muscle_groups,
+        movement_pattern: input.movement_pattern,
+        equipment: input.equipment,
+        difficulty: input.difficulty,
+        exclude_ids: input.exclude_ids,
+      };
+      const { rows, total } = await exerciseQuery.findRanked({
+        ...filters,
+        limit: input.limit,
+      });
+      const exercises = rows.map((r) => ({
+        id: r.id,
+        name: r.name,
+        // [B5b issue#38] 中文名随库直出——展示层确定性中文化，Agent 禁止自行翻译
+        name_zh: r.name_zh ?? r.name,
+        exercise_type: r.exercise_type,
+        difficulty: r.difficulty,
+        equipment: r.equipment ?? "bodyweight",
+        movement_pattern: r.movement_pattern,
+        matched:
+          r.primary_matches > 0 ? ("primary" as const) : ("secondary" as const),
+        description: describeExercise(r),
+      }));
+      const filtersApplied = Object.fromEntries(
+        Object.entries(filters).filter(([, v]) => v != null),
+      );
+      if (total === 0) {
+        // 引导性空态（验证门 #2）：逐维度放宽计数，Agent 按最高产出的单一维度放宽重查。
+        const relaxHint = await exerciseQuery.relaxCounts(filters);
+        return JSON.stringify({
+          total,
+          count: 0,
+          limit: input.limit,
+          filters_applied: filtersApplied,
+          exercises: [],
+          relax_hint: {
+            message:
+              "0 matches. Relax ONE dimension and retry — counts below are whole-library " +
+              "hits with that single dimension dropped (highest count first).",
+            ...relaxHint,
+          },
+        });
+      }
+      return JSON.stringify({
+        total,
+        count: exercises.length,
+        limit: input.limit,
+        filters_applied: filtersApplied,
+        note: "已按需求组合过滤并精排（主肌群命中优先，score=primary×3+secondary×1）；无分页。",
+        exercises,
+      });
+    },
+  });
+
   const getExerciseDetail = new DynamicStructuredTool({
     name: "get_exercise_detail",
     description:
@@ -1279,7 +1660,7 @@ export function buildMcpToolsWith(
           week_id: weekId,
           message:
             "No plan for this week yet — the weekly FRAMEWORK is missing. Build one " +
-            "(load_history → list_exercises → weekly_plan card with data.apply payload, " +
+            "(load_history → find_exercises per split day → weekly_plan card with data.apply payload, " +
             "scope='week') respecting the user's weekly days, equipment and injuries. " +
             "The plan persists ONLY after the user confirms the card (proposal-confirm; " +
             "there is no save tool).",
@@ -1302,6 +1683,7 @@ export function buildMcpToolsWith(
   return [
     loadHistory,
     listExercises,
+    findExercises,
     getExerciseDetail,
     getSessionHrCurve,
     getHrTrend,
@@ -1315,7 +1697,7 @@ export function buildMcpToolsWith(
 
 /**
  * Production entry point (P006: userId resolved per-request via LangGraph ALS;
- * client = singleton). Returns the nine domain tools.
+ * client = singleton). Returns the eleven domain tools.
  */
 export function buildMcpTools(): DynamicStructuredTool[] {
   return buildMcpToolsWith(getPostgresClient(), undefined);

@@ -81,12 +81,15 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
     "00000000-0000-0000-0000-0000000000aa",
   );
 
-  it("builds exactly the ten named tools", () => {
-    // B5b (230e9c9) removed save_weekly_plan under the proposal-confirm flow —
-    // the tool list below is the ten that remain (test was stale until 42b).
+  it("builds exactly the eleven named tools", () => {
+    // B5b (230e9c9) removed save_weekly_plan under the proposal-confirm flow;
+    // T2 (#54) added find_exercises (combined-criteria ranked search) — the
+    // list below is the eleven that remain. list_exercises kept for backward
+    // compatibility (keyword browse / paginated detail).
     const names = tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
       "create_exercise",
+      "find_exercises",
       "get_current_plan",
       "get_exercise_detail",
       "get_hr_trend",
@@ -641,6 +644,188 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     assert.ok(d.includes("compound"), "description carries mechanic:compound");
     assert.ok(d.includes("quadriceps"), "description carries primary muscle");
     assert.ok(d.includes("dumbbell"), "description carries equipment:dumbbell");
+  });
+
+  // =========================================================================
+  // T2 (issue #54): find_exercises — combined criteria + ranked short list.
+  // Gate scenario: 胸+推+哑铃+新手 → ≤10 rows all hitting every dimension;
+  // empty result returns a relax_hint naming the single dimension to drop.
+  // =========================================================================
+
+  it("T2 gate: find_exercises 胸+推+哑铃+新手 returns ≤10 rows all hitting every dimension (real PG)", async (t) => {
+    if (!pgAvailable) {
+      t.skip("PG unreachable");
+      return;
+    }
+    const tools = buildMcpToolsWith(client, userA);
+    const fe = tools.find((t2) => t2.name === "find_exercises")!;
+    const parsed = JSON.parse(
+      (await fe.invoke({
+        muscle_groups: ["chest"],
+        movement_pattern: "push",
+        equipment: ["dumbbell"],
+        difficulty: "beginner",
+      })) as string,
+    ) as {
+      total: number;
+      count: number;
+      limit: number;
+      filters_applied: Record<string, unknown>;
+      note: string;
+      exercises: {
+        id: string;
+        name: string;
+        name_zh: string;
+        difficulty: string | null;
+        equipment: string;
+        movement_pattern: string | null;
+        matched: "primary" | "secondary";
+      }[];
+    };
+    assert.ok(
+      parsed.total >= 1,
+      "library has chest+push+dumbbell+beginner rows",
+    );
+    assert.ok(
+      parsed.count <= 10,
+      "default limit 10 — short list, not a page dump",
+    );
+    assert.equal(parsed.count, parsed.exercises.length);
+    assert.ok(parsed.note, "non-empty result carries the filtered note");
+    assert.deepEqual(
+      parsed.filters_applied,
+      {
+        muscle_groups: ["chest"],
+        movement_pattern: "push",
+        equipment: ["dumbbell"],
+        difficulty: "beginner",
+      },
+      "filters_applied echoes every applied dimension",
+    );
+    // 全命中维度：每一行都必须同时命中 肌群/模式/器械/难度。
+    let lastMatched: "primary" | "secondary" = "primary";
+    let sawPrimary = false;
+    for (const e of parsed.exercises) {
+      assert.equal(e.difficulty, "beginner", `${e.name}: difficulty hit`);
+      assert.equal(e.equipment, "dumbbell", `${e.name}: equipment hit`);
+      assert.equal(
+        e.movement_pattern,
+        "push",
+        `${e.name}: movement_pattern hit`,
+      );
+      assert.ok(e.name_zh, `${e.name}: name_zh present (中文直出)`);
+      assert.ok(
+        e.matched === "primary" || e.matched === "secondary",
+        `${e.name}: matched flag present`,
+      );
+      // 精排：primary 命中必须排在 secondary 之前（不允许交错回退）。
+      if (e.matched === "primary") {
+        sawPrimary = true;
+        assert.equal(
+          lastMatched,
+          "primary",
+          `primary-ranked rows must precede secondary (${e.name})`,
+        );
+      } else {
+        lastMatched = "secondary";
+      }
+    }
+    assert.ok(sawPrimary, "top of the ranking is a primary-muscle hit");
+  });
+
+  it("T2 empty state: impossible combo returns relax_hint naming dimensions to drop (real PG)", async (t) => {
+    if (!pgAvailable) {
+      t.skip("PG unreachable");
+      return;
+    }
+    const tools = buildMcpToolsWith(client, userA);
+    const fe = tools.find((t2) => t2.name === "find_exercises")!;
+    // neck 肌群 × advanced 难度 全库为 0（2026-09-29 实测）→ 必空。
+    const parsed = JSON.parse(
+      (await fe.invoke({
+        muscle_groups: ["neck"],
+        movement_pattern: "pull",
+        difficulty: "advanced",
+      })) as string,
+    ) as {
+      total: number;
+      count: number;
+      exercises: unknown[];
+      relax_hint?: {
+        message: string;
+        drop_movement_pattern?: number;
+        drop_difficulty?: number;
+        drop_muscle_groups?: number;
+      };
+    };
+    assert.equal(parsed.total, 0, "neck×pull×advanced is a guaranteed miss");
+    assert.equal(parsed.count, 0);
+    assert.deepEqual(parsed.exercises, []);
+    assert.ok(parsed.relax_hint, "empty result carries a relax_hint");
+    assert.ok(
+      typeof parsed.relax_hint!.drop_movement_pattern === "number" &&
+        typeof parsed.relax_hint!.drop_difficulty === "number" &&
+        typeof parsed.relax_hint!.drop_muscle_groups === "number",
+      "relax_hint counts every applied dimension (equipment not applied → no key)",
+    );
+    assert.equal(
+      (parsed.relax_hint as Record<string, unknown>).drop_equipment,
+      undefined,
+      "hint only covers dimensions that were actually applied",
+    );
+    assert.ok(
+      parsed.relax_hint!.message.includes("Relax ONE dimension"),
+      "hint message tells the agent to relax one dimension at a time",
+    );
+  });
+
+  it("T2 exclude_ids drops a row from both total and the short list (real PG)", async (t) => {
+    if (!pgAvailable) {
+      t.skip("PG unreachable");
+      return;
+    }
+    const tools = buildMcpToolsWith(client, userA);
+    const fe = tools.find((t2) => t2.name === "find_exercises")!;
+    const first = JSON.parse(
+      (await fe.invoke({ muscle_groups: ["chest"] })) as string,
+    ) as { total: number; exercises: { id: string }[] };
+    const excludedId = first.exercises[0]!.id;
+    const second = JSON.parse(
+      (await fe.invoke({
+        muscle_groups: ["chest"],
+        exclude_ids: [excludedId],
+      })) as string,
+    ) as { total: number; exercises: { id: string }[] };
+    assert.equal(
+      second.total,
+      first.total - 1,
+      "exclude_ids shrinks total by exactly the excluded row",
+    );
+    assert.ok(
+      !second.exercises.some((e) => e.id === excludedId),
+      "excluded id never reappears in the short list",
+    );
+  });
+
+  it("T2 zod boundary: invalid movement_pattern / muscle vocab is rejected by the schema", async () => {
+    const tools = buildMcpToolsWith(
+      {} as never,
+      "00000000-0000-0000-0000-0000000000aa",
+    );
+    const fe = tools.find((t2) => t2.name === "find_exercises")!;
+    await assert.rejects(
+      () =>
+        fe.invoke({ muscle_groups: ["chest"], movement_pattern: "push_day" }),
+      "movement_pattern outside MOVEMENT_PATTERN_VALUES must throw (zod enum)",
+    );
+    await assert.rejects(
+      () => fe.invoke({ muscle_groups: ["pectorals"] }),
+      "muscle outside the 17-vocab must throw (ExerciseMuscleSchema)",
+    );
+    await assert.rejects(
+      () => fe.invoke({ muscle_groups: [] }),
+      "empty muscle_groups must throw (min 1)",
+    );
   });
 
   it("B4 read: get_exercise_detail returns structured columns (real PG)", async (t) => {

@@ -1,13 +1,23 @@
 ---
 name: "plan-generation"
-description: "计划生成能力包 - 周计划提案-确认生成、周/日粒度判断、训练容量计算、历史数据加载、计划格式验证"
+description: "计划生成能力包 - 周计划提案-确认生成、三段式流程（策略→选动作→配参数）、周/日粒度判断、训练容量计算、历史数据加载、计划格式验证"
 category: "planning"
-version: "5.2.0"
+version: "5.3.0"
 ---
 
 # 计划生成
 
 提案-确认（5.0）：Agent 不落库——weekly_plan 卡 data.apply 带 entries，用户确认后 App 直调 apply 端点落库，**确认前绝不进数据库**。「今天练什么」= GET /api/schedule/today。
+
+## 三段式流程（策略 → 选动作 → 配参数，5.3）
+
+计划生成固定三段推进，**禁止边想边翻动作库**：
+
+1. **策略**（零工具调用）：按 program-progression 定分化（推拉腿/上下肢…）、每周训练日与各日容量目标。先想清「练什么」，再去找动作。
+2. **选动作**（`find_exercises`，**≤3 次工具调用收敛**）：每个训练日一次组合查询（`muscle_groups` 一组最多 6 肌群 + `movement_pattern`/`equipment`/`difficulty`，可把推日三肌群并一次查）；候选不够时按 `relax_hint` 最高计数**放宽一个维度**补查。合计 **2-3 次**封顶——合并多日为大查询、或放宽重查，**绝不 `list_exercises` 翻页遍历**。
+3. **配参数**（零工具调用）：按 load_anchors / 新手起步规则配组×次×重量，出 weekly_plan 卡。
+
+返回的短列表已精排（主肌群命中优先、total=全库满足数），直接从短列表挑选；孤立配件（提踵/髋外展等 movement_pattern 未归类）查第二轮时不带 movement_pattern 参数。
 
 ## 周/日粒度判定表（单一真源）
 
@@ -30,9 +40,9 @@ version: "5.2.0"
 
 ```
 整周（新计划/#3/#5）：get_current_plan 判框架 → load_history（硬约束输入）
-  → list_exercises 逐部位 body_part 过滤（分页 30/次，has_more=false 即停）
-  → program-progression（分化+容量）→ weekly_plan 卡（整周 + data.apply）+「确认后生效」
-单日（#2）：get_current_plan → load_history（如需）+ list_exercises → 只重排该日
+  → 三段式：策略（零工具）→ find_exercises 组合筛选选动作（≤3 次收敛，禁翻页）
+  → 配参数（零工具）→ weekly_plan 卡（整周 + data.apply）+「确认后生效」
+单日（#2）：get_current_plan → load_history（如需）+ find_exercises → 只重排该日
 原因不明（#4）：一句话反问，不输出卡
 缺勤顺延：Agent 只解释，Service 查表（planAdjustment.ts）处理；绝不重排/补课/叠加容量
 ```
@@ -50,7 +60,7 @@ version: "5.2.0"
 ## 硬规则
 
 - 面向用户输出一律用 `name_zh`（禁自翻译；`name` 英文只是主键）
-- apply 载荷字段/split 五枚举/校验细则 → `/data-schema/knowledge/plan.md`、knowledge.md §9.3；`exercise_id` 必须来自 list_exercises；sets.length = target_sets
+- apply 载荷字段/split 五枚举/校验细则 → `/data-schema/knowledge/plan.md`、knowledge.md §9.3；`exercise_id` 必须来自 find_exercises / list_exercises 返回；sets.length = target_sets
 - 算术留 Service；数据只经 mcpTools；user_id 服务器注入；落库只经用户确认（先落库再告知=违规）
 
-v5.2.0 42c。
+v5.3.0 T2 (#54)：三段式流程 + find_exercises 组合筛选选动作（≤3 次收敛，禁翻页）。
