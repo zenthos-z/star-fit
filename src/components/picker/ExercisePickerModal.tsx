@@ -62,7 +62,7 @@ import { ExerciseTutorialModal } from '../execution/ExerciseTutorialModal';
 import PickerConfigSheet from './PickerConfigSheet';
 import PickerFilterSheet, { type PickerFilterDim } from './PickerFilterSheet';
 import { SuggestionService } from '../../services/suggestionService';
-import { toLegacyType, valuesToDraftSets } from './pickerAdapter';
+import { suggestionQueryType, valuesToDraftSets } from './pickerAdapter';
 
 export interface ExercisePickerModalProps {
   /** 是否有训练历史；false = 新手态（热门排序 + 引导卡） */
@@ -596,7 +596,7 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
       const ex = item.exercise;
       if (item.sets.length > 0) continue;
       // B6 秒回：镜像命中即同步填入（与 resolve 同条目同导出链，零网络）
-      const synced = SuggestionService.resolveSync(ex.name, toLegacyType(ex.exerciseType), 7);
+      const synced = SuggestionService.resolveSync(ex.name, suggestionQueryType(ex.exerciseType), 7);
       if (synced) {
         setSelected(prev => prev.map(it =>
           it.exercise.id === ex.id && it.sets.length === 0
@@ -607,7 +607,7 @@ const ExercisePickerModal: React.FC<ExercisePickerModalProps> = ({
       }
       if (resolvingRef.current.has(ex.id)) continue;
       resolvingRef.current.add(ex.id);
-      SuggestionService.resolve(ex.name, toLegacyType(ex.exerciseType), 7)
+      SuggestionService.resolve(ex.name, suggestionQueryType(ex.exerciseType), 7)
         .then(res => {
           setSelected(prev => prev.map(it =>
             it.exercise.id === ex.id && it.sets.length === 0

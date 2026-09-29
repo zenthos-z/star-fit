@@ -23,7 +23,6 @@ import ExerciseSettingsModal from '../ExerciseSettingsModal';
 import type { ExerciseAction } from '../../types/protocol';
 import { haptic } from '../../lib/nativeHaptics';
 import {
-  PROTOCOL_TYPE,
   ROLE_BADGE_CLASS,
   ROLE_LABELS,
   ROLE_ORDER,
@@ -32,40 +31,15 @@ import {
   type PickerSetRole,
 } from './pickerData';
 import { createDraftId } from './pickerLogic';
+// A9 参数配置主体 → ExerciseAction 适配已收编 adapter 模块（issue #58：
+// originalType 经 suggestionQueryType 收敛 legacy 9 类口径，两读点同源）
+import { toExerciseAction } from './pickerAdapter';
 
 interface PickerConfigSheetProps {
   item: PickerSelectionItem;
   /** 确认时回写清单（保留配置草稿） */
   onChange: (next: PickerSelectionItem) => void;
   onClose: () => void;
-}
-
-/** 清单项 → ExerciseAction（对齐 src/types/bridge.ts convertExerciseToAction 的字段口径） */
-function toExerciseAction(item: PickerSelectionItem): ExerciseAction {
-  const { exercise, sets, targetRpe } = item;
-  return {
-    protocol_version: '2.0.0',
-    id: exercise.id,
-    exerciseId: `fit://library/exercise/${exercise.id}`,
-    type: PROTOCOL_TYPE[exercise.exerciseType],
-    sets: sets.map((s, idx) => ({
-      index: idx,
-      reps: s.reps,
-      weight: s.weight,
-      duration: s.durationSec,
-      status: 'PLANNED' as const,
-    })),
-    metadata: {
-      name: exercise.name,
-      nameEn: exercise.nameEn,
-      libraryId: exercise.id,
-      targetRpe,
-      originalType: exercise.exerciseType, // legacy 9 类口径（normalizeType 兜底用）
-      primaryMuscles: exercise.muscles,
-      equipment: exercise.equipmentLabel, // 展示口径：真实面板标签行直读该值
-      bodyCategory: exercise.muscle,
-    },
-  };
 }
 
 const PickerConfigSheet: React.FC<PickerConfigSheetProps> = ({ item, onChange, onClose }) => {

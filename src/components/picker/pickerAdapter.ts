@@ -12,8 +12,9 @@
 import type { SuggestionValues } from 'shared/contracts';
 
 import type { Exercise } from '../../types/legacy';
+import type { ExerciseAction } from '../../types/protocol';
 import { createDraftId, type PickerDraftSet } from './pickerLogic';
-import type { PickerExerciseType, PickerSelectionItem } from './pickerData';
+import { PROTOCOL_TYPE, type PickerExerciseType, type PickerSelectionItem } from './pickerData';
 
 /** legacy 类型映射表（flexibility → bodyweight，legacy 无该类） */
 export const LEGACY_TYPE_MAP: Record<PickerExerciseType, string> = {
@@ -31,6 +32,58 @@ export const LEGACY_TYPE_MAP: Record<PickerExerciseType, string> = {
 
 export function toLegacyType(t: PickerExerciseType): string {
   return LEGACY_TYPE_MAP[t] ?? 'resistance';
+}
+
+/** 建议查询统一 type 口径（issue #58）：两读点（清单预填 / 配置面板「应用建议」）
+ *  对同一动作必须产出同一 cacheKey，type 一律经 toLegacyType 收敛。
+ *  关键在 flexibility：库内 10 类含 flexibility，而配置面板 normalizeType 的
+ *  legacy 9 类词表没有它——原样直传会双兜底落 resistance（预填走 bodyweight
+ *  键出 3×12，应用建议走 resistance 键出 4 组+配重，两读点分叉的根因）。 */
+export function suggestionQueryType(exerciseType: PickerExerciseType): string {
+  return toLegacyType(exerciseType);
+}
+
+/** ExerciseAction → 建议查询 type（ExerciseSettingsModal.normalizeType 的真源实现，
+ *  抽出组件使两读点入参可测可收敛）：协议 type 在 legacy 9 类词表内直用，
+ *  否则回退 metadata.originalType（同样须为 legacy 9 类口径），再兜底 resistance。 */
+export function resolveLegacyActionType(actionType: string, originalType?: string): string {
+  const validTypes: readonly string[] = [
+    'resistance', 'cardio', 'bodyweight', 'isometric', 'assisted',
+    'unilateral', 'weight_only', 'reps_only', 'outdoor',
+  ];
+  if (validTypes.includes(actionType)) return actionType;
+  if (originalType && validTypes.includes(originalType)) return originalType;
+  return 'resistance';
+}
+
+/** 清单项 → ExerciseAction（对齐 src/types/bridge.ts convertExerciseToAction 的字段口径）。
+ *  metadata.originalType 必须走 suggestionQueryType（legacy 9 类口径），
+ *  normalizeType 的 originalType 兜底才必中——两读点 type 由此同源。 */
+export function toExerciseAction(item: PickerSelectionItem): ExerciseAction {
+  const { exercise, sets, targetRpe } = item;
+  return {
+    protocol_version: '2.0.0',
+    id: exercise.id,
+    exerciseId: `fit://library/exercise/${exercise.id}`,
+    type: PROTOCOL_TYPE[exercise.exerciseType],
+    sets: sets.map((s, idx) => ({
+      index: idx,
+      reps: s.reps,
+      weight: s.weight,
+      duration: s.durationSec,
+      status: 'PLANNED' as const,
+    })),
+    metadata: {
+      name: exercise.name,
+      nameEn: exercise.nameEn,
+      libraryId: exercise.id,
+      targetRpe,
+      originalType: suggestionQueryType(exercise.exerciseType), // legacy 9 类口径（normalizeType 兜底用）
+      primaryMuscles: exercise.muscles,
+      equipment: exercise.equipmentLabel, // 展示口径：真实面板标签行直读该值
+      bodyCategory: exercise.muscle,
+    },
+  };
 }
 
 /** SuggestionValues → 草稿组（清单/配置全链路同源；时长型/次数型二分支） */
