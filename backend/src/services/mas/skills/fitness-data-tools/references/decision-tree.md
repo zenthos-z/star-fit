@@ -8,10 +8,11 @@
 ├─ 要生成 / 调整训练计划？
 │   └─ 强制链路：
 │      load_history(include_dynamic=true)
-│      → list_exercises({ body_part: "<目标肌群>" })（两步查询：计划覆盖哪几个
-│        部位就逐部位查；返回带 total/has_more，has_more=false 即无需翻页）
-│      → 在返回页里自行筛选：description 已带 pattern/targets/equipment/impact，
-│        据用户器械 + 伤病排除不合适的，只选库里真实存在的
+│      → find_exercises({ muscle_groups: [该日目标肌群], movement_pattern: "<推/拉/蹲…>",
+│        equipment: [用户器械], difficulty: <用户等级>, limit: 10-12 })
+│        （组合筛选，一次收窄四维；≤3 次收敛：候选不够按 relax_hint 最高计数
+│          放宽单一维度补查；一次最多 6 肌群，可把推日胸+肩+三头并一次查）
+│      → 短列表已精排（主肌群命中排前），直接从中挑；空结果看 relax_hint
 │      → （可选）get_exercise_detail(候选 id) 看教程/确认冲击值
 │      → 排计划（负荷参考 load_anchors）
 │      → plan 卡片输出
@@ -22,10 +23,9 @@
 │      → update_profile(据表现更新 load_anchors / active_limitations / recovery_state)
 │      → （可选）summary/deviation 卡片
 │
-├─ 用户问"我能做什么动作"/"帮我选动作"/"有没有练 X 的动作"？
-│   └─ list_exercises({ body_part/equipment: "<用户问的部位或器械>" })
-│      → 在 description 里按肌群/难度/冲击自行筛
-│      → 必要时 get_exercise_detail 看教程
+├─ 用户问"我能做什么动作"/"有没有练 X 的动作"？
+│   └─ find_exercises({ muscle_groups: [X], equipment: [用户器械], difficulty: <用户等级> })
+│      （找提踵/髋外展等配件时不传 movement_pattern）
 │
 ├─ 用户问"XX 动作怎么做 / 标准是什么 / 适不适合我"？
 │   └─ list_exercises({ keyword: "<动作名/中文名>" }) 找到 id（或直接用已知 id）
@@ -45,11 +45,13 @@
 ## 反模式（不要这样做）
 
 - ❌ 不调 `load_history` 就排计划 → 计划会脱离用户的真实能力与限制
-- ❌ 不调 `list_exercises` 就推荐动作 → 可能推荐用户器械做不了、或库里根本不存在的动作
+- ❌ 计划选动作不用 `find_exercises`、却用 `list_exercises` 按部位翻页 → 动作库 355 条
+  永远翻不完，思考链被无谓拉长；选动作一律组合筛选 ≤3 次收敛
+- ❌ 不查动作库就推荐动作 → 可能推荐用户器械做不了、或库里根本不存在的动作
 - ❌ 知道用户有膝伤却不看 description 的 `impact:knee:N`、选了高冲击动作 → 加重伤情
-- ❌ 重复多次调 `list_exercises`（同一过滤条件查一次缓存复用即可，不要每轮都查）
-- ❌ 无过滤地盲调 `list_exercises` 或把 limit 拉满硬翻全库 → 库有 355 条，默认页 30 条；
-  计划流程按目标肌群逐部位查（body_part 过滤），has_more=false 即停
+- ❌ 选动作超过 3 次工具调用 → 合并多日为大查询（一次最多 6 肌群）或按 relax_hint
+  放宽单一维度，绝不翻页（find_exercises 无 offset）
+- ❌ 重复多次调同一过滤条件的查询（查一次缓存复用即可，不要每轮都查）
 - ❌ `update_profile({ active_limitations: [单条新伤] })` 不先取现有列表 → 把已有伤病记录全覆盖丢失
 - ❌ 把 `exercise_list` / 动作数组写成 JSON 字符串而不是数组
 - ❌ 在写工具里传 `userId`（参数不存在，会被 schema 拒绝）

@@ -33,6 +33,12 @@
 - 相同肌群使用不同角度刺激（如上斜/下斜卧推）
 - 每 4-6 周轮换动作变式
 
+### 1.4 选动作工具链（5.3，T2/#54）
+
+选动作一律 `find_exercises` 组合筛选（肌群×模式×器械×难度一次收窄，返回精排
+短列表，主肌群命中优先），**≤3 次调用收敛**：候选不够按 `relax_hint` 放宽单一
+维度补查；**禁止 `list_exercises` 翻页遍历**。流程真源 = SKILL.md 三段式。
+
 ---
 
 ## 二、容量分配规则（已拆分）
@@ -71,13 +77,13 @@
 
 动作创建走管理端（admin 后台），**Agent 没有创建动作的工具**。当动作库中没有合适的动作时：
 
-1. 调用 `list_exercises` 再次核对动作库（确认没有遗漏的合适动作）
+1. 调用 `find_exercises`（必要时放宽维度）再次核对动作库（确认没有遗漏的合适动作；`list_exercises` 关键词查询可兜底）
 2. 找不到就用最接近的库内替代动作，并在 explanation 中说明替代理由
-3. 绝不编造库外动作 id 或名称——plan 卡校验要求 id 来自 `list_exercises` 返回
+3. 绝不编造库外动作 id 或名称——plan 卡校验要求 id 来自 `find_exercises`/`list_exercises` 返回
 
 **禁止使用 custom\_ 前缀或自造 id**：
 
-- 计划卡中的动作 id 必须来自 `list_exercises` 返回的真实条目
+- 计划卡中的动作 id 必须来自 `find_exercises`/`list_exercises` 返回的真实条目
 
 ### 5.3 自定义动作限制
 
@@ -114,7 +120,7 @@
 
 自检清单（输出 plan 卡前逐项核对）：
 
-- id 来自 `list_exercises` 返回的真实条目（禁止编造）
+- id 来自 `find_exercises`/`list_exercises` 返回的真实条目（禁止编造）
 - exercise_type 与动作库中该动作的类型一致
 - sets/reps 为整数（reps 不能是 "8-12" 这类范围字符串）
 - weight >= 0；抗阻动作无 load_anchor 时按 beginner/有经验 分支给起步
@@ -178,7 +184,7 @@
 - ❌ 将 data 写成嵌套的 JSON 字符串而非数组
 - ❌ reps 使用字符串 "8-12" 而非数字 8
 - ✅ data 直接传递数组对象
-- ✅ 动作 id 必须来自 list_exercises 返回
+- ✅ 动作 id 必须来自 find_exercises / list_exercises 返回
 
 ### 9.2 uiHint 结构（校验回路使用）
 
@@ -249,7 +255,7 @@ plan 卡由 uiHint 校验回路（M5c）程序化校验：schema 不通过 → �
 
 - `data` 是**对象**不是数组（与 plan_card 相反）；`days` 覆盖周一至周日整周
 - 每组参数可不同（第 1 组 60kg×8 / 第 2 组 65kg×6）——按组展开正是此卡的
-  意义；`exercise_id` 仍必须来自 list_exercises，禁止编造
+  意义；`exercise_id` 仍必须来自 find_exercises / list_exercises，禁止编造
 - **`apply` 载荷（5.0 必带，新提案）**：确认落库的唯一数据面。scope=week
   整周（split 必带，严格五枚举）；scope=days 单日覆盖（dates 列出被替换日，
   entries 只含该日条目）。展示层 `days[].exercises[].name` 用 **name_zh**
@@ -373,13 +379,13 @@ Agent 职责边界：解释规则 + 引导按下一次训练正常执行；**绝
 
 ### 11.6 动作名中文优先（5.0）
 
-单一陈述见 SKILL.md「动作名中文优先」：`list_exercises` 直出 `name_zh`
-（354/354 已回填），面向用户输出一律用 name_zh、禁止自行翻译或音译；
-存储/引用层（exercise_id）与展示层（name_zh）分离，今日课表 API 同口径
-中文优先（COALESCE(name_zh, name)）。
+单一陈述见 SKILL.md「动作名中文优先」：动作查询工具（find_exercises /
+list_exercises）直出 `name_zh`（354/354 已回填），面向用户输出一律用
+name_zh、禁止自行翻译或音译；存储/引用层（exercise_id）与展示层
+（name_zh）分离，今日课表 API 同口径中文优先（COALESCE(name_zh, name)）。
 
 ---
 
 _最后更新时间: 2026-09-29_
-_版本: 5.2.0 - 42c 场景化拆分：容量/新手/伤病知识拆至 knowledge/ 子目录，§11.1 收敛指针化，§11.2 迁移 data-schema 技能_
-_历史: 5.0.0 - 提案-确认模式 + 粒度规则 + 中文名（B5b/issue #38）；4.0.0 - 周计划生成模式（E3/issue #2）；3.1.0 - 移除幻影工具文档，plan 卡直出链路_
+_版本: 5.3.0 - T2/#54：§1.4 选动作工具链（find_exercises 组合筛选 ≤3 次收敛）；id 真源表述同步_
+_历史: 5.2.0 - 42c 场景化拆分：容量/新手/伤病知识拆至 knowledge/ 子目录，§11.1 收敛指针化，§11.2 迁移 data-schema 技能；5.0.0 - 提案-确认模式 + 粒度规则 + 中文名（B5b/issue #38）；4.0.0 - 周计划生成模式（E3/issue #2）；3.1.0 - 移除幻影工具文档，plan 卡直出链路_

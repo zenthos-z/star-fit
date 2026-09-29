@@ -17,8 +17,8 @@
    - `profile_dynamic.recovery_state`：`{ total_score:80, last_assessed:"..." }`
    - `profile_static.fitness_level`：`"INTERMEDIATE"`
 
-2. `list_exercises({ body_part: "upper_legs" })`（下肢日两步查询的第一步；需要臀可补 `{ body_part: "hips" }`）
-   → 得到 `{total, has_more, exercises:[{id,name,name_zh,description}]}`。在返回页里筛：只留 `equipment:dumbbell` 或 `equipment:bodyweight` 的，再排除 `impact:knee:N` 里 N 偏高的，最终挑出低膝冲击、哑铃可做的下肢动作（Goblet Squat / DB RDL / Bulgarian Split ...）。
+2. `find_exercises({ muscle_groups: ["quadriceps", "hamstrings", "glutes"], movement_pattern: "squat", equipment: ["dumbbell", "bodyweight"], difficulty: "intermediate", limit: 12 })`
+   → 一次调用同时收窄 肌群×模式×器械×难度，返回精排短列表（`matched:"primary"` 排前）。在短列表里再排除 `description` 中 `impact:knee:N` 偏高的，挑出低膝冲击的下肢动作（Goblet Squat / DB RDL / Bulgarian Split ...）；铰链配件（如 DB RDL 归 hinge）不够时按 `relax_hint` 放宽 `movement_pattern` 补查一次。
 
 3. `get_exercise_detail({ id: "<Bulgarian Split 的 id>" })`
    → 核对 `attributes.impact_level.knee=3`（可接受）、`equipment_required=["dumbbell"]`、有 `tutorials.video`。

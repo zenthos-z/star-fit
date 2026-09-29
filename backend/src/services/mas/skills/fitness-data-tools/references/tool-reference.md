@@ -1,6 +1,6 @@
 # 工具参考 (tool-reference)
 
-6 个 MCP 工具的完整参数、返回、调用示例。工具定义源码在 `backend/src/services/agent/mcpTools.ts`。
+7 个 MCP 工具的完整参数、返回、调用示例。工具定义源码在 `backend/src/services/agent/mcpTools.ts`。
 
 ---
 
@@ -83,13 +83,93 @@
 
 ⚠️ 同一过滤条件的查询一个会话只调一次，缓存复用结果；不要每轮重复调，也不要无过滤地盲翻页。
 
+**计划/选动作流程请改用 `find_exercises`**（组合筛选 + 精排短列表，无分页）——`list_exercises` 保留用于关键词检索与浏览场景。
+
+---
+
+## find_exercises（读，5.3/T2 首选选动作工具）
+
+**组合筛选 + 精排短列表**。一次调用同时收窄「肌群 × 动作模式 × 器械 × 难度」，按目标肌群命中度精排（主肌群命中排前），**无分页**——计划流用它在 ≤3 次调用内完成选动作，替代按部位翻页。
+
+**参数**
+
+| 参数               | 类型          | 必填 | 说明                                                                                                                                                          |
+| ------------------ | ------------- | ---- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `muscle_groups`    | string[](1-6) | 是   | 目标肌群，17 肌群受控词表（`chest`/`back`/`shoulders`/`quadriceps`/`hamstrings`/`glutes`/`triceps`/`biceps`/`lats`/`abdominals`…）；主/协同肌群任一命中即入选 |
+| `movement_pattern` | enum          | 否   | 服务端派生动作模式：`push`/`pull`/`squat`/`hinge`/`carry`/`core`/`cardio`/`stretch`。未归类孤立配件（提踵/髋外展等）会被此参数排除——找配件时不传              |
+| `equipment`        | string[](1-5) | 否   | 用户可用器械，15 词表（`barbell`/`dumbbell`/`machine`/`cable`/`band`/`bodyweight`…）；`equipment` 为 NULL 的行按 bodyweight 计入                              |
+| `difficulty`       | enum          | 否   | `beginner`/`intermediate`/`advanced`（ novice≈beginner）                                                                                                      |
+| `exclude_ids`      | string[](≤50) | 否   | 排除的动作 id（本周已排/用户不喜欢）                                                                                                                          |
+| `limit`            | int(1-30)     | 否   | 短列表长度（默认 10）——精排 TOP 切片，非分页                                                                                                                  |
+
+**返回**
+
+```json
+{
+  "total": 6,
+  "count": 6,
+  "limit": 10,
+  "filters_applied": {
+    "muscle_groups": ["chest"],
+    "movement_pattern": "push",
+    "equipment": ["dumbbell"],
+    "difficulty": "beginner"
+  },
+  "note": "已按需求组合过滤并精排（主肌群命中优先，score=primary×3+secondary×1）；无分页。",
+  "exercises": [
+    {
+      "id": "V1StGXR8_Z5jdHi6",
+      "name": "Dumbbell Fly",
+      "name_zh": "哑铃飞鸟",
+      "exercise_type": "resistance",
+      "difficulty": "beginner",
+      "equipment": "dumbbell",
+      "movement_pattern": "push",
+      "matched": "primary",
+      "description": "resistance | beginner | compound | equipment:dumbbell | part:chest | targets:chest"
+    }
+  ]
+}
+```
+
+`total` = 全库满足条件的总数（`limit` 切片前）；`matched` = `primary`（主肌群直接命中，排前）/`secondary`（协同肌群命中）。
+
+**空结果引导**：`total=0` 时返回 `relax_hint`——每个被施加的维度单独放宽后的全库命中数，按最高计数的**单一维度**放宽重查：
+
+```json
+{
+  "total": 0,
+  "exercises": [],
+  "relax_hint": {
+    "message": "0 matches. Relax ONE dimension and retry — ...",
+    "drop_movement_pattern": 23,
+    "drop_difficulty": 11,
+    "drop_equipment": 5
+  }
+}
+```
+
+**示例**（推日选动作，一次查询覆盖胸+肩+三头）：
+
+```json
+find_exercises({
+  "muscle_groups": ["chest", "shoulders", "triceps"],
+  "movement_pattern": "push",
+  "equipment": ["barbell", "dumbbell", "machine", "cable", "bodyweight"],
+  "difficulty": "beginner",
+  "limit": 12
+})
+```
+
+⚠️ 收敛上限 ≤3 次/计划：多日合并大查询（一次最多 6 肌群）、或按 relax_hint 放宽重查；**禁止翻页遍历**（本工具无 offset）。
+
 ---
 
 ## get_exercise_detail（读）
 
 按 id 取单个动作的完整记录（属性/教程/内容）。**只读**。
 
-**参数**：`{ id: string }`（精确 id，来自 list_exercises）
+**参数**：`{ id: string }`（精确 id，来自 find_exercises / list_exercises）
 
 **返回**
 
