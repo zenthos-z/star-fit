@@ -1,13 +1,13 @@
 # A6 动作库翻译抽检报告（issue #19）
 
-> 生成时间：2026-09-26T11:26:28.885Z
+> 生成时间：2026-09-29T02:31:39.514Z
 > 术语表：605 条（通行／直译／存疑 = 581／14／10）
 
 ## 一、总体指标
 
-- 公共库 354 行；名称已译 **354**；教学内容已译 **354**／有教学字段 354
+- 公共库 372 行；名称已译 **372**；教学内容已译 **354**／有教学字段 354
 - 名称定名命中率：**100.0%**（354/354，定名层覆盖内的名称逐字一致）
-- 正文术语命中率：**78.4%**（1657/2113；miss 为措辞重组警示，非硬错误）
+- 正文术语命中率：**79.2%**（1674/2113；miss 为措辞重组警示，非硬错误）
 
 ## 二、存疑译名清单（10 条，不强行定名，待人工复核）
 
@@ -28,291 +28,286 @@
 
 | 术语 | 统一译名 | miss 次数 |
 | --- | --- | --- |
-| Chest / Pectorals / Pecs | 胸部（胸大肌／胸肌） | 101 |
+| Chest / Pectorals / Pecs | 胸部（胸大肌／胸肌） | 92 |
 | Flat | 平板（平凳） | 85 |
 | Press | 推举 | 54 |
-| Overhead | 过顶（颈后） | 28 |
-| Bench | 训练凳（平凳） | 23 |
+| Overhead | 过顶（颈后） | 29 |
+| Bench | 训练凳（平凳） | 22 |
 | Arms Straight | 直臂 | 19 |
-| Standing | 站姿（站立） | 12 |
-| Range of Motion / ROM | 动作行程（活动幅度） | 12 |
-| Curl | 弯举 | 8 |
+| Curl | 弯举 | 9 |
+| Standing | 站姿（站立） | 9 |
+| Range of Motion / ROM | 动作行程（活动幅度） | 9 |
 | One Leg / Single Leg | 单腿 | 8 |
 | Slam | 砸地（药球） | 8 |
-| Machine | 器械 | 7 |
 | One Arm / Single Arm | 单臂 | 7 |
-| Stretch | 拉伸 | 7 |
+| Stretch | 拉伸 | 6 |
 | Stance | 站距 | 6 |
+| Under Control | 有控制地 | 5 |
 
 ## 四、逐条抽检（20 条，名称序均匀抽样）
 
 ### 45 Degree Hyperextension → 45°山羊挺身
 - 定名：✅ 逐字一致
 - 步骤1原文：Position yourself on the 45-degree hyperextension bench with ankles secured.
-- 步骤1译文：躺上45°山羊挺身架，将双脚踝稳固卡在挡垫下方，髋垫上缘对准髋部前侧，确保髋关节可自由屈伸。双脚踩实踏板，双腿自然伸直，稳定好身体再开始动作。
+- 步骤1译文：调整45°山羊挺身凳，将双脚踝固定于挡垫下方，髋部上缘贴靠髋垫，确保髋关节可以自由屈伸。
 - 步骤2原文：Cross arms over chest or place hands behind head.
-- 步骤2译文：双臂交叉抱于胸前，或将双手轻扶在头部两侧耳后位置。注意双手只做支撑、不要向前拉扯颈部，保持颈部与脊柱在一条直线上。
+- 步骤2译文：双臂交叉抱于胸前，或将双手轻扶头部两侧，不要抱紧后脑。身体从头到脚保持一条直线。
 - 步骤3原文：Lower your upper body forward at the hips.
-- 步骤3译文：以髋关节为铰链，缓慢向前俯身，让上半身沿髋部折叠下降，膝盖微屈保持稳定。全程保持背部平直，感受腘绳肌与臀部被逐渐拉长。
+- 步骤3译文：以髋关节为铰链，上半身向前下方缓慢下放。保持背部平直、膝盖微屈，感受腘绳肌与臀部被拉长。
 - ……（共 5 步，步数对齐 ✅）
-- 要领示例：全程保持背部平直，脊柱处于中立位，避免弓背弯腰。
-- 纠错示例：避免弓背弯腰完成动作——保持脊柱中立位，若柔韧性不足可减小下降幅度，让下背全程维持张力。
-- 呼吸：起身发力时呼气，向下俯身还原时吸气。
+- 要领示例：全程保持背部平直，维持脊柱中立位
+- 纠错示例：避免弓背下放——保持背部平直、脊柱中立，防止腰椎承受过大剪切压力
+- 呼吸：起身发力时呼气，下放还原时吸气。
 - 术语命中：3/5（miss：Bench、Chest / Pectorals / Pecs）
 
-### Band Resisted Decline Sit-Up → 弹力带抗阻下斜仰卧起坐
+### Band Seated Leg Extension → 坐姿弹力带腿屈伸
 - 定名：✅ 逐字一致
-- 步骤1原文：Attach a resistance band securely behind the decline bench.
-- 步骤1译文：将弹力带牢固固定在下斜凳后方的稳定锚点上，确保固定端不会滑动松脱。训练前先轻拉测试阻力与牢固程度，避免中途弹脱造成意外。
-- 步骤2原文：Lie on the bench with your feet anchored, holding the band at the chest or behind the neck.
-- 步骤2译文：仰卧于斜凳，双脚固定在脚挡下方并压实，将弹力带两端握于胸前或置于颈后。保持脊柱贴紧凳面、核心收紧，做好发力准备。
-- 步骤3原文：Engage your core and perform a sit-up, raising your torso towards your knees.
-- 步骤3译文：收紧核心发力，腹直肌主动收缩，将躯干向膝盖方向卷起完成仰卧起坐。全程维持弹力带张力，避免颈部过度用力代偿。
+- 步骤1原文：Sit upright on a sturdy chair with feet flat.
+- 步骤1译文：坐在稳固的椅子上，上身挺直、坐骨坐实凳面，双脚平放于地面与髋同宽，保持骨盆端正不歪斜。
+- 步骤2原文：Anchor one end of a band behind the chair leg.
+- 步骤2译文：将弹力带一端固定在椅子腿后方的低位，锚点方向朝向脚踝受力一侧，确认固定牢固可靠。
+- 步骤3原文：Loop the other end of the band around your ankle.
+- 步骤3译文：将弹力带另一端套在训练腿的脚踝处并绕紧固定，调整好初始张力，确保动作全程不会从脚踝滑脱。
 - ……（共 5 步，步数对齐 ✅）
-- 要领示例：全程保持弹力带张力，不可出现松弛
-- 纠错示例：借助惯性甩动完成起身——腹肌刺激大幅降低，还会增加腰椎压力，应放慢节奏、用腹肌力量独立卷起
-- 呼吸：起身卷腹发力时呼气，有控制地下放还原时吸气。
-- 术语命中：5/7（miss：Bench、Chest / Pectorals / Pecs）
+- 要领示例：坐姿挺直上身不塌腰
+- 纠错示例：避免借惯性甩腿——放慢速度，靠股四头肌收缩带动小腿抬起
+- 呼吸：伸膝发力时呼气，缓慢下放还原时吸气。
+- 术语命中：4/6（miss：Twist、Flat）
 
-### Barbell Drag Curl → 杠铃贴身弯举
+### Barbell Front Squat → 杠铃前深蹲
 - 定名：✅ 逐字一致
-- 步骤1原文：Stand tall with feet about hip-width apart and hold the barbell with an underhand grip at your thighs.
-- 步骤1译文：挺直站立，双脚约与髋同宽，双手反握杠铃自然垂于大腿前侧。挺胸目视前方，身体保持直立稳定。
-- 步骤2原文：Pull your shoulders slightly back and keep your elbows behind your torso.
-- 步骤2译文：肩部微微向后收紧，让两侧肘部保持在躯干后方位置，这一姿态是贴身弯举的关键锚点，能最大化二头孤立发力。
-- 步骤3原文：Curl the bar upward by sliding it close along the front of your body as your elbows travel back.
-- 步骤3译文：屈肘将杠铃沿身体前侧向上滑动弯举，杠铃几乎贴着躯干上行，同时肘部随之向后移动，全程杠铃不得离开身体。
+- 步骤1原文：Rack barbell at collarbone level, elbows up.
+- 步骤1译文：将杠铃架调至锁骨高度，杠铃横放在肩前三角肌上，肘部抬高让杠铃被稳稳托住不滑落。
+- 步骤2原文：Stand with feet shoulder-width apart.
+- 步骤2译文：双手扶稳杠铃将其取出深蹲架后退开，双脚与肩同宽站立，脚尖微微外展，重心均匀分布于全脚掌。
+- 步骤3原文：Descend into squat keeping torso upright.
+- 步骤3译文：收紧核心并挺胸，保持躯干挺直垂直向下蹲，全程肘部抬高朝前不放松，防止杠铃前滚失去平衡。
 - ……（共 5 步，步数对齐 ✅）
-- 要领示例：杠铃全程贴近躯干上行
-- 纠错示例：避免杠铃向前荡离身体——保持杠铃贴身上滑，否则张力随肘部前移从二头流失
-- 呼吸：底部吸气，贴身向上弯举时呼气，缓慢下放回落时再次吸气。
-- 术语命中：4/5（miss：Chest / Pectorals / Pecs）
-
-### Bench Sprint → 凳上冲刺跑
-- 定名：✅ 逐字一致
-- 步骤1原文：Stand on the ground with one foot resting on a bench or box with your heel close to the edge.
-- 步骤1译文：站于地面，一脚踏上训练凳或跳箱，脚跟靠近箱面边缘。上身挺直、目视前方，核心收紧，做好蹬伸发力的准备。
-- 步骤2原文：Push off with your foot on top of the bench, extending through the hip and knee.
-- 步骤2译文：箱上的脚用力向下蹬踏，充分伸展髋关节与膝关节，将身体向上推起，感受臀部与腿部肌群的爆发性发力。
-- 步骤3原文：Land with the opposite foot on top of the box, returning your other foot back to the start position.
-- 步骤3译文：换对侧脚踏上箱面落地，另一脚随之回落至地面起始位置。落地时膝盖微屈缓冲，保持重心稳定不摇晃。
-- ……（共 4 步，步数对齐 ✅）
-- 术语命中：3/3
-
-### Cable One Arm Lateral Raise → 单臂绳索侧平举
-- 定名：✅ 逐字一致
-- 步骤1原文：Stand sideways to the cable machine and grasp the handle with the outside hand.
-- 步骤1译文：侧身面向绳索器械站立，用远离器械一侧的手握住握把，让绳索自然经过身前。
-- 步骤2原文：Step away until the cable is taut, with your arm down by your side and a slight bend in your elbow.
-- 步骤2译文：向外迈步直至绳索绷紧产生张力，手臂垂于体侧，肘部微屈并固定这个角度，手腕保持中立。
-- 步骤3原文：Brace your torso and keep your shoulders level.
-- 步骤3译文：收紧核心稳定躯干，双肩保持水平，肩胛下沉，身体不要向器械一侧倾斜。
-- ……（共 7 步，步数对齐 ✅）
-- 要领示例：以肘部引领上抬，小臂只是随动
-- 纠错示例：避免工作侧肩膀向耳朵方向耸起——耸肩会让斜方肌代偿，应保持肩胛下沉，让三角肌中束独立发力
-- 呼吸：手臂向侧方抬起发力时呼气，缓慢下放还原时吸气。
+- 要领示例：肘部始终抬高，托稳杠铃防前倾。
+- 纠错示例：避免肘部下垂——肘一低杠铃就会前滚，务必持续抬高肘部锁稳杠位。
+- 呼吸：下蹲下降的退让阶段吸气，脚跟蹬地发力站起时呼气。
 - 术语命中：6/6
 
-### Car Deadlift → 车架硬拉
+### Bent Press → 单臂弯身推举
 - 定名：✅ 逐字一致
-- 步骤1原文：This event apparatus typically has neutral grip handles, however some have a straight bar that you can approach like a normal deadlift. The apparatus can be loaded with a vehicle or other heavy objects such as tractor tires or kegs.
-- 步骤1译文：这一比赛项目器械通常配有对握把手，也有部分采用直杠，可按普通硬拉的方式靠近操作。器械可加载汽车或其他重物，例如拖拉机轮胎或桶，务必确认载荷安放稳妥。
-- 步骤2原文：Center yourself between the handles if you are a strong squatter, or back a couple inches if you are a strong deadlifter. You feet should be about hip width apart. Bend at the hip to grip the handles. With your feet and your grip set, take a big breath and then lower your hips and flex the knees.
-- 步骤2译文：若你深蹲力量较强，可在两把手之间居中站立；若硬拉更强，则向后退几厘米站定。双脚约与髋同宽，屈髋俯身抓住把手；站位与握把确定后，深吸一口气收紧核心，再下压髋部并屈膝进入预备姿势。
-- 步骤3原文：Look forward with your head, keep your chest up and your back arched, and begin driving through the heels to move the weight upward. As the weight comes up, pull your shoulder blades together as you drive your hips forward.
-- 步骤3译文：头部目视前方，保持挺胸、背部绷紧微弓，开始以脚跟发力蹬地将重量向上拉起。重量上升过程中，在髋部向前顶出的同时收紧肩胛骨，直至身体站直完成锁定。
-- ……（共 4 步，步数对齐 ✅）
-- 术语命中：4/5（miss：Chest / Pectorals / Pecs）
+- 步骤1原文：Clean a kettlebell to your shoulder. Clean the kettlebell to your shoulders by extending through the legs and hips as you raise the kettlebell towards your shoulder. The wrist should rotate as you do so. This will be your starting position.
+- 步骤1译文：将壶铃高翻至肩部：借腿部与髋部发力伸展，把壶铃提向肩侧，同时手腕随之旋转，让壶铃稳落于前臂上，这是起始姿势。
+- 步骤2原文：Begin my leaning to the side opposite the kettlebell, continuing until you are able to touch the ground with your free hand, keeping your eyes on the kettlebell. As you do so, press the weight vertically be extending through the elbow, keeping your arm perpendicular to the ground.
+- 步骤2译文：身体向壶铃对侧弯身俯倾，持续下弯直到空手能够触及地面，全程目光注视壶铃；同时垂直向上推起壶铃、伸直肘关节，保持手臂与地面垂直。
+- 步骤3原文：Return to an upright position, with the kettlebell above your head. Return the kettlebell to the shoulder and repeat for the desired number of repetitions.
+- 步骤3译文：直起身体回到直立姿势，此时壶铃位于头顶正上方；随后将壶铃收回至肩部，重复完成预定的次数。
+- 术语命中：4/4
 
-### Dumbbell Alternating Shoulder Press → 哑铃交替肩推举
+### Cable Rope Overhead Triceps Extension → 绳索颈后臂屈伸
 - 定名：✅ 逐字一致
-- 步骤1原文：Hold dumbbells at shoulder level, palms facing forward.
-- 步骤1译文：双手各持一只哑铃举至肩部高度，掌心朝前，肘部自然收于躯干两侧，双脚站稳建立稳定基础。
-- 步骤2原文：Brace your core and press one dumbbell overhead until arm is fully extended.
-- 步骤2译文：收紧核心与臀部稳定躯干，将一侧哑铃垂直向上推举过头顶，直到手臂完全伸直，手腕保持中立不后弯。
-- 步骤3原文：Lower to shoulder height as you press the opposite dumbbell overhead.
-- 步骤3译文：一侧手臂有控制地下放回肩部高度，同时将另一侧哑铃向上推起，两次动作在同一节奏中衔接完成。
+- 步骤1原文：Attach a rope to a high pulley.
+- 步骤1译文：将绳索握把安装到高位滑轮上并确认锁扣扣紧，先把配重调至较轻档位，便于熟悉动作轨迹。
+- 步骤2原文：Stand (or kneel) with back facing the machine.
+- 步骤2译文：背对器械站立（也可采用跪姿），双脚与髋同宽，收紧核心，保持脊柱中立位，身体稳定后再准备抓绳。
+- 步骤3原文：Grasp rope, step forward, and lean slightly.
+- 步骤3译文：双手握住绳索两端，向前迈出一步使绳索绷紧，上身略微前倾，让肱三头肌预先获得轻微牵拉感。
 - ……（共 5 步，步数对齐 ✅）
-- 要领示例：腰背保持中立，不塌腰不后仰
-- 纠错示例：避免身体向一侧倾斜借力——收紧核心保持躯干正直，让三角肌独立完成推举
-- 呼吸：向上推起的发力阶段呼气，下放还原的退让阶段吸气。
-- 术语命中：6/7（miss：Overhead）
+- 要领示例：上臂固定不动，只有肘关节屈伸发力
+- 纠错示例：避免上臂前后摆动借力——将大臂固定在头侧，只允许肘关节屈伸，让肱三头肌独立发力。
+- 呼吸：伸展手臂发力时呼气，屈肘下放还原时吸气。
+- 术语命中：9/9
 
-### Dumbbell Incline Fly → 哑铃上斜飞鸟
+### Chest Lift with Rotation → 转体胸部抬起
 - 定名：✅ 逐字一致
-- 步骤1原文：Set an incline bench and sit with a dumbbell in each hand on your thighs.
-- 步骤1译文：将上斜凳调整到位，双手各持一只哑铃坐在凳上，把哑铃放在大腿上以便躺下时顺势带起。
-- 步骤2原文：Lie back and press the dumbbells above your upper chest with your palms facing each other.
-- 步骤2译文：仰卧靠稳凳面，将哑铃推举至上胸正上方，掌心相对，手臂自然伸直。
-- 步骤3原文：Bend your elbows slightly and keep that bend locked in.
-- 步骤3译文：肘关节微微弯曲，并将这一角度全程锁定不变，让胸大肌持续保持张力。
+- 步骤1原文：Lie on your back, knees bent, feet flat on floor.
+- 步骤1译文：仰卧于垫上，屈膝约90度，双脚平放地面与髋同宽，脊柱保持中立位。
+- 步骤2原文：Place hands behind head, elbows wide.
+- 步骤2译文：双手轻扶头后，肘部向两侧大幅打开，颈肩保持放松不僵硬。
+- 步骤3原文：Engage core and lift head, neck, and shoulders off mat.
+- 步骤3译文：收紧核心，将头、颈、肩作为一个整体抬离垫面，感受腹肌持续收缩发力。
+- ……（共 5 步，步数对齐 ✅）
+- 要领示例：转体由腹斜肌发力带动，而非借助手臂。
+- 纠错示例：避免用手拉拽颈部——双手只轻扶头后，靠腹肌发力抬起，保护颈椎。
+- 呼吸：抬起并转体时呼气，下放还原时吸气。
+- 术语命中：3/4（miss：Flat）
+
+### Dumbbell Close-Grip Press → 哑铃窄距卧推
+- 定名：✅ 逐字一致
+- 步骤1原文：Lie flat on a bench with a dumbbell in each hand.
+- 步骤1译文：平躺在训练凳上，双手各持一只哑铃举于胸部正上方，双脚踏实地面，收紧核心稳定身体。
+- 步骤2原文：Hold dumbbells together above chest, palms in.
+- 步骤2译文：双手持哑铃在胸部上方相互靠拢，掌心相对采用对握，手腕保持中立位平直，肘部微屈准备下放。
+- 步骤3原文：Lower dumbbells toward sternum, elbows tight to torso.
+- 步骤3译文：有控制地将哑铃向胸骨方向下放，肘部内夹紧贴躯干两侧，感受肱三头肌和胸内侧被拉伸。
+- ……（共 5 步，步数对齐 ✅）
+- 要领示例：全程肘部内夹，始终贴近躯干
+- 纠错示例：避免肘部向外展开——全程内夹贴紧躯干，否则压力转移至肩关节增加受伤风险
+- 呼吸：下放哑铃时吸气，向上推起时呼气。
+- 术语命中：4/6（miss：Press、Flat）
+
+### Dumbbell Incline Triceps Extension → 哑铃上斜臂屈伸
+- 定名：✅ 逐字一致
+- 步骤1原文：Sit back on an incline bench holding a dumbbell in each hand.
+- 步骤1译文：坐上上斜凳并向后靠稳，双手各握一只哑铃，让背部完全贴紧凳面，收紧核心以稳定躯干。
+- 步骤2原文：Press the dumbbells overhead with your palms facing each other.
+- 步骤2译文：将哑铃向上推举至头部正上方，掌心相对呈对握，手臂完全伸直锁定，稳定好起始姿态。
+- 步骤3原文：Keep your elbows pointed up and close to your head.
+- 步骤3译文：保持手肘朝上指向天花板并贴近头部两侧，全程固定大臂位置，不让其随动作前后移动。
 - ……（共 6 步，步数对齐 ✅）
-- 要领示例：肘部微屈，角度全程锁定
-- 纠错示例：避免像卧推一样屈伸肘部——锁定微屈角度，让胸大肌主导发力
-- 呼吸：向两侧下放哑铃时吸气，向内合拢发力时呼气。
-- 术语命中：6/7（miss：Bench）
+- 要领示例：手肘内收始终贴近头部两侧
+- 纠错示例：避免手肘向两侧张开——保持手肘内收贴近头部，让肱三头肌主导发力
+- 呼吸：向头后下放哑铃时吸气，伸直手肘将哑铃举回头顶时呼气。
+- 术语命中：6/8（miss：Bench、Overhead）
 
-### Dumbbell One Arm Zottman Preacher Curl → 单臂佐特曼牧师凳弯举
+### Dumbbell Rear Delt Row → 哑铃后束划船
 - 定名：✅ 逐字一致
-- 步骤1原文：Sit at a preacher bench and plant your feet on the floor.
-- 步骤1译文：坐在牧师凳上，双脚踩实地面稳定身体，调整坐姿让腋窝正好卡住垫板上缘获得支撑。
-- 步骤2原文：Hold a dumbbell in one hand and place the back of your upper arm flat against the pad with your arm nearly straight.
-- 步骤2译文：单手在肩下位置握持哑铃，将大臂后侧平贴在斜垫上，手臂接近伸直但肘部保持微屈不锁死。
-- 步骤3原文：Start with your palm facing up and curl the dumbbell toward your shoulder without lifting your upper arm off the pad.
-- 步骤3译文：掌心向上起始，收缩肱二头肌将哑铃向肩部方向弯举，大臂全程紧贴垫板不抬起离开。
-- ……（共 6 步，步数对齐 ✅）
-- 要领示例：大臂后侧全程贴紧垫板，不给抬臂空间。
-- 纠错示例：大臂离开牧师凳垫板——抬臂会让肩部借力削弱二头刺激，应减轻重量让腋窝卡稳垫板。
-- 呼吸：弯举向上发力时呼气，旋腕转为掌心向下并下放时吸气。
-- 术语命中：4/6（miss：Bench、Flat）
-
-### Dumbbell Single Leg Squat → 哑铃单腿深蹲
-- 定名：✅ 逐字一致
-- 步骤1原文：Stand tall holding a dumbbell in each hand at your sides.
-- 步骤1译文：身体站直，双手各持一只哑铃自然垂于体侧，双脚约与髋同宽，目视前方，重心平稳落在双脚之间。
-- 步骤2原文：Shift your weight onto one foot and lift the other leg straight in front of you.
-- 步骤2译文：将重心完全转移到一条腿上，另一条腿向前伸直抬起、脚尖自然勾起，双臂持铃微展帮助维持平衡。
-- 步骤3原文：Brace your torso and bend your standing knee and hip to lower under control.
-- 步骤3译文：收紧核心稳定躯干，屈髋屈膝同步进行，臀部向后下方坐，控制下蹲速度，全程保持脊柱中立位。
-- ……（共 6 步，步数对齐 ✅）
-- 要领示例：挺胸立腰，躯干保持直立姿态
-- 纠错示例：避免抬起脚中途触地——如难以保持平衡，可先减小下蹲幅度，确保悬空完成整组动作。
-- 呼吸：屈髋下蹲下降时吸气，脚跟发力站起回到起始位置时呼气。
-- 术语命中：4/7（miss：Standing、Chest / Pectorals / Pecs、Under Control）
-
-### Flexion Leg Sit-Up Stretch → 屈腿仰卧起坐拉伸
-- 定名：✅ 逐字一致
-- 步骤1原文：Lie on your back with knees bent and feet flat on the floor.
-- 步骤1译文：仰卧于垫上，双膝弯曲约90度，双脚平放地面与髋同宽，下背部贴实垫面，收紧核心进入起始姿态。
-- 步骤2原文：Cross arms over chest or reach toward knees.
-- 步骤2译文：双臂交叉抱于胸前，或向前伸展指向膝盖方向，双手不抱头不借力，以减少颈部代偿受力。
-- 步骤3原文：Contract abdominal muscles to sit up, curling your spine.
-- 步骤3译文：收缩腹肌，从头部开始将脊柱一节节向上卷起，感受腹直肌持续收缩发力，动作缓慢有控制而非猛然起身。
+- 步骤1原文：Stand with your feet hip- to shoulder-width apart, holding a dumbbell in each hand at your sides.
+- 步骤1译文：双脚分开站立，站距介于髋宽与肩宽之间，双手各握一只哑铃自然垂于身体两侧，肩部放松下沉。
+- 步骤2原文：Hinge at your hips until your torso is leaned forward, soften your knees, and let the dumbbells hang below your shoulders with your palms facing each other.
+- 步骤2译文：以髋部为轴向前俯身，膝盖微屈，让哑铃垂于肩部正下方，掌心相对，背部保持平直不弓腰。
+- 步骤3原文：Brace your core and keep your back flat as you pull your elbows up and out to the sides.
+- 步骤3译文：收紧核心稳定躯干，保持背部平直，将手肘向上并向身体两侧拉起，让肘部略高出躯干平面。
 - ……（共 5 步，步数对齐 ✅）
-- 要领示例：卷起速度放慢，让腹肌主导完成每一节脊柱的卷动。
-- 纠错示例：避免猛然发力借力起身——放慢卷起节奏，靠腹肌收缩逐节带动脊柱上行。
-- 呼吸：起身卷腹发力时呼气，下放还原退让时吸气。
-- 术语命中：4/7（miss：Curl、Flat、Chest / Pectorals / Pecs）
+- 要领示例：以肘部引导划船方向
+- 纠错示例：避免俯身时弓腰圆背——保持核心收紧、背部平直，保护腰椎
+- 呼吸：下放哑铃时吸气，向上并向身体两侧划船发力时呼气。
+- 术语命中：6/8（miss：Shoulder-Width、Flat）
 
-### Jackknife → 折刀两头起
+### Exercise Ball Crunch → 瑞士球卷腹
 - 定名：✅ 逐字一致
-- 步骤1原文：Lie on your back with arms at your sides and legs extended.
-- 步骤1译文：仰卧在垫上，双臂自然放在身体两侧并贴紧地面，双腿伸直并拢，收紧腹部做好启动准备。
-- 步骤2原文：Engage your core and lift legs towards the ceiling.
-- 步骤2译文：收紧核心，保持双腿伸直并拢向上抬起，直到几乎垂直指向天花板，全程让下背贴紧垫面。
-- 步骤3原文：Continue lifting hips off the mat, reaching feet upward.
-- 步骤3译文：继续向上发力将髋部抬离垫面，让双脚朝天花板方向尽量向上伸展，感受下腹部强烈收缩发力。
+- 步骤1原文：Lie on an exercise ball with your lower back curvature pressed against the spherical surface of the ball. Your feet should be bent at the knee and pressed firmly against the floor. The upper torso should be hanging off the top of the ball. The arms should either be kept alongside the body or crossed on top of your chest as these positions avoid neck strains (as opposed to the hands behind the back of the head position).
+- 步骤1译文：下背部贴住瑞士球球面仰卧，屈膝双脚踩实地面，上半身悬出球顶之外，双臂可置于身体两侧或交叉抱于胸前，此摆位可避免颈部受力。
+- 步骤2原文：Lower your torso into a stretch position keeping the neck stationary at all times. This will be your starting position.
+- 步骤2译文：缓慢下放躯干进入拉伸位，感受腹肌被预先拉长，全程保持颈部固定不动，该姿势即为动作的起始位置。
+- 步骤3原文：With the hips stationary, flex the waist by contracting the abdominals and curl the shoulders and trunk upward until you feel a nice contraction on your abdominals. The arms should simply slide up the side of your legs if you have them at the side or just stay on top of your chest if you have them crossed. The lower back should always stay in contact with the ball. Exhale as you perform this movement and hold the contraction for a second.
+- 步骤3译文：保持髋部固定，收缩腹肌将肩部与躯干向上卷起，感受腹肌明显收紧，双臂顺腿侧上滑或保持抱胸，下背始终贴住球面，发力时呼气并在顶端停顿一秒。
 - ……（共 5 步，步数对齐 ✅）
-- 要领示例：双腿全程保持伸直并拢。
-- 纠错示例：避免双腿快速坠落——有控制地逐节缓慢下放，保持腹部持续张力不松懈。
-- 呼吸：向上抬起髋部时呼气，向下缓慢落回时吸气。
-- 术语命中：2/2
+- 术语命中：3/5（miss：Curl、Chest / Pectorals / Pecs）
 
-### Leg Raise with Hip Lift → 举腿抬髋
+### Hip Extension Stretch → 髋伸展拉伸
 - 定名：✅ 逐字一致
-- 步骤1原文：Lie flat with arms at your sides and legs straight.
-- 步骤1译文：平躺于垫上，双臂伸直放于身体两侧、掌心向下贴地，双腿并拢完全伸直，保持下背部贴紧地面。
-- 步骤2原文：Raise your legs up together towards the ceiling.
-- 步骤2译文：收紧核心，双腿并拢保持伸直，用下腹力量将双腿向上抬起至垂直于地面，全程避免借力摆动。
-- 步骤3原文：At the top of the movement, press your legs up by lifting your hips off the ground.
-- 步骤3译文：双腿到达最高点后，收缩下腹将臀部卷起离开地面，仿佛双脚朝天花板方向蹬伸，感受腹部强烈收缩。
+- 步骤1原文：Lie face down with legs extended.
+- 步骤1译文：俯卧于垫上，双腿向后伸直并拢，脚背贴地，全身放松，额头轻贴地面或面部转向一侧。
+- 步骤2原文：Place hands beneath shoulders, elbows bent.
+- 步骤2译文：双手撑在肩膀正下方的地面上，屈肘，掌心贴地、手指朝前，与俯卧撑起始位相似。
+- 步骤3原文：Press palms into floor, lifting chest and gently extending hips.
+- 步骤3译文：手掌下压地面，将胸部缓缓向上推起，同时轻柔伸展髋部，感受髋屈肌被逐渐拉长。
 - ……（共 5 步，步数对齐 ✅）
-- 要领示例：双腿始终并拢，膝盖不弯曲分开。
-- 纠错示例：避免借助惯性甩腿——放慢节奏，用下腹力量主导每一次抬腿，动作才真正刺激腹肌。
-- 呼吸：抬髋发力时呼气，下放还原阶段吸气。
-- 术语命中：2/4（miss：Press、Flat）
-
-### Lever Seated Leg Curl → 器械坐姿腿弯举
-- 定名：✅ 逐字一致
-- 步骤1原文：Adjust the seat and pad so your knees line up with the machine’s pivot point.
-- 步骤1译文：调整座椅与滚垫位置，使膝盖正对器械转轴，确保发力力线与关节活动轴一致。
-- 步骤2原文：Sit back against the pad and place your lower legs under the roller just above your ankles.
-- 步骤2译文：背部贴紧靠垫坐好，将小腿置于滚垫下方、位置在脚踝正上方，避免滚垫垫得过高。
-- 步骤3原文：Grip the handles and keep your thighs pressed into the seat.
-- 步骤3译文：双手握紧把手，大腿始终下压贴紧坐垫，防止弯举过程中髋部抬起借力。
-- ……（共 6 步，步数对齐 ✅）
-- 要领示例：臀部紧贴坐垫，髋部不上抬
-- 纠错示例：避免弯举时臀部抬离坐垫——保持大腿下压，否则髋部代偿会削弱腘绳肌刺激
-- 呼吸：屈膝向下弯举发力时呼气，滚垫回升还原时吸气。
-- 术语命中：8/8
-
-### Military Press → 军事推举
-- 定名：✅ 逐字一致
-- 步骤1原文：Stand with feet hip-width apart and barbell at shoulder height.
-- 步骤1译文：双脚与髋同宽站立，将杠铃从架上起杠或提拉至锁骨位置，让杠铃稳定架在肩部高度，挺胸目视前方。
-- 步骤2原文：Grip the bar with hands just outside shoulder-width.
-- 步骤2译文：双手握距略宽于肩正握杠铃，握稳后让前臂在杠铃正下方保持竖直，为沿直线向上推起做好准备。
-- 步骤3原文：Brace your core and squeeze your glutes.
-- 步骤3译文：收紧核心并用力夹紧臀部，让躯干像立柱一样稳定，骨盆保持中立，避免推举时腰椎代偿受力。
-- ……（共 5 步，步数对齐 ✅）
-- 要领示例：全程保持核心收紧，躯干稳定不晃动。
-- 纠错示例：避免身体过度后仰借力——腰椎会承受过大压力，应收紧核心与臀部，保持躯干垂直。
-- 呼吸：向上推起发力时呼气，缓慢下放还原时吸气。
-- 术语命中：7/9（miss：Shoulder-Width、Overhead）
-
-### Push-Ups With Feet On An Exercise Ball → 足垫瑞士球俯卧撑
-- 定名：✅ 逐字一致
-- 步骤1原文：Lie on the floor face down and place your hands about 36 inches apart from each other holding your torso up at arms length.
-- 步骤1译文：俯卧于地面，双手间距约36英寸（约91厘米）撑地，手臂完全伸直撑起躯干。手指朝前略外张，肩胛保持稳定不耸肩。
-- 步骤2原文：Place your toes on top of an exercise ball. This will allow your body to be elevated.
-- 步骤2译文：将脚尖或脚背置于瑞士球顶部，让身体呈脚高头低的抬升姿态。先稳定球体、找到平衡后再进入动作，防止球体滑动。
-- 步骤3原文：Lower yourself until your chest almost touches the floor as you inhale.
-- 步骤3译文：吸气，屈肘有控制地下降身体，直到胸部几乎触及地面。全程收紧核心，让瑞士球上的双脚保持稳定不晃动。
-- ……（共 5 步，步数对齐 ✅）
+- 要领示例：避免过度反弓下背，幅度适可而止
+- 纠错示例：避免下背过度反弓——控制撑起高度并保持髋部贴地，保护腰椎
+- 呼吸：准备就位时吸气，手掌下压撑起进入拉伸时呼气。
 - 术语命中：3/4（miss：Press）
 
-### Seated Bent Over Back Stretch → 坐姿俯身背部拉伸
+### Kettlebell Thruster → 壶铃火箭推
 - 定名：✅ 逐字一致
-- 步骤1原文：Sit comfortably on the floor, legs extended or crossed.
-- 步骤1译文：舒适地坐在垫面上，双腿向前伸直或盘腿交叉，脊柱自然直立，肩膀放松下沉，为俯身拉伸做好准备。
-- 步骤2原文：Hinge forward at the hips, keeping back relaxed.
-- 步骤2译文：以髋部为折点缓缓向前俯身，让背部保持放松延展，不要刻意绷紧脊柱，感受下背与腿后侧被逐渐拉长。
-- 步骤3原文：Let arms reach forward toward feet or floor.
-- 步骤3译文：双臂自然向前伸展，伸向脚尖方向或让手指触碰地面，肩颈保持放松，让背部的牵拉感温和渐进。
-- ……（共 5 步，步数对齐 ✅）
-- 要领示例：颈部放松，让头部自然下垂
-- 纠错示例：避免过度弓背折叠——保持从髋部俯身、背部延展，防止腰椎受压不适
-- 呼吸：俯身折叠前先吸气，向前俯身时缓缓呼气，随呼气让身体放松下沉加深拉伸。
-- 术语命中：2/3（miss：Chest / Pectorals / Pecs）
+- 步骤1原文：Clean two kettlebells to your shoulders. Clean the kettlebells to your shoulders by extending through the legs and hips as you pull the kettlebells towards your shoulders. Rotate your wrists as you do so. This will be your starting position.
+- 步骤1译文：将两只壶铃翻举至肩部起始位：双腿与髋部发力伸展，把壶铃向肩部方向提拉，同时旋转手腕让壶铃稳稳架在肩前。这是起始姿势。
+- 步骤2原文：Begin to squat by flexing your hips and knees, lowering your hips between your legs. Maintain an upright, straight back as you descend as low as you can.
+- 步骤2译文：屈髋屈膝开始下蹲，让髋部在两腿之间下沉；下蹲全程保持背部挺直、躯干直立，收紧核心，尽可能蹲到最低点。
+- 步骤3原文：At the bottom, reverse direction and squat by extending your knees and hips, driving through your heels. As you do so, press both kettlebells overhead by extending your arms straight up, using the momentum from the squat to help drive the weights upward.
+- 步骤3译文：蹲至底部后反向发力，脚跟蹬地伸展膝、髋站起；同时借助下蹲反弹的惯性将双臂向上完全伸直，把壶铃推举过头顶。
+- ……（共 4 步，步数对齐 ✅）
+- 术语命中：3/7（miss：Squat、Clean、Overhead、Arms Straight）
 
-### Single Dumbbell Stiff-Leg Deadlift → 单哑铃直腿硬拉
+### Lever Reverse Hyperextension → 器械反向山羊挺身
 - 定名：✅ 逐字一致
-- 步骤1原文：Stand upright holding a dumbbell with both hands at your thighs.
-- 步骤1译文：直立站好，双脚与髋同宽，双手共同握住一只哑铃自然垂于大腿前侧，收紧核心、目视前方。
-- 步骤2原文：Keep a slight bend in your knees and your back flat.
-- 步骤2译文：保持膝盖微屈并固定屈膝角度不变，背部平直，肩胛骨后缩下沉，让脊柱全程处于中立位置。
-- 步骤3原文：Hinge forward at the hips, lowering the dumbbell towards the floor.
-- 步骤3译文：以髋部为铰链向前俯身，臀部主动向后推送，让哑铃紧贴大腿前侧缓慢向地面方向下放。
-- ……（共 5 步，步数对齐 ✅）
-- 要领示例：臀部向后坐，用髋部主导俯身幅度。
-- 纠错示例：避免弓背下放——腰椎一旦弯曲压力剧增，应在背部即将变形前停止下放。
-- 呼吸：俯身下放阶段吸气，起身还原发力时呼气。
-- 术语命中：4/6（miss：Flat、Stretch）
-
-### Stability Ball Leg Curl → 瑞士球腿弯举
-- 定名：✅ 逐字一致
-- 步骤1原文：Lie face up on the floor, arms at your sides, heels on a stability ball.
-- 步骤1译文：仰卧于地面，双臂自然放在身体两侧、掌心贴地稳定躯干，双脚脚跟搭在瑞士球顶部正中，身体保持放松准备进入动作。
-- 步骤2原文：Lift hips to form a straight line from shoulders to heels.
-- 步骤2译文：收紧臀大肌与核心，向上抬起髋部，直到肩、髋、脚跟呈一条直线，感受臀肌与腘绳肌的等长收缩。
-- 步骤3原文：Bend knees to roll the ball toward your glutes.
-- 步骤3译文：保持髋部高度不变、不塌落，屈膝把瑞士球向臀部方向回拉，小腿始终贴住球面，集中感受腘绳肌收缩发力。
-- ……（共 5 步，步数对齐 ✅）
-- 要领示例：全程保持髋部向上顶起，臀部不落地。
-- 纠错示例：避免髋部中途下塌——会导致腘绳肌刺激减弱并增加腰部压力，全程保持肩到踵呈直线、臀部持续收紧。
-- 呼吸：屈膝将球拉回时呼气，伸腿将球推出还原时吸气。
+- 步骤1原文：Adjust the machine so your hips rest on the pad and your legs can hang freely.
+- 步骤1译文：调整器械，使髋部贴靠在垫上，双腿可自然下垂悬空。髋部位置决定发力角度，务必先校准再俯身。
+- 步骤2原文：Lie face down with your torso supported and grip the handles or sides for stability.
+- 步骤2译文：俯卧让躯干获得器械充分支撑，双手握紧把手或器械两侧以稳定身体，肩膀放松不耸起。
+- 步骤3原文：Place your feet against the foot pads and let your legs hang down under control.
+- 步骤3译文：双脚抵住脚垫，让双腿有控制地自然下垂至起始位置。开始前确保双腿处于放松悬挂状态。
+- ……（共 6 步，步数对齐 ✅）
+- 要领示例：用臀大肌收缩发力抬腿，感受臀部收紧。
+- 纠错示例：避免借惯性甩腿上抬——应放慢节奏，用臀大肌收缩主导每一次抬腿。
+- 呼吸：下放双腿时吸气，向身后上方抬起发力时呼气。
 - 术语命中：7/7
 
-### Suspended Split Squat → 悬吊分腿蹲
+### Lying Quadriceps Stretch → 仰卧股四头肌拉伸
 - 定名：✅ 逐字一致
-- 步骤1原文：Suspend your straps so the handles are 18-30 inches from the floor.
-- 步骤1译文：将悬吊带调整至合适长度，使把手位于离地面18-30英寸的高度。
-- 步骤2原文：Facing away from the setup, place your rear foot into the handle behind you. Keep your head looking forward and your chest up, with your knee slightly bent. This will be your starting position.
-- 步骤2译文：背对悬吊架站立，将后脚放入身后的把手内。目视前方、挺胸，后腿膝盖微屈，这是起始姿势。
-- 步骤3原文：Descend by flexing the knee and hips, lowering yourself to the ground. Keep your weight on the heel of your foot and maintain your posture throughout the exercise.
-- 步骤3译文：屈膝屈髋让身体垂直下降。重心压在前脚脚跟上，全程保持躯干挺直、姿态稳定。
+- 步骤1原文：Lie on your stomach with legs extended.
+- 步骤1译文：俯卧于垫上，双腿向后完全伸直并拢，身体放松，可将额头轻贴垫面保持颈部舒适。
+- 步骤2原文：Bend one knee, bringing heel toward glute.
+- 步骤2译文：屈曲一侧膝盖，让脚跟向臀部方向靠近，另一条腿保持伸直贴地，骨盆位置不要移动。
+- 步骤3原文：Reach back and grasp ankle with hand.
+- 步骤3译文：用同侧手臂向后伸，抓住该侧脚踝或脚背，握稳之后再准备加深拉伸幅度。
+- ……（共 5 步，步数对齐 ✅）
+- 要领示例：双膝保持并拢，不要分开
+- 纠错示例：避免用力过猛拉拽脚踝——以大腿前侧中等牵拉感为限，防止肌肉拉伤
+- 呼吸：向臀部方向牵拉加深时呼气，放松还原时吸气。
+- 术语命中：4/5（miss：Flat）
+
+### Plyometric Side Lunge Stretch → 增强式侧弓步拉伸
+- 定名：✅ 逐字一致
+- 步骤1原文：Stand with feet wider than hip-width apart.
+- 步骤1译文：双脚开立，站距略宽于髋部，脚尖朝向正前方或微微外展。保持身体直立、目视前方，为侧向移动做好准备。
+- 步骤2原文：Shift your weight to one side, bending the knee and keeping the opposite leg straight.
+- 步骤2译文：将重心移向一侧，弯曲该侧膝盖下蹲，同时保持另一条腿完全伸直。感受伸直腿大腿内侧内收肌群的牵拉感。
+- 步骤3原文：Drop into a deep lunge while maintaining upright posture.
+- 步骤3译文：继续下沉至深弓步位置，上身保持挺直不弓背。臀部向后推坐，尽量加深对大腿内侧的拉伸幅度。
+- ……（共 5 步，步数对齐 ✅）
+- 要领示例：挺胸抬头，保持上身直立不塌陷。
+- 纠错示例：避免膝盖向内塌陷——保持膝盖对准脚尖方向，否则会增加膝关节受压风险。
+- 呼吸：准备姿势时吸气，向一侧下蹲进入弓步的过程中呼气，左右交替重复时保持这一呼吸节奏。
+- 术语命中：5/7（miss：Lunge、Chest / Pectorals / Pecs）
+
+### Running → 跑步
+- 定名：✅ 逐字一致
+- 步骤1原文：Warm up with light walking or dynamic stretches.
+- 步骤1译文：先以轻快的步行或动态拉伸充分热身，让肌肉温度升高、关节滑液分泌增加，为接下来的跑步做好身体准备。
+- 步骤2原文：Begin running at a moderate pace.
+- 步骤2译文：以中等配速开始起跑，步频与步幅保持稳定节奏，避免起步过猛导致心率骤升、过早疲劳。
+- 步骤3原文：Maintain a steady breathing rhythm and upright posture.
+- 步骤3译文：保持均匀稳定的呼吸节奏，躯干挺直、挺胸收腹、目视前方，让身体在跑动全程保持高效姿态。
+- ……（共 5 步，步数对齐 ✅）
+- 要领示例：挺胸抬头，保持躯干不塌陷
+- 纠错示例：避免步幅过大跨步跑——落地点超出重心前方过多会形成刹车效应，加大膝关节冲击，应提升步频、适当缩小步幅
+- 呼吸：蹬地发力推进时平稳呼气，身体回弹恢复阶段吸气，保持呼吸节奏均匀连贯。
+- 术语命中：1/2（miss：Chest / Pectorals / Pecs）
+
+### Side Bend Stretch → 体侧拉伸
+- 定名：✅ 逐字一致
+- 步骤1原文：Stand or sit tall with spine neutral.
+- 步骤1译文：站立或坐姿均可，保持脊柱中立位挺直坐高，双肩放松下沉，目视前方。
+- 步骤2原文：Raise right arm overhead.
+- 步骤2译文：右臂伸直举过头顶，感受身体右侧的初步延展，手臂尽量贴近耳侧。
+- 步骤3原文：Slowly bend torso to the left, keeping hips steady.
+- 步骤3译文：缓慢将躯干向左侧弯曲，保持骨盆稳定不动，让拉伸感沿右侧腰腹延伸。
+- ……（共 5 步，步数对齐 ✅）
+- 要领示例：保持两侧骨盆等高水平
+- 纠错示例：避免躯干扭转代偿——保持胸口朝前，只做纯粹的侧向弯曲
+- 呼吸：侧屈进入拉伸时呼气，回到直立姿势时吸气。
+- 术语命中：2/4（miss：Twist、Overhead）
+
+### Squat → 徒手深蹲
+- 定名：✅ 逐字一致
+- 步骤1原文：Stand with feet shoulder-width apart and toes slightly outward.
+- 步骤1译文：挺直站立，双脚分开与肩同宽，脚尖略微向外打开。重心均匀分布于双脚，目视前方。
+- 步骤2原文：Brace core and keep chest up.
+- 步骤2译文：收紧核心，挺胸抬头，肩胛骨后缩下沉。保持脊柱中立位，为下蹲建立稳定躯干。
+- 步骤3原文：Initiate movement by pushing hips back and bending knees.
+- 步骤3译文：以臀部向后坐的方式启动动作，同时屈膝下蹲。膝盖方向与脚尖一致，感受臀部与大腿后侧被拉紧。
+- ……（共 5 步，步数对齐 ✅）
+- 要领示例：膝盖始终对准脚尖方向，不内扣
+- 纠错示例：避免膝盖内扣塌陷——主动将膝盖对准脚尖方向，防止膝关节压力增大。
+- 呼吸：下蹲下落时吸气，起身站立发力时呼气。
+- 术语命中：7/8（miss：Chest / Pectorals / Pecs）
+
+### Supine Chest Throw → 仰卧胸前抛球
+- 定名：✅ 逐字一致
+- 步骤1原文：This drill is great for chest passes when you lack a partner or a wall of sufficient strength. Lay on the ground on your back with your knees bent.
+- 步骤1译文：这项练习非常适合在缺少同伴或没有足够坚固墙面时练习胸前抛球。仰卧于地面，屈膝让双脚平稳踩实，下背贴地并收紧核心保持身体稳定。
+- 步骤2原文：Begin with the ball on your chest, held with both hands on the bottom.
+- 步骤2译文：将药球放在胸口位置，双手从下方托住球体，肘部自然弯曲贴近身体两侧，让胸部肌肉预先保持一定张力。
+- 步骤3原文：Explode up, extending through the elbow to throw the ball directly above you as high as possible.
+- 步骤3译文：从胸口爆发性向上推球，充分伸展肘关节，将球笔直抛向头顶正上方并尽可能抛高，感受胸大肌的快速收缩发力。
 - ……（共 4 步，步数对齐 ✅）
-- 术语命中：3/5（miss：Squat、Chest / Pectorals / Pecs）
+- 术语命中：2/2
+
+### Yoke Walk → 轭架行走
+- 定名：✅ 逐字一致
+- 步骤1原文：The yoke is usually done with a yoke apparatus, but is sometimes seen with refrigerators or other heavy objects.
+- 步骤1译文：轭架行走通常使用专门的轭架器械进行，有时也会用冰箱或其他重物代替完成。重量应以自己能够稳定控制为准。
+- 步骤2原文：Begin by racking the apparatus across the back of the shoulders. With your head looking forward and back arched, lift the yoke by driving through the heels.
+- 步骤2译文：将器械架于两侧肩后，目视前方、背部保持适度反弓，收紧核心，双脚脚跟发力蹬地将轭架抬离地面并站直。
+- 步骤3原文：Begin walking as quickly as possible using short, quick steps. You may hold the side posts of the yoke to help steady it and hold it in position. Continue for the given distance as fast as possible, usually 75-100 feet.
+- 步骤3译文：采用短促快速的步伐尽快向前行走，可以扶住轭架侧柱帮助稳定并保持位置。以最快速度完成规定距离，通常为75-100英尺。
+- 术语命中：2/2
 
 ## 五、复核口径说明
 
