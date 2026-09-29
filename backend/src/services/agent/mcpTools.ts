@@ -115,7 +115,6 @@ import { generateExerciseNanoId } from "../../utils/nanoid.js";
 import { createWeeklyPlanRepository } from "../../db/postgresql/repository/weeklyPlan.repository.js";
 import {
   WEEK_ID_PATTERN,
-  PLAN_ENTRY_DATE_PATTERN,
   getIsoWeekId,
   // T2 (issue #54): find_exercises 参数词表直接复用数据契约真源（17 肌群 / 15 器材）
   ExerciseMuscleSchema,
@@ -1113,44 +1112,15 @@ const getCurrentPlanSchema = z
       "REUSE it and adjust entries on request instead of regenerating.",
   );
 
-const weeklyPlanEntryInputSchema = z.object({
-  entry_date: z
-    .string()
-    .regex(PLAN_ENTRY_DATE_PATTERN, "Calendar day YYYY-MM-DD")
-    .describe("Calendar day YYYY-MM-DD this entry belongs to (no timezone)."),
-  exercise_id: z
-    .string()
-    .min(12)
-    .max(24)
-    .describe("Exercise id from list_exercises (NEVER invented)."),
-  target_sets: z
-    .number()
-    .int()
-    .positive()
-    .describe("Target set count for the day (positive integer)."),
-  target_load: z
-    .object({
-      type: z.enum(["rpe", "percent_1rm"]),
-      min: z.number(),
-      max: z.number(),
-    })
-    .describe(
-      "Target load range [min, max]: RPE 0-10 when type=rpe, %1RM (0,100] " +
-        "when type=percent_1rm. min must be <= max.",
-    ),
-  sort_order: z
-    .number()
-    .int()
-    .min(0)
-    .optional()
-    .describe("Order within the same day (default 0)."),
-});
-
 // [B5b issue#38] save_weekly_plan 工具已移除：周计划写入改为提案-确认架构——
 // Agent 提案轮算好 entries 随 weekly_plan 卡携带（data.apply 载荷），用户点
 // 「确认启用」后前端直调 POST /api/schedule/weekly-plan/apply 确定性落库。
 // 确认前计划不进数据库（根治「计划不知什么时候就出现了」）。读取仍走
 // get_current_plan；调整/重算同经确认端点（scope=days / week）。
+// [T9 #66] apply 载荷 entries 单条形态（含 day_focus/rationale/category/sets
+// 结构化字段）契约真源 = shared/contracts PlanEntryInputSchema——此处不再
+// 维护本地副本（旧 save_weekly_plan 时代的 weeklyPlanEntryInputSchema 已删，
+// 防双源漂移），Agent 侧字段速查见 /data-schema/knowledge/plan.md。
 
 // ---------------------------------------------------------------------------
 // Scoped write helpers (exposed so B2/B3 can drive the guard with real PG)

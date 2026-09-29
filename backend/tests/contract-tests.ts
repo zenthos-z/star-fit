@@ -39,6 +39,11 @@ import {
   ScheduleSummaryResponseSchema,
   TODAY_STATUS_TO_SUMMARY,
   getIsoWeekId,
+  PlanSetPrescriptionSchema,
+  PlanEntryCategorySchema,
+  WeeklyPlanCardDataSchema,
+  resolvePlanEntryCategory,
+  PLAN_ENTRY_CATEGORY_VALUES,
   type PlanEntry,
   type WeeklyPlan,
 } from "../../shared/contracts/index.js";
@@ -310,6 +315,11 @@ function buildEntryRow(overrides: Record<string, unknown> = {}) {
     target_load: { type: "rpe", min: 7, max: 8 },
     status: "planned",
     sort_order: 0,
+    // [T9 #66] 结构化列缺省「旧行」形态（004 迁移前存量：全 NULL）
+    day_focus: null,
+    rationale: null,
+    category: null,
+    sets: null,
     created_at: "2026-09-26T08:00:00.000Z",
     updated_at: "2026-09-26T08:00:00.000Z",
     ...overrides,
@@ -981,6 +991,243 @@ describe("Contract Tests: Weekly Plan", () => {
     // 同态迁移 = 幂等重放，恒放行
     for (const s of ["planned", "adjusted", "completed", "skipped"] as const) {
       assert.strictEqual(canTransitionPlanEntryStatus(s, s), true);
+    }
+  });
+});
+
+// ============================================================================
+// Contract Tests: Weekly Plan Structured Fields (T9 / issue #66)
+// day_focus / rationale / category / sets 逐组处方——新字段 Zod 往返 + 旧数据回落
+// ============================================================================
+
+describe("Contract Tests: Weekly Plan Structured Fields (T9)", () => {
+  /** T9 全字段条目输入（apply 载荷单条形态） */
+  function structuredEntryInput(overrides: Record<string, unknown> = {}) {
+    return {
+      entry_date: "2026-09-28",
+      exercise_id: WP_EXERCISE_ID,
+      target_sets: 3,
+      target_load: { type: "rpe", min: 6, max: 8 },
+      status: "planned",
+      sort_order: 1,
+      day_focus: "胸肩三头",
+      rationale: "复合动作打底建立基础力量，末端轻量收尾",
+      category: "main",
+      sets: [
+        { set_no: 1, weight_kg: 60, reps: 8, rpe: 7 },
+        { set_no: 2, weight_kg: 62.5, reps: 8, rpe: 7.5 },
+        { set_no: 3, weight_kg: 65, reps: 6, rpe: 8 },
+      ],
+      ...overrides,
+    };
+  }
+
+  test("input with full structured fields roundtrips (values preserved)", () => {
+    const result = CreateWeeklyPlanInputSchema.safeParse(
+      buildCreateInput({ entries: [structuredEntryInput()] }),
+    );
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      const e = result.data.entries[0];
+      assert.strictEqual(e.day_focus, "胸肩三头");
+      assert.strictEqual(e.category, "main");
+      assert.strictEqual(e.sets?.length, 3);
+      assert.strictEqual(e.sets?.[0].weight_kg, 60);
+      assert.strictEqual(e.sets?.[0].rpe, 7);
+      assert.strictEqual(e.sets?.[2].reps, 6);
+    }
+  });
+
+  test("legacy apply payload (no structured fields) still parses — backward compat", () => {
+    const result = CreateWeeklyPlanInputSchema.safeParse(
+      buildCreateInput({
+        entries: [
+          {
+            entry_date: "2026-09-28",
+            exercise_id: WP_EXERCISE_ID,
+            target_sets: 4,
+            target_load: { type: "rpe", min: 7, max: 8 },
+          },
+        ],
+      }),
+    );
+    assert.strictEqual(result.success, true);
+    if (result.success) {
+      assert.strictEqual(result.data.entries[0].day_focus, undefined);
+      assert.strictEqual(result.data.entries[0].sets, undefined);
+    }
+  });
+
+  test("legacy row (structured columns all NULL) parses — old-plan fallback", () => {
+    const entry = PlanEntrySchema.parse(buildEntryRow()); // fixture 默认全 null
+    assert.strictEqual(entry.day_focus, null);
+    assert.strictEqual(entry.rationale, null);
+    assert.strictEqual(entry.category, null);
+    assert.strictEqual(entry.sets, null);
+  });
+
+  test("enriched row roundtrips through PlanEntrySchema", () => {
+    const entry = PlanEntrySchema.parse(
+      buildEntryRow({
+        target_sets: 2,
+        day_focus: "腿",
+        rationale: "深蹲日：主项 5×5 建立模式，注意下背中立",
+        category: "main",
+        sets: [
+          { set_no: 1, weight_kg: 80, reps: 5, rpe: 7 },
+          { set_no: 2, reps: 12, rpe: 5 }, // 自重组：weight_kg 可省
+        ],
+      }),
+    );
+    assert.strictEqual(entry.day_focus, "腿");
+    assert.strictEqual(entry.category, "main");
+    assert.strictEqual(entry.sets?.[1].weight_kg, undefined);
+    assert.strictEqual(entry.sets?.[1].reps, 12);
+  });
+
+  test("sets length must equal target_sets (display=storage same-source rule)", () => {
+    const result = CreateWeeklyPlanInputSchema.safeParse(
+      buildCreateInput({
+        entries: [
+          structuredEntryInput({
+            target_sets: 4, // sets 只有 3 组
+          }),
+        ],
+      }),
+    );
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes("sets")));
+    }
+  });
+
+  test("set_no must be contiguous 1..N", () => {
+    const result = CreateWeeklyPlanInputSchema.safeParse(
+      buildCreateInput({
+        entries: [
+          structuredEntryInput({
+            sets: [
+              { set_no: 1, weight_kg: 60, reps: 8, rpe: 7 },
+              { set_no: 3, weight_kg: 65, reps: 6, rpe: 8 }, // 跳号
+            ],
+            target_sets: 2,
+          }),
+        ],
+      }),
+    );
+    assert.strictEqual(result.success, false);
+    if (!result.success) {
+      assert.ok(result.error.issues.some((i) => i.path.includes("set_no")));
+    }
+  });
+
+  test("per-set prescription field bounds: rpe 0-10, reps positive int, set_no positive", () => {
+    assert.strictEqual(
+      PlanSetPrescriptionSchema.safeParse({
+        set_no: 1,
+        reps: 8,
+        rpe: 10.5,
+      }).success,
+      false,
+    );
+    assert.strictEqual(
+      PlanSetPrescriptionSchema.safeParse({ set_no: 1, reps: 0, rpe: 7 })
+        .success,
+      false,
+    );
+    assert.strictEqual(
+      PlanSetPrescriptionSchema.safeParse({ set_no: 0, reps: 8, rpe: 7 })
+        .success,
+      false,
+    );
+    // 合法上界：rpe 10 / 0.5 步进 / weight_kg 省略
+    assert.strictEqual(
+      PlanSetPrescriptionSchema.safeParse({ set_no: 1, reps: 8, rpe: 10 })
+        .success,
+      true,
+    );
+  });
+
+  test("category enum is exactly warmup|main|cooldown", () => {
+    assert.deepStrictEqual(
+      [...PLAN_ENTRY_CATEGORY_VALUES],
+      ["warmup", "main", "cooldown"],
+    );
+    assert.strictEqual(
+      PlanEntryCategorySchema.safeParse("cardio").success,
+      false,
+    );
+  });
+
+  test("resolvePlanEntryCategory falls back to main on legacy NULL", () => {
+    assert.strictEqual(resolvePlanEntryCategory(null), "main");
+    assert.strictEqual(resolvePlanEntryCategory(undefined), "main");
+    assert.strictEqual(resolvePlanEntryCategory("warmup"), "warmup");
+    assert.strictEqual(resolvePlanEntryCategory("cooldown"), "cooldown");
+  });
+
+  test("today schedule entry: new fields optional (legacy render path) and validated when present", () => {
+    const base = {
+      entry_id: WP_ENTRY_ID,
+      exercise_id: WP_EXERCISE_ID,
+      exercise_name: "杠铃深蹲",
+      target_sets: 3,
+      target_load: { type: "rpe", min: 6, max: 8 },
+      status: "planned",
+      sort_order: 0,
+    };
+    // 旧数据回落渲染：缺新字段也过（后端出库恒携带，此处锁「缺省不炸」）
+    assert.strictEqual(TodayScheduleEntrySchema.safeParse(base).success, true);
+    // 全字段
+    const full = TodayScheduleEntrySchema.safeParse({
+      ...base,
+      day_focus: "腿",
+      rationale: "深蹲日",
+      category: "warmup",
+      sets: [{ set_no: 1, reps: 10, rpe: 4 }],
+    });
+    assert.strictEqual(full.success, true);
+    // 非法段位拒绝
+    assert.strictEqual(
+      TodayScheduleEntrySchema.safeParse({ ...base, category: "finisher" })
+        .success,
+      false,
+    );
+  });
+
+  test("weekly_plan card accepts day rationale + exercise category (display layer)", () => {
+    const card = WeeklyPlanCardDataSchema.safeParse({
+      week_label: "第 1 周",
+      split_summary: "全身 · 每周 3 练",
+      days: [
+        {
+          entry_date: "2026-09-28",
+          split_label: "全身 A",
+          focus: "蹲+水平推拉",
+          rationale: "首个训练日以复合动作建立动作模式",
+          rest: false,
+          exercises: [
+            {
+              exercise_id: WP_EXERCISE_ID,
+              name: "杠铃深蹲",
+              category: "main",
+              sets: [{ set: 1, weight: 40, reps: 8 }],
+            },
+            {
+              exercise_id: "bench-press-00002",
+              name: "弹力带肩外旋",
+              category: "warmup",
+              sets: [{ set: 1, reps: 15 }],
+            },
+          ],
+        },
+        { entry_date: "2026-09-29", rest: true, exercises: [] },
+      ],
+    });
+    assert.strictEqual(card.success, true);
+    if (card.success) {
+      assert.strictEqual(card.data.days[0].rationale?.length > 0, true);
+      assert.strictEqual(card.data.days[0].exercises[1].category, "warmup");
     }
   });
 });

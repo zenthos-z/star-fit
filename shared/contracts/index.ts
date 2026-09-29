@@ -1251,6 +1251,8 @@ export {
   PLAN_ENTRY_STATUS_TRANSITIONS,
   SET_TYPE_VALUES,
   DEFAULT_SET_TYPE,
+  PLAN_ENTRY_CATEGORY_VALUES,
+  DEFAULT_PLAN_ENTRY_CATEGORY,
 
   // Schemas
   WeekIdSchema,
@@ -1259,6 +1261,8 @@ export {
   PlanEntryStatusSchema,
   PlanLoadTypeSchema,
   TargetLoadSchema,
+  PlanEntryCategorySchema,
+  PlanSetPrescriptionSchema,
   WeeklyPlanSchema,
   PlanEntrySchema,
   WeeklyPlanWithEntriesSchema,
@@ -1283,6 +1287,8 @@ export {
   type PlanEntryStatus,
   type PlanLoadType,
   type TargetLoad,
+  type PlanEntryCategory,
+  type PlanSetPrescription,
   type WeeklyPlan,
   type PlanEntry,
   type WeeklyPlanWithEntries,
@@ -1302,6 +1308,7 @@ export {
 
   // Functions
   canTransitionPlanEntryStatus,
+  resolvePlanEntryCategory,
   getIsoWeekId,
 } from './weekly-plan.js';
 
