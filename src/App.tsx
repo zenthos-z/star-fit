@@ -7,6 +7,7 @@ import { computeSettlementSummary } from './lib/settlementSummary';
 import { LoadAnchors } from './types/protocol';
 import TimerCapsule from './components/TimerCapsule';
 import LockScreen from './components/execution/LockScreen';
+import FeelModal, { type FeelModalTarget, type FeelPatch } from './components/execution/FeelModal';
 import { ExerciseCardV2 } from './components/execution/ExerciseCardV2';
 import ReorderMode from './components/execution/ReorderMode';
 import SettlementV2 from './components/settlement/SettlementV2';
@@ -72,6 +73,15 @@ interface ChatMessage {
     planData?: any[]; // Stores the raw plan data from AI before adding to session
     isThinking?: boolean;
 }
+
+/**
+ * 力量类动作类型：组完成后存在组间休息（handleUpdateSet 塞默认 60s 倒计时），
+ * 也是组后感受弹窗（#98）的触发集合——有氧/户外是持续运动，完成后无休息语境不弹。
+ * ★与 handleUpdateSet 内休息赋值分支共用同一清单，两处语义必须同步。
+ */
+const STRENGTH_SET_TYPES: ExerciseType[] = [
+  'resistance', 'bodyweight', 'assisted', 'unilateral', 'weight_only', 'reps_only', 'isometric',
+];
 
 /**
  * 将 Exercise 转换为 ExerciseAction 用于 ExerciseSettingsModal
@@ -501,6 +511,10 @@ const App: React.FC = () => {
   const [pickerEntry, setPickerEntry] = useState<{ mode: 'batch' | 'append' } | null>(null);
   const [toast, setToast] = useState<{ msg: string; visible: boolean }>({ msg: '', visible: false });
   const lastBackPressRef = useRef<number>(0);
+
+  // 组后感受弹窗（#98）：当前待评价的组。确认 → feel/feel_note 写回该组
+  // （经 handleUpdateSet，sync 原样携带入库）；跳过 → 不写任何字段直接关。
+  const [feelTarget, setFeelTarget] = useState<FeelModalTarget | null>(null);
 
   // Reorder Mode State
   const [reorderMode, setReorderMode] = useState<{ 
@@ -1040,6 +1054,25 @@ const App: React.FC = () => {
       }
     }
 
+    // 组后感受弹窗（#98）：力量类组完成跃迁即弹（组间休息语境）。触发点收口在
+    // handleUpdateSet——锁屏大按钮 / 训练卡片 / 手表遥控三条完成路径全经过这里，
+    // 手表端完成组手机同样弹窗。有氧/户外无休息语境不弹（STRENGTH_SET_TYPES 注释）。
+    if (updates.completed === true) {
+      const ex = session.exercises.find(e => e.id === exId);
+      const oldSet = ex?.sets.find(s => s.id === setId);
+      const isStrength = STRENGTH_SET_TYPES.includes(ex?.type as ExerciseType) || ex?.type == null;
+      if (ex && oldSet && !oldSet.completed && isStrength) {
+        const setIdx = ex.sets.findIndex(s => s.id === setId);
+        setFeelTarget({
+          exId,
+          setId,
+          exName: ex.name,
+          setNo: setIdx + 1,
+          total: ex.sets.length,
+        });
+      }
+    }
+
     setSession(prev => {
       const updatedExercises = prev.exercises.map(ex => {
         if (ex.id === exId) {
@@ -1055,8 +1088,7 @@ const App: React.FC = () => {
               //      零休息直切下一个动作界面）
               //   有氧/户外是持续运动，完成后不存在休息（户外跑假休息 bug 的根修保持）
               if (updates.completed === true && !s.completed) {
-                const STRENGTH_TYPES = ['resistance', 'bodyweight', 'assisted', 'unilateral', 'weight_only', 'reps_only', 'isometric'];
-                const isStrength = STRENGTH_TYPES.includes(ex.type) || ex.type === null || ex.type === undefined;
+                const isStrength = STRENGTH_SET_TYPES.includes(ex.type) || ex.type === null || ex.type === undefined;
                 if (isStrength) {
                   const now = Date.now();
                   const DEFAULT_REST_TIME = 60; // 默认60秒
@@ -1108,6 +1140,18 @@ const App: React.FC = () => {
     const target = ex?.sets.find(s => s.id === setId);
     const cur = target?.restEndTime ?? Date.now();
     handleUpdateSet(exId, setId, { restEndTime: cur + extraSec * 1000 });
+  };
+
+  // --- 组后感受弹窗（#98）：确认写当前组 feel/feel_note，跳过不写任何字段 ---
+
+  const handleFeelConfirm = (patch: FeelPatch) => {
+    if (!feelTarget) return;
+    handleUpdateSet(feelTarget.exId, feelTarget.setId, patch);
+    setFeelTarget(null);
+  };
+
+  const handleFeelSkip = () => {
+    setFeelTarget(null);
   };
 
   // 手表遥控上行（2026-09-20 上提 App 层）：手表「完成本组/休息按钮」→ 手机状态机。
@@ -1560,6 +1604,19 @@ const App: React.FC = () => {
             onPause={handlePauseSession}
             onResume={handleResumeSession}
             onEnd={() => handleEndSession()}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* 组后感受弹窗（#98，z-[150] > 锁屏 z-[140]）：组完成即弹，确认/跳过二选一。
+          会话非 active/paused（已结束）随条件卸载，录音轮询在组件卸载时兜底清理 */}
+      <AnimatePresence>
+        {feelTarget && (session.status === 'active' || session.status === 'paused') && (
+          <FeelModal
+            key="feel-modal"
+            target={feelTarget}
+            onConfirm={handleFeelConfirm}
+            onSkip={handleFeelSkip}
           />
         )}
       </AnimatePresence>
