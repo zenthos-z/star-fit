@@ -7,7 +7,8 @@
  * - User ID input with dropdown selection
  * - Integrated scan button inside input field
  * - Scanning animation with spinner
- * - Server list popup for selection
+ * - 多命中列出全部供选择，单命中自动连接（#84 多后端共存场景）
+ * - 自动登录连接失败自动重扫：单命中重连，多命中带提示重选
  * - Auto-discover LAN servers
  * - Integration with L2 IDB storage
  */
@@ -16,7 +17,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { isNativeTabBar, hideTabBar } from '../lib/nativeTabBar';
 import {
-  detectServer,
+  detectServers,
   checkServerHealth,
   formatServerUrl,
   parseServerInput
@@ -38,6 +39,8 @@ interface DiscoveredServer {
   url: string;
   source: string;
   latency?: number;
+  /** /health 响应的 version（多后端共存时供用户比对） */
+  version?: string;
 }
 
 interface User {
@@ -130,9 +133,17 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [isServerValid, setIsServerValid] = useState(false);
   const [showQRScanner, setShowQRScanner] = useState(false);
-  const [autoLoginStatus, setAutoLoginStatus] = useState<'idle' | 'connecting' | 'failed'>('idle');
+  const [autoLoginStatus, setAutoLoginStatus] = useState<'idle' | 'connecting' | 'rescanning' | 'failed'>('idle');
+  // 多命中选择列表顶部提示（重扫语境：「上次连接的地址已不可用，请重新选择」）
+  const [serverListNotice, setServerListNotice] = useState<string | null>(null);
   const userDropdownRef = useRef<HTMLDivElement>(null);
   const autoLoginAttemptedRef = useRef(false);
+  // 自动登录失败原因：连接不可达才触发自动重扫（鉴权失败重扫无意义）
+  const autoFailKindRef = useRef<'unreachable' | 'other' | null>(null);
+  // 自动重扫只做一次，防「连不上→重扫→自动重连→又失败」循环
+  const rescanAttemptedRef = useRef(false);
+  // 列表语境：手动扫描（失败报错可见）vs 失败重扫（静默重连，横幅反馈）
+  const listContextRef = useRef<'manual' | 'rescan'>('manual');
 
   // 登录页隐藏原生 Tab Bar：
   // MainTabBar 只在登录后的分支渲染，注销 reload 后没人调 hideTabBar()，
@@ -257,13 +268,19 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
 
   // 自动登录：有保存的凭据（= 非第一次使用）时静默直连上次服务器。
   // 第一次使用（无凭据）不受影响 —— 手动输入 / 点放大镜扫描。
+  // 连接不可达时自动重扫：单命中自动重连，多命中弹选择列表
+  // （附「上次连接的地址已不可用」提示），零命中停在表单走手输路径。
   useEffect(() => {
     if (!hydrated || autoLoginAttemptedRef.current) return;
     autoLoginAttemptedRef.current = true;
     if (!serverIp.trim() || !userId.trim()) return; // 第一次使用：什么都不做
     setAutoLoginStatus('connecting');
     loginWithCredentials(serverIp, userId, true).then((ok) => {
-      if (!ok) setAutoLoginStatus('failed'); // 失败停在已填好的表单，等用户手动
+      if (!ok && autoFailKindRef.current === 'unreachable') {
+        void rescanAfterAutoFail();
+      } else if (!ok) {
+        setAutoLoginStatus('failed'); // 失败停在已填好的表单，等用户手动
+      }
     });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [hydrated]);
@@ -323,15 +340,24 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
     setIsScanning(true);
     setError('');
     setDiscoveredServers([]);
+    setServerListNotice(null);
+    listContextRef.current = 'manual';
 
     try {
-      const result = await detectServer();
+      const hits = await detectServers();
 
-      if (result) {
-        setDiscoveredServers([result]);
-        setShowServerList(true);
+      if (hits.length === 0) {
+        // 未命中：静默收场，不弹错误——用户直接在输入框手输 IP 即可
+        return;
       }
-      // 未命中：静默收场，不弹错误——用户直接在输入框手输 IP 即可
+      if (hits.length === 1) {
+        // 单命中：自动连接，不再让用户多点一次
+        connectToServer(hits[0]);
+        return;
+      }
+      // 多命中：列出全部供选择（多后端共存场景）
+      setDiscoveredServers(hits);
+      setShowServerList(true);
     } catch (e) {
       console.warn('[LoginV2] Scan failed:', e);
       setDiscoveredServers([]);
@@ -340,13 +366,59 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
     }
   };
 
-  const handleSelectServer = (server: DiscoveredServer) => {
-    setServerIp(formatServerUrl(server.url));
-    setShowServerList(false);
-    setDiscoveredServers([]);
+  /** 选定/命中单台后的统一接续：填 IP、记历史，已填用户名时直接登录 */
+  const connectToServer = (server: DiscoveredServer) => {
+    const ip = formatServerUrl(server.url);
+    setServerIp(ip);
 
     // Add to history
     addServerToHistory(server.url, server.latency).catch(console.error);
+
+    if (userId.trim()) {
+      // 重扫语境静默（失败走横幅），手动扫描语境报错可见
+      void loginWithCredentials(ip, userId, listContextRef.current === 'rescan');
+    }
+  };
+
+  const handleSelectServer = (server: DiscoveredServer) => {
+    setShowServerList(false);
+    setDiscoveredServers([]);
+    setServerListNotice(null);
+    connectToServer(server);
+  };
+
+  /**
+   * 自动登录连接失败后的自动重扫（issue #84）：
+   * 单命中自动重连（不二次重扫，防循环），多命中弹选择列表交还用户，
+   * 零命中停在表单走手输路径。
+   */
+  const rescanAfterAutoFail = async (): Promise<void> => {
+    if (rescanAttemptedRef.current) {
+      setAutoLoginStatus('failed');
+      return;
+    }
+    rescanAttemptedRef.current = true;
+    setAutoLoginStatus('rescanning');
+    try {
+      const hits = await detectServers();
+      if (hits.length === 0) {
+        setAutoLoginStatus('failed'); // 零命中：停在已填表单，等用户手输
+        return;
+      }
+      if (hits.length === 1) {
+        const ok = await loginWithCredentials(formatServerUrl(hits[0].url), userId, true);
+        if (!ok) setAutoLoginStatus('failed');
+        return;
+      }
+      listContextRef.current = 'rescan';
+      setDiscoveredServers(hits);
+      setServerListNotice('上次连接的地址已不可用，请重新选择');
+      setShowServerList(true);
+      setAutoLoginStatus('failed'); // 列表关掉后底部横幅仍有交代
+    } catch (e) {
+      console.warn('[LoginV2] Rescan failed:', e);
+      setAutoLoginStatus('failed');
+    }
   };
 
   const handleSelectUser = (user: User) => {
@@ -384,6 +456,7 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
 
     if (!healthCheck.ok) {
       if (silent) {
+        autoFailKindRef.current = 'unreachable'; // 连接失败（非鉴权）：允许自动重扫
         setAutoLoginStatus('failed');
         return false;
       }
@@ -430,6 +503,7 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
       return true;
     } catch (e) {
       if (silent) {
+        autoFailKindRef.current = 'other'; // 服务器可达但登录被拒：重扫无意义
         setAutoLoginStatus('failed');
         return false;
       }
@@ -644,32 +718,36 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
             </motion.div>
           )}
 
-          {/* Auto-login status（自动直连反馈：连接中禁点，失败后可手动重试） */}
+          {/* Auto-login status（自动直连反馈：连接/重扫中禁点，失败后可手动重试） */}
           {autoLoginStatus !== 'idle' && (
             <motion.div
               initial={{ opacity: 0, y: -6 }}
               animate={{ opacity: 1, y: 0 }}
               className={`text-xs font-bold p-3 rounded-2xl text-center ${
-                autoLoginStatus === 'connecting'
-                  ? 'bg-star-gray text-gray-500'
-                  : 'bg-amber-50 text-amber-600'
+                autoLoginStatus === 'failed'
+                  ? 'bg-amber-50 text-amber-600'
+                  : 'bg-star-gray text-gray-500'
               }`}
             >
               {autoLoginStatus === 'connecting'
                 ? '正在连接上次的服务器…'
-                : '自动连接上次服务器失败，请检查后重试或重新扫描'}
+                : autoLoginStatus === 'rescanning'
+                  ? '正在重新扫描局域网服务器…'
+                  : '自动连接上次服务器失败，请检查后重试或重新扫描'}
             </motion.div>
           )}
 
           {/* Login Button — 胶囊主行动钮（对齐 SettlementV2 双钮规范） */}
           <button
             onClick={handleLogin}
-            disabled={autoLoginStatus === 'connecting'}
+            disabled={autoLoginStatus === 'connecting' || autoLoginStatus === 'rescanning'}
             className={`w-full h-[50px] bg-star-dark text-white font-semibold text-[17px] rounded-full shadow-floating transition-all ${
-              autoLoginStatus === 'connecting' ? 'opacity-60 cursor-wait' : 'active:scale-95'
+              autoLoginStatus === 'connecting' || autoLoginStatus === 'rescanning'
+                ? 'opacity-60 cursor-wait'
+                : 'active:scale-95'
             }`}
           >
-            {autoLoginStatus === 'connecting' ? '正在连接…' : '登录'}
+            {autoLoginStatus === 'connecting' || autoLoginStatus === 'rescanning' ? '正在连接…' : '登录'}
           </button>
         </div>
       </div>
@@ -703,9 +781,15 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
                 <h3 className="text-lg font-black text-star-dark mb-2">
                   发现 {discoveredServers.length} 个服务器
                 </h3>
-                <p className="text-xs text-gray-400 mb-4">点击选择服务器自动填入 IP</p>
+                <p className="text-xs text-gray-400 mb-4">选择要连接的服务器</p>
 
-                <div className="space-y-2">
+                {serverListNotice && (
+                  <div className="bg-amber-50 text-amber-600 text-xs font-bold p-3 rounded-2xl text-center mb-4">
+                    {serverListNotice}
+                  </div>
+                )}
+
+                <div className="space-y-2 max-h-72 overflow-y-auto">
                   {discoveredServers.map((server, index) => (
                     <motion.button
                       key={index}
@@ -720,10 +804,12 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
                           <p className="font-bold text-star-dark text-sm truncate">
                             {formatServerUrl(server.url)}
                           </p>
-                          <p className="text-[10px] text-gray-400 mt-1 uppercase">
-                            来源: {server.source}
-                            {server.latency !== undefined && (
-                              <span className="ml-2">延迟: {server.latency}ms</span>
+                          <p className="text-[10px] text-gray-400 mt-1">
+                            {server.latency !== undefined && <span>{server.latency}ms</span>}
+                            {server.version && (
+                              <span className={server.latency !== undefined ? 'ml-2' : ''}>
+                                v{server.version}
+                              </span>
                             )}
                           </p>
                         </div>

@@ -72,12 +72,16 @@ export interface DetectionResult {
   url: string;
   source: string;
   latency?: number;
+  /** /health 响应的 version 字段（多后端共存时供用户比对） */
+  version?: string;
 }
 
 export interface HealthCheckResult {
   ok: boolean;
   message: string;
   latency?: number;
+  /** /health 响应的 version 字段（非 starfit 或解析失败时缺省） */
+  version?: string;
 }
 
 /**
@@ -117,18 +121,24 @@ export async function checkServerHealth(
     // 扫描场景要求精确命中：只有返回 Starfit 标识的 /health 才算发现，
     // 避免把局域网里碰巧占用 43111 的其他服务当成本服务器。
     // （对已知历史 URL 的直查则放宽：任何 <600 的响应都算在线。）
+    // 响应体尽力解析：exact 借此校验 starfit 标识，两种模式都顺带带出
+    // version（多后端共存时列出供用户比对）；解析失败不拦截非 exact 命中。
     if (response.status >= 200 && response.status < 600) {
-      if (exact) {
-        try {
-          const body = await response.json();
-          if (body?.app !== 'starfit') {
-            return { ok: false, message: 'not a starfit server' };
-          }
-        } catch {
+      let version: string | undefined;
+      try {
+        const body = await response.json();
+        if (exact && body?.app !== 'starfit') {
+          return { ok: false, message: 'not a starfit server' };
+        }
+        if (typeof body?.version === 'string' && body.version) {
+          version = body.version;
+        }
+      } catch {
+        if (exact) {
           return { ok: false, message: 'unrecognized response' };
         }
       }
-      return { ok: true, message: 'Server is online', latency };
+      return { ok: true, message: 'Server is online', latency, version };
     }
     return { ok: false, message: `HTTP ${response.status}` };
   } catch (e: any) {
@@ -205,33 +215,34 @@ async function getCandidates(): Promise<ServerCandidate[]> {
 }
 
 /**
- * 竞速扫描：一轮并发探测全部候选（不限批次），任一命中立即 resolve。
- * 局域网 /24 = 256 个地址，90 并发 + 700ms 超时 → 最坏 ~2s 出结果；
- * 服务器在线时通常 <1s（第一个批次内的命中立刻返回，不等其余请求）。
+ * 全量扫描：一轮并发探测全部候选（不限批次），收集窗口内所有响应者。
+ * 局域网 /24 = 254 个地址，60 并发 + 800ms 超时 → 最坏 ~2s 出结果；
+ * 多后端共存（BYO-server 真实场景）时全部列出，不再命中即返回赌第一台。
  */
-async function raceScanCandidates(
+async function collectScanHits(
   candidates: ServerCandidate[],
   onProgress?: (current: ServerCandidate, total: number) => void,
   concurrency = 90,
   timeoutMs = 700,
-): Promise<DetectionResult | null> {
+): Promise<DetectionResult[]> {
   return new Promise((resolve) => {
+    const hits: DetectionResult[] = [];
     let settled = 0;
     let nextIndex = 0;
     let done = false;
     const total = candidates.length;
 
-    const finish = (result: DetectionResult | null) => {
+    const finish = () => {
       if (!done) {
         done = true;
-        resolve(result);
+        resolve(hits);
       }
     };
 
     const launchNext = (): void => {
       if (done) return;
       if (nextIndex >= total) {
-        if (settled >= total) finish(null);
+        if (settled >= total) finish();
         return;
       }
       const candidate = candidates[nextIndex++];
@@ -239,13 +250,18 @@ async function raceScanCandidates(
       checkServerHealth(candidate.url, timeoutMs, true)
         .then((result) => {
           if (result.ok) {
-            finish({ url: candidate.url, source: candidate.source, latency: result.latency });
+            hits.push({
+              url: candidate.url,
+              source: candidate.source,
+              latency: result.latency,
+              version: result.version,
+            });
           }
         })
         .catch(() => {})
         .finally(() => {
           settled++;
-          if (!done && settled >= total) finish(null);
+          if (!done && settled >= total) finish();
           launchNext();
         });
     };
@@ -322,18 +338,19 @@ function generateFullSubnetCandidates(subnet: string): ServerCandidate[] {
 }
 
 /**
- * Detect available Starfit server (optimized for first-time users)
+ * Detect all available Starfit servers on the LAN (issue #84 多后端命中列出全部)
  * @param onProgress - Callback for progress updates
- * @returns Detection result or null if no server found
+ * @returns All detected servers, sorted by latency ascending; empty array if none
  *
- * Strategy（2026-09 优化：一轮竞速扫描替代三阶段分批）：
- * 0. 已知地址直查（history / 本机 dev server）——最快路径，通常 <100ms
- * 1. WebRTC 拿本机 IP → 定位网段 → **全网段 .1-.254 一轮并发竞速扫描**
- *    （90 并发、700ms 超时、命中即返回；固定端口 43111 + /health starfit 标识精确识别）
+ * Strategy（2026-09 优化：一轮并发扫描替代三阶段分批）：
+ * 0. 已知地址直查（history / 本机 dev server）——最快路径，通常 <100ms；
+ *    命中即返回单元素列表（上游按单命中自动连接，现状保持）
+ * 1. WebRTC 拿本机 IP → 定位网段 → **全网段 .1-.254 一轮并发扫描收集全部响应者**
+ *    （60 并发、800ms 超时、窗口内命中全收；固定端口 43111 + /health starfit 标识精确识别）
  */
-export async function detectServer(
+export async function detectServers(
   onProgress?: (current: ServerCandidate, total: number) => void
-): Promise<DetectionResult | null> {
+): Promise<DetectionResult[]> {
   console.log('[ServerDetector] Starting server detection...');
 
   // Phase 0: 已知地址直查（上次连过的服务器几乎总是本次的服务器）
@@ -343,27 +360,46 @@ export async function detectServer(
     const result = await checkServerHealth(candidate.url, 800);
     if (result.ok) {
       console.log('[ServerDetector] Known address hit:', candidate.url);
-      return { url: candidate.url, source: candidate.source, latency: result.latency };
+      return [{
+        url: candidate.url,
+        source: candidate.source,
+        latency: result.latency,
+        version: result.version,
+      }];
     }
   }
 
-  // Phase 1: 全网段竞速扫描
+  // Phase 1: 全网段扫描——收集窗口内全部响应者（多后端共存场景全部列出供选择）
   console.log('[ServerDetector] Getting client IP address...');
-  const localIp = await getLocalIpAddress();
+  const localIp = await getLocalIpAddress().catch(() => null);
   console.log('[ServerDetector] Client IP:', localIp);
 
   const subnet = localIp ? extractSubnet(localIp) : '192.168.1';
-  console.log(`[ServerDetector] Race-scanning ${subnet}.1-.254 ...`);
+  console.log(`[ServerDetector] Scanning ${subnet}.1-.254 for all responders ...`);
   const lanCandidates = generateFullSubnetCandidates(subnet);
 
-  const scanResult = await raceScanCandidates(lanCandidates, onProgress, 60, 800);
-  if (scanResult) {
-    console.log('[ServerDetector] Server found:', scanResult);
-    return scanResult;
-  }
+  const hits = await collectScanHits(lanCandidates, onProgress, 60, 800);
+  // 延迟最优在前，并列时保持扫描序（Array.prototype.sort 稳定）
+  hits.sort((a, b) => (a.latency ?? Infinity) - (b.latency ?? Infinity));
 
-  console.log('[ServerDetector] No server found');
-  return null;
+  if (hits.length > 0) {
+    console.log(`[ServerDetector] Found ${hits.length} server(s):`, hits.map(h => h.url));
+  } else {
+    console.log('[ServerDetector] No server found');
+  }
+  return hits;
+}
+
+/**
+ * Detect available Starfit server（兼容封装：返回首个/最优命中）
+ * @param onProgress - Callback for progress updates
+ * @returns Detection result or null if no server found
+ */
+export async function detectServer(
+  onProgress?: (current: ServerCandidate, total: number) => void
+): Promise<DetectionResult | null> {
+  const hits = await detectServers(onProgress);
+  return hits[0] ?? null;
 }
 
 /**
