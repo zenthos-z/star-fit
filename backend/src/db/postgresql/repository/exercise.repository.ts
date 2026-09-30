@@ -325,6 +325,18 @@ export class ExerciseRepository extends BaseRepository {
   }
 
   /**
+   * 动作库 id 全集（#96/#97 关系引用完整性的判据宇宙）：全库 id 只读扫描，
+   * 库仅数百行不分页。与 mcpTools ExerciseQuery.listAllIds 同口径——
+   * load_history 交付门卫与 Agent 载荷快照共用同一全集。
+   */
+  async listAllIds(): Promise<Set<string>> {
+    const rows = await this.queryMany<{ id: string }>(
+      "SELECT id FROM exercises",
+    );
+    return new Set(rows.map((r) => r.id));
+  }
+
+  /**
    * A3 导入管道写入入口：整体替换公共动作库（可重复执行）。
    *
    * 单事务内：先 DELETE 全部公共库行（owner_user_id IS NULL，用户自建动作

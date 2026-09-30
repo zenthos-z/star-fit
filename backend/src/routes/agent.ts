@@ -20,6 +20,10 @@ import {
   getScheduleSummary,
   postApplyWeeklyPlan,
 } from "../controllers/scheduleController.js";
+import {
+  listAgentPayloadSnapshots,
+  getAgentPayloadSnapshot,
+} from "../controllers/agentPayloadController.js";
 
 export default async function agentRoutes(app: FastifyInstance) {
   app.post("/agent/classify", postClassifyExercise);
@@ -66,4 +70,9 @@ export default async function agentRoutes(app: FastifyInstance) {
 
   // Debug / Admin
   app.post("/admin/resolve-context", resolveContext);
+
+  // #96 Agent 输入可视化页：交付载荷快照回看（训练后审计，只读）。
+  // 鉴权同全部 /api 路由（STARFIT_ACCESS_TOKEN 门 + X-User-Id 用户隔离）。
+  app.get("/debug/agent-payloads", listAgentPayloadSnapshots);
+  app.get("/debug/agent-payloads/:sessionId", getAgentPayloadSnapshot);
 }

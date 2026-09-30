@@ -8,13 +8,15 @@
 import React, { useEffect, useState } from 'react';
 import { ScenarioPanel } from './ScenarioPanel';
 import { SseConsolePanel } from './SseConsolePanel';
+import { PayloadAuditPanel } from './PayloadAuditPanel';
 import { installSseFetchTap } from './sse/recorder';
 
-type Tab = 'cards' | 'sse';
+type Tab = 'cards' | 'sse' | 'payloads';
 
 const TABS: Array<{ key: Tab; label: string }> = [
   { key: 'cards', label: '卡片场景' },
   { key: 'sse', label: 'SSE 调试台' },
+  { key: 'payloads', label: 'Payload 审计' },
 ];
 
 export const DebugApp: React.FC = () => {
@@ -53,7 +55,13 @@ export const DebugApp: React.FC = () => {
         </nav>
       </header>
       <main className="pb-16 max-w-2xl mx-auto">
-        {tab === 'cards' ? <ScenarioPanel /> : <SseConsolePanel />}
+        {tab === 'cards' ? (
+          <ScenarioPanel />
+        ) : tab === 'sse' ? (
+          <SseConsolePanel />
+        ) : (
+          <PayloadAuditPanel />
+        )}
       </main>
     </div>
   );
