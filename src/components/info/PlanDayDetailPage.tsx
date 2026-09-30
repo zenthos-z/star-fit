@@ -2,8 +2,13 @@
  * PlanDayDetailPage — 当日详情子页（D2 周计划卡 / C2 信息页共用二级页）。
  *
  * 交互：push 级页面右滑入 300ms easeOut（design-spec-ios §3）。
- * 动作条目按组展开，每组参数独立（第1组 60kg×8 / 第2组 65kg×6）；
- * 组间无逐组差异时折叠为单行「第 1–N 组」（排版工整，issue #8 修正 3）。
+ * T10/#67 重做：
+ *  - 计划说明区：rationale（安排原因/目标/注意要点）随行即显；旧计划无
+ *    rationale 整区隐藏（不炸、不占位）
+ *  - 三段式分组：热身动作 / 正式动作 / 收尾动作（拉伸），固定段序；
+ *    旧计划（category NULL）映射层已回落 main，落「正式动作」段
+ *  - 逐组参数：T9 sets 在位时每组独立行（第1组 60kg×8 / 第2组 65kg×6 形态；
+ *    无配重动作以 RPE 作负荷锚）；sets 为 null 回落区间文案并折叠「第 1–N 组」
  *
  * 视觉同源（PR#17 返工）：动作卡与历史卡同一套（白底 rounded-2xl +
  * border-gray-100 + shadow-sm）；chip 用 PlanCard 同款灰徽标；
@@ -19,19 +24,29 @@ import { setTabBarHidden } from '../../lib/nativeTabBar';
 import { resolveExerciseDisplayName } from '../../utils/exerciseDisplay';
 import { useExerciseLibraryIndex } from '../../hooks/useExerciseLibraryIndex';
 import {
+  groupExercisesByCategory,
   isUniformSetBlock,
   dayVolumeSummary,
   type PlanDayDetailVM,
   type PlanDaySetVM,
 } from '../../utils/weeklyPlanView';
 
-/** 单组参数行：等参数块折叠为「第 1–N 组」单行，其余逐组独立 */
-function SetRow({ set, total }: { set: PlanDaySetVM; total: number }): JSX.Element {
-  const loadText = set.weightKg !== undefined ? null : set.loadText;
+/**
+ * 单组参数行。collapsed=等参数块折叠态（组号合并为「第 1–N 组」）——
+ * 与负荷文案解耦判定：T9 逐组行（无 loadText 但有 rpe/配重）永不折叠，
+ * 不能再借 loadText 有无推断折叠（旧实现会误合并 RPE 逐组块）。
+ */
+function SetRow({ set, total, collapsed }: { set: PlanDaySetVM; total: number; collapsed: boolean }): JSX.Element {
+  // 配重在位 → 第 1–N 组形态只展示配重×次数；缺省时 RPE/区间文案作负荷锚
+  const loadText = set.weightKg !== undefined
+    ? null
+    : set.rpe !== undefined
+      ? `RPE ${set.rpe}`
+      : set.loadText;
   return (
     <div className="grid grid-cols-[64px_1fr_1fr] items-center gap-2 border-b border-gray-100 py-2.5 last:border-b-0">
       <span className="text-[12px] text-gray-400">
-        {total > 1 && set.setNo === 1 && loadText ? `第 1–${total} 组` : `第 ${set.setNo} 组`}
+        {collapsed && set.setNo === 1 ? `第 1–${total} 组` : `第 ${set.setNo} 组`}
       </span>
       <span className="font-mono text-[15px] font-semibold text-gray-900">
         {set.weightKg !== undefined && (
@@ -73,7 +88,7 @@ function ExerciseCard({ name, sets, note }: { name: string; sets: PlanDayDetailV
       </div>
       <div className="pt-0.5">
         {display.map((s) => (
-          <SetRow key={s.setNo} set={s} total={sets.length} />
+          <SetRow key={s.setNo} set={s} total={sets.length} collapsed={collapsed} />
         ))}
       </div>
       {note && <div className="pb-1 pt-1.5 text-[12px] leading-relaxed text-gray-400">{note}</div>}
@@ -154,7 +169,7 @@ export const PlanDayDetailPage: React.FC<PlanDayDetailPageProps> = ({ detail, on
           )}
         </div>
 
-        {/* 主体：休息日弱化 / 训练日动作列表 */}
+        {/* 主体：休息日弱化 / 训练日=计划说明区 + 三段式动作分组 */}
         <div className="mx-auto flex max-w-md flex-col gap-3 px-4 pt-4">
           {detail.rest ? (
             <div className="rounded-2xl border border-gray-100 bg-white px-5 py-8 text-center shadow-sm">
@@ -162,14 +177,32 @@ export const PlanDayDetailPage: React.FC<PlanDayDetailPageProps> = ({ detail, on
               <p className="pt-1 text-[13px] text-gray-500">安排放松与睡眠，肌肉在休息中生长</p>
             </div>
           ) : (
-            detail.exercises.map((ex, i) => (
-              <ExerciseCard
-                key={ex.exerciseId ?? `${ex.name}-${i}`}
-                name={resolveExerciseDisplayName(ex.name, { library: libraryIndex })}
-                sets={ex.sets}
-                note={ex.note}
-              />
-            ))
+            <>
+              {/* 计划说明区：安排原因/目标/注意要点；旧计划无 rationale 整区隐藏 */}
+              {detail.rationale && (
+                <section
+                  aria-label="计划说明"
+                  className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm"
+                >
+                  <div className="text-[12px] font-medium text-gray-400">计划说明</div>
+                  <p className="pt-1.5 text-[13px] leading-relaxed text-gray-600">{detail.rationale}</p>
+                </section>
+              )}
+              {/* 三段式分组（warmup→main→cooldown 固定段序，空段省略） */}
+              {groupExercisesByCategory(detail.exercises).map((group) => (
+                <section key={group.category} aria-label={group.label} className="flex flex-col gap-3">
+                  <div className="px-1 text-[12px] font-medium text-gray-400">{group.label}</div>
+                  {group.exercises.map((ex, i) => (
+                    <ExerciseCard
+                      key={ex.exerciseId ?? `${group.category}-${ex.name}-${i}`}
+                      name={resolveExerciseDisplayName(ex.name, { library: libraryIndex })}
+                      sets={ex.sets}
+                      note={ex.note}
+                    />
+                  ))}
+                </section>
+              ))}
+            </>
           )}
         </div>
       </motion.div>

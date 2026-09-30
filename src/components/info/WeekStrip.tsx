@@ -15,7 +15,7 @@ export interface WeekStripDay {
   date: string;
   /** 训练日（有当日条目） */
   isTrainDay: boolean;
-  /** 格内标注：训练日=组数（如 4组），休息日显示「休」 */
+  /** 格内标注：训练日=当日焦点短标签（T9 day_focus；旧数据回落组数如 4组），休息日显示「休」 */
   mark: string;
 }
 

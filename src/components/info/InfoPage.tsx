@@ -4,8 +4,9 @@
  * 结构（docs/design/mockups/d1-weekly-plan-ui.html 区块 2 定稿；配色/排印按
  * PR#17 返工与 App 现有卡片同源——白卡 gray-100 边 + star-accent 交互，
  * 禁 mockup 橙色；字阶 iosTypeScale）：
- *   上 = 本周计划：横向 7 天条（训练日深墨+块底加深 / 休息日灰）+ 选中日概览 +
- *        查看当日详情入口（进 PlanDayDetailPage 二级页，与 D2 周计划卡共用）
+ *   上 = 本周计划：横向 7 天条（训练日深墨+块底加深 / 休息日灰；格内标注
+ *        T10/#67 起为当日焦点短标签 day_focus，旧数据回落组数）+ 选中日概览 +
+ *        「详情」入口（进 PlanDayDetailPage 二级页，与 D2 周计划卡共用）
  *   下 = 训练历史：现有历史卡样式原样迁移（SessionCardItem），无进度条
  *
  * 数据：本周计划读确定性课表 API（useWeeklyPlan，纯 DB 读无 LLM）；
@@ -100,17 +101,19 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
     }
   };
 
-  // 横条 7 天模型：训练日=当日有条目；标注用动作组数（库数据无逐日分化标签）
+  // 横条 7 天模型：训练日=当日焦点短标签（T9 day_focus，一两个字；旧计划
+  // 无该列回落组数标注），休息日「休」
   const stripDays: WeekStripDay[] = weekDates.map((date) => {
     const r = dayMap[date];
     const isTrainDay = r?.status === 'planned';
-    const setCount = isTrainDay
-      ? r!.entries.reduce((acc, e) => acc + e.target_sets, 0)
-      : 0;
+    const entries = isTrainDay ? r!.entries : [];
+    // 同日条目冗余同值，取首个非空；旧数据全 null → 回落组数
+    const dayFocus = entries.find((e) => e.day_focus)?.day_focus;
+    const setCount = entries.reduce((acc, e) => acc + e.target_sets, 0);
     return {
       date,
       isTrainDay,
-      mark: isTrainDay ? `${setCount}组` : '休',
+      mark: isTrainDay ? (dayFocus || `${setCount}组`) : '休',
     };
   });
 
@@ -228,7 +231,7 @@ const InfoPage: React.FC<InfoPageProps> = ({ sessions, onSelect, onDelete, onOpe
                         }}
                         className="mt-2.5 flex h-11 w-full items-center justify-center gap-1.5 rounded-full bg-star-accent text-[15px] font-semibold text-white transition-all active:scale-95"
                       >
-                        查看当日详情
+                        详情
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                           <path d="m4.5 2.5 3.5 3.5-3.5 3.5" />
                         </svg>
