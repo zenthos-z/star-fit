@@ -1,0 +1,7 @@
+# 脚本生成文件禁 prettier 重排（#88 分册1）：
+# 字节稳定性由 src/services/agent/__tests__/exerciseTypeSync.test.ts 守门——
+# prettier 的表格列对齐会改写字节，造成与生成器输出漂移。
+# 改类型定义请改 shared/contracts/card-types.ts 后运行
+# node scripts/gen-exercise-type-index.mjs 重新生成。
+src/services/mas/skills/exercise-type-guide/knowledge-index.md
+src/services/mas/skills/exercise-type-guide/SKILL.md

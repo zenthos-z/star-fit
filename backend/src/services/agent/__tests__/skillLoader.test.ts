@@ -57,10 +57,13 @@ import {
 //   2026-09-30  plan-generation knowledge 5.4.1 (T9 剧本回放返工): §9.3 增
 //               「思考不预写出卡内容 / 出卡轮零工具」防膨胀要点（回放实测
 //               卡片随工具轮消息被流层吞进思考）——SHA 按磁盘实值重算
+//   2026-09-30  exercise-type-guide/knowledge-index.md 重生成（W2/#88 分册1
+//               类型体系统一：单一真源 shared/contracts/card-types.ts，
+//               scripts/gen-exercise-type-index.mjs 生成）——SHA 按磁盘实值重算
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
-    "7865b3d7f9647c0094fecae4a2a8c3640e00ed79a8621f249db97b427bcfef8d",
+    "8fca328c6186d9b9ab3598a70601edc51dafba281aa097c6c9df54087ccef4ad",
   "exercise-type-guide/knowledge/assisted.md":
     "78e5a44d2fd374b4d0781e8797af40e86827ce081ff20bbd75ea0b2813e8bbda",
   "exercise-type-guide/knowledge/bodyweight.md":

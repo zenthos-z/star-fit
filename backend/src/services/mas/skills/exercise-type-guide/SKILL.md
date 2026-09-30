@@ -2,7 +2,7 @@
 name: "exercise-type-guide"
 description: "动作类型指南 - 提供动作类型规范查询和参数设置指导"
 category: "knowledge"
-version: "1.1.0"
+version: "1.2.0"
 ---
 
 # 动作类型指南技能包 (Exercise Type Guide Skill)
@@ -23,25 +23,32 @@ version: "1.1.0"
 本技能包提供：
 
 1. **知识库文档**：详细的动作类型规范（参数要求、示例、最佳实践）
-2. **查询工具**：`get_exercise_type_knowledge` - 供 AI 主动查询特定类型的规范
+2. **按需读取**：原生 `read_file` 按需查询特定类型的规范（R5 起
+   `get_exercise_type_knowledge` / `load_skill` 等 MAS 工具已移除）
 3. **按需加载架构**：只在需要时加载详细知识，避免 token 浪费
 
 ## 动作类型规范
 
 ### 10 种动作类型及其参数要求
 
-| 类型           | 名称       | 必需字段     | 可选字段 | 典型示例              |
-| -------------- | ---------- | ------------ | -------- | --------------------- |
-| `resistance`   | 抗阻力训练 | weight > 0   | -        | 深蹲: weight=60       |
-| `unilateral`   | 单侧训练   | weight >= 0  | -        | 箭步蹲: weight=20     |
-| `bodyweight`   | 自重训练   | -            | weight=0 | 俯卧撑: weight=0      |
-| `assisted`     | 辅助训练   | weight > 0   | -        | 助力引体: weight=-10  |
-| `isometric`    | 等长收缩   | duration > 0 | weight   | 平板支撑: duration=30 |
-| `cardio`       | 有氧训练   | duration > 0 | distance | 跑步: duration=600    |
-| `flexibility`  | 柔韧性训练 | -            | duration | 拉伸: duration=30     |
-| `heavy_weight` | 大重量训练 | weight > 0   | -        | 硬拉: weight=100      |
-| `rep_training` | 次数训练   | weight >= 0  | -        | 次数训练: weight=0    |
-| `outdoor`      | 户外运动   | distance > 0 | duration | 户外跑: distance=3000 |
+> 类型定义单一真源 = `shared/contracts/card-types.ts`（5 大类 + 细类 +
+> cardType 两级体系，#88 分册1）。下表由
+> `scripts/gen-exercise-type-index.mjs` 生成，禁手改。
+
+<!-- BEGIN GENERATED: exercise-type-table (scripts/gen-exercise-type-index.mjs) -->
+| 类型 | 大类 | 名称 | cardType | 必需字段 | 可选字段 | 典型示例 |
+| -------------- | ------ | -------- | ---------- | ---------- | -------- | --------------------- |
+| `resistance` | resistance | 抗阻力训练 | `resistance_standard` | weight > 0 | - | 深蹲: weight=60 |
+| `unilateral` | resistance | 单侧训练 | `resistance_standard` | weight > 0 | - | 箭步蹲: weight=20 |
+| `bodyweight` | resistance | 自重训练 | `resistance_standard` | 无（weight 默认 0） | weight=0 | 俯卧撑: weight=0 |
+| `assisted` | resistance | 辅助训练 | `resistance_standard` | weight <= 0（负值助力，如 -20 = 辅助 20kg） | - | 助力引体: weight=-10 |
+| `isometric` | isometric | 等长收缩 | `isometric_static` | duration > 0（reps 应为 1） | weight | 平板支撑: duration=30 |
+| `cardio` | cardio | 有氧训练 | `cardio_running` | duration > 0 | distance | 跑步: duration=600 |
+| `flexibility` | stretch | 柔韧性训练 | `stretch_standard` | 无（可选 duration） | duration | 拉伸: duration=30 |
+| `heavy_weight` | resistance | 大重量训练 | `resistance_standard` | weight > 0 | - | 硬拉: weight=100 |
+| `rep_training` | resistance | 次数训练 | `resistance_standard` | 无（weight 默认 0） | - | 次数训练: weight=0 |
+| `outdoor` | cardio | 户外运动 | `cardio_outdoor` | distance > 0 | duration | 户外跑: distance=3000 |
+<!-- END GENERATED: exercise-type-table -->
 
 ## 工具列表
 
@@ -89,30 +96,27 @@ read_file("/exercise-type-guide/knowledge/rep_training.md") // 次数训练
 ```
 1. 用户需求 "练胸"
 2. list_exercises ({body_part: "chest"} 按部位过滤查询，返回页里筛)
-3. get_exercise_type_knowledge({type: "resistance"}) → 了解 resistance 类型需要 weight 字段
+3. read_file("/exercise-type-guide/knowledge/resistance.md") → 了解 resistance 类型需要 weight 字段
 4. load_history (获取历史负荷锚点)
 5. 生成包含 weight 字段的动作计划
 6. 输出 plan 卡（json 围栏, type: "plan"）
 ```
 
-### 工具使用示例
+### 按需读取示例
 
 ```javascript
-// 查询单个类型 - 返回该类型的详细知识（~1000-2000 tokens）
-get_exercise_type_knowledge({ type: "cardio", includeExamples: true });
+// 单个类型详细知识（~1000-2000 tokens）
+read_file("/exercise-type-guide/knowledge/cardio.md");
 
-// 查询多个类型 - 返回多个类型的概要（~300 tokens/类型）
-get_exercise_type_knowledge({ types: ["resistance", "bodyweight"] });
-
-// 不传参数 - 返回轻量级索引（所有类型概要，~500 tokens）
-get_exercise_type_knowledge();
+// 轻量级索引（所有类型概要，~500 tokens）
+read_file("/exercise-type-guide/knowledge-index.md");
 ```
 
 ## 知识文档结构
 
 ```
 exercise-type-guide/
-├── knowledge-index.md       # 轻量级索引（~500 tokens）
+├── knowledge-index.md       # 轻量级索引（~500 tokens，脚本生成）
 ├── knowledge/
 │   ├── resistance.md        # 抗阻力训练详细知识
 │   ├── bodyweight.md        # 自重训练详细知识
@@ -124,9 +128,10 @@ exercise-type-guide/
 │   ├── flexibility.md       # 柔韧性训练详细知识
 │   ├── heavy_weight.md      # 大重量训练详细知识
 │   └── rep_training.md      # 次数训练详细知识
-└── data/
-    └── exerciseTypeMetadata.ts  # 类型元数据
 ```
+
+类型元数据（大类归属 / cardType / 必需字段）真源在
+`shared/contracts/card-types.ts`，不由本技能目录维护。
 
 ## 依赖服务
 
@@ -134,6 +139,10 @@ exercise-type-guide/
 
 ## 版本历史
 
+- **1.2.0** (2026-09-30) - #88 分册1 类型体系统一：类型表/知识索引改由
+  scripts/gen-exercise-type-index.mjs 从 shared/contracts/card-types.ts 单一
+  真源生成（5 大类 + 细类 + cardType 两级体系）；清除已移除 MAS 工具
+  get_exercise_type_knowledge 的残留引用
 - **1.1.0** (2026-03-01) - 迁移到 DeepAgents Skills 模式，按需加载详细知识
 - **1.1.1** (2026-09-08) - frontmatter name 规范为连字符；load_skill（已移除的 MAS 工具）改为原生 read_file 按需读取
 - **1.0.0** (2026-02-22) - 初始版本，实现按需加载架构

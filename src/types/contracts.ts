@@ -18,7 +18,13 @@ export type {
   ExerciseAction,
   WorkoutSession,
   BiometricMetric,
-  AgentInteraction
+  AgentInteraction,
+  // #88 分册1：cardType 两级体系（单一真源 card-types.ts）
+  CardType,
+  CardTypeValue,
+  CardMajorType,
+  ExerciseFineType,
+  ExerciseActionType
 } from '../../shared/contracts/index';
 
 // Re-export schemas
@@ -34,5 +40,11 @@ export {
   ExerciseActionSchema,
   WorkoutSessionSchema,
   BiometricMetricSchema,
-  AgentInteractionSchema
+  AgentInteractionSchema,
+  // #88 分册1：cardType 两级体系（单一真源 card-types.ts）
+  CardTypeSchema,
+  cardTypeForExerciseType,
+  normalizeCardType,
+  normalizeExerciseType,
+  normalizeExerciseActionType
 } from '../../shared/contracts/index';

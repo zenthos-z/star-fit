@@ -9,14 +9,15 @@
  */
 
 import { z } from "zod";
-// weekly_plan 卡契约（单一真源 shared/contracts）：import 供本文件 UIHintSchema
-// 使用，re-export 保持本模块既有公共 API。
+// weekly_plan 卡契约 + 动作类型枚举（单一真源 shared/contracts）：import 供本
+// 文件 UIHintSchema 使用，re-export 保持本模块既有公共 API。
 import {
   WeeklyPlanSetSchema,
   WeeklyPlanExerciseSchema,
   WeeklyPlanDaySchema,
   WeeklyPlanCardDataSchema,
   ProfilePendingIntentSchema,
+  ExerciseTypeEnum,
 } from "shared/contracts";
 export {
   WeeklyPlanSetSchema,
@@ -33,23 +34,10 @@ export {
 // Exercise Type Enum
 // ============================================================================
 
-/**
- * Exercise Type Enum for plan_card validation.
- * Matches the 10 types defined in shared/contracts EXERCISE_TYPE_VALUES.
- */
-export const ExerciseTypeEnum = z.enum([
-  "resistance",
-  "bodyweight",
-  "isometric",
-  "cardio",
-  "outdoor",
-  "unilateral",
-  "assisted",
-  "flexibility",
-  "heavy_weight",
-  "rep_training",
-]);
-
+// #88 分册1：手写第二套 10 类枚举已删——plan_card 校验与技能知识库、DB 枚举
+// 同源于 shared/contracts card-types.ts（改一处自动同步；漂移由
+// typeUnification 测试守门）。
+export { ExerciseTypeEnum };
 export type ExerciseType = z.infer<typeof ExerciseTypeEnum>;
 
 // ============================================================================
@@ -131,8 +119,9 @@ export type SurveyCardData = z.infer<typeof SurveyCardDataSchema>;
  * - isometric: duration > 0 required, reps should be 1
  * - cardio: duration > 0 required
  * - outdoor: distance > 0 required
- * - resistance/unilateral/heavy_weight: weight optional (0 = user self-selects
- *   on first attempt; becomes load_anchor after the session is logged)
+ * - resistance/unilateral/heavy_weight: weight must NEVER be 0 (2026-09-17
+ *   rule, enforced in superRefine; beginner/self-select users get the empty
+ *   bar 20kg or the smallest plate 2.5-5kg; becomes load_anchor after logging)
  * - assisted: weight is a NEGATIVE assistance weight per GOLD spec
  *   (assisted.md: -20 = 20kg assistance); 0 = standard unassisted
  * - bodyweight/rep_training/flexibility: no required fields

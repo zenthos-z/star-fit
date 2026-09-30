@@ -119,6 +119,9 @@ import {
   // T2 (issue #54): find_exercises 参数词表直接复用数据契约真源（17 肌群 / 15 器材）
   ExerciseMuscleSchema,
   ExerciseEquipmentSchema,
+  // #88 分册1：动作类型枚举复用 card-types 单一真源（10 细类，与
+  // exercise-type-guide 技能知识库 / DB exercise_type_enum 同源）
+  ExerciseTypeEnum,
 } from "shared/contracts";
 import { utcToday } from "../schedule/scheduleService.js";
 // [B6 issue#39] 写路径心跳：画像/计划/训练完成 → 静默登记建议缓存空闲重算
@@ -980,12 +983,9 @@ const createExerciseSchema = z
       .describe(
         'Exercise name in the user\'s language, e.g. "单臂哑铃划船（左）". Must not duplicate an existing library name.',
       ),
-    exercise_type: z
-      .string()
-      .max(24)
-      .describe(
-        "One of: resistance | unilateral | bodyweight | assisted | isometric | cardio | flexibility | heavy_weight | rep_training | outdoor. Pick by how the movement is measured (assisted uses NEGATIVE assistance weight).",
-      ),
+    exercise_type: ExerciseTypeEnum.describe(
+      "Pick by how the movement is measured (assisted uses NEGATIVE assistance weight).",
+    ),
     targets_primary: z
       .array(z.string().max(40))
       .max(6)

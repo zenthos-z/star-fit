@@ -13,12 +13,15 @@
 import { Exercise, Session } from './legacy';
 import type { ExerciseAction } from './protocol';
 import { WorkoutSession } from './protocol';
+import { normalizeExerciseActionType } from '../../shared/contracts/card-types';
 
-// Unified lowercase type system - no conversion needed
-// Protocol now uses the same types as ExerciseType
+// 类型归一单一真源（#88 分册1）：legacy 漂移值（weight_only/reps_only 等）
+// 与旧 5 类协议值经 shared card-types 归一后进入 protocol 词表；
+// 归一失败回退 'UNKNOWN'（与 protocol ExerciseAction 缺省一致）。
+// 原值在下方 metadata.originalType 双保险保留，不丢存量语义。
 const convertExerciseType = (oldType: string): any => {
-  // Direct pass-through since both use lowercase
-  return oldType || 'UNKNOWN';
+  const normalized = normalizeExerciseActionType(oldType || '');
+  return normalized === 'unknown' ? 'UNKNOWN' : normalized;
 };
 
 const convertSessionStatus = (status: string): 'UNKNOWN' | 'DRAFT' | 'IN_PROGRESS' | 'COMPLETED' | 'CANCELLED' => {
