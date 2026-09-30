@@ -2,15 +2,23 @@ import { useState, useEffect } from 'react';
 import {
   loadLoginCredentials,
   saveLoginCredentials,
-  clearLoginCredentials as clearStorageLoginCredentials
+  clearLoginCredentials as clearStorageLoginCredentials,
+  clearUserStateStorage
 } from '@/storage';
+import { Keys } from '@/storage/schemas';
+
+/**
+ * [#82 方案A] 切号清理超时：WKWebView 的 IDB 可能挂起（见 logout 同类处理）。
+ * 超时后放行登录、清理在后台择机完成——宁可偶发残留，不可卡死登录。
+ */
+export const USER_STATE_CLEAR_TIMEOUT_MS = 3000;
 
 export interface LoginStatusReturn {
   isLoggedIn: boolean;
   userId: string | null;
   serverUrl: string | null;
   serverIp: string | null;
-  login: (userId: string, serverUrl: string, serverIp: string) => void;
+  login: (userId: string, serverUrl: string, serverIp: string) => Promise<void>;
   logout: () => void;
 }
 
@@ -89,7 +97,25 @@ export const useLoginStatus = (): LoginStatusReturn => {
     return () => window.removeEventListener('storage', handleStorageChange);
   }, [isLoggedIn, userId]);
 
-  const login = (newUserId: string, newServerUrl: string, newServerIp: string) => {
+  const login = async (newUserId: string, newServerUrl: string, newServerIp: string) => {
+    // [#82 方案A] 切号检测：上一身份优先取切号墓碑（LoginV2 在回调本方法前已把
+    // IDB 凭据覆写为新用户，凭据读取仅作旧版本升级设备的兜底）。
+    // 两处皆无 = 全新设备首次登录（含 guest 数据），不触发清理。
+    const prevUserId =
+      localStorage.getItem(Keys.lastUserId) ||
+      (await loadLoginCredentials().catch(() => ({ userId: null as string | null }))).userId ||
+      null;
+    if (prevUserId && prevUserId !== newUserId) {
+      try {
+        await Promise.race([
+          clearUserStateStorage(),
+          new Promise<void>((r) => setTimeout(r, USER_STATE_CLEAR_TIMEOUT_MS)),
+        ]);
+      } catch (e) {
+        console.warn('[useLoginStatus] user-state clear failed (non-fatal):', e);
+      }
+    }
+
     // Save to IDB
     saveLoginCredentials(newUserId, newServerUrl).catch(console.error);
 
@@ -103,6 +129,8 @@ export const useLoginStatus = (): LoginStatusReturn => {
     localStorage.setItem('starfit_user_id', newUserId);
     localStorage.setItem('starfit_server_url', newServerUrl);
     localStorage.setItem('starfit_server_ip', newServerIp);
+    // 切号墓碑：登出不清除，供下次登录检测身份变化（#82）
+    localStorage.setItem(Keys.lastUserId, newUserId);
     localStorage.removeItem('starfit_logged_out');
   };
 
@@ -112,6 +140,12 @@ export const useLoginStatus = (): LoginStatusReturn => {
     setServerUrl(null);
     setServerIp(null);
     setIsLoggedIn(false);
+
+    // [#82] 切号墓碑：凭据即将被清，此键是下次登录检测身份变化的唯一活口
+    // （A 登出 → B 登录时由此触发用户态清理）
+    if (userId) {
+      localStorage.setItem(Keys.lastUserId, userId);
+    }
 
     // Clear localStorage FIRST (synchronous, cannot fail) so a reload
     // right after this call always lands on the login page.
