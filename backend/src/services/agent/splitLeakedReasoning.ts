@@ -156,6 +156,31 @@ export function looksLikeToolReturnEcho(text: string): boolean {
 }
 
 /**
+ * ★吞卡修复 II（2026-09-30，refs #73 验收回放实锤）：终步消息里「工具复述
+ * + 围栏卡」被单换行粘接成同一块时（无空行分隔），B/C 分支的 echo 候选块
+ * 整块含 ```——原实现把复述连卡一起吞进 thinking（回放实测：3060 字符
+ * 自检清单编号行复述 + 1092 字符 survey_card 被整块摘除为 4149 字符 echo，
+ * 零 token 零卡送达）。
+ *
+ * 判别锚：read_file 复述里的围栏永远带编号行前缀（返回每行 `N\t`，含
+ * knowledge.md §9 示例卡的围栏行 `185\t```json`）；模型自己写的卡围栏顶格
+ * （无编号前缀）。在第一个「无编号前缀」的围栏行前补一个空行，把粘接块
+ * 拆成「复述块 + 卡块」——复述照旧剥离，卡归 rest 走 token 路径。只处理
+ * 首块（echo 候选块）；围栏即首行（整块本来就是卡）不动。
+ */
+function breakGluedCardFence(body: string): string {
+  const firstSep = body.search(/\n{2,}/);
+  const firstBlock = firstSep === -1 ? body : body.slice(0, firstSep);
+  if (!firstBlock.includes("```")) return body;
+  const lines = firstBlock.split("\n");
+  const fenceIdx = lines.findIndex((l) => /^[ \t]*```/.test(l));
+  if (fenceIdx <= 0) return body; // 无自身围栏 / 围栏即首行（整块是卡，非复述）
+  lines.splice(fenceIdx, 0, ""); // 围栏行前补空行 → 粘接块拆成两块
+  const rebuilt = lines.join("\n");
+  return firstSep === -1 ? rebuilt : rebuilt + body.slice(firstSep);
+}
+
+/**
  * 终步工具复述前缀剥离（2026-09-23 返工 v3）。
  *
  * v2（efabc98）在终步 flush 前对「整个 stepRaw」跑 looksLikeToolReturnEcho，
@@ -188,7 +213,8 @@ export function stripToolEchoPrefix(text: string): {
   rest: string;
 } {
   if (!text || text.trim().length === 0) return { echo: "", rest: text };
-  const body = text.trimStart();
+  // ★吞卡修复 II：粘接复述+卡先拆开（见 breakGluedCardFence 注释）
+  const body = breakGluedCardFence(text.trimStart());
 
   // A. 前导 JSON 串（含粘接对象）
   if (body.startsWith("{")) {
