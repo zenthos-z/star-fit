@@ -2,7 +2,7 @@
  * T1 调试台 · 卡片场景面板（issue #53）。
  *
  * 一键加载预置场景：fixture 数据直灌 ExerciseRenderer——与真实聊天挂卡完全
- * 同一条渲染链路（PluginRegistry 按 uiHint.type / exercise.type 分发），
+ * 同一条渲染链路（卡片注册表按 uiHint.type / exercise.type 分发，#88 分册3），
  * 零 Agent 调用，秒开目标 UI。onConfirm 回调在调试台里被显式可视化
  * （确认载荷日志），让「卡片 → 回传」双向都可观测。
  */

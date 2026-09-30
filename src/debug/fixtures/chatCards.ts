@@ -5,7 +5,8 @@
  *  - backend/src/services/agent/schemas/uiHintSchemas.ts（UIHintSchema 判别联合
  *    ——后端校验回路 uiHintValidationLoop 实际执行的那份 Zod）
  *  - backend/src/services/agent/uiHintFormat.ts（HC-1 技能教 Agent 产出的形态）
- *  - src/components/execution/ExerciseRenderer.tsx PluginRegistry（前端分发键）
+ *  - src/components/execution/registry/assembleCards.ts 卡片注册表（前端分发键，
+ *    #88 分册3——原 ExerciseRenderer 硬编码 PluginRegistry 已删）
  *
  * 每个带 backendValidated 的 wireCard 由 fixtures.schema.test.ts 逐一对
  * backend UIHintSchema 校验——改契约或改 fixture 都会被测试拦下。
@@ -384,7 +385,7 @@ export const CHAT_CARD_SCENARIOS: DebugScenario[] = [
     id: 'deviation-card',
     group: 'chat-card',
     label: '偏差卡 · 计划偏离确认',
-    description: 'deviation_card：reason + suggestion（注：PluginRegistry 无此键，走 StandardCard 兜底——真实行为）',
+    description: 'deviation_card：reason + suggestion（注：#88 分册3 起无组件卡型=显式错误卡——可见缺口非兜底；补 DeviationCard 后在 assembleCards.ts 注册即闭环）',
     bubbleText: '检测到这组完成情况与计划有偏差：',
     backendValidated: true,
     wireCard: {

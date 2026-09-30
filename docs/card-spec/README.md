@@ -117,13 +117,16 @@ Agent 生成的计划只允许引用动作库内的 `exerciseId`（#81 / #86 返
 1. 复制 [templates/card-spec-template.md](templates/card-spec-template.md) → `docs/card-spec/{cardType}.md`，逐项回答必答清单
 2. 示例 JSON 实际通过 uiHintValidator；`node scripts/check-card-spec.mjs` 退出码 0
 3. 类型扩展评审门：`CARD_TYPE_VALUES` / DB 枚举变更走契约批评审（数据契约红线：Zod 验证失败必须抛错）
-4. 分册3 注册 API（`register(cardType, component, spec)`，编译时注册先行）落地后补注册；当前编译时映射在 `ExerciseRenderer.tsx`，注册 API 等分册2 定稿后做
+4. 注册渲染组件：`register(cardType, component, spec)` → `src/components/execution/registry/assembleCards.ts`（分册3 已落地）。spec 与 shared/contracts 契约自动对拍（必需字段 ⊆ `ExerciseSetEntrySchema`、uiHint 允许键与 uiHintValidator 一致、cardType 真源枚举内），不一致装配即抛错；未注册 cardType 分发 = 显式错误卡（红线2 不兜底，禁静默 StandardCard）
+
+**新卡上手 3 步**：① 写规范卡（本节 1-2）→ ② 真源扩键（本节 3）→ ③ `register(cardType, component, spec)` 进装配文件（本节 4）。AI 卡型（无运动细类）跳过 ②，键域真源见 `src/components/execution/registry/cardSpec.ts` `AI_CARD_TYPES`。
 
 ## 守门与自查
 
 ```bash
 node scripts/check-card-spec.mjs        # 字段对拍 + 示例 JSON 校验，退出码 0 = 过
 env -u NODE_ENV npm run typecheck       # 根目录类型检查（脚本不污染类型面）
+env -u NODE_ENV npx vitest run src/components/execution/registry   # 分册3 注册表：装配等价性/细类覆盖/真源对拍
 ```
 
 文档用语以 `CONTEXT.md` 领域术语表为准（Avoid 词禁用）。
