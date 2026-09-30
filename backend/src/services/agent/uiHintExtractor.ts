@@ -38,6 +38,9 @@
  */
 
 import type { AgentEvent, UiHintCard } from "shared/contracts";
+// 吞卡修复（refs #73）：救卡判别用已知卡类型白名单（与校验器/技能同源），
+// 区分真卡与「带 type 字段的工具返回复述」（list_exercises 行对象）。
+import { ALLOWED_UIHINT_TYPES } from "./uiHintFormat.js";
 
 // ---------------------------------------------------------------------------
 // Pure card parser — exported for unit testing
@@ -129,88 +132,81 @@ const FENCE_TAIL_KEEP = 12;
 // ---------------------------------------------------------------------------
 
 /**
- * Find the earliest balanced `{ ... }` object in `text` (brace counting that
- * respects JSON strings + escapes) that parses into a uiHint card. Returns the
- * half-open span `[start, end)` and the card, or `null` if none.
+ * JSON-suspect predicate for a brace region (T56/#78 泄漏防线）：`{` followed
+ * (within whitespace) by a `"` — canonical JSON opening, quoted key — or
+ * structural-character heavy (>60% of non-whitespace is {}[]",:). CJK prose
+ * braces (`{ 目标 }`) match neither: they quote nothing and are mostly
+ * non-structural, so genuine prose keeps streaming untouched.
+ */
+function looksLikeJsonSuspect(obj: string): boolean {
+  if (/^\{\s*"/.test(obj)) return true;
+  const nonWs = obj.replace(/\s+/g, "");
+  if (nonWs.length === 0) return false;
+  const structural = (obj.match(/[\{\}\[\]"',:]/g) ?? []).length;
+  return structural / nonWs.length > 0.6;
+}
+
+interface TopLevelScan {
+  /** Earliest balanced `{...}` that parses into a card, if any. */
+  card: { start: number; end: number; card: Record<string, unknown> } | null;
+  /**
+   * Start of the earliest JSON-suspect region that must NOT stream as prose:
+   * a balanced-but-not-a-card JSON-looking object (malformed card JSON /
+   * type-less tool JSON — the old "balanced but not a card — leave intact as
+   * prose" path streamed it straight into the answer bubble, T56/#78 SSE
+   * capture), or a still-unbalanced `{`. `-1` when nothing is suspect.
+   */
+  suspectStart: number;
+}
+
+/**
+ * Walk top-level brace regions of `text` (string/escape-aware): prose braces
+ * (`{ 目标 }`) are skipped past — a leading prose brace must neither block
+ * card extraction nor trigger the JSON holdback (旧实现只看第一个对象，
+ * 首对象非卡即整体放弃）。
+ */
+function scanTopLevelBraces(text: string): TopLevelScan {
+  let i = 0;
+  for (;;) {
+    const brace = text.indexOf("{", i);
+    if (brace === -1) return { card: null, suspectStart: -1 };
+    const end = matchBalancedBraces(text, brace, text.length);
+    if (end === -1) {
+      return { card: null, suspectStart: brace }; // unbalanced (still growing)
+    }
+    const candidate = text.slice(brace, end);
+    const card = tryParseCard(candidate);
+    if (card) {
+      return { card: { start: brace, end, card }, suspectStart: -1 };
+    }
+    if (looksLikeJsonSuspect(candidate)) {
+      return { card: null, suspectStart: brace };
+    }
+    i = end; // balanced non-suspect (prose brace) — keep scanning
+  }
+}
+
+/**
+ * Earliest balanced card object in `text`, or `null`. Thin wrapper over
+ * {@link scanTopLevelBraces} for the mid-stream extraction path.
  */
 function findBalancedCard(
   text: string,
 ): { start: number; end: number; card: Record<string, unknown> } | null {
-  const from = text.indexOf("{");
-  if (from === -1) {
-    return null;
-  }
-  let depth = 0;
-  let inStr = false;
-  let escape = false;
-  for (let i = from; i < text.length; i += 1) {
-    const ch = text[i]!;
-    if (inStr) {
-      if (escape) {
-        escape = false;
-      } else if (ch === "\\") {
-        escape = true;
-      } else if (ch === '"') {
-        inStr = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inStr = true;
-    } else if (ch === "{") {
-      depth += 1;
-    } else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        const candidate = text.slice(from, i + 1);
-        const card = tryParseCard(candidate);
-        if (card) {
-          return { start: from, end: i + 1, card };
-        }
-        return null; // balanced but not a card — leave intact as prose.
-      }
-    }
-  }
-  return null; // unbalanced (still growing) — leave intact.
+  return scanTopLevelBraces(text).card;
 }
 
 /**
- * Number of trailing chars to hold back because they contain an unmatched `{`
- * (a card mid-arrival). Holds the whole in-progress object so it is never
- * flushed as prose before it completes. `0` when braces are balanced.
+ * Number of trailing chars to hold back because they contain card-suspect
+ * JSON that must NOT stream as prose: an in-progress (unmatched) `{...`
+ * object, OR a balanced object that did not extract as a card but looks like
+ * JSON — held until the terminal flush (done/error), which downgrades the
+ * suspect span to `thinking` and releases the surrounding prose (refs #73
+ * 验收 / T56-#78 联动：宁可缓冲到终态判定后再决定放行或降级）。
  */
-function openBraceHoldback(text: string): number {
-  let depth = 0;
-  let outerStart = -1;
-  let inStr = false;
-  let escape = false;
-  for (let i = 0; i < text.length; i += 1) {
-    const ch = text[i]!;
-    if (inStr) {
-      if (escape) {
-        escape = false;
-      } else if (ch === "\\") {
-        escape = true;
-      } else if (ch === '"') {
-        inStr = false;
-      }
-      continue;
-    }
-    if (ch === '"') {
-      inStr = true;
-    } else if (ch === "{") {
-      if (depth === 0) {
-        outerStart = i;
-      }
-      depth += 1;
-    } else if (ch === "}") {
-      depth -= 1;
-      if (depth === 0) {
-        outerStart = -1;
-      }
-    }
-  }
-  return depth > 0 && outerStart !== -1 ? text.length - outerStart : 0;
+function jsonSuspectHoldback(text: string): number {
+  const { suspectStart } = scanTopLevelBraces(text);
+  return suspectStart === -1 ? 0 : text.length - suspectStart;
 }
 
 // ---------------------------------------------------------------------------
@@ -250,41 +246,64 @@ class StreamCardExtractor {
       this.insideBuf = "";
       this.inFence = false;
     }
-    // OUTSIDE residuals: a complete unfenced card may still be sitting in the
-    // buffer; residual prose is emitted verbatim — EXCEPT an unparsable
-    // balanced-looking object (malformed card JSON), which downgrades to
-    // `thinking` so broken card payloads never reach the answer bubble.
+    // OUTSIDE residuals: terminal judgment per span — cards extracted, JSON
+    // suspects downgraded, prose released (see emitOutsideResidual).
     if (this.outsideBuf) {
-      const balanced = findBalancedCard(this.outsideBuf);
-      if (balanced) {
-        if (this.outsideBuf.slice(0, balanced.start)) {
-          out.push(this.token(this.outsideBuf.slice(0, balanced.start)));
-        }
-        out.push(this.uiHint(balanced.card));
-        if (this.outsideBuf.slice(balanced.end)) {
-          out.push(this.token(this.outsideBuf.slice(balanced.end)));
-        }
-      } else {
-        out.push(...this.emitOutsideResidual(this.outsideBuf));
-      }
+      out.push(...this.emitOutsideResidual(this.outsideBuf));
       this.outsideBuf = "";
     }
     return out;
   }
 
   /**
-   * Emit outside-buffer residual text, hiding malformed card payloads from the
-   * answer prose. An unparsable JSON-looking object (starts with `{`, braces
-   * balanced or still open) is model scratch work — route it to `thinking`.
-   * Genuine prose passes through untouched.
+   * Terminal judgment for outside-buffer residual text (refs #73 验收 /
+   * T56-#78 联动）：逐顶层括号区/围栏残片裁决——
+   *   - 平衡卡对象 → uiHint（与流中提取同一宽松口径）；
+   *   - JSON 可疑段（畸形卡 JSON / 无 type 工具 JSON / 未闭合 `{`）→ 降级
+   *     `thinking`，绝不进正文；
+   *   - 前后散文 → token 终态放行（不被可疑段陪葬）；
+   *   - 尾部未确认围栏残片（流截断在 "```jso" 等）→ 降级 `thinking`。
    */
   private emitOutsideResidual(text: string): AgentEvent[] {
-    const trimmed = text.trim();
-    if (trimmed.startsWith("{")) {
-      // JSON-ish残片：未闭合或解析失败的卡片载荷，降级为 thinking，不进正文。
-      return [this.thinking(trimmed)];
+    const out: AgentEvent[] = [];
+    let i = 0;
+    for (;;) {
+      const brace = text.indexOf("{", i);
+      if (brace === -1) break;
+      const end = matchBalancedBraces(text, brace, text.length);
+      const spanEnd = end === -1 ? text.length : end;
+      const span = text.slice(brace, spanEnd);
+      const card = end === -1 ? null : tryParseCard(span);
+      if (card) {
+        if (text.slice(i, brace)) out.push(this.token(text.slice(i, brace)));
+        out.push(this.uiHint(card));
+      } else if (looksLikeJsonSuspect(span)) {
+        if (text.slice(i, brace)) out.push(this.token(text.slice(i, brace)));
+        if (span.trim()) out.push(this.thinking(span.trim()));
+      } else if (end === -1) {
+        break; // unbalanced non-suspect (prose brace) — leave to prose below
+      } else {
+        // balanced non-suspect (prose brace): the prose before it AND the
+        // brace span itself are answer text — emit both, keep scanning.
+        if (text.slice(i, end)) out.push(this.token(text.slice(i, end)));
+        i = end;
+        continue;
+      }
+      i = spanEnd;
+      if (end === -1) return out; // suspect span consumed to end
     }
-    return text ? [this.token(text)] : [];
+    const rest = text.slice(i);
+    if (!rest) return out;
+    const fenceAt = rest.lastIndexOf("```");
+    if (fenceAt !== -1) {
+      // Stream cut mid-opener (or stray closer): a fence fragment is never
+      // prose — downgrade it, release what precedes.
+      if (rest.slice(0, fenceAt)) out.push(this.token(rest.slice(0, fenceAt)));
+      out.push(this.thinking(rest.slice(fenceAt).trim()));
+      return out;
+    }
+    out.push(this.token(rest));
+    return out;
   }
 
   // -- OUTSIDE fence --------------------------------------------------------
@@ -334,14 +353,16 @@ class StreamCardExtractor {
       }
       // 3. Nothing complete yet. Emit safe prose, holding back a tail that
       //    covers a potential split ``` opener (including an as-yet-unconfirmed
-      //    long language word), AND any in-progress (unmatched) `{`, so a
-      //    half-arrived fence or card is never flushed as prose.
+      //    long language word), AND any card-suspect JSON region (in-progress
+      //    `{` OR balanced-but-unparseable card JSON — T56/#78: the latter used
+      //    to stream straight into the answer bubble), so neither a half-arrived
+      //    fence/card nor malformed card JSON is ever flushed as prose.
       let holdback = FENCE_TAIL_KEEP;
       const fenceFrag = this.outsideBuf.lastIndexOf("```");
       if (fenceFrag !== -1) {
         holdback = Math.max(holdback, this.outsideBuf.length - fenceFrag);
       }
-      holdback = Math.max(holdback, openBraceHoldback(this.outsideBuf));
+      holdback = Math.max(holdback, jsonSuspectHoldback(this.outsideBuf));
       if (this.outsideBuf.length > holdback) {
         const safe = this.outsideBuf.slice(
           0,
@@ -405,6 +426,170 @@ class StreamCardExtractor {
 }
 
 // ---------------------------------------------------------------------------
+// Card segmentation — stream-layer rescue (吞卡修复, refs #73)
+// ---------------------------------------------------------------------------
+
+/**
+ * String/escape-aware brace matcher for a `{...}` object starting at `start`:
+ * returns the end index (exclusive) of the balanced object, or -1 when it is
+ * unbalanced within `limit`.
+ */
+function matchBalancedBraces(
+  text: string,
+  start: number,
+  limit: number,
+): number {
+  let depth = 0;
+  let inStr = false;
+  let escape = false;
+  for (let i = start; i < limit; i += 1) {
+    const ch = text[i]!;
+    if (inStr) {
+      if (escape) escape = false;
+      else if (ch === "\\") escape = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === "{") depth += 1;
+    else if (ch === "}") {
+      depth -= 1;
+      if (depth === 0) return i + 1;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Mark brace-balanced inline card objects within `[from, to)` into `spans`.
+ * Non-card balanced objects (tool-return echoes without a top-level `type`)
+ * are skipped past, not rescued; an unbalanced `{` aborts (incomplete object —
+ * nothing later in the region can be rescued safely past it).
+ */
+function markInlineCards(
+  text: string,
+  from: number,
+  to: number,
+  spans: Array<[number, number]>,
+): void {
+  let i = from;
+  while (i < to) {
+    const brace = text.indexOf("{", i);
+    if (brace === -1 || brace >= to) return;
+    const end = matchBalancedBraces(text, brace, to);
+    if (end === -1) return;
+    if (tryParseRescuableCard(text.slice(brace, end))) {
+      spans.push([brace, end]);
+    }
+    i = end;
+  }
+}
+
+/**
+ * Rescue-eligible card: parses as a card ({@link tryParseCard}) AND carries a
+ * KNOWN card `type` ({@link ALLOWED_UIHINT_TYPES}).
+ *
+ * The liberal tryParseCard (ANY non-empty string `type`) is right for the
+ * streaming extractor — invalid cards MUST reach the validator to drive the
+ * retry loop — but too loose for the tool_calls rescue: tool-return echoes
+ * also carry `type` fields (e.g. list_exercises rows `{id, name,
+ * type:"compound"}`), and rescuing those would leak tool echoes into the token
+ * stream (streamToolLeak 回归实锤). The allowlist is the discriminator: a
+ * real card's type is always in it — the validator rejects anything else
+ * anyway.
+ */
+function tryParseRescuableCard(
+  jsonStr: string,
+): Record<string, unknown> | null {
+  const card = tryParseCard(jsonStr);
+  if (card === null) return null;
+  const type = card["type"];
+  return typeof type === "string" &&
+    (ALLOWED_UIHINT_TYPES as readonly string[]).includes(type)
+    ? card
+    : null;
+}
+
+/**
+ * Split a COMPLETE buffered message body into card segments and the rest.
+ *
+ * Used by the stream layer (`classifyAgentStream`) to rescue cards emitted in
+ * a message that ALSO carries tool_calls (the GLM "emits the card while calling
+ * a tool" shape, refs #73): without this, the whole body is classified as
+ * thinking and an ~12k-char weekly_plan card never reaches the user. A span is
+ * a CARD segment when it is either
+ *   - a complete ``` fence whose body parses into a uiHint card payload
+ *     ({@link tryParseCard}: JSON object with a non-empty string `type`), or
+ *   - a brace-balanced inline JSON object of the same card shape (models
+ *     occasionally omit the fence — the streaming extractor recovers these on
+ *     the terminal path; parity here).
+ * Everything else (narration, non-card fences such as an echoed ```markdown
+ * skill doc, tool-return JSON without a top-level `type`) stays in `rest` so
+ * the caller keeps routing it to thinking — the tool-leak governance is
+ * untouched: intermediate steps still emit ZERO prose tokens.
+ *
+ * `isEcho` (optional): a candidate card segment judged to be an echo of a tool
+ * result (e.g. the example card fence inside plan-generation knowledge.md §9
+ * quoted verbatim in a read_file echo) is demoted back into `rest` instead of
+ * being rescued — an example card from an echoed doc must never be delivered
+ * to the user as a real card.
+ */
+export function splitCardSegments(
+  text: string,
+  isEcho?: (segment: string) => boolean,
+): { cards: string[]; rest: string } {
+  const cardSpans: Array<[number, number]> = [];
+  let pos = 0;
+  while (pos < text.length) {
+    const open = text.indexOf("```", pos);
+    const regionEnd = open === -1 ? text.length : open;
+    markInlineCards(text, pos, regionEnd, cardSpans);
+    if (open === -1) break;
+    // Fence head: ``` + optional language word, then optional spaces and at
+    // most one newline (mirrors findFenceOpen).
+    let headEnd = open + 3;
+    while (headEnd < text.length && /[A-Za-z0-9+.-]/.test(text[headEnd]!)) {
+      headEnd += 1;
+    }
+    while (
+      headEnd < text.length &&
+      (text[headEnd] === " " || text[headEnd] === "\t")
+    ) {
+      headEnd += 1;
+    }
+    if (text[headEnd] === "\n") headEnd += 1;
+    else if (text[headEnd] === "\r" && text[headEnd + 1] === "\n") headEnd += 2;
+    const close = text.indexOf("```", headEnd);
+    if (close === -1) {
+      // Unclosed fence: the remainder is not a deliverable fence. Best-effort
+      // — scan its body for inline card objects (same recovery the streaming
+      // extractor performs at stream end), then stop.
+      markInlineCards(text, headEnd, text.length, cardSpans);
+      break;
+    }
+    if (tryParseRescuableCard(text.slice(headEnd, close))) {
+      cardSpans.push([open, close + 3]);
+    }
+    pos = close + 3;
+  }
+
+  const cards: string[] = [];
+  const restParts: string[] = [];
+  let cursor = 0;
+  for (const [start, end] of cardSpans) {
+    const segment = text.slice(start, end);
+    if (isEcho && isEcho(segment)) {
+      continue; // echo of a tool result — leave the span inside `rest`
+    }
+    if (start > cursor) restParts.push(text.slice(cursor, start));
+    cards.push(segment);
+    cursor = end;
+  }
+  restParts.push(text.slice(cursor));
+  return { cards, rest: restParts.join("").trim() };
+}
+
+// ---------------------------------------------------------------------------
 // Public async-iterable transform
 // ---------------------------------------------------------------------------
 
@@ -432,14 +617,20 @@ export async function* extractUiHintEvents(
         for (const out of extractor.feed(event.text)) {
           yield out;
         }
-      } else {
-        // A terminal / non-token event: flush any pending prose first, then
-        // forward the event unchanged. Forwarding existing uiHint events
-        // verbatim keeps this transform idempotent if a card was already split
-        // out upstream.
+      } else if (event.type === "done" || event.type === "error") {
+        // True terminal: run the buffered card judgment (release as uiHint /
+        // downgrade to thinking) first, then forward the event unchanged.
         for (const out of extractor.flush()) {
           yield out;
         }
+        yield event;
+      } else {
+        // Non-token, non-terminal (thinking / an upstream uiHint): forward
+        // verbatim WITHOUT flushing — a mid-answer thinking event (LiveEchoGate
+        // echo) must never cut an in-progress card buffer (T56/#78 泄漏路径 B:
+        // 卡头进 thinking、卡尾失去 `{` 锚以散文泄漏、残缺围栏吞收尾散文).
+        // Forwarding existing uiHint events verbatim keeps this transform
+        // idempotent if a card was already split out upstream.
         yield event;
       }
     }

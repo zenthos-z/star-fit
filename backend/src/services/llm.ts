@@ -209,7 +209,12 @@ export async function loadModel(
       apiKey,
       anthropicApiUrl: resolved.baseURL,
       temperature: 1.0,
-      maxTokens: 16384,
+      // ≠ OpenAI 分支的 16384：该值在 coding 端点只护 tool-args 截断（thinking
+      // 不占 completion 配额）；Anthropic Messages 协议里 thinking 块计入
+      // max_tokens（bigmodel 端点实测执行：max_tokens=16 时只有 thinking 且
+      // stop_reason=max_tokens，2026-09-30 探针）。计划轮思考链 ~5 万 token 级，
+      // 16384 会在卡生成中途截断整轮。65536 端点实测接受。
+      maxTokens: 65536,
     });
   }
 

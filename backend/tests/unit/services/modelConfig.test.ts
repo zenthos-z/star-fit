@@ -259,7 +259,10 @@ describe("M8 DeepSeek model config", () => {
       };
       expect(model.model).toBe("glm-5.3-flash");
       expect(model.apiUrl).toBe("https://open.bigmodel.cn/api/anthropic");
-      expect(model.maxTokens).toBe(16384);
+      // 65536（吞卡修复 II 期间修正）：Anthropic Messages 协议 thinking 块
+      // 计入 max_tokens（bigmodel 端点实测执行），16384 会在长思考轮截断卡
+      // 片生成；OpenAI 分支的 16384 只护 tool-args 截断，两者语义不同。
+      expect(model.maxTokens).toBe(65536);
     });
 
     it("GLM_BASE_URL env overrides the coding endpoint", async () => {

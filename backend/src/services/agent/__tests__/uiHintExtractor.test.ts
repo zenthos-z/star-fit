@@ -323,3 +323,124 @@ test("leak guard: genuine prose (no braces) still passes through as tokens", asy
     false,
   );
 });
+
+// ---------------------------------------------------------------------------
+// 流中断/不可解析卡载荷防泄漏（2026-09-30，refs #73 验收 + T56/#78 联动）：
+// 未闭合/不可解析的卡片 JSON 不得以正文 token 倾给用户——缓冲到终态（done /
+// error）判定后再放行（成卡）或降级（thinking）。三条历史泄漏路径：
+//   A. 无围栏 balanced-but-unparseable 卡 JSON 在流中被当散文放行
+//      （uiHintExtractor findBalancedCard "balanced but not a card — leave
+//      intact as prose"：括号已平衡 → holdback=0 → 整段 JSON 流进正文）；
+//   B. 非 token 事件（LiveEchoGate 中途吐的 thinking）触发 flush，把正在
+//      累积的卡缓冲中途清空——卡头进 thinking、卡尾失去 `{` 锚后以散文
+//      泄漏，且其后的收尾散文被残缺围栏吞掉（双重故障）；
+//   C. 未确认围栏残片（"```jso"）在终态 flush 时以 token 泄漏。
+// ---------------------------------------------------------------------------
+
+test("leak guard A: unfenced balanced-but-unparseable card JSON -> buffered, downgraded at terminal, prose around preserved", async () => {
+  // 模型少写围栏、JSON 又带尾逗号（parse 失败、括号平衡）—— :170 路径。
+  const broken =
+    '{"type": "weekly_plan", "data": {"week_label": "第 1 周", "days": [1, 2,]}}';
+  const raw = rawFromTokens([
+    "这是你的计划：\n\n",
+    broken,
+    "\n\n确认后开始训练。",
+  ]);
+  const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  const thinkText = out
+    .filter((e) => e.type === "thinking")
+    .map((e) => e.text)
+    .join("");
+  assert.equal(
+    tokenText.includes("weekly_plan"),
+    false,
+    "不可解析卡 JSON 绝不以正文 token 倾给用户（:170 泄漏路径）",
+  );
+  assert.equal(
+    tokenText.includes('"week_label"'),
+    false,
+    "卡载荷字段不得泄漏进正文",
+  );
+  assert.ok(
+    thinkText.includes("weekly_plan"),
+    "畸形卡 JSON 终态降级为 thinking（不丢失）",
+  );
+  assert.ok(tokenText.includes("这是你的计划"), "卡前散文照常放行");
+  assert.ok(
+    tokenText.includes("确认后开始训练"),
+    "卡后散文终态放行（不被陪葬）",
+  );
+});
+
+test("leak guard B: interleaved thinking event must not cut card accumulation mid-stream", async () => {
+  // LiveEchoGate 实测形态：answerLive 直通段里 echo 块以 thinking 事件穿插
+  // 在 token 之间。旧实现对任何非 token 事件 flush——正在累积的围栏卡被
+  // 中途清空：卡头进 thinking、卡尾失去 `{` 锚以散文泄漏、残缺 "```" 把
+  // 收尾散文吞进围栏。
+  async function* gen(): AsyncIterable<AgentEvent> {
+    yield {
+      type: "token",
+      text: '好的，这是你的周计划：\n```json\n{"type": "week',
+    };
+    yield { type: "thinking", text: "1\t复述的工具返回块……" };
+    yield {
+      type: "token",
+      text: 'ly_plan", "data": {"week_label": "第 1 周", "days": []}}',
+    };
+    yield { type: "token", text: "\n```\n以上是本周计划。" };
+    yield { type: "done" };
+  }
+  const out = await drain(extractUiHintEvents(gen()));
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  const hint = out.find((e) => e.type === "uiHint");
+  assert.ok(hint, "穿插 thinking 后围栏卡仍被完整提取");
+  assert.equal((hint?.card as { type?: string }).type, "weekly_plan");
+  assert.equal(
+    tokenText.includes("week_label"),
+    false,
+    "卡尾不得因缓冲被清空而以散文泄漏",
+  );
+  assert.ok(tokenText.includes("好的，这是你的周计划"), "卡前散文照常放行");
+  assert.ok(
+    tokenText.includes("以上是本周计划"),
+    "收尾散文照常放行（不得被残缺围栏吞掉）",
+  );
+});
+
+test("leak guard C: unconfirmed fence fragment tail at terminal -> thinking, not token", async () => {
+  // 流在 "```jso" 处截断（开围栏未确认）——:174 相邻路径。
+  const raw = rawFromTokens(["计划参数如下", "```jso"]);
+  const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  assert.equal(
+    tokenText.includes("```"),
+    false,
+    "围栏残片不得以 token 泄漏（终态降级 thinking）",
+  );
+  assert.ok(tokenText.includes("计划参数如下"), "残片前的散文照常放行");
+});
+
+test("leak guard A 防误伤: prose braces（{ 目标 }）不缓冲、不降级", async () => {
+  const prose = "目标拆解 { 目标 } 与 { 手段 } 完成";
+  const raw = rawFromTokens([prose]);
+  const out = await drain(extractUiHintEvents(raw.chat({} as ChatRequest)));
+  const tokenText = out
+    .filter((e) => e.type === "token")
+    .map((e) => e.text)
+    .join("");
+  assert.equal(tokenText, prose, "散文中的中文花括号原样透传");
+  assert.equal(
+    out.some((e) => e.type === "thinking"),
+    false,
+  );
+});

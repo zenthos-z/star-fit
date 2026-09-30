@@ -72,6 +72,9 @@ import { chunkAnswerText } from "./splitLeakedReasoning.js";
 import { stripToolEchoPrefix } from "./splitLeakedReasoning.js";
 import { stripToolEchoBlocks } from "./splitLeakedReasoning.js";
 import { LiveEchoGate } from "./splitLeakedReasoning.js";
+// 吞卡修复（refs #73）：tool_calls 消息正文里的卡片段切分器（围栏卡 /
+// inline 卡 + 复述判别豁免），见 uiHintExtractor 的 splitCardSegments。
+import { splitCardSegments } from "./uiHintExtractor.js";
 export { splitLeakedReasoning };
 
 // ---------------------------------------------------------------------------
@@ -635,7 +638,10 @@ export class DeepAgentService implements AgentService {
  *   - messages delta 只进缓冲（stepRaw），绝不在快照前翻转为 token；
  *   - 快照确认「无 tool_calls」→ 终步：批量拆分器切缓冲 [推理→thinking,
  *     答案→逐段 token]，随后该步剩余 delta 直通（answerLive=true）；
- *   - 快照确认「有 tool_calls」→ 中间步：缓冲全量转 thinking，零 token；
+ *   - 快照确认「有 tool_calls」→ 中间步：缓冲正文转 thinking、零散文 token。
+ *     唯一例外（吞卡修复，2026-09-30 refs #73）：正文里的卡片段（完整围栏
+ *     且 body 解析为 uiHint 卡 / 平衡 inline 卡，且非工具返回复述）→ 以
+ *     token 放行走卡片路径（uiHintExtractor → 校验回路），与终步卡片同终点；
  *   - 流在快照前结束 → 未分类缓冲按叙述转 thinking（绝不猜 token）。
  * 这封死了 2026-09-23 回归：旧版在 messages 流里用 isAnswerStartBlock 提前
  * 翻转 answerStarted，工具调用轮复述的技能全文/动作库 JSON（CJK 主导）被误判
@@ -645,6 +651,17 @@ export async function* classifyAgentStream(
   stream: AsyncIterable<unknown>,
 ): AsyncIterable<AgentEvent> {
   let leakedThinking = ""; // reasoning stripped from terminal messages
+
+  // ★吞卡修复（refs #73）：本轮（含 before_agent 重放的历史）全部工具返回的
+  // 扁平文本（去空白）。卡片段若逐字出现在任一工具返回里 → 是复述不是交付
+  // （典型：read_file plan-generation knowledge.md §9 的示例卡围栏被复述），
+  // 不救——防止把技能文档里的示例卡当真卡送给用户。
+  const toolResultFlats: string[] = [];
+  const isToolResultEcho = (segment: string): boolean => {
+    const flat = segment.replace(/\s+/g, "");
+    if (flat.length === 0) return false;
+    return toolResultFlats.some((t) => t.includes(flat));
+  };
 
   // Per-step streaming state (reset at every `updates` classification).
   let stepRaw = ""; // this step's buffered delta text (classified at snapshot)
@@ -734,6 +751,10 @@ export async function* classifyAgentStream(
     // after_model snapshots would clobber a captured finalText with
     // undefined.
     const update = data as Record<string, { messages?: unknown[] }>;
+    // ★吞卡修复（refs #73）：先收集本快照（任意节点）里的工具返回文本作
+    // 复述判别锚——必须在 model_request 分类前执行：卡所在步的快照只含 AI
+    // 消息，工具返回在相邻的 tools 节点快照 / before_agent 历史重放里。
+    collectToolResults(update, toolResultFlats);
     const state = update?.["model_request"];
     const msgs = state?.messages;
     if (!Array.isArray(msgs) || msgs.length === 0) continue;
@@ -755,13 +776,26 @@ export async function* classifyAgentStream(
       (Array.isArray(last.additional_kwargs?.tool_calls) &&
         last.additional_kwargs!.tool_calls!.length > 0);
     if (hasTools) {
-      // Intermediate model step: the ENTIRE buffered text was narration
-      // around a tool call — surface it as thinking, never as token.
+      // Intermediate model step: the buffered text is narration around a tool
+      // call — surface it as thinking, never as prose token.
       // 这正是 2026-09-23 泄漏回归的封堵点：上一版在快照前就靠
       // isAnswerStartBlock 放行，工具调用轮复述的技能全文/动作库 JSON
       // 直接进了正文；现在缓冲在快照前绝不出门。
+      // ★吞卡修复（2026-09-30，refs #73）：唯一例外——GLM「边调工具边出卡」
+      // 形态下，卡片正文就写在携带 tool_calls 的消息里，整段归 thinking 会
+      // 把 12k 字符的 weekly_plan 吞进思考链、用户永远收不到（T9 验收回放二
+      // 实锤：92,277 thinking 字符中 42,851 是被吞的卡）。卡片段（围栏卡 /
+      // inline 卡，经工具返回复述判别豁免）以 token 放行，交给下游
+      // uiHintExtractor 提取 + 校验回路——与终步卡片同一条路径；其余正文
+      // （叙述 / 复述 / 非卡围栏）照旧全量转 thinking，零散文 token。
       if (stepRaw.trim()) {
-        yield { type: "thinking", text: stepRaw.trim() };
+        const { cards, rest } = splitCardSegments(stepRaw, isToolResultEcho);
+        if (rest.trim()) {
+          yield { type: "thinking", text: rest.trim() };
+        }
+        for (const card of cards) {
+          yield { type: "token", text: card };
+        }
       }
       resetStep();
     } else {
@@ -857,6 +891,58 @@ export async function* classifyAgentStream(
   // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。
   //   最终答案同样已在循环内逐段/逐 token 实时转发，流尾不再补发。）
   yield { type: "done" };
+}
+
+/**
+ * Collect tool-result texts from an `updates` snapshot (any node) into `sink`
+ * (whitespace-flattened) — the echo anchor for the card-segment rescue
+ * (吞卡修复, refs #73): a "card" whose text appears verbatim (modulo
+ * whitespace) inside a tool result is an echo — e.g. the example card fence
+ * inside a read_file return of plan-generation/knowledge.md — not a delivery,
+ * and must not be rescued to the token stream.
+ */
+function collectToolResults(
+  update: Record<string, { messages?: unknown[] }> | undefined,
+  sink: string[],
+): void {
+  for (const nodeState of Object.values(update ?? {})) {
+    const ms = nodeState?.messages;
+    if (!Array.isArray(ms)) continue;
+    for (const m of ms) {
+      const msg = m as {
+        _getType?: () => string;
+        role?: string;
+        content?: unknown;
+      } | null;
+      if (!msg) continue;
+      const kind =
+        typeof msg._getType === "function" ? msg._getType() : msg.role;
+      if (kind !== "tool") continue;
+      const flat = flattenMessageText(msg.content);
+      if (flat) sink.push(flat);
+    }
+  }
+}
+
+/** Message content (string or text blocks) flattened to a whitespace-free string. */
+function flattenMessageText(content: unknown): string | undefined {
+  let text = "";
+  if (typeof content === "string") {
+    text = content;
+  } else if (Array.isArray(content)) {
+    for (const block of content) {
+      if (
+        block &&
+        typeof block === "object" &&
+        (block as { type?: string }).type === "text" &&
+        typeof (block as { text?: unknown }).text === "string"
+      ) {
+        text += (block as { text: string }).text;
+      }
+    }
+  }
+  const flat = text.replace(/\s+/g, "");
+  return flat.length > 0 ? flat : undefined;
 }
 
 /**
