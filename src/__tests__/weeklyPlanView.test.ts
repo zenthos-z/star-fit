@@ -2,7 +2,8 @@
  * weeklyPlanView — 周计划视图模型纯函数单测（D2/C2 共用层）。
  *
  * 覆盖：ISO 周日期推导（周一锚定/跨月）、负荷区间文案、三态课表 → 详情 VM、
- * AI 卡 → 详情 VM（逐组参数透传）、等参数折叠判定、概览文案。
+ * AI 卡 → 详情 VM（逐组参数透传）、等参数折叠判定、概览文案、
+ * T10/#67 三段式归组与 T9 结构化字段消费（rationale/category/sets，旧数据回落）。
  */
 import { describe, it, expect } from 'vitest';
 import type { TodayScheduleResponse, WeeklyPlanCardData } from 'shared/contracts';
@@ -20,6 +21,7 @@ import {
   weeklyCardRows,
   dayVolumeSummary,
   exerciseNameLine,
+  groupExercisesByCategory,
   isUniformSetBlock,
 } from '../utils/weeklyPlanView';
 
@@ -206,5 +208,166 @@ describe('overview / uniform collapse helpers', () => {
     expect(isUniformSetBlock(uniform)).toBe(true);
     expect(isUniformSetBlock(varied)).toBe(false);
     expect(isUniformSetBlock([{ setNo: 1, loadText: 'RPE 7' }])).toBe(false);
+    // 逐组 RPE 有差异 → 不折叠（T9 金字塔/递减处方必须逐组可见）
+    expect(isUniformSetBlock([
+      { setNo: 1, reps: 8, rpe: 6 },
+      { setNo: 2, reps: 8, rpe: 8 },
+    ])).toBe(false);
+  });
+});
+
+// ============================================================================
+// T10/#67 — T9 结构化字段消费 + 三段式归组
+// ============================================================================
+
+/** T9 结构化课表日：三段式 + 逐组处方 + day_focus/rationale 随行 */
+const structuredDay = (date: string): TodayScheduleResponse => ({
+  date,
+  week_id: '2026-W40',
+  status: 'planned',
+  split: 'push_pull_legs',
+  entries: [
+    {
+      entry_id: 's1',
+      exercise_id: 'V1StGXR8_Z5jdHi6',
+      exercise_name: '髋部动态热身',
+      target_sets: 1,
+      target_load: rpe(5, 5),
+      status: 'planned',
+      sort_order: 0,
+      day_focus: '腿',
+      rationale: '腿日安排在力量块中段，深蹲与辅助动作按 60→65kg 递增；注意蹲深。',
+      category: 'warmup',
+      sets: [{ set_no: 1, reps: 10, rpe: 5 }],
+    },
+    {
+      entry_id: 's2',
+      exercise_id: 'a1b2c3d4e5f6',
+      exercise_name: '杠铃深蹲',
+      target_sets: 2,
+      target_load: rpe(7, 8),
+      status: 'planned',
+      sort_order: 1,
+      day_focus: '腿',
+      rationale: '腿日安排在力量块中段，深蹲与辅助动作按 60→65kg 递增；注意蹲深。',
+      category: 'main',
+      sets: [
+        { set_no: 1, weight_kg: 60, reps: 8, rpe: 7 },
+        { set_no: 2, weight_kg: 65, reps: 6, rpe: 8 },
+      ],
+    },
+    {
+      entry_id: 's3',
+      exercise_id: 'b2c3d4e5f6a1',
+      exercise_name: '股四头肌静态拉伸',
+      target_sets: 1,
+      target_load: rpe(4, 4),
+      status: 'planned',
+      sort_order: 2,
+      day_focus: '腿',
+      rationale: '腿日安排在力量块中段，深蹲与辅助动作按 60→65kg 递增；注意蹲深。',
+      category: 'cooldown',
+      sets: [{ set_no: 1, reps: 30, rpe: 4 }],
+    },
+  ],
+});
+
+describe('todayScheduleDayToVM — T9 结构化字段（T10/#67）', () => {
+  it('carries rationale（同日冗余同值取首个非空）', () => {
+    const vm = todayScheduleDayToVM(structuredDay('2026-09-25'));
+    expect(vm.rationale).toBe('腿日安排在力量块中段，深蹲与辅助动作按 60→65kg 递增；注意蹲深。');
+  });
+
+  it('expands per-set prescriptions verbatim（配重×次数×RPE）', () => {
+    const vm = todayScheduleDayToVM(structuredDay('2026-09-25'));
+    const squat = vm.exercises[1];
+    expect(squat.sets).toHaveLength(2);
+    expect(squat.sets[0]).toMatchObject({ setNo: 1, weightKg: 60, reps: 8, rpe: 7 });
+    expect(squat.sets[1]).toMatchObject({ setNo: 2, weightKg: 65, reps: 6, rpe: 8 });
+    // 逐组处方行无区间文案（不与 target_load 区间混排）
+    expect(squat.sets[0].loadText).toBeUndefined();
+    // 无配重动作（热身/拉伸）：rpe 随行作为负荷锚
+    expect(vm.exercises[0].sets[0]).toMatchObject({ setNo: 1, reps: 10, rpe: 5 });
+    expect(vm.exercises[0].sets[0].weightKg).toBeUndefined();
+  });
+
+  it('maps categories through resolvePlanEntryCategory（warmup/main/cooldown）', () => {
+    const vm = todayScheduleDayToVM(structuredDay('2026-09-25'));
+    expect(vm.exercises.map((e) => e.category)).toEqual(['warmup', 'main', 'cooldown']);
+  });
+
+  it('falls back for legacy plans（无 T9 字段：rationale 缺省、category 回落 main、sets 回落区间文案）', () => {
+    const vm = todayScheduleDayToVM(plannedDay('2026-09-25'));
+    expect(vm.rationale).toBeUndefined();
+    expect(vm.exercises.map((e) => e.category)).toEqual(['main', 'main']);
+    expect(vm.exercises[0].sets[0]).toMatchObject({ setNo: 1, loadText: 'RPE 7–8' });
+    expect(vm.exercises[0].sets[0].weightKg).toBeUndefined();
+  });
+});
+
+describe('groupExercisesByCategory — 三段式归组（T10/#67）', () => {
+  it('groups in fixed warmup→main→cooldown order', () => {
+    const vm = todayScheduleDayToVM(structuredDay('2026-09-25'));
+    const groups = groupExercisesByCategory(vm.exercises);
+    expect(groups.map((g) => g.category)).toEqual(['warmup', 'main', 'cooldown']);
+    expect(groups.map((g) => g.label)).toEqual(['热身动作', '正式动作', '收尾动作（拉伸）']);
+    expect(groups[0].exercises).toHaveLength(1);
+    expect(groups[1].exercises).toHaveLength(1);
+    expect(groups[2].exercises).toHaveLength(1);
+  });
+
+  it('omits empty sections（旧计划全 main → 单段）', () => {
+    const vm = todayScheduleDayToVM(plannedDay('2026-09-25'));
+    const groups = groupExercisesByCategory(vm.exercises);
+    expect(groups).toHaveLength(1);
+    expect(groups[0].category).toBe('main');
+    expect(groups[0].exercises).toHaveLength(2);
+  });
+});
+
+describe('weeklyCardDayToVM — T9 字段透传（rationale/category）', () => {
+  it('carries day rationale and per-exercise category', () => {
+    const cardData: WeeklyPlanCardData = {
+      week_label: '第 2 周',
+      split_summary: '推拉腿 · 每周 3 练',
+      days: [
+        {
+          entry_date: '2026-09-25',
+          split_label: '腿',
+          rationale: '力量块中段安排腿日，主项递增。',
+          rest: false,
+          exercises: [
+            {
+              exercise_id: 'V1StGXR8_Z5jdHi6',
+              name: '杠铃深蹲',
+              category: 'main',
+              sets: [{ set: 1, weight: 60, reps: 8, set_type: 'working' as const }],
+            },
+          ],
+        },
+      ],
+    };
+    const vm = weeklyCardDayToVM(cardData.days[0]);
+    expect(vm.rationale).toBe('力量块中段安排腿日，主项递增。');
+    expect(vm.exercises[0].category).toBe('main');
+  });
+
+  it('legacy card without T9 fields falls back（rationale 缺省、category 回落 main）', () => {
+    const cardData: WeeklyPlanCardData = {
+      week_label: '第 1 周',
+      split_summary: '全身 · 每周 2 练',
+      days: [
+        {
+          entry_date: '2026-09-25',
+          rest: false,
+          exercises: [
+            { exercise_id: 'V1StGXR8_Z5jdHi6', name: '杠铃深蹲', sets: [{ set: 1, weight: 60, reps: 8, set_type: 'working' as const }] },
+          ],
+        },
+      ],
+    };
+    const vm = weeklyCardDayToVM(cardData.days[0]);
+    expect(vm.rationale).toBeUndefined();
+    expect(vm.exercises[0].category).toBe('main');
   });
 });
