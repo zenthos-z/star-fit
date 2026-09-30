@@ -1,18 +1,24 @@
 /**
  * startOnboarding — B3「开始运动」子菜单 + 首次使用预调研（issue #23）
  *
- * 两块纯逻辑（便于单测）：
- * 1. buildStartMenuOptions：TimerCapsule 分裂菜单选项构建。
- *    有 nextPlan（AI 暂存的今日计划）时多第三选项「开始今日训练」——选中即
- *    预填计划进会话（复用 handleImportNextPlan，语义本就是预填，v1 整合路线）。
- * 2. resolveFirstUseTriage：首次打开 AI 教练的分流决策。
+ * 纯逻辑（便于单测）：
+ * 1. resolveTodayPlanMenuState：开始菜单第三选项三态判定（T8 #65）。
+ *    优先级规则：**今日排期优先，本地暂存 nextPlan 兜底**。
+ * 2. buildStartMenuOptions：TimerCapsule 分裂菜单选项构建。
+ *    ready 态第三选项「载入计划」（选中即预填当日计划进会话，预填语义
+ *    唯一路径，复用 buildExercisesFromPlan，#58 后不再分叉）；
+ *    rest 态第三选项「今日休息」不可点（休息态呈现）；none 态回落两选项。
+ * 3. scheduleEntriesToPlanItems：今日课表条目 → 预填原始条目
+ *    （AI plan_card 数据同形状），exercise_type 经 resolveType 回查动作库。
+ * 4. resolveFirstUseTriage：首次打开 AI 教练的分流决策。
  *    训练历史为空才算新用户；有周计划 → 引导发送资料/截图（AI 解析既有计划）；
  *    纯新手 → 基础调研引导卡片（画像四项：经验/目标/器材/频次）。
  *    卡片走 survey_card uiHint 多态回路（SurveyCard 渲染），不新造组件。
- * 3. resolveUserHasHistory [fix #23]：训练历史判定改用户维度（后端该用户记录数
+ * 5. resolveUserHasHistory [fix #23]：训练历史判定改用户维度（后端该用户记录数
  *    优先，后端不可达回退设备本地历史），杜绝同设备他人历史误判老用户。
  */
 import React from 'react';
+import type { TodayScheduleEntry, TodayScheduleResponse } from 'shared/contracts';
 import type { StartMenuOption } from '../components/TimerCapsule';
 
 // ---------------------------------------------------------------------------
@@ -22,16 +28,82 @@ import type { StartMenuOption } from '../components/TimerCapsule';
 export interface StartMenuActions {
   onPickLibrary: () => void;
   onOpenCoach: () => void;
-  onStartTodayPlan: () => void;
+  /** 「载入计划」（T8 #65）：今日排期或本地暂存 → 预填进会话 */
+  onLoadPlan: () => void;
 }
 
 export const START_OPTION_KEYS = {
   library: 'library',
   aiCoach: 'ai-coach',
-  startTodayPlan: 'next-plan',
+  loadPlan: 'load-plan',
+  restToday: 'rest-today',
 } as const;
 
-export function buildStartMenuOptions(hasNextPlan: boolean, actions: StartMenuActions): StartMenuOption[] {
+// ---------------------------------------------------------------------------
+// 第三选项三态判定（T8 / issue #65）
+// ---------------------------------------------------------------------------
+
+/**
+ * 开始菜单第三选项三态：
+ *  - ready：可点「载入计划」（source 记录数据来自今日排期还是本地暂存）
+ *  - rest：休息日，第三选项呈现「今日休息」不可点
+ *  - none：无排期且无本地暂存 → 回落两选项（接入周计划前的现状）
+ */
+export type TodayPlanMenuState =
+  | { kind: 'ready'; source: 'schedule' | 'local' }
+  | { kind: 'rest' }
+  | { kind: 'none' };
+
+/**
+ * [T8 #65] 三态判定。**优先级规则（注释即规范）：今日排期优先，本地暂存
+ * nextPlan 兜底。**
+ * 1. 今日排期（GET /schedule/today）status=planned 且有条目 → ready（schedule）
+ * 2. 排期在场但今日=rest_day → rest（排期对当日权威，本地暂存不越权覆盖课表）
+ * 3. 无排期（no_plan / 课表不可得 / planned 形态异常无条目）→ 本地暂存
+ *    nextPlan 兜底（ready·local；接入周计划前「下一次训练」暂存的行为保留）
+ * 4. 两者皆无 → none（回落两选项）
+ */
+export function resolveTodayPlanMenuState(
+  schedule: TodayScheduleResponse | null | undefined,
+  nextPlan: readonly unknown[] | null | undefined,
+): TodayPlanMenuState {
+  if (schedule?.status === 'planned' && schedule.entries.length > 0) {
+    return { kind: 'ready', source: 'schedule' };
+  }
+  if (schedule?.status === 'rest_day') return { kind: 'rest' };
+  if (Array.isArray(nextPlan) && nextPlan.length > 0) {
+    return { kind: 'ready', source: 'local' };
+  }
+  return { kind: 'none' };
+}
+
+/**
+ * 今日课表条目 → 预填原始条目（AI plan_card 数据同形状，供
+ * buildExercisesFromPlan 消费——预填路径唯一，排期条目不分叉）。
+ * 逐组处方（T9）取首组作整卡默认（预填只是脚手架，用户可逐组改）；
+ * 旧计划无 sets（null）→ reps/weight 置 0、rpe 缺省由消费侧兜底；
+ * exercise_type 课表契约不携带，由 resolveType 按动作 id 回查动作库，
+ * 查不到/未传 → undefined，消费侧回落 'resistance'。
+ */
+export function scheduleEntriesToPlanItems(
+  entries: readonly TodayScheduleEntry[],
+  resolveType?: (exerciseId: string) => string | undefined,
+): Array<Record<string, unknown>> {
+  return entries.map((e) => {
+    const firstSet = e.sets?.[0];
+    return {
+      id: e.exercise_id,
+      name: e.exercise_name,
+      sets: e.target_sets,
+      reps: firstSet?.reps ?? 0,
+      weight: firstSet?.weight_kg ?? 0,
+      targetRpe: firstSet?.rpe,
+      exercise_type: resolveType?.(e.exercise_id),
+    };
+  });
+}
+
+export function buildStartMenuOptions(plan: TodayPlanMenuState, actions: StartMenuActions): StartMenuOption[] {
   return [
     {
       key: START_OPTION_KEYS.library,
@@ -53,19 +125,37 @@ export function buildStartMenuOptions(hasNextPlan: boolean, actions: StartMenuAc
       ),
       onSelect: actions.onOpenCoach,
     },
-    // 第三选项（有计划时）：issue #23 定稿文案「开始今日训练」，选中直接预填
-    ...(hasNextPlan
+    // 第三选项（ready 态）：T8 #65 文案定稿「载入计划」——动词开头，与
+    // 「挑选动作」「AI 教练」结构对齐；选中直接预填进会话
+    ...(plan.kind === 'ready'
       ? [
           {
-            key: START_OPTION_KEYS.startTodayPlan,
-            label: '开始今日训练',
+            key: START_OPTION_KEYS.loadPlan,
+            label: '载入计划',
             icon: (
               <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
                 <rect x="3" y="4" width="18" height="18" rx="2" />
                 <path d="M16 2v4M8 2v4M3 10h18" />
               </svg>
             ),
-            onSelect: actions.onStartTodayPlan,
+            onSelect: actions.onLoadPlan,
+          },
+        ]
+      : []),
+    // 第三选项（rest 态）：休息态呈现「今日休息」不可点——让用户知道周计划
+    // 在场且今天轮休，而非静默退化为两选项造成「计划丢了」的错觉
+    ...(plan.kind === 'rest'
+      ? [
+          {
+            key: START_OPTION_KEYS.restToday,
+            label: '今日休息',
+            icon: (
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" className="w-[18px] h-[18px]">
+                <path d="M21 12.8A8.5 8.5 0 1 1 11.2 3a6.6 6.6 0 0 0 9.8 9.8Z" />
+              </svg>
+            ),
+            onSelect: () => {},
+            disabled: true,
           },
         ]
       : []),
