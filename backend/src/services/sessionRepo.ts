@@ -220,7 +220,7 @@ export const SessionRepo = {
     deviceId: string,
     sessions: Session[],
     manualUserId?: string,
-  ): Promise<{ success: boolean; count: number }> => {
+  ): Promise<{ success: boolean; count: number; userId?: string }> => {
     const client = SessionRepo.getClient();
     const user = await SessionRepo.ensureUser(deviceId, manualUserId);
 
@@ -313,7 +313,8 @@ export const SessionRepo = {
     await CacheService.del(`sessions:user:${user.id}`);
     await CacheService.del(`active_ids:user:${user.id}`);
 
-    return { success: true, count: sessions.length };
+    // userId 供调用链消费（#96：sync push 后冻结 Agent 交付载荷快照用）
+    return { success: true, count: sessions.length, userId: user.id };
   },
 
   // Get new sessions since timestamp (Pull)

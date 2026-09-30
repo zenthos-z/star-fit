@@ -30,6 +30,11 @@ export {
   type SuggestionCacheWriteRow,
   type SuggestionCacheReadEntry,
 } from "./suggestionCache.repository.js";
+export {
+  AgentPayloadSnapshotRepository,
+  createAgentPayloadSnapshotRepository,
+  type AgentPayloadSnapshotWriteRow,
+} from "./agentPayloadSnapshot.repository.js";
 
 // Re-export types for convenience
 export type {

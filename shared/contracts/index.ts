@@ -694,6 +694,31 @@ export type {
   AgentDeliveryGateResult,
 } from './agent-delivery.js';
 
+/**
+ * Agent 交付载荷快照（#96 Agent 输入可视化页）：训练后审计快照的
+ * 校验结果 / 预处理标注 / 列表行 / 详情行 / API 响应契约。
+ * 详见 agent-payload-snapshot.ts 模块头（快照只读红线）。
+ */
+export {
+  AgentPayloadValidationCodeSchema,
+  AgentPayloadValidationSchema,
+  AgentSetTimestampSourceSchema,
+  AgentSetPreprocessNoteSchema,
+  AgentPayloadSnapshotListRowSchema,
+  AgentPayloadSnapshotDetailSchema,
+  AgentPayloadListResponseSchema,
+} from './agent-payload-snapshot.js';
+export type {
+  AgentPayloadValidationCode,
+  AgentPayloadValidation,
+  AgentSetTimestampSource,
+  AgentSetPreprocessNote,
+  AgentPayloadSnapshotListRow,
+  AgentPayloadSnapshotDetail,
+  AgentPayloadDetailNormalized,
+  AgentPayloadListResponse,
+} from './agent-payload-snapshot.js';
+
 // ExerciseAction
 export const ExerciseActionSchema = z.object({
   protocol_version: z.literal('2.0.0').default('2.0.0'),

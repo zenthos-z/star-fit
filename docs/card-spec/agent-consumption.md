@@ -162,8 +162,19 @@ stats 字段（总口径已算好，禁止从 exercises 重算）：`totalVolume
 
 AI 分析效果优化（后置）、分享 / 市场机制、原始音频存储、AI 自动修复建议注入。
 
+### 5.4 落地形态（#96 已实现，2026-10-01）
+
+| 项 | 实现 |
+|---|---|
+| 快照点 | 原始会话写链（`POST /api/sync/push` → `upsertSessions` 后、同请求内）冻结「交付时点」快照。构造逻辑与 load_history 门卫同一套真源（`shared/contracts/agent-delivery.ts` 的 normalize + validate + 动作库全集），不新造第二套口径。快照点不在 `POST /api/sessions`：该端点收 workoutSummary 预聚合条目（`sets` 是组数计数字段），不携带逐组数据也无法过 #97 归一化 |
+| 存储 | `agent_payload_snapshots` 表（migration 005）：`(user_id, session_id)` 唯一，重同步 upsert 覆盖；`payload_json`（归一形态，unnormalizable 时原始输入原样冻结）+ `validation_json`（过/拒 + code + reason + reference_check）+ `preprocess_json`（逐组 timestamp 来源 / status 归一轨迹） |
+| API | `GET /api/debug/agent-payloads`（列表：时间/动作数/校验徽标 + limit/offset 分页）、`GET /api/debug/agent-payloads/:sessionId`（详情全量）。鉴权同全部 /api 路由（STARFIT_ACCESS_TOKEN 门 + X-User-Id 用户隔离） |
+| 页面 | 调试台第三 tab「Payload 审计」（`?debug=1` + DEV 构建，不进生产产物）：列表 → 详情四分区 + 预处理分区 + 校验 banner + 原始 JSON 展开；拒付行红色标注 + 原因；拉取失败无兜底直接报错 |
+| 快照失败语义 | 快照是旁路观测：逐条 try/catch，快照失败只记日志，绝不阻断同步主链 |
+
 ## 6. 变更记录
 
 | 日期 | 变更 | 依据 |
 |---|---|---|
 | 2026-09-30 | 分册4 创建（手册批） | #88 v2 spec |
+| 2026-10-01 | §5.4 落地形态补记（快照表/API/调试台 tab） | #96 |
