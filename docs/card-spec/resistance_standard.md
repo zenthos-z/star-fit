@@ -81,8 +81,10 @@ plan_card 卡级外层键：
 | `distance` | 本卡不写 |
 | `rpe` | 实际 RPE（0-10，可选） |
 | `status` | `planned` / `completed` / `skipped`（跳过 = 教练四问「是否跳过」的数据源） |
-| `timestamp` | 组完成时刻 ISO 8601（休息推断链输入；目标必填化，契约批） |
+| `timestamp` | 组完成时刻 ISO 8601（休息推断链输入；**必填**，#97 已落契约；存量无值按 startTime+组序推算） |
 | `restEndTime` | 休息结束时刻 epoch ms（下一组开始前） |
+| `feel` | 感受滑块原值 0-100 int（无级连续值禁分档，可选；#97 已落契约） |
+| `feel_note` | 感受语义补充 ≤500 字符（语音转写，可选；#97 已落契约） |
 <!-- /spec:fields -->
 
 ### 4.3 持久化条目层（`POST /api/sessions` exercises[] 每行；格式化训练条目）
@@ -186,7 +188,7 @@ plan_card 卡级外层键：
     { "index": 0, "reps": 8, "weight": 60, "rpe": 7, "status": "completed", "timestamp": "2026-09-30T14:20:31Z", "restEndTime": 1790778091000 },
     { "index": 1, "reps": 8, "weight": 60, "rpe": 8, "status": "completed", "timestamp": "2026-09-30T14:22:05Z" },
     { "index": 2, "reps": 7, "weight": 62.5, "rpe": 9, "status": "completed", "timestamp": "2026-09-30T14:24:12Z", "restEndTime": 1790778312000 },
-    { "index": 3, "status": "skipped" }
+    { "index": 3, "status": "skipped", "timestamp": "2026-09-30T14:25:12Z", "feel": 62, "feel_note": "最后一组膝盖外侧有点紧，跳过" }
   ],
   "uiHint": { "cardType": "resistance_standard" }
 }

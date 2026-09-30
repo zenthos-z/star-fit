@@ -29,6 +29,10 @@ export interface ExerciseSet {
   rpe?: number; // Actual RPE logged
   restEndTime?: number; // 休息结束时间戳（每个组独立）
   completedAt?: number; // 组完成时刻时间戳（ms）——休息时长 = min(restEndTime, 下一组completedAt) − 本组completedAt
+  /** 感受滑块原值 0-100（无级连续值禁分档；契约 ExerciseSetEntry.feel，#97）。组后弹窗（采集 UI 批）写入，sync 原样携带入库 */
+  feel?: number;
+  /** 感受语义补充 ≤500 字符（语音转写文本，原始音频不存；契约 ExerciseSetEntry.feel_note，#97） */
+  feel_note?: string;
 }
 
 export type ExerciseType = 'resistance' | 'cardio' | 'bodyweight' | 'isometric' | 'assisted' | 'unilateral' | 'weight_only' | 'reps_only' | 'outdoor';

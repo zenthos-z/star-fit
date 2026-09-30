@@ -22,6 +22,8 @@ import {
   ExerciseActionTypeEnum,
   EXERCISE_TYPE_FIELDS,
 } from './card-types.js';
+// 单组记录契约（#97）：schema 供本文件 ExerciseActionSchema 装配使用
+import { ExerciseSetEntrySchema } from './exercise-set.js';
 
 // Re-export validation utilities
 export {
@@ -658,6 +660,40 @@ export type BiometricMetric = z.infer<typeof BiometricMetricSchema>;
 export { CardTypeSchema } from './card-types.js';
 export type { CardType } from './card-types.js';
 
+/**
+ * 单组记录契约（#97）——定义与推导见 exercise-set.ts（兄弟子模块，
+ * agent-delivery.ts 同源引用，避免 index ↔ delivery 循环求值）。
+ */
+export { ExerciseSetEntrySchema } from './exercise-set.js';
+export type { ExerciseSetEntry } from './exercise-set.js';
+
+/**
+ * Agent 交付边界硬校验（#97 红线3）：喂 Agent 的会话数据归一化 +
+ * 全字段 Zod 校验 + 关系引用完整性，坏数据抛错拒交付。
+ * 详见 agent-delivery.ts 模块头（推算规则 / 错误码 / 门卫助手）。
+ */
+export {
+  AGENT_SET_TIMESTAMP_STEP_MS,
+  AgentDeliveryError,
+  AgentDeliverySetSchema,
+  AgentDeliveryExerciseSchema,
+  AgentDeliverySessionSchema,
+  normalizeSessionForAgentDelivery,
+  validateAgentSessionDelivery,
+  normalizeAndValidateAgentSession,
+  gateSessionsForAgentDelivery,
+  inferSetTimestampMs,
+} from './agent-delivery.js';
+export type {
+  AgentDeliverySet,
+  AgentDeliveryExercise,
+  AgentDeliverySession,
+  AgentDeliveryErrorCode,
+  AgentDeliveryValidationOptions,
+  AgentDeliveryRejection,
+  AgentDeliveryGateResult,
+} from './agent-delivery.js';
+
 // ExerciseAction
 export const ExerciseActionSchema = z.object({
   protocol_version: z.literal('2.0.0').default('2.0.0'),
@@ -668,17 +704,7 @@ export const ExerciseActionSchema = z.object({
   // 入口先过 normalizeExerciseActionType（card-types.ts 单一映射表），
   // 禁直接破坏存量数据语义。
   type: ExerciseActionTypeEnum.default('unknown'),
-  sets: z.array(z.object({
-    index: z.number(),
-    reps: z.number().optional(),
-    weight: z.number().optional(),
-    duration: z.number().optional(),
-    distance: z.number().optional(),
-    rpe: z.number().min(0).max(10).optional(),
-    status: z.enum(['unknown', 'planned', 'completed', 'skipped']).default('unknown'),
-    timestamp: z.string().datetime().optional(),
-    restEndTime: z.number().optional(),
-  })),
+  sets: z.array(ExerciseSetEntrySchema),
   uiHint: z.object({
     cardType: CardTypeSchema.optional(),
     pluginId: z.string().optional(),

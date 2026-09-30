@@ -63,8 +63,14 @@ export const ExerciseActionSchema = z.object({
     heartRate: z.number().min(0).optional(), // avg bpm — 仅由手表样本聚合写入（ADR-0001），手动录入已废弃
     rpe: z.number().min(0).max(10).optional(),
     status: z.enum(['UNKNOWN', 'PLANNED', 'COMPLETED', 'SKIPPED']).default('UNKNOWN'),
+    // 组时间戳：契约真源 shared/contracts exercise-set.ts 已必填化（#97）；
+    // 本前端交换模型保持 optional——计划态组在完成前无时刻，必填约束在
+    // 交付边界（agent-delivery normalize）执行，此处不重复推断。
     timestamp: z.string().datetime().optional(),
     restEndTime: z.number().optional(), // 每个组独立的休息结束时间戳
+    // 感受采集契约字段（#97）：与 shared ExerciseSetEntrySchema 同口径
+    feel: z.number().int().min(0).max(100).optional(),
+    feel_note: z.string().max(500).optional(),
   })),
   uiHint: z.object({
     cardType: CardTypeSchema.optional(),
