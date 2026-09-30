@@ -8,11 +8,12 @@
  * - 旧计划回落：category 全 main 单段、等参数块折叠「第 1–N 组」、无说明区
  * - 休息日：弱化卡，无动作分组
  * - #81 卡头缩略图：点按开教程 Sheet（详情页独立实例）/ 无 poster 降级哑铃
- *   仍可点 / 无 exerciseId 占位恒在可点+轻提示不打开 / 44×44 恒定（不同组数
- *   与无 id 占位对比）
+ *   仍可点 / ▸ 角标三态（有视频▸/有封面无视频无▸/无封面占位无▸）/
+ *   exerciseId 类型可空防御容错（不构造入口，真实数据零孤儿不触达）/
+ *   44×44 恒定（不同组数对比）
  */
 import React from 'react';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { vi, beforeEach, afterEach } from 'vitest';
 import { PlanDayDetailPage } from '../PlanDayDetailPage';
@@ -134,14 +135,17 @@ describe('PlanDayDetailPage（T10/#67）', () => {
 // #81 卡头教程缩略图入口
 // ============================================================================
 
-/** 教程数据链桩：按 exerciseId 约定 poster 响应；未约定的 id 一律无封面 */
-function stubTutorialFetch(posterById: Record<string, string | null> = {}): ReturnType<typeof vi.fn> {
+/** 教程数据链桩：按 exerciseId 约定素材响应（poster + 是否有视频）；未约定的 id 一律无封面无视频 */
+function stubTutorialFetch(byId: Record<string, { posterUrl?: string | null; hasVideo?: boolean }> = {}): ReturnType<typeof vi.fn> {
   const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
     const url = String(input);
-    const hit = Object.entries(posterById).find(([id]) => url.includes(`/exercises/${id}`));
+    const hit = Object.entries(byId).find(([id]) => url.includes(`/exercises/${id}`));
     return {
       ok: true,
-      json: async () => ({ poster_url: hit ? hit[1] : null }),
+      json: async () => ({
+        poster_url: hit ? (hit[1].posterUrl ?? null) : null,
+        video_urls: hit && hit[1].hasVideo ? { male: 'https://cdn.example.com/demo-male.mp4' } : null,
+      }),
     } as unknown as Response;
   });
   vi.stubGlobal('fetch', fetchMock);
@@ -182,9 +186,9 @@ describe('PlanDayDetailPage #81 卡头教程缩略图', () => {
     vi.unstubAllGlobals();
   });
 
-  it('卡头缩略图存在（44×44 radius-10），点按打开教程 Sheet（详情页独立实例）', async () => {
+  it('卡头缩略图存在（44×44 radius-10），有视频 ▸ 在位，点按打开教程 Sheet（详情页独立实例）', async () => {
     const user = userEvent.setup();
-    const fetchMock = stubTutorialFetch({ px1: 'https://cdn.example.com/poster-px1.jpg' });
+    const fetchMock = stubTutorialFetch({ px1: { posterUrl: 'https://cdn.example.com/poster-px1.jpg', hasVideo: true } });
     render(
       <PlanDayDetailPage detail={singleExerciseVM({ exerciseId: 'px1', name: '杠铃深蹲', setCount: 3 })} onClose={() => undefined} />,
     );
@@ -192,12 +196,16 @@ describe('PlanDayDetailPage #81 卡头教程缩略图', () => {
     // 页面经 portal 挂 document.body → 查询走 document 全局，不能用 render().container
     await waitFor(() => expect(document.body.querySelector('img[src*="poster-px1"]')).not.toBeNull());
     expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/exercises/px1'), expect.anything());
+    // jsdom 不加载图片字节 → 手动派发 onLoad（封面渐显完成）
+    fireEvent.load(document.body.querySelector('img[src*="poster-px1"]')!);
     // 缩略图视觉盒 44×44 + radius-10
     const box = screen.getByTestId('thumb-box');
     expect(box.className).toContain('h-11 w-11');
     expect(box.className).toContain('rounded-[10px]');
     // 点按热区外扩 6px（44 → 56）
     expect(box.parentElement!.className).toContain('after:-inset-1.5');
+    // 库内确有视频（video_urls 非空）且封面在显 → ▸ 播放角标在位
+    await waitFor(() => expect(screen.queryByTestId('play-badge')).not.toBeNull());
     // 点按打开教程 Sheet：ExerciseTutorialModal 头部关闭钮出现（主页返回链之外）
     await user.click(screen.getByLabelText('查看「杠铃深蹲」教程'));
     expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
@@ -205,7 +213,7 @@ describe('PlanDayDetailPage #81 卡头教程缩略图', () => {
     expect(screen.getAllByText('杠铃深蹲').length).toBeGreaterThan(1);
   });
 
-  it('无 poster → gray-50 底+哑铃灰标降级，点击仍进教程；拉取中为静态骨架', async () => {
+  it('无 poster → gray-50 底+哑铃灰标降级（无 ▸），点击仍进教程；拉取中为静态骨架', async () => {
     const user = userEvent.setup();
     let resolveFetch: (v: unknown) => void = () => undefined;
     vi.stubGlobal('fetch', vi.fn((_input: RequestInfo | URL) => new Promise((res) => { resolveFetch = res; })));
@@ -217,39 +225,73 @@ describe('PlanDayDetailPage #81 卡头教程缩略图', () => {
     expect(box.className).toContain('bg-gray-100');
     expect(document.body.querySelector('img')).toBeNull();
     // 确认无封面 → gray-50 + 哑铃占位
-    resolveFetch({ ok: true, json: async () => ({ poster_url: null }) });
+    resolveFetch({ ok: true, json: async () => ({ poster_url: null, video_urls: { male: 'https://cdn.example.com/v.mp4' } }) });
     await waitFor(() => expect(box.className).toContain('bg-gray-50'));
     expect(document.body.querySelector('img')).toBeNull();
     expect(box.querySelector('svg path')).not.toBeNull();
+    // 无封面占位无 ▸（即便库内确有视频，角标只在封面在显时出现）
+    expect(screen.queryByTestId('play-badge')).toBeNull();
     // 降级态仍可点进教程
     await user.click(screen.getByLabelText('查看「腿举」教程'));
     expect(screen.getByRole('button', { name: '关闭' })).toBeInTheDocument();
   });
 
-  it('无 exerciseId → 占位恒在（gray-50+哑铃灰标）可点，点击轻提示不打开 Sheet', async () => {
-    const user = userEvent.setup();
+  it('▸ 角标三态：有视频▸ / 有封面无视频无▸ / 无封面占位无▸', async () => {
+    stubTutorialFetch({
+      pb1: { posterUrl: 'https://cdn.example.com/pb1.jpg', hasVideo: true },
+      pb2: { posterUrl: 'https://cdn.example.com/pb2.jpg', hasVideo: false },
+      // pb3 不约定 → 无封面无视频
+    });
+    render(
+      <PlanDayDetailPage
+        detail={{
+          entryDate: '2026-09-25',
+          title: '周五 · 腿',
+          rest: false,
+          exercises: [
+            { exerciseId: 'pb1', name: '有视频动作', category: 'main', sets: [{ setNo: 1, weightKg: 60, reps: 8 }] },
+            { exerciseId: 'pb2', name: '无视频动作', category: 'main', sets: [{ setNo: 1, weightKg: 60, reps: 8 }] },
+            { exerciseId: 'pb3', name: '无封面动作', category: 'main', sets: [{ setNo: 1, weightKg: 0, reps: 15 }] },
+          ],
+        }}
+        onClose={() => undefined}
+      />,
+    );
+    // 两张封面渐显完成（有视频 / 无视频）：jsdom 手动派发 onLoad
+    await waitFor(() => {
+      const imgs = Array.from(document.body.querySelectorAll('[data-testid="thumb-box"] img'));
+      expect(imgs.length).toBe(2);
+    });
+    document.body.querySelectorAll('[data-testid="thumb-box"] img').forEach((img) => fireEvent.load(img));
+    await waitFor(() => {
+      const imgs = Array.from(document.body.querySelectorAll('[data-testid="thumb-box"] img'));
+      expect(imgs.every((i) => i.className.includes('opacity-100'))).toBe(true);
+    });
+    // 全页仅 1 个 ▸：只在「封面在显 + video_urls 非空」卡上（无视频封面、无封面占位均不挂载）
+    expect(screen.getAllByTestId('play-badge')).toHaveLength(1);
+    // 无视频卡：封面照常展示（入口/封面不受角标影响）
+    const boxes = screen.getAllByTestId('thumb-box');
+    expect(boxes[1].querySelector('img')).not.toBeNull();
+    // 无封面卡：哑铃占位（gray-50）
+    expect(boxes[2].className).toContain('bg-gray-50');
+    expect(boxes[2].querySelector('img')).toBeNull();
+  });
+
+  it('exerciseId 类型可空（防御容错）：缺省不构造缩略图入口，卡头退回纯文字（真实数据零孤儿不触达）', () => {
     const fetchMock = stubTutorialFetch();
     render(
       <PlanDayDetailPage detail={singleExerciseVM({ name: '山羊挺身', setCount: 2 })} onClose={() => undefined} />,
     );
-    // 入口恒在（#81 返工）：占位块照常渲染（同无封面降级形态），不沿教程数据链发请求
-    const box = screen.getByTestId('thumb-box');
-    expect(box.className).toContain('bg-gray-50');
-    expect(box.className).toContain('h-11 w-11');
-    expect(box.querySelector('svg path')).not.toBeNull();
-    expect(document.body.querySelector('img')).toBeNull();
+    // 类型层可空被组件容忍：不炸、不构造缩略图入口（不发库请求）
+    expect(document.body.querySelector('[data-testid="thumb-box"]')).toBeNull();
+    expect(screen.queryByTestId('play-badge')).toBeNull();
     expect(fetchMock).not.toHaveBeenCalled();
-    // 名称与组数徽标照常展示，卡头仍为固定 48px 行
+    // 卡头退回纯文字（自然行高），名称与组数徽标照常展示
     expect(screen.getByText('山羊挺身')).toBeInTheDocument();
     expect(screen.getByText('2 组')).toBeInTheDocument();
-    // 点击占位 → 轻提示 toast（禁弹错误），不打开教程 Sheet、不发请求
-    await user.click(screen.getByLabelText('查看「山羊挺身」教程'));
-    expect(screen.getByText('该条目暂无关联动作库条目')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: '关闭' })).toBeNull();
-    expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it('44×44 恒定：1 组 / 3 组 / 无 exerciseId 占位的缩略图视觉盒类名逐字一致', () => {
+  it('44×44 恒定：1 组与 3 组动作的缩略图视觉盒类名逐字一致', () => {
     render(
       <PlanDayDetailPage
         detail={{
@@ -268,21 +310,16 @@ describe('PlanDayDetailPage #81 卡头教程缩略图', () => {
                 { setNo: 3, weightKg: 70, reps: 5 },
               ],
             },
-            // 旧计划无 exerciseId：占位同尺寸，不因缺 id 缩水/消失
-            { name: '山羊挺身', category: 'main', sets: [{ setNo: 1, weightKg: 0, reps: 15 }] },
           ],
         }}
         onClose={() => undefined}
       />,
     );
     const boxes = screen.getAllByTestId('thumb-box');
-    expect(boxes).toHaveLength(3);
+    expect(boxes).toHaveLength(2);
     // 尺寸/圆角类名逐字一致——卡高随组数变化，缩略图永远 44×44 radius-10
     const sizeClass = (el: HTMLElement) => el.className.match(/h-11 w-11|rounded-\[10px\]/g)?.sort().join(' ');
     expect(sizeClass(boxes[0])).toBe('h-11 w-11 rounded-[10px]');
     expect(sizeClass(boxes[0])).toBe(sizeClass(boxes[1]));
-    expect(sizeClass(boxes[0])).toBe(sizeClass(boxes[2]));
-    // 无 exerciseId 卡的占位形态与无封面降级一致（gray-50 底）
-    expect(boxes[2].className).toContain('bg-gray-50');
   });
 });
