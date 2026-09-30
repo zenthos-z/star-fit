@@ -38,6 +38,13 @@ export type PickerExerciseType =
 export type PickerRegion = 'upper' | 'lower' | 'core' | 'cardio';
 
 /**
+ * 条目来源（issue #85）：confirm 分流批量入库的唯一判据——
+ * library=库内已有行（加入会话即可，不 POST，避免撞 exercises_name_key 假失败）；
+ * custom=用户自建（确认时才走批量创建入库）。
+ */
+export type PickerExerciseSource = 'library' | 'custom';
+
+/**
  * 组类型标注（A31 契约扩展：真源 shared/contracts SetType，issue #31）。
  * 前端旧值 rampUp/rampDown 已随契约统一为 snake_case（ramp_up/ramp_down）；
  * 语义不变：热身/正式/递增/递减/AMRAP。
@@ -97,6 +104,8 @@ export interface PickerExercise {
   isRecommended: boolean;
   /** 动作封面：库3 3D 解剖渲染图（R2 CDN，male 版）；缺失 '' → 列表回退类型图标 */
   thumbnail: string;
+  /** 来源（issue #85）：库内已有行 / 用户自建——confirm 批量入库分流的唯一判据 */
+  source: PickerExerciseSource;
 }
 
 /** 配置面板中可编辑的一组（清单页/配置页流转的草稿形态） */
@@ -280,6 +289,7 @@ export function buildPickerExercises(library: PickerLibraryEntry[]): PickerExerc
       hotRank: i + 1,
       isRecommended: i + 1 > 3 && (i + 1) % 17 === 0,
       thumbnail: sanitizeThumbnail(e.thumbnail),
+      source: 'library',
     };
   });
 }

@@ -21,6 +21,7 @@ import { ExerciseSortService } from "../services/exerciseSortService.js";
 import { parseJSONSafe } from "../types/validation.js";
 import { getNowISO } from "../utils/timestamp.js";
 import { assembleTutorialMd } from "../services/tutorialAssembler.js";
+import { DatabaseError } from "../utils/errorHandler.js";
 
 /**
  * 组装 API 响应视图：结构化列 → 兼容既有前端键（targets / equipment_required）。
@@ -368,6 +369,19 @@ export async function createExercise(
       exerciseId: body.id,
     });
   } catch (error) {
+    // exercises_name_key 唯一约束冲突 → 409 name_exists（issue #85：库内动作
+    // 重复创建的可读语义，不再裸 500 SQL 错误；pg 错误经 DatabaseError.context.error
+    // 透传，映射口径对齐 adminController.exerciseEditErrorStatus）
+    if (
+      error instanceof DatabaseError &&
+      (error.context as any)?.error?.code === "23505"
+    ) {
+      reply.status(409).send({
+        error: "name_exists",
+        details: "动作英文名已存在（name 唯一）",
+      });
+      return;
+    }
     reply.status(500).send({
       error: "Failed to create exercise",
       details: error instanceof Error ? error.message : String(error),
