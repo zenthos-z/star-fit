@@ -9,6 +9,14 @@
  *    旧计划（category NULL）映射层已回落 main，落「正式动作」段
  *  - 逐组参数：T9 sets 在位时每组独立行（第1组 60kg×8 / 第2组 65kg×6 形态；
  *    无配重动作以 RPE 作负荷锚）；sets 为 null 回落区间文案并折叠「第 1–N 组」
+ *  - 教程缩略图入口（#81，二次返工定稿）：卡头固定 48px 行（44×44 radius-10
+ *    + 名称 + 组数徽标，点按热区 56×56），点开 ExerciseTutorialModal 独立实例
+ *    （详情页自有 state，不入主页 tutorialExerciseId 返回链）；图源 poster_url
+ *    走教程数据链（tutorialPoster.ts）。▸ 播放角标条件渲染：仅 video_urls
+ *    非空（库内确有演示视频）且有封面时显示——无视频有封面→封面无▸、
+ *    无封面→灰底哑铃占位无▸（#87 入口恒在）。无 exerciseId 不构造缩略图
+ *    入口（类型可空防御容错；plan_entries 零孤儿，真实数据不触达该态，
+ *    卡头退回纯文字）
  *
  * 视觉同源（PR#17 返工）：动作卡与历史卡同一套（白底 rounded-2xl +
  * border-gray-100 + shadow-sm）；chip 用 PlanCard 同款灰徽标；
@@ -16,13 +24,16 @@
  * Footnote 13 / Caption 12，数值 font-mono + 10px 单位小字（design-spec §5）。
  * 段落标识全走排版层级，无 emoji 图标（issue #8 修正 2）。
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { haptic } from '../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../lib/nativeTabBar';
 import { resolveExerciseDisplayName } from '../../utils/exerciseDisplay';
 import { useExerciseLibraryIndex } from '../../hooks/useExerciseLibraryIndex';
+import { ExerciseTutorialModal } from '../execution/ExerciseTutorialModal';
+import type { ExerciseAction } from '../../types/protocol';
+import { useTutorialPoster } from './tutorialPoster';
 import {
   groupExercisesByCategory,
   isUniformSetBlock,
@@ -75,12 +86,104 @@ function SetRow({ set, total, collapsed }: { set: PlanDaySetVM; total: number; c
   );
 }
 
-function ExerciseCard({ name, sets, note }: { name: string; sets: PlanDayDetailVM['exercises'][number]['sets']; note?: string }): JSX.Element {
+/** 哑铃占位图标路径（PickerFilterSheet.dumbbell 同款线性体系，禁 emoji） */
+const DUMBBELL_PATHS = ['M6 6.75v10.5', 'M18 6.75v10.5', 'M3.25 9v6', 'M20.75 9v6', 'M6 12h12'];
+
+/** 播放角标（同训练页播放语义：实心三角，教程封面放大镜徽标同款黑透底）。
+ * 条件渲染（#81 二次返工）：仅库内确有演示视频（video_urls 非空）时挂载，
+ * 对无视频动作不做虚假可播信号。 */
+function PlayBadge(): JSX.Element {
+  return (
+    <span data-testid="play-badge" className="absolute -right-1 -top-1 flex h-4 w-4 items-center justify-center rounded-full bg-black/45 text-white shadow-sm" aria-hidden="true">
+      <svg viewBox="0 0 24 24" fill="currentColor" className="h-2 w-2">
+        <path fillRule="evenodd" d="M4.5 5.653c0-1.426 1.529-2.33 2.779-1.643l11.54 6.348c1.295.712 1.295 2.573 0 3.285L7.28 19.991c-1.25.687-2.779-.217-2.779-1.643V5.653z" clipRule="evenodd" />
+      </svg>
+    </span>
+  );
+}
+
+/**
+ * 卡头教程缩略图（#81）：44×44 radius-10，尺寸恒定不随组数变化，入口恒在
+ * （无封面照常灰底哑铃占位可点，#87）。点按热区 56×56（after 四周外扩 6px，
+ * 纯视觉盒保持 44，不吞名称区）。
+ * 三态：封面渐显（lazy+onLoad 透明度过渡）/ 无封面 gray-50+哑铃灰标 /
+ * 拉取中静态骨架灰底（无 pulse，不闪跳）。
+ * ▸ 角标条件渲染：有封面渐显完成且 video_urls 非空才挂载（二次返工）。
+ */
+function CardHeaderThumb({ exerciseId, name, onOpen }: { exerciseId: string; name: string; onOpen: () => void }): JSX.Element {
+  const { posterUrl, hasVideo, loading } = useTutorialPoster(exerciseId);
+  const [loadedUrl, setLoadedUrl] = useState<string | null>(null);
+  const [failedUrl, setFailedUrl] = useState<string | null>(null);
+  const imgFailed = posterUrl !== null && failedUrl === posterUrl;
+  const imgVisible = posterUrl !== null && failedUrl !== posterUrl && loadedUrl === posterUrl;
+  const showFallback = posterUrl === null ? !loading : imgFailed;
+  return (
+    <button
+      type="button"
+      onClick={() => {
+        haptic('light');
+        onOpen();
+      }}
+      aria-label={`查看「${name}」教程`}
+      className="relative h-11 w-11 shrink-0 after:absolute after:-inset-1.5 after:content-[''] active:scale-95 transition-transform"
+    >
+      <span
+        data-testid="thumb-box"
+        className={`block h-11 w-11 overflow-hidden rounded-[10px] ${showFallback ? 'bg-gray-50' : 'bg-gray-100'}`}
+      >
+        {posterUrl !== null && !imgFailed && (
+          <img
+            src={posterUrl}
+            alt=""
+            loading="lazy"
+            decoding="async"
+            onLoad={() => setLoadedUrl(posterUrl)}
+            onError={() => setFailedUrl(posterUrl)}
+            className={`h-11 w-11 object-cover object-center transition-opacity duration-300 ${imgVisible ? 'opacity-100' : 'opacity-0'}`}
+          />
+        )}
+        {showFallback && (
+          <span className="flex h-11 w-11 items-center justify-center text-gray-300" aria-hidden="true">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round">
+              {DUMBBELL_PATHS.map((d) => <path key={d} d={d} />)}
+            </svg>
+          </span>
+        )}
+      </span>
+      {/* ▸ 仅「封面在显 + 库内确有视频」：无视频封面/占位/骨架/加载失败均不挂载 */}
+      {imgVisible && hasVideo && <PlayBadge />}
+    </button>
+  );
+}
+
+function ExerciseCard({
+  exerciseId,
+  name,
+  sets,
+  note,
+  onOpenTutorial,
+}: {
+  /** 类型可空（防御容错）；缺省=不构造缩略图入口（plan_entries 零孤儿，真实数据不触达） */
+  exerciseId?: string;
+  name: string;
+  sets: PlanDayDetailVM['exercises'][number]['sets'];
+  note?: string;
+  onOpenTutorial?: (exerciseId: string, name: string) => void;
+}): JSX.Element {
   const collapsed = isUniformSetBlock(sets);
   const display = collapsed ? [sets[0]] : sets;
   return (
     <div className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm">
-      <div className="flex items-center gap-2.5 border-b border-gray-100 pb-2.5">
+      {/* 卡头：有 exerciseId → 固定 48px 行（44 缩略图+名称+组数徽标）；缺省
+          （防御路径，真实数据不触达）→ 不构造缩略图入口，退回纯文字卡头 */}
+      <div className={`flex items-center gap-2.5 border-b border-gray-100 ${exerciseId && onOpenTutorial ? 'h-12' : 'pb-2.5'}`}>
+        {exerciseId && onOpenTutorial && (
+          <CardHeaderThumb
+            exerciseId={exerciseId}
+            name={name}
+            onOpen={() => onOpenTutorial(exerciseId, name)}
+          />
+        )}
         <div className="min-w-0 flex-1 truncate text-[17px] font-semibold tracking-tight text-gray-900">{name}</div>
         <span className="shrink-0 rounded-full border border-gray-100 bg-gray-50 px-2 py-0.5 text-[10px] font-medium text-gray-500">
           {sets.length} 组
@@ -109,13 +212,17 @@ export interface PlanDayDetailPageProps {
  */
 export const PlanDayDetailPage: React.FC<PlanDayDetailPageProps> = ({ detail, onClose }) => {
   const libraryIndex = useExerciseLibraryIndex();
+  /** 详情页自有教程 Sheet 状态：与主页 tutorialExerciseId 返回链完全隔离（#81） */
+  const [tutorial, setTutorial] = useState<{ exerciseId: string; name: string } | null>(null);
   useEffect(() => {
     if (!detail) return;
     setTabBarHidden(true);
     return () => setTabBarHidden(false);
   }, [detail]);
 
-  return createPortal(
+  return (
+    <>
+      {createPortal(
   <AnimatePresence>
     {detail && (
       <motion.div
@@ -195,9 +302,11 @@ export const PlanDayDetailPage: React.FC<PlanDayDetailPageProps> = ({ detail, on
                   {group.exercises.map((ex, i) => (
                     <ExerciseCard
                       key={ex.exerciseId ?? `${group.category}-${ex.name}-${i}`}
+                      exerciseId={ex.exerciseId}
                       name={resolveExerciseDisplayName(ex.name, { library: libraryIndex })}
                       sets={ex.sets}
                       note={ex.note}
+                      onOpenTutorial={(id, displayName) => setTutorial({ exerciseId: id, name: displayName })}
                     />
                   ))}
                 </section>
@@ -209,5 +318,29 @@ export const PlanDayDetailPage: React.FC<PlanDayDetailPageProps> = ({ detail, on
     )}
   </AnimatePresence>,
   document.body,
+  )}
+      {/* 教程 Sheet：独立 portal 实例（wrapper 提升层叠上下文盖过详情页 z-[130]；
+          详情页关闭即随之卸载，不触碰主页 tutorialExerciseId 返回链）。
+          onAskAi 空实现与 ExercisePickerModal 教程入口同口径。 */}
+      {detail && tutorial && createPortal(
+        <div className="fixed inset-0 z-[135]">
+          <ExerciseTutorialModal
+            exercise={{
+              protocol_version: '2.0.0',
+              id: tutorial.exerciseId,
+              exerciseId: tutorial.exerciseId,
+              type: 'resistance',
+              sets: [],
+              name: tutorial.name,
+              libraryId: tutorial.exerciseId,
+              metadata: { name: tutorial.name, libraryId: tutorial.exerciseId },
+            } as unknown as ExerciseAction}
+            onClose={() => setTutorial(null)}
+            onAskAi={() => {}}
+          />
+        </div>,
+        document.body,
+      )}
+    </>
   );
 };
