@@ -58,7 +58,7 @@ reps / weight / duration / distance / rpe 逐组记录，符号语义随细类�
 |---|---|
 | 采集 | 每组完成时刻自动落值（前端 `completedAt` ms；契约层 `timestamp` ISO 8601） |
 | 用途 | 休息推断链输入；会话内动作顺序还原 |
-| 契约现状 | 契约中 `timestamp` 为可选——**目标必填化，契约批**（契约缺口清单 #2） |
+| 契约现状 | `timestamp` **必填**（#97 已落契约 `ExerciseSetEntrySchema`）；存量无值在交付边界按 `startTime + (组序+1) × 60s` 推算填充（`shared/contracts/agent-delivery.ts`，推算锚点间距 = 默认休息节奏，非测量值）。已知缺口：completedAt 仅力量类组落值，有氧/户外组走推算（采集端统一落值属采集 UI 批） |
 
 ### 4.3 休息（推断量，不单独存储）
 
@@ -121,9 +121,9 @@ reps / weight / duration / distance / rpe 逐组记录，符号语义随细类�
 | feel | 感受滑块：无级 0-100 **连续值，原值存储不分档** |
 | feel_note | 语义化文本补充（受伤 / 疼痛 / 力量过大等滑块说不清的内容）；语音输入复用 @ 对话框已实现的语音转文本，**原始音频不存** |
 | 序列 | 组间形成对比序列 + 跨动作按动作顺序排列，供 Agent 分析状态与理解程度趋势 |
-| 契约现状 | `feel` / `feel_note` 字段未落契约——**契约批**（契约缺口清单 #1），落地前本节为目标态定义 |
+| 契约现状 | `feel` / `feel_note` **已落契约**（#97：`ExerciseSetEntrySchema`，feel 0-100 int 原值 / feel_note ≤500 字符，均可选）；采集弹窗属采集 UI 批（批次3），本批为契约与交付校验 |
 
-目标态载荷（草案形态，落地以契约批为准）：
+目标态载荷（#97 已落契约，字段口径与 `ExerciseSetEntrySchema` 一致）：
 
 <!-- spec:example id="dc-feel-draft" validator="none" -->
 ```json

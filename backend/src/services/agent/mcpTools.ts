@@ -122,6 +122,8 @@ import {
   // #88 分册1：动作类型枚举复用 card-types 单一真源（10 细类，与
   // exercise-type-guide 技能知识库 / DB exercise_type_enum 同源）
   ExerciseTypeEnum,
+  // #97 红线3：Agent 交付边界门卫（归一 + 全字段 Zod + 关系引用完整性）
+  gateSessionsForAgentDelivery,
 } from "shared/contracts";
 import { utcToday } from "../schedule/scheduleService.js";
 // [B6 issue#39] 写路径心跳：画像/计划/训练完成 → 静默登记建议缓存空闲重算
@@ -520,6 +522,20 @@ export class ExerciseQuery extends BaseRepository {
       params,
     );
     return { rows, total: Number(countRow?.total ?? 0) };
+  }
+
+  /**
+   * All exercise ids (#97): the referential-integrity universe for the Agent
+   * delivery gate (load_history validates every session exercise reference
+   * against this set). Read-only full id scan — the library is a few hundred
+   * rows, no pagination needed.
+   */
+  async listAllIds(): Promise<Set<string>> {
+    const rows = await this.queryMany<{ id: string }>(
+      "SELECT id FROM exercises",
+      {},
+    );
+    return new Set(rows.map((r) => r.id));
   }
 
   /**
@@ -1254,6 +1270,45 @@ export function buildMcpToolsWith(
       } catch {
         liveRows = [];
       }
+      // #97 红线3「无缺漏无错误」交付硬校验：live 行先过 agent-delivery 门卫
+      // （归一 + 全字段 Zod + 关系引用完整性），坏行扣下并上浮原因——拒付
+      // 可见（delivery_gate），绝不静默进 Agent。被扣行的 write_session 记忆
+      // 条目（如有）仍经下方 merge 以 summary 源补位，不受连带。
+      let deliveryGate: {
+        validated: number;
+        rejected: Array<{
+          session_id: string | null;
+          code: string;
+          reason: string;
+        }>;
+      } | null = null;
+      if (liveRows.length > 0) {
+        let knownExerciseIds: Set<string> | undefined;
+        try {
+          knownExerciseIds = await new ExerciseQuery(client).listAllIds();
+        } catch (err) {
+          // 引用全集读不到时只做结构校验并留痕——库扫描失败 ≠ 会话数据坏，
+          // 不因旁路读失败扣下整段历史（拒付必须有据）。
+          console.error(
+            "[load_history] exercise id universe unavailable, reference check skipped:",
+            err,
+          );
+        }
+        const gate = gateSessionsForAgentDelivery(liveRows, {
+          knownExerciseIds,
+        });
+        liveRows = gate.delivered.map((s) => ({ raw_json: s }));
+        if (gate.rejected.length > 0) {
+          console.error(
+            `[load_history] delivery gate rejected ${gate.rejected.length} session(s):`,
+            gate.rejected,
+          );
+        }
+        deliveryGate = {
+          validated: gate.delivered.length,
+          rejected: gate.rejected,
+        };
+      }
       const trimmed = trimSessions(
         {
           sessions: mergeHistorySources(
@@ -1261,6 +1316,7 @@ export function buildMcpToolsWith(
             liveRows,
             limit,
           ),
+          ...(deliveryGate ? { delivery_gate: deliveryGate } : {}),
         },
         limit,
       );

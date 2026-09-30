@@ -81,8 +81,10 @@ plan_card 卡级外层键：
 | `distance` | 实际距离米 |
 | `rpe` | 实际 RPE（0-10，可选） |
 | `status` | `planned` / `completed` / `skipped`（整段跳过） |
-| `timestamp` | 段完成时刻 ISO 8601（多段间歇时为休息推断链输入） |
+| `timestamp` | 段完成时刻 ISO 8601（**必填**，#97 已落契约；多段间歇时为休息推断链输入；存量无值按 startTime+组序推算） |
 | `restEndTime` | 段间休息结束时刻 epoch ms（单段连续执行不写；多段间歇适用） |
+| `feel` | 感受滑块原值 0-100 int（无级连续值禁分档，可选；#97 已落契约） |
+| `feel_note` | 感受语义补充 ≤500 字符（语音转写，可选；#97 已落契约） |
 <!-- /spec:fields -->
 
 ### 4.3 持久化条目层（`POST /api/sessions` exercises[] 每行；格式化训练条目）

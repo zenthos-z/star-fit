@@ -50,8 +50,15 @@ const convertExerciseToAction = (exercise: Exercise): ExerciseAction => {
       distance: set.distance,
       rpe: set.rpe,
       status: set.completed ? 'COMPLETED' : 'PLANNED',
-      timestamp: set.completed ? new Date().toISOString() : undefined,
-      restEndTime: set.restEndTime
+      // 组完成时刻取 completedAt 实测值（#97 契约 timestamp 语义）；
+      // 无实测值 = 缺席（undefined），不在桥接层虚构 now()——交付边界
+      // （shared agent-delivery）按 session.startTime+组序推算补齐。
+      timestamp: typeof set.completedAt === 'number'
+        ? new Date(set.completedAt).toISOString()
+        : undefined,
+      restEndTime: set.restEndTime,
+      feel: set.feel,
+      feel_note: set.feel_note,
     })),
     uiHint: {
       cardType: exercise.uiHint?.cardType as any,

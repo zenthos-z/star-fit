@@ -74,8 +74,10 @@ plan_card 卡级外层键（对拍 `UIHintPlanCard`）：
 | `distance` | 实际距离米 |
 | `rpe` | 实际 RPE（0-10） |
 | `status` | `unknown` / `planned` / `completed` / `skipped` |
-| `timestamp` | 组时间戳（ISO 8601；目标必填化，契约批） |
+| `timestamp` | 组时间戳（ISO 8601；**必填**，#97 已落契约；存量无值按 startTime+组序推算） |
 | `restEndTime` | 休息结束时间戳（epoch ms，休息推断链输入） |
+| `feel` | 感受滑块原值 0-100 int（无级连续值禁分档，可选；#97 已落契约） |
+| `feel_note` | 感受语义补充 ≤500 字符（语音转写，可选；#97 已落契约） |
 <!-- /spec:fields -->
 
 ### 4.3 持久化条目层（`POST /api/sessions` exercises[] 每行；格式化训练条目）
