@@ -6,7 +6,7 @@
  * 2. 空选择=确认禁用态（悬浮条常驻）；
  * 3. 文案 × 场景参数对应表（PICKER_MODE_CONFIRM：替换X / 添加N个 / 追加N个到队尾）；
  * 4. App 级确认行为（usePickerEntryConfirm，mock API）：会话队尾追加保持顺序
- *    + 批量入库循环 POST + 进度横幅（复用 #48 BatchAddBanner）；
+ *    + 来源分流（#85：库内不 POST 仅入会话无横幅；自建批量入库，失败重试补失败项）；
  * 5. ExerciseSettingsModal 库视图接线：mode="single-replace"，确认即回填关闭。
  */
 
@@ -46,6 +46,23 @@ const findEn = (nameEn: string) => {
 
 const BENCH = 'Barbell Bench Press';
 const DEADLIFT = 'Axle Deadlift';
+
+/** 库内清单项（真实库条目构造） */
+const makeLibItem = (nameEn: string): PickerSelectionItem => {
+  const ex = findEn(nameEn);
+  return {
+    exercise: ex,
+    sets: [{ id: `set-${ex.id}`, role: 'working', weight: 40, reps: 10, durationSec: 0 }],
+    targetRpe: 7,
+  };
+};
+
+/** 自建清单项（source:'custom'——#85 confirm 批量入库分流的唯一判据） */
+const makeCustomItem = (nameEn: string, name: string): PickerSelectionItem => ({
+  exercise: { ...MOCK_EXERCISES[0], source: 'custom', nameEn, name },
+  sets: [{ id: `set-custom-${nameEn}`, role: 'working', weight: 0, reps: 10, durationSec: 0 }],
+  targetRpe: 7,
+});
 
 const renderPicker = (mode: PickerEntryMode, onConfirm = vi.fn()) => {
   render(<ExercisePickerModal mode={mode} hasHistory={false} onClose={() => {}} onConfirm={onConfirm} />);
@@ -166,6 +183,8 @@ describe('A10 三模式 · 进入→交互→确认', () => {
 
 // ---------------------------------------------------------------------------
 // 4. App 级确认行为（usePickerEntryConfirm + BatchAddBanner，mock API）
+//    （issue #85 语义更新：库内条目加入会话即可不 POST——批量创建仅对自建
+//    条目走，全库内批次状态保持 idle 不弹横幅；失败重试路径以混合批次验证）
 // ---------------------------------------------------------------------------
 
 /** 测试宿主：picker（入口场景）→ confirm → 会话追加回调 + 批量入库横幅 */
@@ -190,6 +209,23 @@ function EntryHost({
   );
 }
 
+/** 直连宿主：绕过 picker UI 直接 confirm 任意来源组合（自建条目构造用） */
+function DirectHost({
+  items,
+  onExercisesAdded,
+}: {
+  items: PickerSelectionItem[];
+  onExercisesAdded: (exercises: Exercise[]) => void;
+}) {
+  const entry = usePickerEntryConfirm({ onExercisesAdded });
+  return (
+    <div>
+      <button onClick={() => entry.confirm(items)}>direct-confirm</button>
+      <BatchAddBanner state={entry.state} onRetry={entry.retryFailed} onDismiss={entry.dismiss} />
+    </div>
+  );
+}
+
 /** 横幅整句匹配器：计数带色 span 拆散了文本节点，须按 <p> 整体 textContent 匹配 */
 const bannerSentence = (text: string) => (_: unknown, el: Element | null) =>
   el?.tagName === 'P' && el.textContent === text;
@@ -200,7 +236,7 @@ describe('A10 App 级确认行为（usePickerEntryConfirm + BatchAddBanner）', 
     createExerciseMock.mockResolvedValue({ id: 'x' });
   });
 
-  it('append 确认：会话队尾追加保持清单顺序 + 批量入库循环 POST + 横幅进度走满', async () => {
+  it('append 确认（库内条目）：会话队尾追加保持清单顺序，不 POST、无横幅，session id 锚定库行 id', async () => {
     const user = userEvent.setup();
     const onExercisesAdded = vi.fn();
     render(<EntryHost mode="append" onExercisesAdded={onExercisesAdded} />);
@@ -218,18 +254,16 @@ describe('A10 App 级确认行为（usePickerEntryConfirm + BatchAddBanner）', 
     expect(added[0].sets.length).toBeGreaterThan(0);
     expect(added[0].sets[0].status).toBe('PLANNED');
 
-    // 批量入库：顺序循环单条 POST，id 与会话 Exercise 同源（session id = 库 id 约定）
-    await waitFor(() => expect(createExerciseMock).toHaveBeenCalledTimes(2));
-    const postNames = createExerciseMock.mock.calls.map(c => (c[0] as { name: string }).name);
-    expect(postNames).toEqual([findEn(BENCH).nameEn, findEn(DEADLIFT).nameEn]);
-    expect((createExerciseMock.mock.calls[0][0] as { id: string }).id).toBe(added[0].id);
-    expect(added[0].libraryId).toBe(added[0].id);
+    // 库内条目不触批量创建（#85：POST 必撞 exercises_name_key 假失败），session id = 库行 id
+    expect(createExerciseMock).not.toHaveBeenCalled();
+    expect(added[0].id).toBe(findEn(BENCH).id);
+    expect(added[0].libraryId).toBe(findEn(BENCH).id);
 
-    // 横幅进度走满（#48 BatchAddBanner 复用）
-    await waitFor(() => expect(screen.getByText(bannerSentence('已添加 2 个动作'))).toBeInTheDocument());
+    // 无横幅（状态保持 idle）
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('batch 确认（mock API 同一路径，模式仅文案差异）', async () => {
+  it('batch 确认（库内条目，mock API 同一路径，模式仅文案差异）：不 POST 仅入会话', async () => {
     const user = userEvent.setup();
     const onExercisesAdded = vi.fn();
     render(<EntryHost mode="batch" onExercisesAdded={onExercisesAdded} />);
@@ -239,36 +273,49 @@ describe('A10 App 级确认行为（usePickerEntryConfirm + BatchAddBanner）', 
     await user.click(screen.getByRole('button', { name: '添加1个' }));
 
     expect(onExercisesAdded).toHaveBeenCalledTimes(1);
-    await waitFor(() => expect(createExerciseMock).toHaveBeenCalledTimes(1));
+    expect(createExerciseMock).not.toHaveBeenCalled();
+    expect(screen.queryByRole('status')).not.toBeInTheDocument();
   });
 
-  it('批量入库失败不阻断会话追加（横幅呈现失败态，单条重试仅补失败项）', async () => {
+  it('混合批次自建条目入库失败不阻断会话追加（横幅呈现失败态，单条重试仅补失败项）', async () => {
     const user = userEvent.setup();
     const onExercisesAdded = vi.fn();
+    const custom = makeCustomItem('Custom Z Press', '自建Z推举');
     createExerciseMock
       .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce({ id: 'x' })
-      .mockResolvedValueOnce({ id: 'x' }); // 重试轮：仅失败单条
-    render(<EntryHost mode="append" onExercisesAdded={onExercisesAdded} />);
+      .mockResolvedValueOnce({ id: 'x' }); // 重试轮：仅失败自建单条
+    render(
+      <DirectHost
+        items={[
+          { ...makeLibItem(BENCH) },
+          custom,
+        ]}
+        onExercisesAdded={onExercisesAdded}
+      />,
+    );
 
-    await pick(user, [BENCH, DEADLIFT]);
-    await user.click(screen.getByRole('button', { name: '去配置' }));
-    await user.click(screen.getByRole('button', { name: '追加2个到队尾' }));
+    await user.click(screen.getByRole('button', { name: 'direct-confirm' }));
 
-    // 会话追加先落账（本地优先，不因入库失败回滚）
+    // 会话追加先落账（本地优先，不因入库失败回滚；库内+自建全量 2 条）
     expect(onExercisesAdded).toHaveBeenCalledTimes(1);
     expect(onExercisesAdded.mock.calls[0][0]).toHaveLength(2);
 
-    // 失败态常驻 + 单条重试补失败项
+    // 失败态常驻（仅计自建 1 条：库内不计入）+ 单条重试补失败项
     await waitFor(() =>
-      expect(screen.getByText(bannerSentence('已添加 1 个，1 个添加失败'))).toBeInTheDocument(),
+      expect(screen.getByText(bannerSentence('已添加 0 个，1 个添加失败'))).toBeInTheDocument(),
     );
     await user.click(screen.getByRole('button', { name: '重试失败' }));
     await waitFor(() =>
-      expect(screen.getByText(bannerSentence('已添加 2 个动作'))).toBeInTheDocument(),
+      expect(screen.getByText(bannerSentence('已添加 1 个动作'))).toBeInTheDocument(),
     );
-    expect(createExerciseMock).toHaveBeenCalledTimes(3);
-    expect((createExerciseMock.mock.calls[2][0] as { name: string }).name).toBe(findEn(BENCH).nameEn);
+    expect(createExerciseMock).toHaveBeenCalledTimes(2);
+    expect(createExerciseMock.mock.calls.map(c => (c[0] as { name: string }).name)).toEqual([
+      'Custom Z Press',
+      'Custom Z Press',
+    ]);
+    // 库内条目 session id = 库行 id（未参与入库）
+    const added = onExercisesAdded.mock.calls[0][0] as Exercise[];
+    expect(added[0].id).toBe(findEn(BENCH).id);
   });
 });
 

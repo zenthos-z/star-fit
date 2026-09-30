@@ -12,6 +12,7 @@
 import React, { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { BatchCreateState } from '../../hooks/useBatchExerciseCreate';
+import { isNativeTabBar } from '../../lib/nativeTabBar';
 
 interface BatchAddBannerProps {
   state: BatchCreateState;
@@ -32,6 +33,15 @@ const BatchAddBanner: React.FC<BatchAddBannerProps> = ({ state, onRetry, onDismi
 
   const progressPct = state.total > 0 ? Math.round((state.succeeded / state.total) * 100) : 0;
 
+  // 避让 Tab Bar（issue #85）：横幅常驻根层级、picker 关闭后 tab bar 复现，
+  // bottom-0 会被盖（iOS 原生 bar 悬浮 WebView 之上；CSS 回落 bar z-105 高于旧 z-90）。
+  // 抬升至 bar 之上：iOS 原生 = safe-area + 72px（MainTabBar body 避让同款常量）；
+  // CSS 回落 = safe-bottom + 64px（bar 实高 ≈59px：py-2.5 + 图标20 + gap4 + 文字15）。
+  // z-[106]：层叠表上 CSS tab bar(105) 之上、AI sheet(110) 之下的空档。
+  const tabbarClearance = isNativeTabBar
+    ? 'calc(env(safe-area-inset-bottom, 0px) + 72px)'
+    : 'calc(var(--safe-bottom, 0px) + 64px)';
+
   return (
     <AnimatePresence>
       {visible && (
@@ -40,8 +50,8 @@ const BatchAddBanner: React.FC<BatchAddBannerProps> = ({ state, onRetry, onDismi
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: 24 }}
           transition={{ type: 'tween', duration: 0.2, ease: 'easeOut' }}
-          className="fixed bottom-0 inset-x-0 z-[90] px-4"
-          style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 16px)' }}
+          className="fixed inset-x-0 z-[106] px-4"
+          style={{ bottom: tabbarClearance }}
           role="status"
           aria-label="批量添加进度"
         >
