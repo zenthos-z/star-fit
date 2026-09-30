@@ -2,9 +2,9 @@
  * T1 调试 fixture 类型（issue #53）。
  *
  * 一个 DebugScenario = 一个可一键加载的预置 UI 场景：
- *  - chat-card   ：走 uiHint 多态回路——数据直灌 ExerciseRenderer（PluginRegistry
- *                  按 uiHint.type 分发），与真实聊天气泡挂卡的渲染链路完全同源，
- *                  零 Agent 调用。
+ *  - chat-card   ：走 uiHint 多态回路——数据直灌 ExerciseRenderer（卡片注册表
+ *                  按 uiHint.type 分发，#88 分册3），与真实聊天气泡挂卡的渲染链路
+ *                  完全同源，零 Agent 调用。
  *  - execution-card：走 exercise 分支——ExerciseRenderer 按 exercise.type 分发到
  *                  执行层插件卡（ResistanceCard / CardioCard / …）。
  *
@@ -38,7 +38,7 @@ export interface DebugScenario {
   bubbleText?: string;
   /**
    * uiHint 直灌载荷：wireCard 原样交给 ExerciseRenderer。
-   * type 值 = PluginRegistry 分发键 = 后端线上帧的 card.type。
+   * type 值 = 卡片注册表分发键（registry/assembleCards.ts）= 后端线上帧的 card.type。
    */
   wireCard?: {
     type: BackendValidatedCardType | FrontendOnlyCardType;

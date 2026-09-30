@@ -1,78 +1,34 @@
 import React from 'react';
 import { ExerciseAction, LoadAnchors } from '../../types/protocol';
-import { ResistanceCard } from './plugins/ResistanceCard';
-import { CardioCard } from './plugins/CardioCard';
-import { RunningCard } from './plugins/RunningCard';
-// import { OutdoorRunningCard } from './plugins/OutdoorRunningCard';
-const OutdoorExerciseCardV2 = React.lazy(() => import('./plugins/OutdoorExerciseCardV2').then(m => ({ default: m.OutdoorExerciseCardV2 })));
-import { IsometricCard } from './plugins/IsometricCard';
-import { PlanCard } from './cards/PlanCard';
-import { WeeklyPlanCard } from './cards/WeeklyPlanCard';
-import { SummaryCard } from './cards/SummaryCard';
-import { SurveyCard } from './cards/SurveyCard';
-import { SurveySuccessCard } from './cards/SurveySuccessCard';
-import { AuditCompleteCard } from './cards/AuditCompleteCard';
-import { HitlConfirmCard } from './cards/HitlConfirmCard';
-import { ProfileUpdateConfirmCard } from './cards/ProfileUpdateConfirmCard';
 import { FloatingAttachment, Attachment } from './FloatingAttachment';
 import { useAttachments } from '../../hooks/useAttachments';
+// #88 分册3：cardType → 组件映射 = 注册表装配（原硬编码 PluginRegistry 已删）
+import './registry/assembleCards';
+import { resolveCard } from './registry/cardRegistry';
 
 /**
- * Placeholder for Generic/Standard Card
- * [FIX] 去掉冗余的兜底展示，直接渲染实际内容或错误信息
+ * 未注册 cardType 的显式错误卡（红线2「不兜底」）。
+ * 可见失败 + 修复指引，替代迁移前的静默 StandardCard JSON 兜底。
  */
-const StandardCard: React.FC<{
-  exercise: ExerciseAction;
-  uiHint?: any;
-  onUpdate?: (updates: Partial<ExerciseAction>) => void;
-  onConfirm?: (payload: any) => void;
-  addAttachment?: (attachment: Omit<Attachment, 'id' | 'timestamp'>) => void;
-}> = ({ exercise, uiHint }) => {
-  // 优先展示 uiHint 中的原始数据，而不是兜底信息
-  const displayData = uiHint?.data || exercise;
-
-  return (
-    <div className="p-4 border rounded-2xl shadow-sm bg-gray-50 border-gray-200">
-      <div className="flex justify-between items-center mb-2">
-        <h3 className="font-bold text-lg text-gray-700">{exercise.exerciseId}</h3>
-        <span className="text-xs text-gray-400 uppercase font-bold tracking-widest">{exercise.type}</span>
-      </div>
-      <pre className="text-xs text-gray-600 whitespace-pre-wrap bg-gray-100 p-3 rounded-lg overflow-auto max-h-60">
-        {JSON.stringify(displayData, null, 2)}
-      </pre>
+const UnregisteredCardError: React.FC<{ cardType: string | undefined }> = ({ cardType }) => (
+  <div
+    role="alert"
+    data-testid="unregistered-card-error"
+    className="p-4 border rounded-2xl shadow-sm bg-rose-50 border-rose-200"
+  >
+    <div className="flex justify-between items-center mb-2">
+      <h3 className="font-bold text-base text-rose-700">
+        卡片渲染失败：未注册的 cardType{cardType ? `「${cardType}」` : '（空）'}
+      </h3>
     </div>
-  );
-};
-
-/**
- * Plugin Registry Mapping
- * Maps cardType (from uiHint or exercise.type) to specialized components.
- *
- * 统一标准：小写 + 下划线格式
- */
-const PluginRegistry: Record<string, React.FC<any>> = {
-  // 运动类型卡片
-  'resistance_standard': ResistanceCard,
-  'cardio_running': RunningCard,
-  'running_gps': OutdoorExerciseCardV2,
-  'outdoor_gps': OutdoorExerciseCardV2,
-  'isometric_static': IsometricCard,
-  'hiit_timer': CardioCard,
-
-  // AI Coach 卡片 - 统一为新标准（小写 + 下划线）
-  'plan_card': PlanCard,
-  'weekly_plan': WeeklyPlanCard,
-  'survey_card': SurveyCard,
-  'summary_card': SummaryCard,
-  'survey_success': SurveySuccessCard,
-  'audit_complete': AuditCompleteCard,
-  'hitl_confirm': HitlConfirmCard,
-  'profile_update_confirm': ProfileUpdateConfirmCard,
-
-  // 错误兜底
-  'skeleton': StandardCard,
-  'unknown': StandardCard,
-};
+    <p className="text-xs text-rose-600 leading-relaxed">
+      该类型未注册渲染组件，已按「不兜底」红线停止渲染（禁静默降级）。
+      注册方式：register(&#123;cardType&#125;, Component, spec) →
+      src/components/execution/registry/assembleCards.ts（新键需先进
+      shared/contracts card-types 真源；AI 卡见 cardSpec.ts AI_CARD_TYPES）。
+    </p>
+  </div>
+);
 
 interface ExerciseRendererProps {
   exercise?: ExerciseAction;
@@ -93,6 +49,10 @@ interface ExerciseRendererProps {
  * ExerciseRenderer - The central dispatcher for exercise cards.
  * Implements the Plugin-based Execution Layer as per EXERCISE_EXECUTION_REFACTOR_GUIDE.md.
  * Now upgraded to support Polymorphic Cards (PLAN, SUMMARY, etc.) for AICoachOverlay.
+ *
+ * #88 分册3：分发链切换到插件注册表（registry/assembleCards.ts 装配，
+ * register(cardType, component, spec) 开放注册）。未注册 cardType = 显式
+ * 错误卡（不兜底）；对外 props 接口不变，调用方无感。
  */
 export const ExerciseRenderer: React.FC<ExerciseRendererProps> = ({
   exercise,
@@ -107,15 +67,24 @@ export const ExerciseRenderer: React.FC<ExerciseRendererProps> = ({
   const { attachments, addAttachment, dismissAttachment } = useAttachments();
 
   // 1. Identification logic: prioritize uiHint.cardType/type, fallback to exercise.type
-  const cardType = uiHint?.cardType || uiHint?.type || exercise?.uiHint?.cardType || exercise?.type || 'standard';
+  //    （优先级与迁移前一致；exercise.type 细类裸值由注册表按真源映射派生标准卡）
+  const rawCardType = uiHint?.cardType || uiHint?.type || exercise?.uiHint?.cardType || exercise?.type;
 
-  // 2. Dispatch logic
-  const SelectedPlugin = (PluginRegistry[cardType] || StandardCard) as React.FC<any>;
-
-  // 3. Data normalization
+  // 2. Data normalization
   const data = exercise || uiHint?.data;
 
   if (!data && !uiHint) return null;
+
+  // 3. Dispatch logic（注册表）：未注册 = undefined → 显式错误卡，禁静默兜底
+  const entry = resolveCard(rawCardType);
+  if (!entry) {
+    console.error(
+      `[ExerciseRenderer] 未注册的 cardType "${rawCardType ?? '(空)'}"——去注册：register(cardType, component, spec)` +
+        `，装配文件 src/components/execution/registry/assembleCards.ts（#88 分册3；不设静默兜底）`,
+    );
+    return <UnregisteredCardError cardType={rawCardType} />;
+  }
+  const SelectedPlugin = entry.component as React.FC<any>;
 
   return (
     <div className="exercise-renderer-wrapper group relative">

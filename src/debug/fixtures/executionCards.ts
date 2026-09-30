@@ -3,7 +3,7 @@
  *
  * 形态真源：src/types/protocol.ts ExerciseActionSchema + 各执行插件
  * （ResistanceCard / CardioCard / IsometricCard / OutdoorExerciseCardV2）实际
- * 消费的字段。分发键 = exercise.uiHint.cardType（PluginRegistry 的键）。
+ * 消费的字段。分发键 = exercise.uiHint.cardType（卡片注册表 registry/assembleCards.ts 的键）。
  *
  * fixtures.schema.test.ts 对每个 exercise 跑 ExerciseActionSchema 校验。
  */

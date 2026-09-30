@@ -2,7 +2,7 @@
  * T1 调试台组件测试（issue #53）——数据直灌链路与 SSE 调试台渲染冒烟。
  *
  * 覆盖：
- * - ScenarioPanel：场景列表 → 点击 → 真实渲染组件出卡（PluginRegistry 分发）
+ * - ScenarioPanel：场景列表 → 点击 → 真实渲染组件出卡（卡片注册表分发）
  *   （plan-card / weekly-plan-card / survey-card / profile_update_confirm / 执行卡）
  * - SseConsolePanel：回放入账后 turn/帧可见；ping 帧与未知帧照常展示不炸；
  *   帧展开 payload JSON
