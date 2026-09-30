@@ -63,6 +63,52 @@ export const SSE_STREAM_FIXTURES: SseStreamFixture[] = [
     ].join(''),
   },
   {
+    id: 'sse-weekly-plan-leak-long-thinking',
+    label: '#56 长思考后周计划卡泄漏（thinking 倾泻 + 卡片 JSON 进 token）',
+    description: 'issue #56 复现帧序：GLM 长思考 delta 倾泻后，weekly_plan 卡未被剥成 uiHint、以围栏 JSON 进 token——前端终态复原兜底（cardLeakRecovery）的确定性回归样例',
+    raw: [
+      ...Array.from({ length: 20 }, (_, i) =>
+        `data: {"type":"thinking","text":"画像读取与动作选配推理第${i}步。"}\n\n`),
+      'data: {"type":"token","text":"这是为你定制的第 1 周计划：\\n\\n```json\\n"}\n\n',
+      `data: {"type":"token","text":${JSON.stringify(JSON.stringify({
+        type: 'weekly_plan',
+        data: {
+          week_label: '第 1 周',
+          phase_label: '增肌基础块',
+          split_summary: '全身×3 · 每周三练 · 新手起步',
+          days: [
+            {
+              entry_date: '2026-09-30',
+              split_label: '全身',
+              focus: '胸肩三头',
+              rest: false,
+              exercises: [{ exercise_id: 'V1StGXR8_Z5jdHi6', name: '杠铃卧推', sets: [{ set: 1, weight: 60, reps: 8 }] }],
+            },
+            { entry_date: '2026-10-01', rest: true, exercises: [] },
+          ],
+          apply: {
+            scope: 'week',
+            split: 'full_body',
+            dates: [],
+            entries: [{
+              entry_date: '2026-09-30',
+              exercise_id: 'V1StGXR8_Z5jdHi6',
+              target_sets: 1,
+              target_load: { type: 'rpe', min: 4, max: 5 },
+              sort_order: 0,
+              day_focus: '胸肩三头',
+              rationale: '新手以复合动作为主建立基础力量',
+              category: 'main',
+              sets: [{ set_no: 1, weight_kg: 60, reps: 8, rpe: 7 }],
+            }],
+          },
+        },
+      }))}}\n\n`,
+      'data: {"type":"token","text":"\\n```\\n\\n确认后我帮你启用本周计划。"}\n\n',
+      'data: {"type":"done"}\n\n',
+    ].join(''),
+  },
+  {
     id: 'sse-hostile-frames',
     label: '异常帧全家桶（未知类型/坏 JSON/[DONE]/CRLF/多行 data）',
     description: '解析器容错极限：未知帧类型、畸形 JSON、[DONE] 哨兵、CRLF 分隔、多行 data 拼接、注释帧——一律跳过/标注，禁炸',

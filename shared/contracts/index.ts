@@ -1093,6 +1093,10 @@ export const UiHintCardSchema = z.object({
     'instruction',
     'deviation',
     'profile_update_confirm',
+    // 2026-09 B5b/D2：对话周计划提案卡（提案-确认，data.apply 为确认落库
+    // 唯一数据面）。后端校验白名单（uiHintSchemas）与前端渲染注册表均已
+    // 支持，此前仅 TS 联合类型缺失（#56 定位时实锤的契约缝隙）。
+    'weekly_plan',
     'unknown',
   ]).default('unknown'),
   title: z.string().optional(),
