@@ -7,6 +7,8 @@ export interface StartMenuOption {
   label: string;
   icon: React.ReactNode;
   onSelect: () => void;
+  // 休息态等不可点选项（T8 #65）：降透明呈现、点击无动作（不关菜单、不触发）
+  disabled?: boolean;
 }
 
 interface TimerCapsuleProps {
@@ -353,13 +355,15 @@ const TimerCapsule: React.FC<TimerCapsuleProps> = ({
                   animate={{ opacity: 1, scale: 1, y: 0 }}
                   exit={{ opacity: 0, scale: 0.6, y: -28, transition: { duration: 0.12 } }}
                   transition={{ type: 'spring', stiffness: 420, damping: 26, mass: 0.9, delay: i * 0.05 }}
-                  whileTap={{ scale: 0.95 }}
+                  whileTap={opt.disabled ? undefined : { scale: 0.95 }}
                   onClick={() => {
+                    if (opt.disabled) return; // 休息态：无触感、不关菜单、不触发动作
                     haptic('light');
                     setMenuOpen(false);
                     opt.onSelect();
                   }}
-                  className="frost-lens relative w-[208px] h-[56px] rounded-full flex items-center gap-3 px-4"
+                  aria-disabled={opt.disabled || undefined}
+                  className={`frost-lens relative w-[208px] h-[56px] rounded-full flex items-center gap-3 px-4 ${opt.disabled ? 'opacity-45' : ''}`}
                 >
                   <span className="w-8 h-8 rounded-full bg-black/[0.05] flex items-center justify-center text-gray-700 shrink-0">
                     {opt.icon}

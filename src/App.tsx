@@ -34,7 +34,10 @@ import {
   ExerciseLibraryService
 } from '@/services';
 import { SuggestionService } from './services/suggestionService';
-import { buildStartMenuOptions } from './utils/startOnboarding';
+import { buildStartMenuOptions, resolveTodayPlanMenuState, scheduleEntriesToPlanItems } from './utils/startOnboarding';
+import { API_BASE, getHeaders } from '@/services/geminiService';
+import { todayDateKey } from './utils/weeklyPlanView';
+import type { TodayScheduleResponse } from 'shared/contracts';
 import { App as CapacitorApp } from '@capacitor/app';
 import { eventTracking, TrackingEvent } from '@/services/eventTracking';
 import { DEFAULT_REST_TIME, RPE_COLORS, DEFAULT_AI_CONFIG } from '@/constants';
@@ -437,6 +440,34 @@ const App: React.FC = () => {
     };
   }, []);
 
+  // [T8 #65] 今日课表拉取：形态防御同 useAICoach 预填路径（status 三枚举
+  // 白名单，非法载荷不进 state）；失败静默（菜单三态回落本地暂存兜底）。
+  // 周计划确认落库后即时刷新（与 useWeeklyPlan 同一广播源）。
+  useEffect(() => {
+    let cancelled = false;
+    const fetchTodaySchedule = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/schedule/today?date=${todayDateKey()}`, {
+          headers: getHeaders(),
+        });
+        if (!res.ok) return;
+        const raw = await res.json();
+        if (cancelled) return;
+        if (raw && (raw.status === 'planned' || raw.status === 'rest_day' || raw.status === 'no_plan')) {
+          setTodaySchedule(raw as TodayScheduleResponse);
+        }
+      } catch {
+        // 课表不可得 → 保持 null，走本地暂存兜底（不打扰用户）
+      }
+    };
+    void fetchTodaySchedule();
+    window.addEventListener('starfit:weekly-plan-applied', fetchTodaySchedule);
+    return () => {
+      cancelled = true;
+      window.removeEventListener('starfit:weekly-plan-applied', fetchTodaySchedule);
+    };
+  }, []);
+
   const [isTransitioning, setIsTransitioning] = useState(false);
   // [nav-state-machine] screen 层（home/history/settings/history-detail/settlement）由
   // navigationReducer 统一承载；currentRoute/viewHistorySession 为下方派生的兼容层，
@@ -459,6 +490,10 @@ const App: React.FC = () => {
  
   const [tutorialExerciseId, setTutorialExerciseId] = useState<string | null>(null);
   const [nextPlan, setNextPlan] = useState<any[] | null>(null);
+  // [T8 #65] 今日课表（GET /schedule/today，纯 DB 读）：开始菜单「载入计划」
+  // 三态判定数据源。课表不可得（网络失败/形态非法）保持 null，由
+  // resolveTodayPlanMenuState 回落本地暂存 nextPlan 兜底。
+  const [todaySchedule, setTodaySchedule] = useState<TodayScheduleResponse | null>(null);
   const [isLibraryOpen, setIsLibraryOpen] = useState(false);
   // A10（issue #32）：picker 直连入口场景。batch=训练前/主页空状态挑选（批量添加进会话）；
   // append=训练中「+」加动作（追加队尾）。single-replace 不走此路径（配置页内换动作，
@@ -862,7 +897,7 @@ const App: React.FC = () => {
 
   const handleStartSession = () => {
     haptic('medium'); // 主操作：开始训练
-    // 空状态点击「开始」不再直接开动作库：TimerCapsule 会弹分裂菜单（挑选动作/AI 教练/今日计划）
+    // 空状态点击「开始」不再直接开动作库：TimerCapsule 会弹分裂菜单（挑选动作/AI 教练/载入计划·今日休息）
 
     if (session.status === 'idle' || session.status === 'finished') {
       setSession(prev => ({
@@ -940,12 +975,11 @@ const App: React.FC = () => {
     },
   });
 
-  const handleImportNextPlan = () => {
-    if (!nextPlan || !Array.isArray(nextPlan) || nextPlan.length === 0) {
-      showToast("暂无可导入的计划");
-      return;
-    }
-    const newExercises = buildExercisesFromPlan(nextPlan);
+  // [T8 #65] 预填统一入口：本地暂存/今日排期同走 buildExercisesFromPlan →
+  // 整单替换进会话（原 handleImportNextPlan 语义，勿另造预填路径——#58 刚
+  // 修完预填两读点同源问题）。clearLocal：消费型暂存导入后清空（排期不消费）。
+  const importPlanIntoSession = (planItems: any[], opts?: { clearLocal?: boolean }) => {
+    const newExercises = buildExercisesFromPlan(planItems);
     setSession({
       id: uuidv4(),
       startTime: 0,
@@ -953,9 +987,40 @@ const App: React.FC = () => {
       status: 'idle',
       exercises: newExercises
     });
-    clearNextPlan().catch(console.error);
-    setNextPlan(null);
-    showToast(`已导入计划 (${newExercises.length} 个动作)`);
+    if (opts?.clearLocal) {
+      clearNextPlan().catch(console.error);
+      setNextPlan(null);
+    }
+    showToast(`已载入计划 (${newExercises.length} 个动作)`);
+  };
+
+  const handleImportNextPlan = () => {
+    if (!nextPlan || !Array.isArray(nextPlan) || nextPlan.length === 0) {
+      showToast("暂无可载入的计划");
+      return;
+    }
+    importPlanIntoSession(nextPlan, { clearLocal: true });
+  };
+
+  // 开始菜单「载入计划」（T8 #65）：来源分发与 resolveTodayPlanMenuState
+  // 一致——今日排期优先，本地暂存 nextPlan 兜底。排期条目 exercise_type
+  // 课表契约不携带 → 动作库按 id 回查（缓存命中毫秒级；库不可得回落
+  // 'resistance'，与 buildExercisesFromPlan 兜底一致）。
+  const handleLoadTodayPlan = async () => {
+    const schedule = todaySchedule;
+    if (schedule?.status === 'planned' && schedule.entries.length > 0) {
+      let resolveType: ((id: string) => string | undefined) | undefined;
+      try {
+        const lib = await ExerciseLibraryService.getExercises();
+        const typeById = new Map(lib.map(ex => [ex.id, ex.exercise_type]));
+        resolveType = (id: string) => typeById.get(id);
+      } catch {
+        // 动作库不可得：exercise_type 置空，全部按 'resistance' 兜底
+      }
+      importPlanIntoSession(scheduleEntriesToPlanItems(schedule.entries, resolveType));
+      return;
+    }
+    handleImportNextPlan();
   };
 
   const handleUpdateSet = (exId: string, setId: string, updates: Partial<ExerciseSet>) => {
@@ -1447,7 +1512,9 @@ const App: React.FC = () => {
             onEnd={() => handleEndSession()}
             onLockScreen={() => setIsLockScreenOpen(true)}
             startOptions={buildStartMenuOptions(
-              Boolean(nextPlan && Array.isArray(nextPlan) && nextPlan.length > 0),
+              // 三态（T8 #65）：今日排期优先，本地暂存 nextPlan 兜底（规则见
+              // resolveTodayPlanMenuState 注释）
+              resolveTodayPlanMenuState(todaySchedule, nextPlan),
               {
                 // A10（issue #32）：开始菜单「挑选动作」= 训练前/主页空状态批量场景
                 onPickLibrary: () => handleAddSingleExercise('batch'),
@@ -1455,13 +1522,14 @@ const App: React.FC = () => {
                   // 菜单关闭动画先走，再开 AI 浮层（与返回键时序一致的错峰）
                   setTimeout(() => openAiCoach(), 150);
                 },
-                // 「开始今日训练」：直接预填今日计划进会话（handleImportNextPlan 本就是预填语义）
-                onStartTodayPlan: handleImportNextPlan,
+                // 「载入计划」：今日排期/本地暂存 → 预填当日计划进会话
+                // （预填语义唯一路径，见 importPlanIntoSession）
+                onLoadPlan: handleLoadTodayPlan,
               }
             )}
           />
 
-          {/* 空状态「导入计划」旧悬浮钮已删：功能吸收进 TimerCapsule 分裂菜单（B3 起为「开始今日训练」） */}
+          {/* 空状态「导入计划」旧悬浮钮已删：功能吸收进 TimerCapsule 分裂菜单（T8 #65 起为三态「载入计划/今日休息」） */}
 
           {/* #57：动作库（picker 全屏）不开 tab bar——iOS 原生侧由
               ExercisePickerModal 内 setTabBarHidden 承担，此处管 CSS 回落端

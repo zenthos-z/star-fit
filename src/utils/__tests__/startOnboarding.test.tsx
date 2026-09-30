@@ -2,65 +2,183 @@
  * B3 开始运动子菜单 + 首次使用预调研分流（issue #23）单测
  * 覆盖：三选项条件渲染（有/无计划）、分流决策四象限、画像四题口径、
  *       文案红线（无 emoji / 无禁色值）
+ * T8 #65：开始菜单三态（ready 载入计划 / rest 今日休息 / none 两选项回落）、
+ *         优先级规则（今日排期优先，本地暂存 nextPlan 兜底）、课表条目→预填映射
  */
 import { describe, expect, it } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   buildStartMenuOptions,
   resolveFirstUseTriage,
+  resolveTodayPlanMenuState,
+  scheduleEntriesToPlanItems,
   resolveUserHasHistory,
   NEWBIE_SURVEY_QUESTIONS,
   PLAN_GUIDE_TEXT,
   NEWBIE_SURVEY_TEXT,
   START_OPTION_KEYS,
 } from '../startOnboarding';
+import type { TodayScheduleResponse } from 'shared/contracts';
 import { Keys } from '@/storage/schemas';
 
 const noop = () => {};
 const actions = {
   onPickLibrary: noop,
   onOpenCoach: noop,
-  onStartTodayPlan: noop,
+  onLoadPlan: noop,
 };
 
-describe('buildStartMenuOptions · 三选项条件渲染', () => {
-  it('无计划 = 两选项现状（挑选动作 + AI 教练）', () => {
-    const opts = buildStartMenuOptions(false, actions);
+// --- 今日课表 fixture（TodayScheduleResponse 形态，契约 superRefine 同构） ---
+const mkSchedule = (
+  overrides: Partial<TodayScheduleResponse> & { status: TodayScheduleResponse['status'] },
+): TodayScheduleResponse => ({
+  date: '2026-09-30',
+  week_id: '2026-W40',
+  split: overrides.status === 'no_plan' ? null : 'push_pull_legs',
+  entries: [],
+  ...overrides,
+});
+const plannedSchedule = mkSchedule({
+  status: 'planned',
+  entries: [
+    {
+      entry_id: '11111111-1111-4111-8111-111111111111',
+      exercise_id: 'abc123def456',
+      exercise_name: '杠铃卧推',
+      target_sets: 4,
+      target_load: { type: 'rpe', min: 7, max: 8 },
+      status: 'planned',
+      sort_order: 0,
+    },
+    {
+      entry_id: '22222222-2222-4222-8222-222222222222',
+      exercise_id: 'xyz789ghi012',
+      exercise_name: '绳索下压',
+      target_sets: 3,
+      target_load: { type: 'rpe', min: 8, max: 8 },
+      status: 'planned',
+      sort_order: 1,
+    },
+  ],
+});
+
+describe('resolveTodayPlanMenuState · 三态判定与优先级（T8 #65）', () => {
+  it('今日排期 planned 且有条目 → ready（排期优先）', () => {
+    expect(resolveTodayPlanMenuState(plannedSchedule, null)).toEqual({ kind: 'ready', source: 'schedule' });
+    // 排期与本地暂存并存：仍是排期优先
+    expect(resolveTodayPlanMenuState(plannedSchedule, [{ name: 'x' }])).toEqual({ kind: 'ready', source: 'schedule' });
+  });
+
+  it('今日=休息日 → rest（排期在场即权威，本地暂存不越权覆盖课表）', () => {
+    const restSchedule = mkSchedule({ status: 'rest_day' });
+    expect(resolveTodayPlanMenuState(restSchedule, null)).toEqual({ kind: 'rest' });
+    expect(resolveTodayPlanMenuState(restSchedule, [{ name: 'x' }])).toEqual({ kind: 'rest' });
+  });
+
+  it('无排期（no_plan）→ 本地暂存 nextPlan 兜底（ready·local）', () => {
+    const noPlan = mkSchedule({ status: 'no_plan' });
+    expect(resolveTodayPlanMenuState(noPlan, [{ name: 'x' }])).toEqual({ kind: 'ready', source: 'local' });
+    expect(resolveTodayPlanMenuState(noPlan, null)).toEqual({ kind: 'none' });
+    expect(resolveTodayPlanMenuState(noPlan, [])).toEqual({ kind: 'none' });
+  });
+
+  it('课表不可得（null）→ 本地暂存兜底；两者皆无 → none（两选项回落现状）', () => {
+    expect(resolveTodayPlanMenuState(null, [{ name: 'x' }])).toEqual({ kind: 'ready', source: 'local' });
+    expect(resolveTodayPlanMenuState(null, null)).toEqual({ kind: 'none' });
+  });
+
+  it('planned 形态异常（entries 意外为空）→ 不按训练日算，回落暂存/none', () => {
+    const broken = mkSchedule({ status: 'planned', entries: [] });
+    expect(resolveTodayPlanMenuState(broken, [{ name: 'x' }])).toEqual({ kind: 'ready', source: 'local' });
+    expect(resolveTodayPlanMenuState(broken, null)).toEqual({ kind: 'none' });
+  });
+});
+
+describe('buildStartMenuOptions · 三选项条件渲染（T8 #65 三态）', () => {
+  it('none = 两选项回落现状（挑选动作 + AI 教练）', () => {
+    const opts = buildStartMenuOptions({ kind: 'none' }, actions);
     expect(opts).toHaveLength(2);
     expect(opts.map(o => o.key)).toEqual([START_OPTION_KEYS.library, START_OPTION_KEYS.aiCoach]);
     expect(opts.map(o => o.label)).toEqual(['挑选动作', 'AI 教练']);
   });
 
-  it('有计划 = 三选项，第三选项为「开始今日训练」且置末位', () => {
-    const opts = buildStartMenuOptions(true, actions);
+  it('ready = 三选项，第三选项为「载入计划」且置末位（文案 T8 #65 定稿）', () => {
+    const opts = buildStartMenuOptions({ kind: 'ready', source: 'schedule' }, actions);
     expect(opts).toHaveLength(3);
-    expect(opts[2].key).toBe(START_OPTION_KEYS.startTodayPlan);
-    expect(opts[2].label).toBe('开始今日训练');
+    expect(opts[2].key).toBe(START_OPTION_KEYS.loadPlan);
+    expect(opts[2].label).toBe('载入计划');
+    expect(opts[2].disabled).toBeFalsy();
     // 前两项保持现状不动
     expect(opts[0].label).toBe('挑选动作');
     expect(opts[1].label).toBe('AI 教练');
   });
 
+  it('rest = 三选项，第三选项为「今日休息」且不可点（休息态呈现）', () => {
+    const opts = buildStartMenuOptions({ kind: 'rest' }, actions);
+    expect(opts).toHaveLength(3);
+    expect(opts[2].key).toBe(START_OPTION_KEYS.restToday);
+    expect(opts[2].label).toBe('今日休息');
+    expect(opts[2].disabled).toBe(true);
+  });
+
   it('选项形状满足 TimerCapsule StartMenuOption（key/label/icon/onSelect）', () => {
-    const opts = buildStartMenuOptions(true, actions);
-    for (const o of opts) {
-      expect(typeof o.key).toBe('string');
-      expect(typeof o.label).toBe('string');
-      expect(o.icon).toBeTruthy();
-      expect(typeof o.onSelect).toBe('function');
+    for (const plan of [
+      { kind: 'none' } as const,
+      { kind: 'ready', source: 'local' } as const,
+      { kind: 'rest' } as const,
+    ]) {
+      for (const o of buildStartMenuOptions(plan, actions)) {
+        expect(typeof o.key).toBe('string');
+        expect(typeof o.label).toBe('string');
+        expect(o.icon).toBeTruthy();
+        expect(typeof o.onSelect).toBe('function');
+      }
     }
   });
 
-  it('onSelect 动作透传（选中第三项触发 onStartTodayPlan）', () => {
+  it('onSelect 动作透传（选中「载入计划」触发 onLoadPlan）', () => {
     let picked = '';
     const spyActions = {
       onPickLibrary: () => { picked = 'library'; },
       onOpenCoach: noop,
-      onStartTodayPlan: () => { picked = 'today'; },
+      onLoadPlan: () => { picked = 'plan'; },
     };
-    const opts = buildStartMenuOptions(true, spyActions);
+    const opts = buildStartMenuOptions({ kind: 'ready', source: 'schedule' }, spyActions);
     opts[2].onSelect();
-    expect(picked).toBe('today');
+    expect(picked).toBe('plan');
+  });
+});
+
+describe('scheduleEntriesToPlanItems · 课表条目 → 预填原始条目（T8 #65）', () => {
+  it('逐组处方（T9）取首组作整卡默认；exercise_type 经 resolveType 回查', () => {
+    const entries = [
+      {
+        ...plannedSchedule.entries[0],
+        sets: [
+          { set_no: 1, weight_kg: 60, reps: 8, rpe: 7 },
+          { set_no: 2, weight_kg: 62.5, reps: 6, rpe: 8 },
+        ],
+      },
+    ];
+    const items = scheduleEntriesToPlanItems(entries, id => (id === 'abc123def456' ? 'resistance' : undefined));
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({
+      id: 'abc123def456',
+      name: '杠铃卧推',
+      sets: 4,
+      reps: 8,
+      weight: 60,
+      targetRpe: 7,
+      exercise_type: 'resistance',
+    });
+  });
+
+  it('旧计划无 sets（null）→ reps/weight 置 0、rpe/type 缺省交消费侧兜底', () => {
+    const items = scheduleEntriesToPlanItems(plannedSchedule.entries);
+    expect(items[0]).toMatchObject({ name: '杠铃卧推', sets: 4, reps: 0, weight: 0 });
+    expect(items[0].targetRpe).toBeUndefined();
+    expect(items[0].exercise_type).toBeUndefined();
+    // 未传 resolveType 同样安全（App 侧库不可得路径）
   });
 });
 
