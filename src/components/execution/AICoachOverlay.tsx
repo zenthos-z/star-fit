@@ -27,6 +27,10 @@ import { BubbleGallery, GALLERY_MESSAGES } from './BubbleGallery';
 import { useBackendHealth } from '../../services/connectivity';
 import { ThinkingBlock } from './ThinkingBlock';
 import { updateScrollFollow } from '../../hooks/chatScrollFollow';
+import { useEdgeSwipeBack } from '../../hooks/useEdgeSwipeBack';
+
+/** sheet 进出场转场（transitions.sheet 的 CSS 等价串）：开合动画与左缘返回的样式还原共用同一串 */
+const SHEET_TRANSITION_CSS = 'transform 420ms cubic-bezier(0.32,0.72,0,1), opacity 300ms ease';
 
 interface MessageProgressIndicatorProps {
   items: ProgressItem[];
@@ -353,6 +357,17 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
   const [showContent, setShowContent] = useState(true);
   // 消息图片全屏查看器：{ dataUrl 本地预览, mediaId 服务器引用 }
   const [viewingImage, setViewingImage] = useState<{ dataUrl?: string; mediaId?: string } | null>(null);
+  // [issue #83] iOS 左缘右滑返回：sheet 根层挂边缘手势（返回按钮语义不变）。
+  // 历史面板 / 图片查看器盖在本层之上时让位 —— 返回永远作用于最顶层，不跨层关闭。
+  const edgeSwipe = useEdgeSwipeBack({
+    enabled: isOpen && !showHistoryPanel && !viewingImage,
+    onBack: onClose,
+    dom: {
+      restTransform: 'translateY(0)',
+      closedTransform: 'translateY(100%)',
+      restTransition: SHEET_TRANSITION_CSS,
+    },
+  });
   // 模拟器入口：Welcome 屏 STARFIT 标志长按 1 秒切换气泡画廊（URL ?bubbleGallery 之外的等效通道）
   // 长按而非连点：WKWebView 触摸层连点易与系统手势/双击缩放冲突，长按更可靠
   const [galleryToggled, setGalleryToggled] = useState(false);
@@ -712,9 +727,10 @@ export const AICoachOverlay: React.FC<AICoachOverlayProps> = ({
 
   return (
     <div
+      ref={edgeSwipe.ref}
       style={{
         // iOS sheet 观感：从底部滑入/滑出（系统 search 呈现的近似）
-        transition: 'transform 420ms cubic-bezier(0.32,0.72,0,1), opacity 300ms ease',
+        transition: SHEET_TRANSITION_CSS,
         transform: isOpen ? 'translateY(0)' : 'translateY(100%)',
         opacity: isOpen ? 1 : 0,
         pointerEvents: isOpen ? 'auto' : 'none',
@@ -1350,32 +1366,38 @@ const WelcomeChip: React.FC<{ label: string; icon: string }> = ({ label, icon })
  * 消息图片全屏查看器（点击气泡缩略图打开）。
  * 黑底 + 缩放淡入（复用海报结果查看器的视觉语言），点任意处关闭。
  * 媒体加载失败 → 降级显示服务器引用路径，不白屏。
+ * [issue #83] 左缘右滑返回：查看器是最顶层，返回 = 关闭查看器回到对话（framer 模式驱动 x）。
  */
 const MessageImageViewer: React.FC<{
   src: string;
   fallbackSrc?: string;
   onClose: () => void;
-}> = ({ src, fallbackSrc, onClose }) => (
-  <motion.div
-    initial={{ opacity: 0 }}
-    animate={{ opacity: 1 }}
-    exit={{ opacity: 0 }}
-    transition={{ duration: 0.2 }}
-    className="fixed inset-0 z-[200] bg-black flex items-center justify-center"
-    onClick={onClose}
-  >
-    <img
-      src={src}
-      alt="消息图片"
-      className="max-w-full max-h-full object-contain"
-      onError={(e) => {
-        const img = e.currentTarget;
-        if (fallbackSrc && img.src !== fallbackSrc) {
-          img.src = fallbackSrc;
-        } else if (!fallbackSrc) {
-          onClose();
-        }
-      }}
-    />
-  </motion.div>
-);
+}> = ({ src, fallbackSrc, onClose }) => {
+  const edgeSwipe = useEdgeSwipeBack({ enabled: true, onBack: onClose });
+  return (
+    <motion.div
+      ref={edgeSwipe.ref}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+      transition={{ duration: 0.2 }}
+      style={{ x: edgeSwipe.x }}
+      className="fixed inset-0 z-[200] bg-black flex items-center justify-center"
+      onClick={onClose}
+    >
+      <img
+        src={src}
+        alt="消息图片"
+        className="max-w-full max-h-full object-contain"
+        onError={(e) => {
+          const img = e.currentTarget;
+          if (fallbackSrc && img.src !== fallbackSrc) {
+            img.src = fallbackSrc;
+          } else if (!fallbackSrc) {
+            onClose();
+          }
+        }}
+      />
+    </motion.div>
+  );
+};
