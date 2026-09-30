@@ -2,6 +2,7 @@ import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { ChatThread } from '@/storage';
 import { transitions } from '../../lib/animations';
+import { useEdgeSwipeBack } from '../../hooks/useEdgeSwipeBack';
 
 interface ChatHistoryPanelProps {
   isOpen: boolean;
@@ -38,14 +39,20 @@ export const ChatHistoryPanel: React.FC<ChatHistoryPanelProps> = ({
     onClose();
   };
 
+  // [issue #83] 左缘右滑返回：面板盖在 AI 教练 sheet 之上，返回 = 关闭面板回到对话
+  // （framer 模式：hook 只驱动 x，transform 组合交给 framer-motion，与 y 进出场共存）
+  const edgeSwipe = useEdgeSwipeBack({ enabled: isOpen, onBack: onClose });
+
   return (
     <AnimatePresence>
       {isOpen && (
         <motion.div
+          ref={edgeSwipe.ref}
           initial={{ y: '100%' }}
           animate={{ y: 0 }}
           exit={{ y: '100%' }}
           transition={transitions.sheet} // 与 AI 教练等其他全屏页统一：底部滑入 sheet
+          style={{ x: edgeSwipe.x }}
           className="fixed inset-0 z-[70] bg-[#FAFAFA] flex flex-col"
         >
           {/* Header with Safe Area support for Notch/Dynamic Island */}
