@@ -269,6 +269,70 @@ export async function loadServerHistory(): Promise<ServerHistoryEntry[]> {
   return history || [];
 }
 
+// ========== [#82 方案A] 切号清残留（账号切换即清空用户态数据） ==========
+
+/**
+ * 切号时保留的键：设备级标识 / 登录凭据 / 共享内容缓存。
+ * 未列出的键一律视为用户态数据（default-clear）——新增用户态键无需登记；
+ * 误保留的代价（跨账号数据泄漏）远大于误清除（重新拉取内容缓存）。
+ */
+const USER_STATE_KEEP_EXACT = [
+  Keys.deviceId,            // 设备标识（方案A 明确保留）
+  Keys.userId,              // 登录凭据
+  Keys.serverUrl,           // 登录凭据
+  Keys.serverHistory,       // 服务器连接记录（设备级便利项，见 clearLoginCredentials 注释）
+  Keys.lastUserId,          // 切号检测墓碑（useLoginStatus 读写）
+  'starfit_server_ip',      // 凭据 legacy localStorage 镜像（useLoginStatus）
+  'starfit_login_creds',    // 凭据聚合（saveLoginCredentials）
+  'starfit_logged_out',     // 登出墓碑（useLoginStatus.logout）
+  'starfit_login_username', // 登录名展示留存（LoginV2，每次登录覆写）
+  'starfit_access_token',   // 访问令牌（geminiService，每次登录覆写）
+  Keys.exerciseLibrary,     // 动作公共库缓存（服务端内容缓存，非用户态）
+  Keys.exerciseLibraryMeta,
+];
+const USER_STATE_KEEP_PREFIXES = [
+  'tutorial:', // 教程正文缓存（服务端内容缓存）
+];
+
+/** 判定一个键是否属于用户态数据（切号时需清除） */
+export function isUserStateKey(key: string): boolean {
+  if (USER_STATE_KEEP_EXACT.includes(key)) return false;
+  return !USER_STATE_KEEP_PREFIXES.some((p) => key.startsWith(p));
+}
+
+/**
+ * 清除所有用户态存储，保留设备级标识、登录凭据与共享内容缓存（#82 方案A）。
+ * 双后端清扫：IDB kv 库 + localStorage（海报等直写 localStorage 的键不在 IDB）。
+ * @returns 清除的键数量（双后端合计）
+ */
+export async function clearUserStateStorage(): Promise<number> {
+  let removed = 0;
+  if (useIDB) {
+    try {
+      for (const k of await idbKeys()) {
+        if (isUserStateKey(k)) {
+          await idbRemove(k);
+          removed++;
+        }
+      }
+    } catch (e) {
+      console.warn('[Storage] clearUserStateStorage: IDB pass failed:', e);
+    }
+  }
+  try {
+    for (const k of lsKeys()) {
+      if (isUserStateKey(k)) {
+        lsRemove(k);
+        removed++;
+      }
+    }
+  } catch (e) {
+    console.warn('[Storage] clearUserStateStorage: localStorage pass failed:', e);
+  }
+  console.log(`[Storage] clearUserStateStorage: removed ${removed} user-state key(s)`);
+  return removed;
+}
+
 /**
  * Add server to history or update existing entry
  */

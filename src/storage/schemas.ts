@@ -161,6 +161,10 @@ export const Keys = {
   userId: "starfit_user_id",
   serverUrl: "starfit_server_url",
   serverHistory: "starfit_server_history",
+  // [#82 方案A] 切号检测墓碑：login 成功 / logout 时记录最近一次登录身份。
+  // 设备级 localStorage 键，与 starfit_logged_out 同为跨登出存活——LoginV2
+  // 在回调 onLogin 前已把 IDB 凭据覆写为新用户，切号探测只能依赖此键。
+  lastUserId: "starfit_last_user_id",
   // Chat Thread Management
   chatThreadList: (sessionId: string) => `chat_thread_list:${sessionId}`,
   chatMessages: (threadId: string) => `chat_messages:${threadId}`
