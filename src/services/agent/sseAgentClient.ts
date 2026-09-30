@@ -324,6 +324,9 @@ const CARD_TYPE_TO_LEGACY: Record<UiHintCard['type'], string> = {
   // 2026-09: user-profile auto-update consent bubble. Rendered as-is so the
   // frontend can bind its special confirm/cancel bubble to this type.
   profile_update_confirm: 'profile_update_confirm',
+  // [issue #56] 对话周计划提案卡：注册表卡名即 weekly_plan，显式恒等映射
+  // （此前缺键靠 `?? card.type` 兜底，枚举加宽后补齐契约面）。
+  weekly_plan: 'weekly_plan',
   unknown: 'unknown_card',
 };
 

@@ -26,6 +26,7 @@ import type { ProfileUpdateDecisionRecord } from '../components/execution/cards/
 import type { WeeklyPlanDecisionRecord } from '../components/execution/cards/WeeklyPlanCard';
 import type { AgentScenario, UiHintCard, TodayScheduleResponse, ProfileApplyRequest, ProfilePendingIntent, WeeklyPlanApplyPayload } from 'shared/contracts';
 import { buildProfileResumePrompt, parsePendingIntent } from '../utils/profileIntent';
+import { recoverLeakedCard } from '../utils/cardLeakRecovery';
 import { parseJSONSafe } from 'shared/contracts';
 import {
   saveChatThreadList,
@@ -644,7 +645,9 @@ ${JSON.stringify(uploadData, null, 2)}`;
 
         // 本轮流结束：定型 thinking 气泡为最终消息（此刻才挂卡片）
         // uiHint 合成：从 SSE card 产出可渲染卡片对象
-        let uiHint = synthesizeUiHint(card);
+        // [issue #56 泄漏卡兜底] 与主路径同源：流层漏剥的卡型 JSON 终态复原
+        const recovered = recoverLeakedCard(accumulated, card);
+        let uiHint = synthesizeUiHint(card ?? recovered.card);
 
         // [FIX 2026-09-17] plan 场景（初始问卷）本来就要求 Agent 出 plan_card——
         // 此处旧防御「无条件丢弃 plan_card」把正常卡片吃掉了（实锤：模拟器实测文字
@@ -659,7 +662,7 @@ ${JSON.stringify(uploadData, null, 2)}`;
           role: 'ai',
           text: streamError
             ? `上传失败，请重试。[${streamError.code}: ${streamError.message}]`
-            : (accumulated || "感谢您的反馈。"),
+            : (recovered.text || "感谢您的反馈。"),
           thinkingText: thinkingWindow || undefined,
           uiHint,
           explanation: undefined,
@@ -872,18 +875,21 @@ ${JSON.stringify(uploadData, null, 2)}`;
       progress.flush();
 
       // 本轮流结束：定型这条消息 —— 现在才挂上卡片，卡片渲染在此刻发生
-      // [B5b SSE ②] CONNECTION_LOST：已收到的部分内容保留展示，但明确告知
-      // 连接中断并挂上重试载荷（UI 渲染「连接中断，点击重试」），不再干等。
+      // [issue #56 泄漏卡兜底] 后端流层提取器漏剥时卡片 JSON 会以 token 文本
+      // 进正文（「周计划气泡显示原始 JSON 串」根因）。终态复原：正文里的
+      // 卡型 JSON 复原成卡片（SSE 已送达卡优先）或降级为明确可读提示；
+      // 错误轮的 [诊断] 文案不走复原（accumulated 不展示）。
       const connectionLost = error?.code === 'CONNECTION_LOST';
+      const recovered = error ? { text: accumulated, card: undefined } : recoverLeakedCard(accumulated, card);
       setChatHistory(prev => prev.map(m => (m.isThinking ? {
         role: 'ai',
         text: error
           ? connectionLost
             ? (accumulated ? `${accumulated}\n\n（连接中断，回复可能不完整）` : '连接中断，请点击重试。')
             : `[诊断] agent 返回错误 — ${error.code}: ${error.message}`
-          : accumulated,
+          : recovered.text,
         thinkingText: thinkingWindow || undefined,
-        uiHint: synthesizeUiHint(card),
+        uiHint: synthesizeUiHint(card ?? recovered.card),
         explanation: undefined,
         isThinking: false,
         progressItems: [],
@@ -1325,10 +1331,12 @@ ${JSON.stringify(uploadData, null, 2)}`;
 
           setChatHistory(prev => {
             const filtered = prev.filter(m => !m.isThinking);
+            // [issue #56 泄漏卡兜底] 与主路径同源（流层漏剥的卡型 JSON 终态复原）
+            const recovered = recoverLeakedCard(result.text, result.card);
             return [...filtered, {
               role: 'ai',
-              text: result.error ? "" : (result.text || ""),
-              uiHint: synthesizeUiHint(result.card),
+              text: result.error ? "" : recovered.text,
+              uiHint: synthesizeUiHint(result.card ?? recovered.card),
               explanation: undefined
             }];
           });
@@ -1387,14 +1395,16 @@ ${JSON.stringify(uploadData, null, 2)}`;
       console.log('[analyzeWorkout] response card:', result.card);
 
       // Remove analyzing indicator, show Agent's summary + card
+      // [issue #56 泄漏卡兜底] 与主路径同源（流层漏剥的卡型 JSON 终态复原）
+      const recovered = recoverLeakedCard(result.text, result.card);
       setChatHistory(prev => {
         // Remove _isAnalyzing flag from all messages
         const updated: ChatMessage[] = prev.map(m => {
           if (m._isAnalyzing) {
             return {
               ...m,
-              text: result.text || m.text || '训练分析完成。',
-              uiHint: synthesizeUiHint(result.card),
+              text: recovered.text || m.text || '训练分析完成。',
+              uiHint: synthesizeUiHint(result.card ?? recovered.card),
               _isAnalyzing: false,
               _analysisComplete: true
             };
