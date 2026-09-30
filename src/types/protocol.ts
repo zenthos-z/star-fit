@@ -1,9 +1,11 @@
 import { z } from 'zod';
+// cardType 两级体系单一真源（#88 分册1）：shared/contracts/card-types.ts
+import { CardTypeSchema } from '../../shared/contracts/card-types';
 
 /**
  * Starfit Data Protocol V2 - Core Pillars
  * Based on DATA_PROTOCOL_STANDARD.md
- * 
+ *
  * Compliance Checklist:
  * - Lenient Reading: Zod schemas are non-strict by default.
  * - Time Format: ISO 8601 (UTC) via .datetime().
@@ -23,15 +25,10 @@ export const BiometricMetricSchema = z.object({
 
 export type BiometricMetric = z.infer<typeof BiometricMetricSchema>;
 
-export const CardTypeSchema = z.enum([
-  'UNKNOWN',
-  'resistance_standard',
-  'cardio_running',
-  'hiit_timer',
-  'isometric_static',
-  'running_gps'
-]).default('UNKNOWN');
-
+// CardType — 单一真源 shared/contracts/card-types.ts（#88 分册1 两级体系
+// {major}_{variant}）。旧 5 值全部保留合法，新增 cardio_outdoor /
+// stretch_standard 与别名 outdoor_gps；本模块再导出保持既有导入路径。
+export { CardTypeSchema };
 export type CardType = z.infer<typeof CardTypeSchema>;
 
 // 2. ExerciseAction - Single exercise set or action
@@ -40,7 +37,9 @@ export const ExerciseActionSchema = z.object({
   protocol_version: z.literal('2.0.0').default('2.0.0'),
   id: z.string().uuid(),
   exerciseId: z.string(), // fit://library/exercise/{eid}
-  // Unified lowercase type system matching backend exercise_type (9 types)
+  // Unified lowercase type system matching backend exercise_type（10 细类）
+  // #88 分册1：hiit 入列（旧 5 类协议合法值，编排格式无细类）；
+  // 存量旧值 strength/stretch 经 shared card-types normalize 兼容读取
   type: z.enum([
     'UNKNOWN',
     'resistance',
@@ -52,7 +51,8 @@ export const ExerciseActionSchema = z.object({
     'heavy_weight',
     'rep_training',
     'outdoor',
-    'flexibility'
+    'flexibility',
+    'hiit'
   ]).default('UNKNOWN'),
   sets: z.array(z.object({
     index: z.number(),

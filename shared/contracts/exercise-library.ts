@@ -37,11 +37,13 @@
  * 字段形态对齐 PostgreSQL 表 exercises 深化列
  * （迁移 backend/src/db/postgresql/migrations/002_exercise_details.sql）。
  *
- * @version 1.0.0
+ * @version 1.1.0 — ExerciseTypeEnum/EXERCISE_TYPE_VALUES 定义迁至 card-types.ts
+ *   （#88 分册1 类型体系统一），本文件转出口
  * @created 2026-09-26
  */
 
 import { z } from 'zod';
+import { ExerciseTypeEnum } from './card-types.js';
 
 // ============================================================================
 // 受控词表 (Controlled Vocabularies)
@@ -478,40 +480,13 @@ export type ExerciseVideoUrls = z.infer<typeof ExerciseVideoUrlsSchema>;
 // 枚举与通用 Schema（exercises 表既有口径，自 index.ts 迁入）
 // ============================================================================
 
-/**
- * Exercise Type Enum
- */
-export const ExerciseTypeEnum = z.enum([
-  'resistance',
-  'unilateral',
-  'bodyweight',
-  'assisted',
-  'isometric',
-  'cardio',
-  'flexibility',
-  'heavy_weight',
-  'rep_training',
-  'outdoor',
-]);
-
-export type ExerciseType = z.infer<typeof ExerciseTypeEnum>;
-
-/**
- * Exercise Type Values - Unified constant for exercise types
- * Used across the codebase to ensure consistency
- */
-export const EXERCISE_TYPE_VALUES = [
-  'resistance',    // 抗阻力训练
-  'unilateral',    // 单侧训练
-  'bodyweight',    // 自重训练
-  'assisted',      // 辅助训练
-  'isometric',     // 等长收缩
-  'cardio',        // 有氧训练
-  'flexibility',   // 柔韧性训练
-  'heavy_weight',  // 大重量训练
-  'rep_training',  // 次数训练
-  'outdoor'        // 户外运动
-] as const;
+// 类型体系统一（issue #88 分册1）：枚举定义唯一真源迁至 card-types.ts
+// （5 大类 + 细类 + cardType 两级体系），本文件转出口保持既有导入路径。
+export {
+  ExerciseTypeEnum,
+  EXERCISE_TYPE_VALUES,
+  type ExerciseType,
+} from './card-types.js';
 
 /**
  * Difficulty Level Enum（三值口径；库1 expert 经 DIFFICULTY_ALIASES 归一为 advanced）

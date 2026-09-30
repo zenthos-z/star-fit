@@ -15,6 +15,10 @@
  */
 
 import { z } from 'zod';
+import {
+  EXERCISE_TYPE_VALUES,
+  LEGACY_EXERCISE_TYPE_ALIASES,
+} from './card-types.js';
 
 // ============================================================================
 // 版本常量（进入 context_fingerprint，改公式/表值请 +1 以失效前端缓存）
@@ -26,17 +30,9 @@ export const SUGGESTION_FORMULA_VERSION = 1;
 // 动作类型（白名单 string，兼容三处词表漂移，统一经 normalize 收敛）
 // ============================================================================
 
+// 细类全集 = card-types 单一真源（#88 分册1）；建议公式域另加 unknown 兜底
 export const SUGGESTION_EXERCISE_TYPES = [
-  'resistance',
-  'unilateral',
-  'bodyweight',
-  'assisted',
-  'isometric',
-  'cardio',
-  'outdoor',
-  'heavy_weight',
-  'rep_training',
-  'flexibility',
+  ...EXERCISE_TYPE_VALUES,
   'unknown',
 ] as const;
 
@@ -44,17 +40,17 @@ export type SuggestionExerciseType = (typeof SUGGESTION_EXERCISE_TYPES)[number];
 
 /**
  * 收敛各处漂移的动作类型词表：
- * - protocol.ts 的 weight_only / reps_only 笔误 → heavy_weight / rep_training
+ * - 旧值别名（strength/stretch/weight_only/reps_only）→ card-types
+ *   LEGACY_EXERCISE_TYPE_ALIASES 单一映射表（#88 分册1，禁再手写第二套）
  * - contracts ExerciseAction 的 5 枚举小写子集 → 原样保留
+ * - hiit → cardio：公式域无 hiit 细类（hiit 为编排格式，动作层合法值），
+ *   按既有拍板落 cardio 公式——建议域局部决策，不经别名表
  * - 未知值 → 'unknown'
  */
 export function normalizeSuggestionExerciseType(raw: string): SuggestionExerciseType {
   const mapped: Record<string, SuggestionExerciseType> = {
-    weight_only: 'heavy_weight',
-    reps_only: 'rep_training',
-    strength: 'resistance',
+    ...LEGACY_EXERCISE_TYPE_ALIASES,
     hiit: 'cardio',
-    stretch: 'flexibility',
   };
   const lower = String(raw || '').toLowerCase().trim();
   if ((SUGGESTION_EXERCISE_TYPES as readonly string[]).includes(lower)) {

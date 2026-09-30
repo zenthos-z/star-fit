@@ -15,6 +15,14 @@
 
 import { z } from 'zod';
 
+// 类型体系统一单一真源（#88 分册1）：5 大类 + 细类 + cardType 两级体系、
+// 旧值兼容映射、锚点字段表全部从 card-types 取，本文件只做装配与再导出。
+import {
+  CardTypeSchema,
+  ExerciseActionTypeEnum,
+  EXERCISE_TYPE_FIELDS,
+} from './card-types.js';
+
 // Re-export validation utilities
 export {
   validateOrThrow,
@@ -157,20 +165,10 @@ export const LoadAnchorSchema = z.object({
 export type LoadAnchor = z.infer<typeof LoadAnchorSchema>;
 
 /**
- * Exercise type to required fields mapping
+ * Exercise type to required fields mapping — 单一真源 card-types.ts
+ * （EXERCISE_TYPE_DEFS.anchor_fields 派生，#88 分册1）
  */
-export const EXERCISE_TYPE_FIELDS = {
-  resistance: ['best_weight', 'best_reps'] as const,
-  unilateral: ['best_weight', 'best_reps'] as const,
-  heavy_weight: ['best_weight', 'best_reps'] as const,
-  rep_training: ['best_reps'] as const,
-  bodyweight: ['best_reps'] as const,
-  assisted: ['best_weight', 'best_reps'] as const,
-  isometric: ['best_duration'] as const,
-  cardio: ['best_pace'] as const,
-  outdoor: ['best_pace'] as const,
-  flexibility: [] as const,
-} as const;
+export { EXERCISE_TYPE_FIELDS } from './card-types.js';
 
 /**
  * Validate anchor for a specific exercise type
@@ -182,45 +180,28 @@ export function validateAnchorForExerciseType(
   anchor: LoadAnchor,
   exerciseType: string
 ): { valid: boolean; errors: string[] } {
-  const errors: string[] = [];
+  const fields = EXERCISE_TYPE_FIELDS[
+    exerciseType as keyof typeof EXERCISE_TYPE_FIELDS
+  ] as readonly string[] | undefined;
 
-  switch (exerciseType) {
-    case 'resistance':
-    case 'unilateral':
-    case 'heavy_weight':
-      if (!anchor.best_weight || !anchor.best_reps) {
-        errors.push(`${exerciseType} 类型需要 best_weight 和 best_reps`);
-      }
-      break;
-    case 'bodyweight':
-      if (!anchor.best_reps) {
-        errors.push('bodyweight 类型需要 best_reps');
-      }
-      break;
-    case 'assisted':
-      if (!anchor.best_weight || !anchor.best_reps) {
-        errors.push('assisted 类型需要 best_weight 和 best_reps');
-      }
-      break;
-    case 'isometric':
-      if (!anchor.best_duration) {
-        errors.push('isometric 类型需要 best_duration');
-      }
-      break;
-    case 'cardio':
-    case 'outdoor':
-      if (!anchor.best_pace) {
-        errors.push(`${exerciseType} 类型需要 best_pace`);
-      }
-      break;
-    case 'flexibility':
-      // Flexibility doesn't require anchors
-      break;
-    default:
-      errors.push(`未知的运动类型: ${exerciseType}`);
+  // 未知类型（含未归一的旧值——调用方应先过 normalizeExerciseType）。
+  // Array.isArray 同时挡掉 Object.prototype 键（toString 等）误命中。
+  if (!Array.isArray(fields)) {
+    return { valid: false, errors: [`未知的运动类型: ${exerciseType}`] };
   }
 
-  return { valid: errors.length === 0, errors };
+  // 该细类全部锚点字段必须非空；错误消息保持历史单条聚合格式
+  //（adminProfileApi 集成测试钉死 `X 类型需要 a 和 b` 文案）
+  const missing = fields.filter(
+    (field) => !(anchor as Record<string, unknown>)[field],
+  );
+  if (missing.length > 0) {
+    return {
+      valid: false,
+      errors: [`${exerciseType} 类型需要 ${missing.join(' 和 ')}`],
+    };
+  }
+  return { valid: true, errors: [] };
 }
 
 /**
@@ -670,24 +651,23 @@ export const BiometricMetricSchema = z.object({
 
 export type BiometricMetric = z.infer<typeof BiometricMetricSchema>;
 
-// CardType
-export const CardTypeSchema = z.enum([
-  'UNKNOWN',
-  'resistance_standard',
-  'cardio_running',
-  'hiit_timer',
-  'isometric_static',
-  'running_gps'
-]).default('UNKNOWN');
-
-export type CardType = z.infer<typeof CardTypeSchema>;
+// CardType — 单一真源 card-types.ts（#88 分册1 两级体系 {major}_{variant}）。
+// 旧 5 值（UNKNOWN/resistance_standard/cardio_running/hiit_timer/
+// isometric_static/running_gps）全部保留合法；新增标准值 cardio_outdoor /
+// stretch_standard 与别名 outdoor_gps。
+export { CardTypeSchema } from './card-types.js';
+export type { CardType } from './card-types.js';
 
 // ExerciseAction
 export const ExerciseActionSchema = z.object({
   protocol_version: z.literal('2.0.0').default('2.0.0'),
   id: z.string().uuid(),
   exerciseId: z.string(), // NanoID format (references Exercise.id)
-  type: z.enum(['unknown', 'strength', 'cardio', 'hiit', 'stretch']).default('unknown'),
+  // 统一类型轴（#88 分册1）：10 细类 + hiit + unknown。
+  // 存量旧 5 类值（strength/cardio/hiit/stretch/unknown）兼容读取：
+  // 入口先过 normalizeExerciseActionType（card-types.ts 单一映射表），
+  // 禁直接破坏存量数据语义。
+  type: ExerciseActionTypeEnum.default('unknown'),
   sets: z.array(z.object({
     index: z.number(),
     reps: z.number().optional(),
@@ -978,6 +958,43 @@ export {
   type ExerciseSourceStatusInput,
   type ExerciseFieldSourceStatus,
 } from './exercise-library.js';
+
+// ============================================================================
+// 类型体系统一（#88 分册1）— card-types 单一真源扁平导出
+// ============================================================================
+// 注：ExerciseTypeEnum / EXERCISE_TYPE_VALUES / ExerciseType 经上方
+// exercise-library 转出口流出，此处不再重复导出；CardTypeSchema /
+// EXERCISE_TYPE_FIELDS 在本文件装配处已再导出，同样不重复。
+export {
+  // 5 大类
+  CARD_MAJOR_TYPES,
+  CARD_MAJOR_LABELS_ZH,
+  type CardMajorType,
+
+  // 细类定义与派生
+  EXERCISE_TYPE_DEFS,
+  EXERCISE_TYPE_LABELS_ZH,
+  type ExerciseFineType,
+  type ExerciseTypeDef,
+
+  // cardType 两级分发键
+  CARD_TYPE_VALUES,
+  MAJOR_CARD_TYPES,
+  CARD_TYPE_ALIASES,
+  cardTypeForExerciseType,
+  normalizeCardType,
+  type CardTypeValue,
+
+  // 会话动作类型
+  EXERCISE_ACTION_TYPE_VALUES,
+  ExerciseActionTypeEnum,
+  normalizeExerciseActionType,
+  type ExerciseActionType,
+
+  // 存量值兼容映射
+  LEGACY_EXERCISE_TYPE_ALIASES,
+  normalizeExerciseType,
+} from './card-types.js';
 
 // ============================================================================
 // MAS Context Types

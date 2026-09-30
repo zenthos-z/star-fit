@@ -1,4 +1,7 @@
 // Common types for Admin V2
+// 词表归一单一真源（#88 分册1）：strength/stretch/weight_only/reps_only 等
+// 旧值先归一到细类/动作词表，再做管理台展示折叠
+import { normalizeExerciseActionType } from '../../../../shared/contracts/card-types';
 
 export interface Exercise {
   id: string;
@@ -65,9 +68,12 @@ export type AppExerciseType =
   | 'unknown';
 
 export const getExerciseType = (ex: any): AppExerciseType => {
-  const rawType = ex.type?.toLowerCase();
+  // 旧值（strength 等）先经 card-types 单一真源归一（#88 分册1，禁第二套映射）；
+  // 归一失败回退原始小写值（run/cycling 等展示层习惯值）
+  const normalized = normalizeExerciseActionType(String(ex.type ?? ''));
+  const rawType = normalized === 'unknown' ? String(ex.type ?? '').toLowerCase() : normalized;
 
-  if (['resistance', 'strength'].includes(rawType)) return 'resistance';
+  if (rawType === 'resistance') return 'resistance';
   if (rawType === 'bodyweight') return 'bodyweight';
   if (rawType === 'assisted') return 'assisted';
   if (rawType === 'isometric') return 'isometric';

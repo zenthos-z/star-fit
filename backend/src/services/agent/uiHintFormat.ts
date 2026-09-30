@@ -15,6 +15,9 @@
  * Note: `survey_card` is now allowed for workout_complete scenario (v3 amendment).
  */
 
+// exercise_type 词表单一真源（#88 分册1）：枚举列表由 shared card-types 生成，禁手抄
+import { EXERCISE_TYPE_VALUES } from "shared/contracts";
+
 /**
  * The card types the agent is allowed to emit. Kept as a runtime
  * constant so tests and consumers stay in sync with the skill text.
@@ -60,7 +63,7 @@ export function loadUiHintFormatSkill(): string {
     "  Each exercise REQUIRES:",
     "  - `exerciseId` (string)",
     "  - `name` (string)",
-    "  - `exercise_type` (one of: resistance|bodyweight|isometric|cardio|outdoor|unilateral|assisted|flexibility|heavy_weight|rep_training)",
+    `  - \`exercise_type\` (one of: ${EXERCISE_TYPE_VALUES.join("|")})`,
     "  - `sets` (positive integer)",
     "  - `reps` (positive integer)",
     "",
@@ -70,7 +73,7 @@ export function loadUiHintFormatSkill(): string {
     "  | isometric | duration > 0, reps=1 | 静力训练按时间计量 |",
     "  | cardio | duration > 0 | 有氧训练必需时长 |",
     "  | outdoor | distance > 0 | 户外运动必需距离 |",
-    "  | resistance/unilateral/heavy_weight | weight 可选（0=首训自选重量） | 留 0 时须在正文说明「首次尝试请自选重量」 |",
+    "  | resistance/unilateral/heavy_weight | weight 不能为 0（留 0 会被校验打回） | 起步重量按经验分支，细则见 plan-generation 技能 novice-starting |",
     "  | assisted | weight <= 0（负值辅助重量） | -20 = 辅助 20kg；正值会被打回 |",
     "  | bodyweight/rep_training | (none) | weight 默认 0 |",
     "  | flexibility | (none) | 无必需字段 |",
