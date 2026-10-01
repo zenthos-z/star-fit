@@ -1,14 +1,9 @@
 {
-  "stateA_h3": {
-    "top": 226,
-    "height": 28,
-    "centerY": 240
-  },
-  "stateB": {
-    "btnRightFromCardRight": 40,
-    "btnCenterYFromCardTop": 40,
-    "btnW": 88,
-    "btnH": 44,
-    "cardW": 368
-  }
+  "btnCenterX": 312,
+  "circleCenterX": 312,
+  "centerXDelta": 0,
+  "btnCenterY": 130,
+  "h3CenterY": 130,
+  "btnW": 48,
+  "btnH": 48
 }

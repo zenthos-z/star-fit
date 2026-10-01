@@ -33,9 +33,9 @@ export const FeelGateAlert: React.FC<FeelGateAlertProps> = ({ groups, onEnd, onG
         data-testid="feel-gate-alert"
         className="bg-white/95 backdrop-blur-xl w-[270px] rounded-[40px] shadow-2xl overflow-hidden animate-in fade-in zoom-in-95 duration-300"
       >
-        {/* Icon + Title */}
+        {/* Icon + Title（图标 w-7 h-7：iOS Alert 比例，精致感 2026-10-01 返工③） */}
         <div className="flex flex-col items-center pt-5 px-4">
-          <svg className="w-9 h-9 text-star-accent mb-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <svg className="w-7 h-7 text-star-accent mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path
               strokeLinecap="round"
               strokeLinejoin="round"

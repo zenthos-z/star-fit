@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { SmilePlus } from 'lucide-react';
 import { ExerciseAction, LoadAnchors, LoadAnchor } from '../../../types/protocol';
 import { deviationBuffer } from '../../../services/DeviationBuffer';
 import { DeviationWarningModal } from '../../DeviationWarningModal';
@@ -281,19 +282,25 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
         name={exerciseName}
         type={exercise.type}
         feelEntry={allSetsCompleted ? (
-          /* #98 feel 入口（2026-10-01 项目主人修正版：纯文字灰胶囊）。
-             对齐硬规则：按钮水平中心 = 组行勾选圆列（第4列 80px 内 48px 圆）水平中心线——
-             勾选圆圆心在内容区右缘内 40px（80px 列内居中），48px 宽按钮右缘贴 header 右缘
-             时圆心在右缘内 24px → mr-[16px] 左移 16px 恰好同心。垂直随 header 行居中；
-             -my-2 抵消 44px 按钮的行高膨胀，两态标题不跳。灰系与卡片灰家族一致 */
+          /* #98 feel 入口（2026-10-01 项目主人修正版：纯文字灰胶囊；同日返工④补按钮质感、
+             ⑤文字改人头图标）。形态：48×48 正圆——与对齐目标（组行勾选圆列 48px 圆）同径，
+             图标居中视觉平衡优于竖胶囊；水平对齐硬规则不变：圆心 = 勾选圆列水平中心线，
+             48px 宽右缘贴 header 右缘时圆心在右缘内 24px → mr-[16px] 左移 16px 恰好同心。
+             垂直随 header 行居中；-my-2.5 抵消 48px 圆的行高膨胀（同 -my-2@44px 等效），
+             两态标题不跳。图标：lucide SmilePlus（「加一条主观感受」语义，iMessage 同族），
+             1.8pt 线条对齐卡头 SF Symbols 复刻体系。质感语言 = 勾选圆同族灰系：
+             border-2 描边（gray-300）+ 彩色投影（shadow-gray-400/40）+ 同款扫光层，
+             「这是可按的按钮」而非信息标签 */
           <button
             type="button"
             aria-label={`记录${exerciseName}全部组感受`}
             onClick={() => { haptic('light'); onFeelEntry?.(); }}
-            className="mr-[16px] -my-2 flex h-11 w-12 shrink-0 items-center justify-center rounded-full
-              bg-gray-100 text-gray-500 transition-transform duration-200 active:scale-95 focus:outline-none"
+            className="mr-[16px] -my-2.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-gray-300
+              bg-gray-100 text-gray-500 shadow-lg shadow-gray-400/40 transition-transform duration-200 active:scale-95 focus:outline-none relative overflow-hidden"
           >
-            <span className="text-[13px] font-black tracking-wide leading-none">感受</span>
+            {/* 勾选圆同款 shimmer 扫光（白带加强到 /60：灰底上保持可感知的微光扫过） */}
+            <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/60 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none" />
+            <SmilePlus className="relative h-[22px] w-[22px]" strokeWidth={1.8} aria-hidden="true" />
           </button>
         ) : undefined}
       />
