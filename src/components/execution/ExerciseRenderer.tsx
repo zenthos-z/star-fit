@@ -41,6 +41,8 @@ interface ExerciseRendererProps {
     cardType?: string;
   };
   onUpdate?: (updates: Partial<ExerciseAction>) => void;
+  /** #98 全部组完成态的「感受」入口（ResistanceCard 接入）——打开动作级聚合感受表单 */
+  onFeelEntry?: () => void;
   onSettingsClick?: () => void;
   onConfirm?: (payload: any) => void;
 }
@@ -61,6 +63,7 @@ export const ExerciseRenderer: React.FC<ExerciseRendererProps> = ({
   loadAnchors,
   uiHint,
   onUpdate,
+  onFeelEntry,
   onSettingsClick,
   onConfirm
 }) => {
@@ -96,6 +99,7 @@ export const ExerciseRenderer: React.FC<ExerciseRendererProps> = ({
           loadAnchors={loadAnchors}
           uiHint={uiHint}
           onUpdate={onUpdate}
+          onFeelEntry={onFeelEntry}
           onConfirm={onConfirm}
           addAttachment={addAttachment}
         />

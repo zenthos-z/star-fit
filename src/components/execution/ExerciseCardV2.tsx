@@ -6,6 +6,8 @@ import SwipeableRow from '@/src/components/SwipeableRow';
 interface ExerciseCardV2Props {
   exercise: any;
   onUpdateSet: (exId: string, setId: string, updates: any) => void;
+  /** #98 全部组完成态的「感受」入口：打开该动作聚合感受表单（透传给卡片插件） */
+  onFeelEntry?: (exId: string) => void;
   onOpenSettings: (exId: string) => void;
   onOpenTutorial: (exId: string) => void;
   onDelete: (exId: string) => void;
@@ -25,6 +27,7 @@ interface ExerciseCardV2Props {
 export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
   exercise,
   onUpdateSet,
+  onFeelEntry,
   onOpenSettings,
   onOpenTutorial,
   onDelete,
@@ -160,6 +163,7 @@ export const ExerciseCardV2: React.FC<ExerciseCardV2Props> = ({
                 pauseStartTime={pauseStartTime}
                 loadAnchors={loadAnchors}
                 onUpdate={handleUpdate}
+                onFeelEntry={() => onFeelEntry?.(exercise.id)}
                 onSettingsClick={() => onOpenSettings(exercise.id)}
             />
         </div>

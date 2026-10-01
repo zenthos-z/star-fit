@@ -25,6 +25,8 @@ interface ResistanceCardProps {
   pauseStartTime?: number;
   loadAnchors?: LoadAnchors;
   onUpdate?: (updates: Partial<ExerciseAction>) => void;
+  /** #98 全部组完成态「感受」入口：打开动作级聚合感受表单（App 层接线） */
+  onFeelEntry?: () => void;
 }
 
 /**
@@ -38,7 +40,8 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
   exerciseIndex = 0,
   isPaused,
   pauseStartTime,
-  onUpdate
+  onUpdate,
+  onFeelEntry
 }) => {
   const [showDeviationModal, setShowDeviationModal] = useState(false);
   const [pendingDeviation, setPendingDeviation] = useState<{
@@ -268,11 +271,32 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
   const targetRpe = exercise.metadata?.targetRpe;
   const completedCount = exercise.sets.filter(s => s.status === 'COMPLETED').length;
   const totalCount = exercise.sets.length;
+  // #98 两态翻转：全部组完成 → 类型标签退位，feel 椭圆入口顶替（补记动作级感受）
+  const allSetsCompleted = totalCount > 0 && completedCount === totalCount;
 
   return (
     <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
       {/* Header */}
-      <CardHeader name={exerciseName} type={exercise.type} />
+      <CardHeader
+        name={exerciseName}
+        type={exercise.type}
+        feelEntry={allSetsCompleted ? (
+          /* #98 feel 入口（2026-10-01 项目主人修正版：纯文字灰胶囊）。
+             对齐硬规则：按钮水平中心 = 组行勾选圆列（第4列 80px 内 48px 圆）水平中心线——
+             勾选圆圆心在内容区右缘内 40px（80px 列内居中），48px 宽按钮右缘贴 header 右缘
+             时圆心在右缘内 24px → mr-[16px] 左移 16px 恰好同心。垂直随 header 行居中；
+             -my-2 抵消 44px 按钮的行高膨胀，两态标题不跳。灰系与卡片灰家族一致 */
+          <button
+            type="button"
+            aria-label={`记录${exerciseName}全部组感受`}
+            onClick={() => { haptic('light'); onFeelEntry?.(); }}
+            className="mr-[16px] -my-2 flex h-11 w-12 shrink-0 items-center justify-center rounded-full
+              bg-gray-100 text-gray-500 transition-transform duration-200 active:scale-95 focus:outline-none"
+          >
+            <span className="text-[13px] font-black tracking-wide leading-none">感受</span>
+          </button>
+        ) : undefined}
+      />
 
       {/* Sets List */}
       <div className="space-y-10">
