@@ -340,36 +340,47 @@ function generateFullSubnetCandidates(subnet: string): ServerCandidate[] {
 /**
  * Detect all available Starfit servers on the LAN (issue #84 多后端命中列出全部)
  * @param onProgress - Callback for progress updates
- * @returns All detected servers, sorted by latency ascending; empty array if none
+ * @returns All detected servers, LAN addresses first then public/tunnel,
+ *          latency ascending within each group; empty array if none
  *
- * Strategy（2026-09 优化：一轮并发扫描替代三阶段分批）：
- * 0. 已知地址直查（history / 本机 dev server）——最快路径，通常 <100ms；
- *    命中即返回单元素列表（上游按单命中自动连接，现状保持）
- * 1. WebRTC 拿本机 IP → 定位网段 → **全网段 .1-.254 一轮并发扫描收集全部响应者**
+ * Strategy（2026-10 调整：局域网优先 + 永不短路）：
+ * 0. 已知地址直查（history / env / 本机 dev server / mobile fallback）并发探测，
+ *    全部命中保留——不再命中即 return（隧道地址可能只是同一后端的公网入口，
+ *    短路会让用户错过局域网直连）
+ * 1. **无论 Phase 0 是否命中都执行**：WebRTC 拿本机 IP → 定位网段 →
+ *    **全网段 .1-.254 一轮并发扫描收集全部响应者**
  *    （60 并发、800ms 超时、窗口内命中全收；固定端口 43111 + /health starfit 标识精确识别）
+ * 2. 合并去重（同 url 一条，Phase 0 来源更具体故优先保留），局域网地址排前、
+ *    其后公网/隧道地址，同组内按延迟升序
  */
 export async function detectServers(
   onProgress?: (current: ServerCandidate, total: number) => void
 ): Promise<DetectionResult[]> {
   console.log('[ServerDetector] Starting server detection...');
 
-  // Phase 0: 已知地址直查（上次连过的服务器几乎总是本次的服务器）
+  // Phase 0: 已知地址直查（并发一轮，全部命中保留，不短路）
   console.log('[ServerDetector] Phase 0: known addresses...');
   const knownCandidates = await getCandidates();
-  for (const candidate of knownCandidates) {
-    const result = await checkServerHealth(candidate.url, 800);
-    if (result.ok) {
+  const knownSettled = await Promise.allSettled(
+    knownCandidates.map(candidate =>
+      checkServerHealth(candidate.url, 800).then(result => ({ candidate, result }))
+    )
+  );
+  const knownHits: DetectionResult[] = [];
+  for (const settled of knownSettled) {
+    if (settled.status === 'fulfilled' && settled.value.result.ok) {
+      const { candidate, result } = settled.value;
       console.log('[ServerDetector] Known address hit:', candidate.url);
-      return [{
+      knownHits.push({
         url: candidate.url,
         source: candidate.source,
         latency: result.latency,
         version: result.version,
-      }];
+      });
     }
   }
 
-  // Phase 1: 全网段扫描——收集窗口内全部响应者（多后端共存场景全部列出供选择）
+  // Phase 1: 全网段扫描——Phase 0 命中也继续（收集窗口内全部响应者）
   console.log('[ServerDetector] Getting client IP address...');
   const localIp = await getLocalIpAddress().catch(() => null);
   console.log('[ServerDetector] Client IP:', localIp);
@@ -378,16 +389,28 @@ export async function detectServers(
   console.log(`[ServerDetector] Scanning ${subnet}.1-.254 for all responders ...`);
   const lanCandidates = generateFullSubnetCandidates(subnet);
 
-  const hits = await collectScanHits(lanCandidates, onProgress, 60, 800);
-  // 延迟最优在前，并列时保持扫描序（Array.prototype.sort 稳定）
-  hits.sort((a, b) => (a.latency ?? Infinity) - (b.latency ?? Infinity));
+  const scanHits = await collectScanHits(lanCandidates, onProgress, 60, 800);
 
-  if (hits.length > 0) {
-    console.log(`[ServerDetector] Found ${hits.length} server(s):`, hits.map(h => h.url));
+  // 合并去重：同 url 只留一条；Phase 0 来源（history/login/local…）比 scan 更具体，优先保留
+  const merged = new Map<string, DetectionResult>();
+  for (const hit of [...knownHits, ...scanHits]) {
+    if (!merged.has(hit.url)) merged.set(hit.url, hit);
+  }
+
+  // 排序：局域网地址在前，其后公网/隧道地址；同组内延迟最优在前
+  // （并列时保持合并序，Array.prototype.sort 稳定）
+  const results = [...merged.values()].sort((a, b) => {
+    const lanDiff = (isLanUrl(a.url) ? 0 : 1) - (isLanUrl(b.url) ? 0 : 1);
+    if (lanDiff !== 0) return lanDiff;
+    return (a.latency ?? Infinity) - (b.latency ?? Infinity);
+  });
+
+  if (results.length > 0) {
+    console.log(`[ServerDetector] Found ${results.length} server(s):`, results.map(h => h.url));
   } else {
     console.log('[ServerDetector] No server found');
   }
-  return hits;
+  return results;
 }
 
 /**
@@ -450,4 +473,29 @@ export function parseServerInput(input: string): string {
 
   // Add http:// prefix and /api suffix
   return `http://${formatted}/api`;
+}
+
+/**
+ * 判断服务器 URL 是否指向私网/回环地址（局域网入口）。
+ *
+ * RFC1918 私网段（10/8、172.16/12、192.168/16）与 localhost/127.0.0.1
+ * 视为局域网；公网 IP、域名、无法解析的串视为公网。
+ * 供登录页服务器列表标注来源（「局域网」/「公网」）与 detectServers 排序共用。
+ */
+export function isLanUrl(url: string): boolean {
+  let host: string;
+  try {
+    host = new URL(url).hostname.toLowerCase();
+  } catch {
+    return false;
+  }
+  if (host === 'localhost' || host.endsWith('.localhost')) return true;
+  const octets = host.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
+  if (!octets) return false;
+  const first = Number(octets[1]);
+  const second = Number(octets[2]);
+  if (first === 127 || first === 10) return true;
+  if (first === 192 && second === 168) return true;
+  if (first === 172 && second >= 16 && second <= 31) return true;
+  return false;
 }
