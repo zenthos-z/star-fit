@@ -283,19 +283,19 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
         type={exercise.type}
         feelEntry={allSetsCompleted ? (
           /* #98 feel 入口（2026-10-01 项目主人修正版：纯文字灰胶囊；同日返工④补按钮质感、
-             ⑤文字改人头图标）。形态：48×48 正圆——与对齐目标（组行勾选圆列 48px 圆）同径，
-             图标居中视觉平衡优于竖胶囊；水平对齐硬规则不变：圆心 = 勾选圆列水平中心线，
-             48px 宽右缘贴 header 右缘时圆心在右缘内 24px → mr-[16px] 左移 16px 恰好同心。
-             垂直随 header 行居中；-my-2.5 抵消 48px 圆的行高膨胀（同 -my-2@44px 等效），
-             两态标题不跳。图标：lucide SmilePlus（「加一条主观感受」语义，iMessage 同族），
-             1.8pt 线条对齐卡头 SF Symbols 复刻体系。质感语言 = 勾选圆同族灰系：
-             border-2 描边（gray-300）+ 彩色投影（shadow-gray-400/40）+ 同款扫光层，
-             「这是可按的按钮」而非信息标签 */
+             ⑤文字改人头图标、返工③-①质感减重）。形态：48×48 正圆——与对齐目标（组行
+             勾选圆列 48px 圆）同径，图标居中视觉平衡优于竖胶囊；水平对齐硬规则不变：
+             圆心 = 勾选圆列水平中心线，48px 宽右缘贴 header 右缘时圆心在右缘内 24px →
+             mr-[16px] 左移 16px 恰好同心。垂直随 header 行居中；-my-2.5 抵消 48px 圆的
+             行高膨胀（同 -my-2@44px 等效），两态标题不跳。图标：lucide SmilePlus（「加一条
+             主观感受」语义，iMessage 同族），1.8pt 线条对齐卡头 SF Symbols 复刻体系。
+             质感（返工③-①减重定案）：去 border-2 描边，只留彩色投影（shadow-gray-400/40）
+             + 同款扫光层——轻量「可按」暗示，不与勾选圆的重描边语言抢层级 */
           <button
             type="button"
             aria-label={`记录${exerciseName}全部组感受`}
             onClick={() => { haptic('light'); onFeelEntry?.(); }}
-            className="mr-[16px] -my-2.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full border-2 border-gray-300
+            className="mr-[16px] -my-2.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full
               bg-gray-100 text-gray-500 shadow-lg shadow-gray-400/40 transition-transform duration-200 active:scale-95 focus:outline-none relative overflow-hidden"
           >
             {/* 勾选圆同款 shimmer 扫光（白带加强到 /60：灰底上保持可感知的微光扫过） */}

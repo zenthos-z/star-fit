@@ -360,8 +360,9 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
           </div>
 
           {/* 语义补充：动作级一句话（支持语音）；胶囊输入（rounded-full，多行时自然撑成
-              stadium）；确认走右上角对勾，底部无按钮 */}
-          <div className="mt-5 flex items-center gap-2 rounded-full border border-gray-100 bg-gray-50 px-4 py-2">
+              stadium）；底色/描边比 sheet 材质深一档（gray-100/gray-200，返工③-③对比度）；
+              确认走右上角对勾，底部无按钮 */}
+          <div className="mt-5 flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2">
             <textarea
               rows={1}
               maxLength={500}
