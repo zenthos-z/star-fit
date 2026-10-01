@@ -30,9 +30,8 @@ export interface FeelModalGroup {
   sets: FeelModalRow[];
 }
 
-/** 表单目标：action = 组后聚合弹窗（单动作）；gate = 结算闸门补记窗（可多动作） */
+/** 聚合表单目标（多行滑条本体；结算闸门走 FeelGateAlert 窄卡，不经此类型） */
 export interface FeelModalTarget {
-  mode: 'action' | 'gate';
   groups: FeelModalGroup[];
 }
 
@@ -42,9 +41,8 @@ export type FeelPatch = Pick<ExerciseSetEntry, 'feel' | 'feel_note'>;
 /** 批量确认载荷：每行一条，携 exId + setId 定位 */
 export type FeelConfirmPatch = { exId: string; setId: string } & FeelPatch;
 
-/** 动作级 action 目标构造（组后触发与卡片补记入口共用）：聚合该动作全部组 */
+/** 动作级目标构造（组后触发/卡片入口/闸门[去补记]共用）：聚合动作全部组 */
 export const buildActionFeelTarget = (ex: Exercise): FeelModalTarget => ({
-  mode: 'action',
   groups: [{
     exId: ex.id,
     exName: ex.name,

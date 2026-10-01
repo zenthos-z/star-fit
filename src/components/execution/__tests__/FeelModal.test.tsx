@@ -6,16 +6,16 @@ import type { FeelModalTarget, FeelConfirmPatch } from '../feelGate';
 import { ExerciseSetEntrySchema } from 'shared/contracts';
 
 /**
- * 组后感受聚合表单测试（issue #98 v2，2026-10-01 重设计）：
+ * 组后感受聚合表单测试（issue #98 v2，2026-10-01 重设计；同日返工闸门改窄卡）：
  * - N 行聚合渲染：每行一条滑块（等宽组号徽章 + 参数摘要），已填组回显、未填默认 50
  * - 批量确认：右上角对勾一次提交全部行（exId+setId+feel 定位写回，payload 过契约校验）
  * - 动作级语义补充：语音/文本 note 只写收尾组 feel_note（≤500 契约约束），空 note 不写字段
  * - 跳过路径：点外部区域 = 跳过，不写任何字段直接关（onSkip 且 onConfirm 不触发）
- * - 结算闸门形态（gate）：只列未填组、分组展示、无补充输入；[补完并结束]/[跳过] 两分支
  * - 语音按钮：触发转写链路（权限→启动→partial 轮询回填→停止取最终文本），
  *   mock 的是 @ 对话框同源 speechInput 模块；web（不支持）时入口隐藏
  * - 卸载兜底清理录音会话
- * 纯函数层（触发判定/闸门扫描/批量写回）另见 feelGate.test.ts。
+ * 纯函数层（触发判定/闸门扫描/批量写回）另见 feelGate.test.ts；
+ * 结算闸门窄卡（FeelGateAlert，只分流不写值）另见 FeelGateAlert.test.tsx。
  */
 
 // speechInput 是 Capacitor 桥模块（jsdom 为 web 环境全 null），整体 mock 掉；
@@ -33,7 +33,6 @@ vi.mock('../../../lib/speechInput', () => speechMocks);
 
 /** 3 组动作、第 1 组已填 70（回显），第 2/3 组未填（默认 50） */
 const actionTarget: FeelModalTarget = {
-  mode: 'action',
   groups: [{
     exId: 'ex-1',
     exName: '杠铃卧推',
@@ -45,11 +44,17 @@ const actionTarget: FeelModalTarget = {
   }],
 };
 
-/** 闸门目标：两个动作各一组未填（分组展示语义） */
-const gateTarget: FeelModalTarget = {
-  mode: 'gate',
+/** 多动作补记目标（闸门[去补记]携多组进来）：分组段标语义 */
+const multiTarget: FeelModalTarget = {
   groups: [
-    { exId: 'ex-1', exName: '杠铃卧推', sets: [{ setId: 'set-2', setNo: 2, weight: 60, reps: 8 }] },
+    {
+      exId: 'ex-1',
+      exName: '杠铃卧推',
+      sets: [
+        { setId: 'set-2', setNo: 2, weight: 60, reps: 8 },
+        { setId: 'set-3', setNo: 3, weight: 60, reps: 8 },
+      ],
+    },
     { exId: 'ex-2', exName: '杠铃划船', sets: [{ setId: 'set-b1', setNo: 1, weight: 40, reps: 10 }] },
   ],
 };
@@ -176,39 +181,25 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
     });
   });
 
-  describe('结算闸门形态（gate）', () => {
-    it('只列未填组并按动作分组展示；无补充输入、无右上角对勾', () => {
-      const utils = renderModal(gateTarget);
-      expect(getSliders(utils)).toHaveLength(2);
+  describe('多动作补记（闸门[去补记]携多组进来）', () => {
+    it('按动作分段展示段标 + 组号沿用原组号（不重新编号），全部行可写', () => {
+      const utils = renderModal(multiTarget);
+      expect(getSliders(utils)).toHaveLength(3);
+      // 段标只出现在各动作首行
       expect(utils.getByText('杠铃卧推')).toBeTruthy();
       expect(utils.getByText('杠铃划船')).toBeTruthy();
-      expect(utils.queryByLabelText('感受补充说明')).toBeNull();
-      expect(utils.queryByRole('button', { name: '确认记录全部组感受' })).toBeNull();
-    });
-
-    it('[补完并结束] → onConfirm 收到全部未填组补丁（不含 feel_note）', () => {
-      const utils = renderModal(gateTarget);
-      dragRow(utils, 1, 65);
-      act(() => {
-        fireEvent.click(utils.getByRole('button', { name: '补完并结束' }));
-      });
-      expect(utils.onConfirm).toHaveBeenCalledTimes(1);
-      const patches = utils.onConfirm.mock.calls[0][0] as FeelConfirmPatch[];
-      expect(patches).toEqual([
-        { exId: 'ex-1', setId: 'set-2', feel: 65 },
-        { exId: 'ex-2', setId: 'set-b1', feel: 50 },
-      ]);
+      expect(utils.getByText('01')).toBeTruthy();
+      expect(utils.getByText('02')).toBeTruthy();
+      // 批量确认：全部行一次写回，exId 各归各动作
+      const patches = confirmAction(utils);
+      expect(patches.map(p => p.exId)).toEqual(['ex-1', 'ex-1', 'ex-2']);
       patches.forEach(expectContractValid);
     });
 
-    it('[跳过] → onSkip 触发、onConfirm 不触发（不写任何字段直接结算）', () => {
-      const utils = renderModal(gateTarget);
-      dragRow(utils, 2, 30);
-      act(() => {
-        fireEvent.click(utils.getByRole('button', { name: '跳过' }));
-      });
-      expect(utils.onSkip).toHaveBeenCalledTimes(1);
-      expect(utils.onConfirm).not.toHaveBeenCalled();
+    it('多动作时标题只报总组数（单动作才带动作名语境）', () => {
+      const utils = renderModal(multiTarget);
+      expect(utils.getByText('感觉如何？')).toBeTruthy();
+      expect(utils.getByText('共 3 组')).toBeTruthy();
     });
   });
 

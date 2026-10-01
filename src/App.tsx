@@ -8,6 +8,7 @@ import { LoadAnchors } from './types/protocol';
 import TimerCapsule from './components/TimerCapsule';
 import LockScreen from './components/execution/LockScreen';
 import FeelModal from './components/execution/FeelModal';
+import FeelGateAlert from './components/execution/FeelGateAlert';
 import {
   STRENGTH_SET_TYPES,
   buildFeelTrigger,
@@ -15,6 +16,7 @@ import {
   collectUnfilledFeelGroups,
   applyFeelPatchesToSession,
   type FeelConfirmPatch,
+  type FeelModalGroup,
   type FeelModalTarget,
 } from './components/execution/feelGate';
 import { ExerciseCardV2 } from './components/execution/ExerciseCardV2';
@@ -515,6 +517,10 @@ const App: React.FC = () => {
   // 组后感受弹窗（#98）：当前待评价的组。确认 → feel/feel_note 写回该组
   // （经 handleUpdateSet，sync 原样携带入库）；跳过 → 不写任何字段直接关。
   const [feelTarget, setFeelTarget] = useState<FeelModalTarget | null>(null);
+  // 结算闸门（#98 返工②）：FeelGateAlert 窄卡只分流（仍要结束/去补记），不经 FeelModal
+  const [feelGateGroups, setFeelGateGroups] = useState<FeelModalGroup[] | null>(null);
+  // 补记来源标记：闸门[去补记]打开表单 → 确认后拿补写快照直接结算
+  const [feelFormFromGate, setFeelFormFromGate] = useState(false);
 
   // Reorder Mode State
   const [reorderMode, setReorderMode] = useState<{ 
@@ -1145,20 +1151,35 @@ const App: React.FC = () => {
   };
 
   const handleFeelConfirm = (patches: FeelConfirmPatch[]) => {
-    const wasGate = feelTarget?.mode === 'gate';
     // 纯函数补写 → 一次 setSession（单次渲染）；闸门路径直接拿补写后的快照结算，
     // 不读 setSession 异步前的旧闭包（否则结算页丢感受）
     const patchedSession = applyFeelPatchesToSession(session, patches);
+    const fromGate = feelFormFromGate;
     setFeelTarget(null);
     setSession(patchedSession);
-    if (wasGate) finalizeSession(patchedSession);
+    if (fromGate) {
+      setFeelFormFromGate(false);
+      finalizeSession(patchedSession);
+    }
   };
 
   const handleFeelSkip = () => {
-    const wasGate = feelTarget?.mode === 'gate';
     setFeelTarget(null);
-    // 闸门跳过：不写任何字段直接结算（跳过的组保持空感受永久落库）
-    if (wasGate) finalizeSession(session);
+    // 闸门[去补记]进来的表单被跳过 → 放弃补记留在训练页（不再结算，闸门语义到此为止）
+    setFeelFormFromGate(false);
+  };
+
+  // 闸门[仍要结束]：不写任何字段直接结算（未填组保持空感受落库）
+  const handleGateEnd = () => {
+    setFeelGateGroups(null);
+    finalizeSession(session);
+  };
+
+  // 闸门[去补记]：关闸门 → 打开聚合表单（未填组行必然默认 50 起步）
+  const handleGateFill = () => {
+    setFeelGateGroups(null);
+    setFeelFormFromGate(true);
+    setFeelTarget({ groups: feelGateGroups ?? [] });
   };
 
   // 手表遥控上行（2026-09-20 上提 App 层）：手表「完成本组/休息按钮」→ 手机状态机。
@@ -1319,15 +1340,15 @@ const App: React.FC = () => {
     return anomalies;
   };
 
-  // 结算收口（#98 v2 §3）：handleEndSession 是唯一入口（TimerCapsule 红色停止 +
-  // LockScreen onEnd 两处调用全经此），先过感受闸门再放行结算
+  // 结算收口（#98 v2 §3，返工②改形态）：handleEndSession 是唯一入口（TimerCapsule
+  // 红色停止 + LockScreen onEnd 两处调用全经此），先过感受闸门再放行结算。
+  // 闸门 = FeelGateAlert 窄卡意图分流：[仍要结束] 直接结算 / [去补记] 开表单，
+  // 写值只发生在表单本体（闸门自身不写任何字段）
   const handleEndSession = () => {
     console.log('[App] handleEndSession called');
-    // 结算闸门：扫描力量类「已完成但未记感受」的组——有则弹补记窗拦截，
-    // [补完并结束]（写回后结算）/ [跳过]（不写直接结算）两条路都在表单回调里放行
     const pendingGroups = collectUnfilledFeelGroups(session.exercises);
     if (pendingGroups.length > 0) {
-      setFeelTarget({ mode: 'gate', groups: pendingGroups });
+      setFeelGateGroups(pendingGroups);
       return;
     }
     finalizeSession(session);
@@ -1642,6 +1663,11 @@ const App: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* 结算闸门窄卡（#98 返工②）：只在表单未开时挂载，意图分流 [仍要结束]/[去补记] */}
+      {feelGateGroups && !feelTarget && (session.status === 'active' || session.status === 'paused') && (
+        <FeelGateAlert groups={feelGateGroups} onEnd={handleGateEnd} onGoFill={handleGateFill} />
+      )}
 
       <AnimatePresence>
         {(currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession || isAiOverlayOpen || pendingExercise || (showSettingsId && session.exercises.find(e => e.id === showSettingsId))) && (

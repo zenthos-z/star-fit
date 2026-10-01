@@ -9,8 +9,8 @@ import {
 
 /**
  * #98 纯函数层测试：组后触发判定（仅最后一组）/ 结算闸门扫描（已完成未填感受）/
- * 批量写回 session（闸门「补完并结束」的结算快照来源）。
- * 组件层交互另见 FeelModal.test.tsx。
+ * 批量写回 session（闸门[去补记]表单确认后的结算快照来源）。
+ * 组件层交互另见 FeelModal.test.tsx / FeelGateAlert.test.tsx。
  */
 
 const mkSet = (over: Partial<ExerciseSet> & Pick<ExerciseSet, 'id'>): ExerciseSet => ({
@@ -43,7 +43,6 @@ describe('buildFeelTrigger（仅力量类最后一组完成跃迁触发）', () 
   it('最后一组未完成→完成 → 触发，聚合全部组', () => {
     const t = buildFeelTrigger(ex, 's3', false);
     expect(t).not.toBeNull();
-    expect(t!.mode).toBe('action');
     expect(t!.groups).toHaveLength(1);
     expect(t!.groups[0].exId).toBe('ex-1');
     expect(t!.groups[0].exName).toBe('杠铃卧推');

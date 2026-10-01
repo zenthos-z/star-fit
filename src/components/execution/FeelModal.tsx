@@ -17,22 +17,21 @@ import type {
 } from './feelGate';
 
 /**
- * 组后感受聚合表单（issue #98 v2，2026-10-01 重设计）：
+ * 组后感受聚合表单（issue #98 v2，2026-10-01 重设计；同日返工收敛材质）：
  * 力量类最后一组完成时弹出，聚合本动作全部组——每行一条无级滑块（0-100 连续值，
  * 已填组回显、未填组默认 50），右上角圆形对勾一次确认批量写回（删除逐组弹窗与
  * 「跳过」文字链：点外部区域 = 跳过，未确认的拖动全部丢弃）。
+ * 结算闸门不在此组件：闸门 = FeelGateAlert 窄卡意图分流（补记入口可携多组进来）。
  *
- * 两种形态：
- * - action：组后弹窗（单动作全部组）+ 底部语义补充输入（支持语音，复用 @ 对话框
- *   iOS 原生 STT 链路，原始音频不存）；语音补充按动作级语义写入收尾组的 feel_note。
- * - gate：结算闸门补记窗（§3，可多动作分组）——只列未填组，无补充输入，
- *   底部 [补完并结束]（全部写回 → 结算）/ [跳过]（不写任何字段 → 结算）。
+ * 材质真源对齐（2026-10-01 项目主人返工①）：Apple glassEffect 语义映射——
+ * .regular 材质 = 高不透明中性白磨砂（bg-white/95 + backdrop-blur-xl）+ 中性白
+ * specular rim 边缘光（白色顶缘描边 + 内侧高光），禁彩虹色散/饱和度戏法；
+ * 圆角/层次与 DeviationWarningModal（项目已拍板 iOS 模态模板）同一语言。
  *
- * 视觉（§5）：底部 sheet 420ms cubic-bezier(0.32,0.72,0,1)（既有弹层规范曲线）+
- * Liquid Glass 材质（半透白 + backdrop blur/saturate + 内侧高光）；滑块水滴拇指
- * （径向高光渐变）+ 拖动中当前值浮动回显（松手淡出）；触感按阈值触发
- * （跨越 25/50/75 轻点、≥90 单次重击），确认 success、跳过不震；全程无声。
- * 仅浅色模式硬编码色值（玻璃材质不随暗色主题翻色）。
+ * 视觉：底部 sheet 420ms cubic-bezier(0.32,0.72,0,1)（既有弹层规范曲线）；
+ * 滑块水滴拇指（径向高光渐变）+ 拖动中当前值浮动回显（松手淡出）；触感按阈值
+ * 触发（跨越 25/50/75 轻点、≥90 单次重击），确认 success、跳过不震；全程无声。
+ * 仅浅色模式硬编码色值（材质不随暗色主题翻色）。
  */
 
 export type { FeelModalTarget, FeelConfirmPatch, FeelPatch } from './feelGate';
@@ -65,6 +64,7 @@ const FeelSliderRow: React.FC<{
   onDragStart: (setId: string) => void;
   onDragEnd: () => void;
 }> = ({ row, value, dragging, showGroupLabel, groupName, onChange, onDragStart, onDragEnd }) => (
+  // 多动作补记（闸门[去补记]携多组进来）按动作分段展示；单动作平铺不带段标
   <div>
     {showGroupLabel && (
       <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">{groupName}</p>
@@ -144,12 +144,11 @@ interface FeelModalProps {
   target: FeelModalTarget;
   /** 批量确认：全部行（含未拖动的默认 50 行）一次写回 */
   onConfirm: (patches: FeelConfirmPatch[]) => void;
-  /** 跳过：action=关闭不写；gate=不写任何字段直接进结算。入口=点外部区域 / gate [跳过] */
+  /** 跳过：关闭不写任何字段。入口 = 点外部区域（暗场） */
   onSkip: () => void;
 }
 
 export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip }) => {
-  const isGate = target.mode === 'gate';
   const totalRows = target.groups.reduce((n, g) => n + g.sets.length, 0);
 
   const [values, setValues] = useState<Record<string, number>>(() =>
@@ -258,7 +257,7 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     target.groups.forEach(g => {
       g.sets.forEach((s, i) => {
         const p: FeelConfirmPatch = { exId: g.exId, setId: s.setId, feel: values[s.setId] ?? FEEL_DEFAULT };
-        if (!isGate && g === target.groups[0] && i === g.sets.length - 1 && trimmed) {
+        if (g === target.groups[0] && i === g.sets.length - 1 && trimmed) {
           p.feel_note = trimmed;
         }
         patches.push(p);
@@ -283,7 +282,7 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
 
   return (
     <div className="fixed inset-0 z-[150]">
-      {/* 暗场：点外部区域 = 跳过（§4 删除二次确认与「跳过」文字链；gate 模式放行结算） */}
+      {/* 暗场：点外部区域 = 跳过（§4 删除二次确认与「跳过」文字链） */}
       <motion.div
         data-testid="feel-backdrop"
         initial={{ opacity: 0 }}
@@ -294,19 +293,19 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
         className="absolute inset-0 bg-black/45"
       />
 
-      {/* 底部 sheet：rounded-t-[40px] + Liquid Glass 材质（§5 半透白 + blur/saturate + 内侧高光） */}
+      {/* 底部 sheet：rounded-t-[40px] + glassEffect .regular 语义材质（中性白磨砂 + specular rim） */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ duration: 0.42, ease: SHEET_EASE }}
         data-testid="feel-modal"
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-[40px] border-t border-white/60"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-[40px] border-t border-white"
         style={{
-          background: 'rgba(255,255,255,0.72)',
-          backdropFilter: 'blur(48px) saturate(180%)',
-          WebkitBackdropFilter: 'blur(48px) saturate(180%)',
-          boxShadow: '0 -12px 48px rgba(15,23,42,0.25), inset 0 1px 0 rgba(255,255,255,0.85)',
+          background: 'rgba(255,255,255,0.95)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          boxShadow: '0 -25px 50px -12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.95)',
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
         }}
       >
@@ -315,35 +314,33 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
           <div className="h-1.5 w-10 rounded-full bg-gray-900/15" />
         </div>
 
-        {/* 语境头：action 形态唯一主动作 = 右上角圆形对勾（深藏青，一次确认全部行） */}
+        {/* 语境头：唯一主动作 = 右上角圆形对勾（深藏青，一次确认全部行） */}
         <div className="relative flex items-center justify-center px-7 pt-4">
           <div className="text-center">
-            <p className="text-[20px] font-bold text-gray-900">
-              {isGate ? `还有 ${totalRows} 组没记感受` : '感觉如何？'}
-            </p>
+            <p className="text-[20px] font-bold text-gray-900">感觉如何？</p>
             <p className="mt-1 text-[13px] font-medium text-gray-500">
-              {isGate ? '补记或跳过后结束训练' : `${actionGroup.exName} · 共 ${actionGroup.sets.length} 组`}
+              {target.groups.length > 1
+                ? `共 ${totalRows} 组`
+                : `${actionGroup.exName} · 共 ${actionGroup.sets.length} 组`}
             </p>
           </div>
-          {!isGate && (
-            <motion.button
-              type="button"
-              data-testid="feel-confirm"
-              aria-label="确认记录全部组感受"
-              whileTap={{ scale: 0.9 }}
-              onClick={handleConfirm}
-              className="absolute right-7 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center
-                rounded-full bg-[#1B2436] text-white shadow-lg shadow-[#1B2436]/30 focus:outline-none"
-            >
-              <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-              </svg>
-            </motion.button>
-          )}
+          <motion.button
+            type="button"
+            data-testid="feel-confirm"
+            aria-label="确认记录全部组感受"
+            whileTap={{ scale: 0.9 }}
+            onClick={handleConfirm}
+            className="absolute right-7 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center
+              rounded-full bg-[#1B2436] text-white shadow-lg shadow-[#1B2436]/30 focus:outline-none"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </motion.button>
         </div>
 
         <div className="px-7 pt-5">
-          {/* 行区：多动作（gate）分组展示；单动作平铺。超高滚动（组多不顶出屏） */}
+          {/* 行区：多动作（闸门[去补记]携多组）按动作分段；单动作平铺。超高滚动（组多不顶出屏） */}
           <div className="max-h-[38vh] space-y-4 overflow-y-auto overscroll-contain pb-1">
             {target.groups.map(g =>
               g.sets.map((s, rowIdx) => (
@@ -352,7 +349,7 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
                   row={s}
                   value={values[s.setId] ?? FEEL_DEFAULT}
                   dragging={draggingSetId === s.setId}
-                  showGroupLabel={isGate && rowIdx === 0}
+                  showGroupLabel={target.groups.length > 1 && rowIdx === 0}
                   groupName={g.exName}
                   onChange={handleSliderChange}
                   onDragStart={handleDragStart}
@@ -362,81 +359,54 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
             )}
           </div>
 
-          {isGate ? (
-            /* 闸门双按钮（§3）：补完并结束 = 全部写回 → 结算；跳过 = 不写 → 结算 */
-            <div className="mt-5">
+          {/* 语义补充：动作级一句话（支持语音）；确认走右上角对勾，底部无按钮 */}
+          <div className="mt-5 flex items-center gap-2 rounded-2xl border border-gray-100 bg-gray-50 px-4 py-2">
+            <textarea
+              rows={1}
+              maxLength={500}
+              value={note}
+              onChange={handleNoteChange}
+              data-testid="feel-note"
+              aria-label="感受补充说明"
+              placeholder={isListening ? '正在聆听…' : '记录细节（支持语音）'}
+              className="max-h-24 min-h-[36px] w-full resize-none bg-transparent py-2 text-[15px] leading-snug
+                text-gray-900 placeholder:text-gray-400 focus:outline-none"
+            />
+            {isSpeechInputSupported && (
               <motion.button
                 type="button"
-                data-testid="feel-gate-confirm"
-                whileTap={{ scale: 0.97 }}
-                onClick={handleConfirm}
-                className="h-14 w-full rounded-2xl bg-[#1B2436] text-[16px] font-semibold text-white
-                  shadow-lg shadow-[#1B2436]/25 focus:outline-none"
+                data-testid="feel-mic"
+                whileTap={{ scale: 0.92 }}
+                onClick={handleMicTap}
+                aria-label={isListening ? '停止语音输入' : '语音输入'}
+                className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full
+                  transition-colors duration-200 ${
+                    isListening ? 'bg-rose-500/10 text-rose-500' : 'bg-[#1B2436]/[0.08] text-gray-500'
+                  }`}
               >
-                补完并结束
-              </motion.button>
-              <motion.button
-                type="button"
-                data-testid="feel-gate-skip"
-                whileTap={{ scale: 0.98 }}
-                onClick={handleSkip}
-                className="mt-2 h-12 w-full rounded-2xl text-[15px] font-medium text-gray-500 focus:outline-none"
-              >
-                跳过
-              </motion.button>
-            </div>
-          ) : (
-            /* 语义补充：动作级一句话（支持语音）；确认走右上角对勾，底部无按钮 */
-            <div className="mt-5 flex items-end gap-2.5">
-              <div className="flex flex-1 items-center gap-2 rounded-[22px] border border-white/80 bg-white/70 px-4 py-2 shadow-sm">
-                <textarea
-                  rows={1}
-                  maxLength={500}
-                  value={note}
-                  onChange={handleNoteChange}
-                  data-testid="feel-note"
-                  aria-label="感受补充说明"
-                  placeholder={isListening ? '正在聆听…' : '记录细节（支持语音）'}
-                  className="max-h-24 min-h-[36px] w-full resize-none bg-transparent py-2 text-[15px] leading-snug
-                    text-gray-900 placeholder:text-gray-400 focus:outline-none"
-                />
-                {isSpeechInputSupported && (
-                  <motion.button
-                    type="button"
-                    data-testid="feel-mic"
-                    whileTap={{ scale: 0.92 }}
-                    onClick={handleMicTap}
-                    aria-label={isListening ? '停止语音输入' : '语音输入'}
-                    className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full
-                      transition-colors duration-200 ${
-                        isListening ? 'bg-rose-500/10 text-rose-500' : 'bg-[#1B2436]/[0.08] text-gray-500'
-                      }`}
-                  >
-                    {isListening && (
-                      <span className="absolute right-1 top-1 flex h-2 w-2">
-                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
-                        <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
-                      </span>
-                    )}
-                    <svg
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth={2}
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      className="h-5 w-5"
-                    >
-                      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
-                      <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
-                      <line x1="12" x2="12" y1="19" y2="22" />
-                    </svg>
-                  </motion.button>
+                {isListening && (
+                  <span className="absolute right-1 top-1 flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
+                  </span>
                 )}
-              </div>
-            </div>
-          )}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth={2}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className="h-5 w-5"
+                >
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+                  <line x1="12" x2="12" y1="19" y2="22" />
+                </svg>
+              </motion.button>
+            )}
+          </div>
         </div>
       </motion.div>
     </div>
