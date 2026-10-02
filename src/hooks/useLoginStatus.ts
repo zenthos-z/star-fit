@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import {
   loadLoginCredentials,
   saveLoginCredentials,
-  clearLoginCredentials as clearStorageLoginCredentials,
+  clearLoginCredentials,
+  clearLoginSession,
   clearUserStateStorage
 } from '@/storage';
 import { Keys } from '@/storage/schemas';
@@ -52,7 +53,7 @@ export const useLoginStatus = (): LoginStatusReturn => {
           setUserId(creds.userId);
           setIsLoggedIn(true);
         } else if (creds.userId && loggedOut) {
-          clearStorageLoginCredentials().catch(() => {});
+          clearLoginCredentials().catch(() => {});
         }
         if (creds.serverUrl) {
           setServerUrl(creds.serverUrl);
@@ -141,32 +142,9 @@ export const useLoginStatus = (): LoginStatusReturn => {
     setServerIp(null);
     setIsLoggedIn(false);
 
-    // [#82] 切号墓碑：凭据即将被清，此键是下次登录检测身份变化的唯一活口
-    // （A 登出 → B 登录时由此触发用户态清理）
-    if (userId) {
-      localStorage.setItem(Keys.lastUserId, userId);
-    }
-
-    // Clear localStorage FIRST (synchronous, cannot fail) so a reload
-    // right after this call always lands on the login page.
-    localStorage.removeItem('starfit_user_id');
-    localStorage.removeItem('starfit_server_url');
-    localStorage.removeItem('starfit_server_ip');
-    // Tombstone: survives even if the IDB delete below hangs, so the app
-    // boots logged-out and lazily purges the stale IDB creds on next launch.
-    localStorage.setItem('starfit_logged_out', '1');
-
-    // Clear IDB best-effort: WKWebView IndexedDB can hang or reject
-    // transiently (observed on iOS sim 2026-09-10: logout never reloaded
-    // because await hung here). Never let it block the reload.
-    try {
-      await Promise.race([
-        clearStorageLoginCredentials(),
-        new Promise<void>((r) => setTimeout(r, 2000)),
-      ]);
-    } catch (e) {
-      console.warn('[useLoginStatus] IDB credential clear failed (non-fatal):', e);
-    }
+    // 存储侧清理收敛到共用路径（#108：401 强制登出复用同一链路）——
+    // 双墓碑（切号 lastUserId / 切服务器 lastServerUrl）+ 清镜像 + IDB 凭据 best-effort
+    await clearLoginSession();
   };
 
   return {

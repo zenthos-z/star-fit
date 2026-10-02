@@ -1,7 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+import { installUnauthorizedInterceptor } from './services/authInterceptor';
 import './index.css';
+
+// #108 机制一：401 全局拦截（包装 window.fetch，登录态 401 → 清凭据 + 踢回登录页）
+installUnauthorizedInterceptor();
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

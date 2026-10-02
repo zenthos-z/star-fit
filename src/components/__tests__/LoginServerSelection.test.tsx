@@ -27,6 +27,7 @@ const storageMocks = vi.hoisted(() => ({
   saveLoginCredentials: vi.fn(),
   addServerToHistory: vi.fn(),
   loadServerHistory: vi.fn(),
+  invalidateUserDataOnServerChange: vi.fn(async () => 0), // #108 机制二（登录页不触发作废路径）
 }));
 
 vi.mock('@/services/serverDetector', async importOriginal => {
