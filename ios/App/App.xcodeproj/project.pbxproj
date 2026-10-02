@@ -29,6 +29,7 @@
 		C6FFEEEACE4E46B29307312B /* (null) in Sources */ = {isa = PBXBuildFile; };
 		FC5A7EE5BDA149BA89619B93 /* (null) in Sources */ = {isa = PBXBuildFile; };
 		A4B4C4D4E5F6071800000001 /* MuscleMapPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = A4B4C4D4E5F6071800000000 /* MuscleMapPlugin.swift */; };
+		B4D4C4D4E5F6071800000011 /* NativeNetworkPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = B4D4C4D4E5F6071800000010 /* NativeNetworkPlugin.swift */; };
 		A4B4C4D4E5F6071800000003 /* MuscleMap in Frameworks */ = {isa = PBXBuildFile; productRef = A4B4C4D4E5F6071800000002 /* MuscleMap */; };
 /* End PBXBuildFile section */
 
@@ -105,6 +106,7 @@
 		EA0000000000000000000002 /* StarfitWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = StarfitWatch.app; path = "$(BUILD_DIR)/$(CONFIGURATION)-watchos/StarfitWatch.app"; sourceTree = "<group>"; };
 		EA0000000000000000000003 /* StarfitWatch.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = StarfitWatch.xcodeproj; path = ../WatchApp/StarfitWatch.xcodeproj; sourceTree = SOURCE_ROOT; };
 		A4B4C4D4E5F6071800000000 /* MuscleMapPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuscleMapPlugin.swift; sourceTree = "<group>"; };
+		B4D4C4D4E5F6071800000010 /* NativeNetworkPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNetworkPlugin.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -158,6 +160,7 @@
 				50B271D01FEDC1A000F3C39B /* public */,
 				A1B2C3D4E5F6071809000000 /* LiveActivityPlugin.swift */,
 				A4B4C4D4E5F6071800000000 /* MuscleMapPlugin.swift */,
+				B4D4C4D4E5F6071800000010 /* NativeNetworkPlugin.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -323,6 +326,7 @@
 				9A2B3C4D5E6F7A8B9C0D1E2F /* LiquidGlassPanelSection.swift in Sources */,
 				A1B2C3D4E5F6071809000001 /* LiveActivityPlugin.swift in Sources */,
 				A4B4C4D4E5F6071800000001 /* MuscleMapPlugin.swift in Sources */,
+				B4D4C4D4E5F6071800000011 /* NativeNetworkPlugin.swift in Sources */,
 				C0DE00000000000000000B04 /* WorkoutActivity.swift in Sources */,
 				FC5A7EE5BDA149BA89619B93 /* (null) in Sources */,
 				C6FFEEEACE4E46B29307312B /* (null) in Sources */,
