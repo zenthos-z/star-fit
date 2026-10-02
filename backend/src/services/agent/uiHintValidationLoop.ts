@@ -14,6 +14,14 @@
  *                up to `maxRetries`. Past `maxRetries`, yield a single
  *                `error` event (code `VALIDATION_ERROR`).
  *
+ * 泄漏重试通道（refs #73/#56 机制升级）：Stage1 提取器把写歪在正文的卡片
+ * JSON 降级为 `thinking`（不产生 uiHint 事件）时，本循环在流终态（done）识别
+ * 降级残片（isDegradedCardFragment：自报卡型 + parse 失败）且本 Attempt 无卡
+ * 可校验 → 走同一重试通道（同一 attempt 计数 / RETRY_STATUS_TOKEN /
+ * buildLeakFeedbackRequest 围栏协议纠错）。重试成功 → 残片已扣留不下发
+ * （等效「从正文剥离」）；重试耗尽 → 残片按现状降级放行（thinking）+ done，
+ * 不新增用户可见错误。
+ *
  * Everything else (`token` / `done` / `error`, and `uiHint` events carrying
  * no card) is passed through untouched, preserving M3's raw-stream contract.
  *
@@ -27,6 +35,8 @@
 import type { AgentEvent, ChatRequest } from "shared/contracts";
 import type { AgentService } from "./AgentService.js";
 import { validateUiHint, type StructuredError } from "./uiHintValidator.js";
+// 泄漏重试通道（refs #73/#56 机制升级）：Stage1 降级的卡型残片识别谓词。
+import { isDegradedCardFragment } from "./uiHintExtractor.js";
 import {
   ALLOWED_UIHINT_TYPES,
   BLACKLISTED_UIHINT_TYPES,
@@ -126,6 +136,7 @@ export async function* chatWithValidationLoop(
       errors: StructuredError[];
       rejectedCard: unknown;
     } | null = null;
+    let leak: { fragments: string[] } | null = null;
     for await (const item of invalid) {
       if (item.kind === "event") {
         // Forward token / done / error / valid-uiHint / cardless-uiHint.
@@ -134,11 +145,33 @@ export async function* chatWithValidationLoop(
         // Prose written around a rejected card — surface as collapsible
         // thinking context, never as answer text.
         yield { type: "thinking", text: item.text };
+      } else if (item.kind === "leak") {
+        // 终态泄漏裁决（refs #73/#56）：降级残片自报卡型，本 Attempt 无卡
+        // 可校验。
+        leak = { fragments: item.fragments };
+        break;
       } else {
         // kind === 'invalid' — first invalid card in this stream.
         firstInvalid = { errors: item.errors, rejectedCard: item.rejectedCard };
         break;
       }
+    }
+
+    if (leak !== null) {
+      // 泄漏重试通道：复用本循环的重试计数与 RETRY_STATUS_TOKEN。
+      if (attempt >= maxRetries) {
+        // 重试耗尽 → 维持现状：残片按降级放行（thinking）+ 补发被暂扣的
+        // done 收尾。不新增用户可见错误（前端 cardLeakRecovery 兜底仍在）。
+        for (const frag of leak.fragments) {
+          yield { type: "thinking", text: frag };
+        }
+        yield { type: "done" };
+        return;
+      }
+      attempt += 1;
+      yield { type: "token", text: RETRY_STATUS_TOKEN };
+      currentReq = buildLeakFeedbackRequest(req, leak.fragments, attempt);
+      continue;
     }
 
     if (firstInvalid === null) {
@@ -190,7 +223,14 @@ type StreamItem =
       rejectedCard: unknown;
       rejectedText: string;
     }
-  | { kind: "rejected_thinking"; text: string };
+  | { kind: "rejected_thinking"; text: string }
+  /**
+   * 终态泄漏裁决（refs #73/#56）：本 Attempt 无卡可校验，但 Stage1 降级的
+   * thinking 残片自报卡型（isDegradedCardFragment）。携带扣留的残片清单交
+   * 上层重试；done 已被吞——重试成功则本轮作废，耗尽则由上层补发残片 +
+   * done（维持现状）。
+   */
+  | { kind: "leak"; fragments: string[] };
 
 /**
  * Wrap `deepAgent.chat(req)` as an async iterable of {@link StreamItem}.
@@ -212,6 +252,10 @@ type StreamItem =
  *         thinking block), then `{ kind: 'invalid' }` and the caller retries.
  * - `done` / `error` events and cardless `uiHint` events flush the held buffer
  *   and are forwarded verbatim.
+ * - 泄漏残片（Stage1 降级的卡型 thinking，refs #73/#56）：首个有效卡之前
+ *   到达的残片扣留不下发（不 flush heldText——此阶段它恒为空）；`done` 时
+ *   本 Attempt 仍无卡可校验 → yield `{kind:'leak'}`（done 暂扣）交上层重试；
+ *   error 终态 / 已发卡的 done → 残片按现状放行（thinking）。
  */
 async function* consumeStreamLookingForInvalidCard(
   deepAgent: AgentService,
@@ -224,6 +268,9 @@ async function* consumeStreamLookingForInvalidCard(
   // the attempt immediately, so nothing after it is ever read.
   let pastFirstCard = false;
   let heldText = ""; // post-first-card prose, held until the verdict settles
+  // 卡型泄漏残片（Stage1 降级 thinking）——扣留至终态裁决：命中重试则由重试
+  // 轮重新产卡（残片不下发，等效从正文剥离）；其余终态按现状放行。
+  let leakFragments: string[] = [];
   for await (const event of stream) {
     if (event.type === "uiHint" && event.card !== undefined) {
       const result = validateUiHint(event.card);
@@ -281,14 +328,42 @@ async function* consumeStreamLookingForInvalidCard(
       }
       continue;
     }
-    // done / error / cardless uiHint — flush any held prose, pass through.
+    if (
+      event.type === "thinking" &&
+      !pastFirstCard &&
+      typeof event.text === "string" &&
+      isDegradedCardFragment(event.text)
+    ) {
+      // 卡型泄漏残片（首卡前到达）：扣留至终态裁决，不即时下发。重试成功则
+      // 由重试轮的合法卡替代（残片永不下发）；耗尽/异常终态再按现状放行。
+      // （首卡已发后的残片是冗余卡载荷——照现状即时放行 thinking，前端已有
+      // 卡时会静默摘除。）
+      leakFragments.push(event.text);
+      continue;
+    }
+    if (event.type === "done" && leakFragments.length > 0 && !pastFirstCard) {
+      // 终态泄漏裁决：本 Attempt 无卡可校验、降级残片自报卡型 → 走重试通道。
+      // done 暂扣不下发：重试成功则本轮作废；耗尽则上层补发残片 + done。
+      yield { kind: "leak", fragments: [...leakFragments] };
+      return;
+    }
+    // done / error / cardless uiHint / 非残片 thinking — flush any held
+    // prose, release held leak fragments (现状降级放行), pass through.
     if (heldText) {
       yield { kind: "event", event: { type: "token", text: heldText } };
       heldText = "";
     }
+    for (const frag of leakFragments) {
+      yield { kind: "event", event: { type: "thinking", text: frag } };
+    }
+    leakFragments = [];
     yield { kind: "event", event };
   }
   // Stream drained with no card (cardless chat turn) — flush remaining prose.
+  // 残片在无终态事件（异常流）下不触发重试，按现状降级放行。
+  for (const frag of leakFragments) {
+    yield { kind: "event", event: { type: "thinking", text: frag } };
+  }
   if (heldText) {
     yield { kind: "event", event: { type: "token", text: heldText } };
   }
@@ -396,6 +471,78 @@ export function buildFeedbackRequest(
         attempt,
         errors,
         rejectedCard,
+      },
+    },
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Leak-retry feedback builder（refs #73/#56 机制升级）
+// ---------------------------------------------------------------------------
+
+/** 泄漏重试的稳定错误码（区别于 Zod shape 错误；程序化消费方可识别）。 */
+export const CARD_LEAK_ERROR_CODE = "card_leak";
+
+/**
+ * Build a leak-retry correction request: the degraded fragment(s) + a
+ * structured fence-protocol error fed back to the agent.
+ *
+ * 与 {@link buildFeedbackRequest} 同构（只修卡不重写 / 基于原始请求瘦身 /
+ * 结构化 metadata 携带反馈），差异点：
+ *   - 错误是围栏协议违规而非 Zod shape 错误（任务书话术：卡片未按围栏协议
+ *     输出，请用 ```json 围栏重新输出完整卡片）；
+ *   - 残片是 parse 失败的破损 JSON，用无语言标注围栏承载（标 json 会误导
+ *     模型以为它是合法 JSON 示例）。
+ */
+export function buildLeakFeedbackRequest(
+  original: ChatRequest,
+  fragments: string[],
+  attempt: number,
+): ChatRequest {
+  const errors: StructuredError[] = [
+    {
+      code: CARD_LEAK_ERROR_CODE,
+      message:
+        "卡片未按围栏协议输出：卡片 JSON 出现在正文散文里（未用 ```json 围栏包裹，" +
+        "或语法破损/括号不闭合），无法被提取成卡片。请用 ```json 围栏重新输出完整卡片。",
+      path: [],
+    },
+  ];
+
+  const correction = [
+    "",
+    `--- uiHint validation feedback (attempt ${attempt} was rejected) ---`,
+    "Your uiHint card LEAKED into the prose: the card JSON was not wrapped in",
+    "a ```json fence (or its syntax was broken / braces unbalanced), so it",
+    "could NOT be extracted as a card and was downgraded. Re-emit the COMPLETE",
+    "card, wrapped in a json fence (```json ... ```).",
+    "HARD CONSTRAINTS — do not do anything else:",
+    "- Do NOT rewrite or repeat the surrounding prose.",
+    "- Do NOT re-call any tools.",
+    "- Do NOT re-read any skill files.",
+    "- Output a single card, nothing before or after the fence.",
+    "",
+    "Degraded fragment (verbatim — fix this exact card):",
+    "```",
+    fragments.join("\n\n"),
+    "```",
+    "Errors:",
+    errors
+      .map((e) => `- [${e.code}] at ${pathToString(e.path)}: ${e.message}`)
+      .join("\n"),
+    `Allowed types: ${ALLOWED_UIHINT_TYPES.join(", ")}.`,
+    `Blacklisted HITL types (never emit): ${BLACKLISTED_UIHINT_TYPES.join(", ")}.`,
+  ].join("\n");
+
+  return {
+    ...original,
+    message: `${original.message}\n${correction}`,
+    metadata: {
+      ...(original.metadata ?? {}),
+      uiHintValidationFeedback: {
+        attempt,
+        errors,
+        leakFragments: fragments,
       },
     },
   };

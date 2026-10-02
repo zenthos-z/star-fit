@@ -590,6 +590,69 @@ export function splitCardSegments(
 }
 
 // ---------------------------------------------------------------------------
+// Leak-fragment predicate — 终态降级片段识别（refs #73/#56 机制升级）
+// ---------------------------------------------------------------------------
+
+/**
+ * 卡型 type 字面量全集：后端校验白名单（ALLOWED_UIHINT_TYPES）+ 前端 LEGACY
+ * 别名（cardLeakRecovery 的 RECOVERABLE_CARD_TYPES 同源口径——plan/summary/
+ * survey/survey_success）。泄漏重试只认「自报卡型」的降级片段；工具返回
+ * JSON（如 list_exercises 行的 type:"compound"）不命中，不触发重试。
+ */
+const LEAK_CARD_TYPE_NAMES = new Set<string>([
+  ...ALLOWED_UIHINT_TYPES,
+  "plan",
+  "summary",
+  "survey",
+  "survey_success",
+]);
+
+/**
+ * 判定一段降级 `thinking` 文本是否为「卡片泄漏残片」——模型本轮意图发卡，
+ * 但卡片 JSON 写歪在正文（非围栏 / 语法破损 / 括号不闭合），被终态降级收起
+ * （emitOutsideResidual / 未闭合围栏路径，refs #73）的片段。
+ *
+ * 判定信号（逐顶层括号区，与 emitOutsideResidual 的裁决粒度一致）：
+ *   1. 区间自报已知卡型 type 字面量，或呈 `{type, data}` 卡协议形态
+ *      （type 值不在白名单也算发卡意图）；
+ *   2. 且该区间整体 JSON.parse 失败——能完整解析成卡的 JSON 不会被降级
+ *      （终态会转 uiHint），只可能出现在流层工具返回复述里（read_file 技能
+ *      文档示例卡的 isEcho 降级），复述不触发重试（否则无卡轮会被复述
+ *      误燃一轮重生成）。
+ *
+ * 散文括号（`{ 目标 }`）、工具行 JSON（type 非卡型、无 data）不命中。
+ */
+export function isDegradedCardFragment(text: string): boolean {
+  let i = 0;
+  for (;;) {
+    const brace = text.indexOf("{", i);
+    if (brace === -1) return false;
+    const end = matchBalancedBraces(text, brace, text.length);
+    const spanEnd = end === -1 ? text.length : end;
+    if (claimsBrokenCardShape(text.slice(brace, spanEnd))) {
+      return true;
+    }
+    if (end === -1) return false; // 未闭合区已吞到文末，后面没有独立区间了
+    i = end;
+  }
+}
+
+/** 单个括号区间的破损卡判定：自报卡型 + 整体 parse 失败。 */
+function claimsBrokenCardShape(span: string): boolean {
+  const claimed = /"type"\s*:\s*"([A-Za-z0-9_]+)"/.exec(span);
+  if (claimed === null) return false;
+  const knownCardIntent =
+    LEAK_CARD_TYPE_NAMES.has(claimed[1]!) || /"data"\s*:/.test(span);
+  if (!knownCardIntent) return false;
+  try {
+    JSON.parse(span);
+    return false; // 完整可解析的卡 JSON = 工具复述，不是降级残片
+  } catch {
+    return true; // 自报卡型但语法破损 —— 真·泄漏残片
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Public async-iterable transform
 // ---------------------------------------------------------------------------
 
