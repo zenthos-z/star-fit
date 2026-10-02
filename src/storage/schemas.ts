@@ -165,6 +165,11 @@ export const Keys = {
   // 设备级 localStorage 键，与 starfit_logged_out 同为跨登出存活——LoginV2
   // 在回调 onLogin 前已把 IDB 凭据覆写为新用户，切号探测只能依赖此键。
   lastUserId: "starfit_last_user_id",
+  // [#108 机制二] 服务器归属记录：跨登出存活的 localStorage 键。登录成功时
+  // 比对本次 serverUrl，变化 → 用户数据缓存整体作废（换了服务器 = 换了数据
+  // 宇宙）。不能用 IDB 凭据 / localStorage 镜像做基准——两者在 logout 时都会
+  // 被清，而「登出 → 换 IP 重登」正是本机制要覆盖的主场景。
+  lastServerUrl: "starfit_last_server_url",
   // Chat Thread Management
   chatThreadList: (sessionId: string) => `chat_thread_list:${sessionId}`,
   chatMessages: (threadId: string) => `chat_messages:${threadId}`

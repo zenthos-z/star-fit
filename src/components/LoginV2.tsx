@@ -27,7 +27,8 @@ import {
   saveLoginCredentials,
   loadLoginCredentials,
   loadServerHistory,
-  addServerToHistory
+  addServerToHistory,
+  invalidateUserDataOnServerChange
 } from '@/storage';
 import { getAccessToken, setAccessToken } from '@/services/geminiService';
 import QRScanner from './QRScanner';
@@ -488,6 +489,10 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
 
       // 保存凭据（token 存 localStorage，getHeaders 自动携带）
       setAccessToken(accessToken.trim() || null);
+      // #108 机制二：登录时服务器变更 → 用户数据缓存整体作废（history/动作库/
+      // 计划/会话草稿等；设备级键豁免）。必须在覆写 IDB 凭据与 onLogin 之前
+      // await——App 的 onLogin 回调随即 reload，异步作废会与 reload 竞态。
+      await invalidateUserDataOnServerChange(serverUrl);
       await saveLoginCredentials(finalUserId, serverUrl);
       // 登录名（用户手输的 ID / 后端 displayName）单独留存：诊断页展示用，
       // 区别于内部 UUID。自动登录走 UUID 时此处不执行，由诊断页画像 API 兜底。
