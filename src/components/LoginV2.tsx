@@ -7,7 +7,7 @@
  * - User ID input with dropdown selection
  * - Integrated scan button inside input field
  * - Scanning animation with spinner
- * - 多命中列出全部供选择，单命中自动连接（#84 多后端共存场景）
+ * - 扫描任何命中（含单条）都弹选择列表，来源标注局域网/公网（#84：选择权交还用户）
  * - 自动登录连接失败自动重扫：单命中重连，多命中带提示重选
  * - Auto-discover LAN servers
  * - Integration with L2 IDB storage
@@ -20,7 +20,8 @@ import {
   detectServers,
   checkServerHealth,
   formatServerUrl,
-  parseServerInput
+  parseServerInput,
+  isLanUrl
 } from '@/services/serverDetector';
 import {
   saveLoginCredentials,
@@ -350,12 +351,8 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
         // 未命中：静默收场，不弹错误——用户直接在输入框手输 IP 即可
         return;
       }
-      if (hits.length === 1) {
-        // 单命中：自动连接，不再让用户多点一次
-        connectToServer(hits[0]);
-        return;
-      }
-      // 多命中：列出全部供选择（多后端共存场景）
+      // 任何命中（含单条）都弹选择列表，不自动连接（#84：公网隧道与局域网
+      // 后端共存时选择权必须交还用户，禁止替用户填地址）
       setDiscoveredServers(hits);
       setShowServerList(true);
     } catch (e) {
@@ -805,9 +802,12 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
                             {formatServerUrl(server.url)}
                           </p>
                           <p className="text-[10px] text-gray-400 mt-1">
-                            {server.latency !== undefined && <span>{server.latency}ms</span>}
+                            <span className={isLanUrl(server.url) ? 'text-emerald-600' : 'text-gray-400'}>
+                              {isLanUrl(server.url) ? '局域网' : '公网'}
+                            </span>
+                            {server.latency !== undefined && <span className="ml-2">{server.latency}ms</span>}
                             {server.version && (
-                              <span className={server.latency !== undefined ? 'ml-2' : ''}>
+                              <span className="ml-2">
                                 v{server.version}
                               </span>
                             )}
