@@ -55,6 +55,37 @@ interface User {
 /** 下拉列表展示/登录用的用户标识：username 兜底 display_name */
 const getUserLabel = (u: User): string => u.username || u.display_name || '';
 
+// ========== [#115 ②] 跨 reload 自动登录防循环闸 ==========
+// autoLoginAttemptedRef 是 mount 级 ref，跨整页 reload 归零，对「自动登录成功
+// → reload → 再自动登录」的循环无防护。sessionStorage 计数跨 reload 存活、
+// 随 WebView 进程结束清零（= 同一次开机）：同次开机自动登录尝试 ≥2 次即停用，
+// 停在已填表单——任何残余循环形态都降级为「慢」而不是疯闪。登录成功清除计数。
+
+/** sessionStorage 计数键（导出供测试直接操纵） */
+export const AUTO_LOGIN_COUNT_KEY = 'starfit_autologin_count';
+/** 同一次开机允许的自动登录尝试上限（第 3 次尝试被闸拦下） */
+export const AUTO_LOGIN_MAX_ATTEMPTS = 2;
+
+export function getAutoLoginAttempts(): number {
+  try {
+    return parseInt(sessionStorage.getItem(AUTO_LOGIN_COUNT_KEY) || '0', 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+function bumpAutoLoginAttempts(): void {
+  try {
+    sessionStorage.setItem(AUTO_LOGIN_COUNT_KEY, String(getAutoLoginAttempts() + 1));
+  } catch { /* 隐私模式等存储禁用：闸失效但绝不阻断登录 */ }
+}
+
+export function clearAutoLoginGate(): void {
+  try {
+    sessionStorage.removeItem(AUTO_LOGIN_COUNT_KEY);
+  } catch { /* 同上 */ }
+}
+
 // Chevron Down Icon
 const ChevronDownIcon = ({ className }: { className?: string }) => (
   <svg
@@ -272,10 +303,18 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
   // 第一次使用（无凭据）不受影响 —— 手动输入 / 点放大镜扫描。
   // 连接不可达时自动重扫：单命中自动重连，多命中弹选择列表
   // （附「上次连接的地址已不可用」提示），零命中停在表单走手输路径。
+  // [#115 ②] 跨 reload 防循环闸：sessionStorage 计数 ≥2 次即停用自动登录，
+  // 停在已填表单（autoLoginAttemptedRef 只防页内重入，跨 reload 归零无效）。
   useEffect(() => {
     if (!hydrated || autoLoginAttemptedRef.current) return;
     autoLoginAttemptedRef.current = true;
     if (!serverIp.trim() || !userId.trim()) return; // 第一次使用：什么都不做
+    if (getAutoLoginAttempts() >= AUTO_LOGIN_MAX_ATTEMPTS) {
+      console.warn('[LoginV2] Auto-login gated: too many attempts in this app session (#115)');
+      setAutoLoginStatus('failed'); // 停在已填好的表单，等用户手动
+      return;
+    }
+    bumpAutoLoginAttempts();
     setAutoLoginStatus('connecting');
     loginWithCredentials(serverIp, userId, true).then((ok) => {
       if (!ok && autoFailKindRef.current === 'unreachable') {
@@ -489,9 +528,31 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
 
       // 保存凭据（token 存 localStorage，getHeaders 自动携带）
       setAccessToken(accessToken.trim() || null);
+
+      // [#115 ⑤·RC2] 登录成功后新 token 轻量探活：login-or-create 通过 ≠ 网关
+      // 对其余路由放行（后端日志实锤：token 网关下 login-or-create 自身 401；
+      // 窄窗口下也可能「登录 200 → 业务 401 → #108 拦截器登出 reload」循环）。
+      // 用同一令牌对受保护路由做一次轻量 GET，失败 → 停在表单报错，不进主界面。
+      const probeRes = await fetch(`${serverUrl}/admin/users`, {
+        method: 'GET',
+        headers: {
+          'Accept': 'application/json',
+          ...(accessToken.trim() ? { 'X-Access-Token': accessToken.trim() } : {})
+        },
+        signal: AbortSignal.timeout(3000)
+      });
+      if (!probeRes.ok) {
+        throw new Error(
+          probeRes.status === 401
+            ? '访问令牌验证失败，请检查令牌后重试'
+            : '服务器连接验证失败，请重试'
+        );
+      }
+
       // #108 机制二：登录时服务器变更 → 用户数据缓存整体作废（history/动作库/
       // 计划/会话草稿等；设备级键豁免）。必须在覆写 IDB 凭据与 onLogin 之前
-      // await——App 的 onLogin 回调随即 reload，异步作废会与 reload 竞态。
+      // await——App 的 onLogin 回调在服务器变更时仍会受控 reload（#115 ①），
+      // 异步作废会与 reload 竞态。
       await invalidateUserDataOnServerChange(serverUrl);
       await saveLoginCredentials(finalUserId, serverUrl);
       // 登录名（用户手输的 ID / 后端 displayName）单独留存：诊断页展示用，
@@ -500,6 +561,9 @@ const LoginV2: React.FC<LoginProps> = ({ onLogin }) => {
         localStorage.setItem('starfit_login_username', data.displayName || uid);
       } catch { /* 忽略隐私模式 */ }
       await addServerToHistory(serverUrl, healthCheck.latency);
+
+      // [#115 ②] 登录成功清除防循环闸计数（本次会话已有可用登录，计数归零）
+      clearAutoLoginGate();
 
       onLogin(finalUserId, serverUrl);
       return true;
