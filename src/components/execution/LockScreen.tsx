@@ -8,6 +8,7 @@ import { LOCK_MOTION } from './lockMotion';
 import { isWatchBridge, onWatchEvent, type WatchEvent } from '../../services/watchConnectivity';
 import { useLoadAnchors } from '../../hooks/useLoadAnchors';
 import { getUserId } from '@/services';
+import { PICKER_EXERCISES } from '../picker/pickerData';
 import type { Exercise, ExerciseType } from '@/src/types/legacy';
 
 /**
@@ -133,11 +134,17 @@ const HoldCircle: React.FC<{
 };
 
 /**
- * 锁定训练屏 v6（2026-09-17 用户拍板：锁屏交互重构）：
+ * 锁定训练屏 v7（#127，2026-10-03：区带布局 + 主钮同位 + 动作预览图）：
  * - 进入：训练中把计时胶囊往下滑（TimerCapsule 手势，不变）
  * - 解锁：上滑时间胶囊，Android 返回键保留为逃生通道
- * - 布局三段式：上方=时间胶囊（17%），中间=信息视窗（固定 340×300 圆角玻璃窗），下方=交互按钮（拇指黄金区）
- * - ★时间胶囊交互（v6 重构，与未锁屏态区分）：
+ * - 布局三区带（v7 flex 列化）：顶部留白 17% → 胶囊带（flex-none）→ 信息带（flex-1，
+ *   340×272 玻璃窗带内居中、小屏 maxHeight 收窗）→ 按钮带（flex-none 恒高 172，
+ *   底锚 safe-bottom+170）。三带互斥，信息再增多也不挤压/重叠按钮（#127 ①）
+ * - ★主钮同位（v7）：主按钮（白色大钮）恒压按钮带底——「完成第 N 组」「结束休息」
+ *   「结束并记录」跨状态底边几何恒定；双钮态副按钮向上生长
+ * - ★动作预览图（v7 最小实现）：运动态名行内当前动作小图、休息态「接下来」行内下一动作
+ *   小图（库3 R2 封面，无图/加载失败回退首字占位）
+ * - ★时间胶囊交互（v6，不变）：
  *   a) 单击不暂停（锁屏防误触）；长按 700ms → 暂停 + 胶囊原地展开成控制条
  *   b) 控制条：左「结束」红钮 / 中时间 / 右「继续」蓝钮，两钮均为环形进度长按激活
  *   c) 上滑解锁手势不受影响（位移>10px 自动作废长按）；控制条展开时轻点胶囊可收起
@@ -201,6 +208,56 @@ const TYPE_DOT: Record<string, string> = {
   weight_only: '#F87171',
   reps_only: '#F87171',
   outdoor: '#34D399'
+};
+
+// ---- 动作预览图（#127 最小实现，2026-10-03）----
+// 链路核结论：LockScreen 此前无任何渲染代码（三分支之「无代码→补最小实现」）。
+// 素材真源 = 库3 R2 CDN 3D 封面（PICKER_LIBRARY 354 条，经 pickerData.sanitizeThumbnail
+// 只放行 r2.dev；库1 真人照 URL 用户拍板不要）。会话 Exercise 自身不带缩略图，
+// 但库内动作 session Exercise.id = 库行 id（usePickerEntryConfirm 约定），直查打包
+// 进端的库索引即可；自建/AI 计划动作查不到 → 首字占位（禁空白塌陷）。
+const THUMB_BY_ID = new Map(PICKER_EXERCISES.map(p => [p.id, p.thumbnail]));
+
+/** metadata.thumbnail 直供位只放行 R2 封面域（与 pickerData.sanitizeThumbnail 同语义：
+ *  库1 真人照 URL 即便混入也不准入） */
+const r2PosterOnly = (url: unknown): string =>
+  typeof url === 'string' && url.includes('r2.dev/exercise-posters/') ? url : '';
+
+/** 动作 → 预览图 URL：metadata 直供优先，否则按 id/libraryId 查库3索引；无则空串（占位） */
+export const resolveExerciseThumb = (ex?: Exercise | null): string => {
+  if (!ex) return '';
+  const direct = r2PosterOnly(ex.metadata?.thumbnail);
+  if (direct) return direct;
+  return THUMB_BY_ID.get(ex.id) ?? THUMB_BY_ID.get(ex.libraryId) ?? '';
+};
+
+/**
+ * 动作小图（36px 圆角）：有图渲染缩略、加载失败回退首字占位，
+ * 无图直接占位——与 ExercisePickerModal.CoverThumb 同语义（onError 降级，禁空白塌陷）。
+ */
+const ActionThumb: React.FC<{ name: string; src?: string }> = ({ name, src }) => {
+  const [failed, setFailed] = useState(false);
+  const show = !!src && !failed;
+  if (!show) {
+    return (
+      <span
+        data-testid="action-thumb-placeholder"
+        className="w-9 h-9 rounded-[12px] bg-white/10 border border-white/10 flex items-center justify-center shrink-0 text-white/50 text-[15px] font-bold"
+      >
+        {name.slice(0, 1)}
+      </span>
+    );
+  }
+  return (
+    <img
+      data-testid="action-thumb"
+      src={src}
+      alt=""
+      loading="lazy"
+      onError={() => setFailed(true)}
+      className="w-9 h-9 rounded-[12px] object-cover object-center bg-white/10 border border-white/10 shrink-0"
+    />
+  );
 };
 
 // 训练态计时胶囊的中心 y（TimerCapsule：top = safe-top + 12px，高 64 → 中心 = safe-top + 44）
@@ -449,12 +506,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   }, [focus, currentEx]);
 
   // 动作间休息前瞻：rest 态时找下一个还有未完成组的动作（跳过当前动作）。
-  // 显示在信息区（用户拍板 2026-09-16：前瞻信息归信息区，不进按钮）。
-  const nextExerciseName = useMemo(() => {
+  // 显示在信息区（用户拍板 2026-09-16：前瞻信息归信息区，不进按钮）；
+  // #127 起带动作预览小图，故返回动作对象（名字 + 缩略图查询键）。
+  const nextExercise = useMemo<Exercise | null>(() => {
     if (focus.kind !== 'rest') return null;
     for (const ex of exercises) {
       if (ex.id === focus.exId) continue;
-      if (ex.sets.some((s: any) => !isSetDone(s))) return ex.name;
+      if (ex.sets.some((s: any) => !isSetDone(s))) return ex;
     }
     return null; // 没有下一动作（当前是最后一个）→ 不显示
   }, [focus, exercises]);
@@ -522,19 +580,23 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     }
 
     if (focus.kind === 'rest') {
-      // 2026-09-17 用户反馈：+10 秒压在「结束休息」上方会占用信息栏高度并导致文字重叠，
-      // 改为主按钮「结束休息」在上、副按钮「+10 秒」垫底（2026-09-17 二次反馈后定稿）
+      // #127（2026-10-03 真机反馈）：主按钮「结束休息」必须与训练态主按钮「完成第 N 组」
+      // 同位——副按钮「+10 秒」回到上方、主钮压底（与倒计时态同构）。旧排法（主钮在上、
+      // 副钮垫底）让休息态白色大按钮整体上浮 80px 与信息窗交错；旧「+10 秒在上顶信息栏」
+      // 的顾虑由区带分离根治（信息窗在 flex 带内居中，几何上不再可能压进按钮带）。
+      // 恒高 172 + 底对齐容器保证：主钮底边在所有状态几何恒定（单钮=唯一子节点，
+      // 双钮=副钮向上生长），拇指肌肉记忆不失效。
       return (
-        <div className="flex flex-col gap-4">
-          <HoldToConfirm
-            variant="primary"
-            label="结束休息"
-            onConfirm={() => onEndRest(focus.exId, focus.setId)}
-          />
+        <div className="flex flex-col gap-4" data-testid="lock-button-stack">
           <HoldToConfirm
             variant="secondary"
             label="+10 秒"
             onConfirm={() => onExtendRest(focus.exId, focus.setId, 10)}
+          />
+          <HoldToConfirm
+            variant="primary"
+            label="结束休息"
+            onConfirm={() => onEndRest(focus.exId, focus.setId)}
           />
         </div>
       );
@@ -543,7 +605,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     if (focus.kind === 'countdown' && counting) {
       // 同休息态：副按钮（放弃）在上、主按钮（结束并记录）压底，主钮位置恒定
       return (
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-4" data-testid="lock-button-stack">
           <HoldToConfirm
             variant="secondary"
             label="放弃本次"
@@ -565,21 +627,25 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
     if (focus.kind === 'countdown') {
       return (
-        <HoldToConfirm
-          variant="primary"
-          label={`开始第 ${focus.setNo} 组 · ${focus.target}s`}
-          onConfirm={() => setCounting({ exId: focus.exId, setId: focus.setId, startedAt: Date.now(), target: focus.target })}
-        />
+        <div data-testid="lock-button-stack">
+          <HoldToConfirm
+            variant="primary"
+            label={`开始第 ${focus.setNo} 组 · ${focus.target}s`}
+            onConfirm={() => setCounting({ exId: focus.exId, setId: focus.setId, startedAt: Date.now(), target: focus.target })}
+          />
+        </div>
       );
     }
 
     // confirm：力量/户外确认当前组
     return (
-      <HoldToConfirm
-        variant="primary"
-        label={`完成第 ${focus.setNo} 组`}
-        onConfirm={() => onCompleteSet(focus.exId, focus.setId)}
-      />
+      <div data-testid="lock-button-stack">
+        <HoldToConfirm
+          variant="primary"
+          label={`完成第 ${focus.setNo} 组`}
+          onConfirm={() => onCompleteSet(focus.exId, focus.setId)}
+        />
+      </div>
     );
   };
 
@@ -612,6 +678,9 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     const heroValue = isRest ? fmt(restRemaining) : isCounting ? fmt(countRemaining!) : null;
     // 运动态无 hero 数字时，动作名升为主视觉（与倒计时同级大字）
     const heroIsName = !isRest && !isCounting;
+    // #127 动作预览小图：运动态 = 当前动作（名行内）；休息态 = 下一动作（「接下来」行内）
+    const currentThumb = resolveExerciseThumb(currentEx);
+    const nextThumb = resolveExerciseThumb(nextExercise);
 
     return (
       <div className="flex flex-col items-center gap-2 px-3 w-full">
@@ -637,10 +706,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           </span>
         )}
 
-        {/* ③ 动作名：休息态作次级说明；运动态（力量）作主视觉 */}
-        <span className={`font-bold text-white leading-tight text-center max-w-[92%] truncate ${heroIsName ? 'text-[30px]' : 'text-[20px] text-white/85'}`}>
-          {focus.exName}
-        </span>
+        {/* ③ 动作名 + 动作小图：休息态作次级说明（无图，预览归「接下来」行）；
+            运动态（力量）作主视觉并带当前动作预览小图（#127） */}
+        <div className="flex items-center justify-center gap-2 max-w-[92%] min-w-0">
+          {!isRest && <ActionThumb name={focus.exName} src={currentThumb} />}
+          <span className={`font-bold text-white leading-tight text-center truncate ${heroIsName ? 'text-[30px]' : 'text-[20px] text-white/85'}`}>
+            {focus.exName}
+          </span>
+        </div>
 
         {/* ④ 当前组参数行：休息态 = 刚完成组；运动态 = 当前组（窗内紧凑字号） */}
         {setParams && (
@@ -654,11 +727,18 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           </div>
         )}
 
-        {/* ④b 动作间休息前瞻（仅 rest 态且有下一动作时）：窗内预告下一个动作 */}
-        {isRest && nextExerciseName && (
-          <span className="text-[14px] font-medium text-white/55">
-            接下来 · <span className="text-white/85 font-semibold">{nextExerciseName}</span>
-          </span>
+        {/* ④b 动作间休息前瞻（仅 rest 态且有下一动作时）：窗内预告下一个动作 + 预览小图（#127，
+            有图渲染 R2 封面、无图/加载失败回退首字占位——禁空白塌陷） */}
+        {isRest && nextExercise && (
+          <div
+            data-testid="lock-next-preview"
+            className="flex items-center justify-center gap-2 max-w-full min-w-0"
+          >
+            <ActionThumb name={nextExercise.name} src={nextThumb} />
+            <span className="truncate text-[14px] font-medium text-white/55">
+              接下来 · <span className="text-white/85 font-semibold">{nextExercise.name}</span>
+            </span>
+          </div>
         )}
 
         {/* ⑤ 组进度：单组动作不显示 */}
@@ -731,7 +811,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.25 }}
-      className="fixed inset-0 z-[140]"
+      className="fixed inset-0 z-[140] flex flex-col"
       style={{
         touchAction: 'none',
         // 锁定屏防误触根基：禁文本选择 + 禁 iOS 长按系统菜单（拷贝/查询/翻译），
@@ -771,12 +851,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         <span className="text-[12px] font-medium text-white/40">上滑解锁</span>
       </motion.div>
 
-      {/* 【上方】时间胶囊（stage 0）：入场 morph（从小胶囊原位放大滑到锁定位）+ 跟手拖拽 + 统一弹簧。
+      {/* 【上方·胶囊带】区带化（#127）：根容器改 flex 列布局，三带互斥——信息带 flex-1 吃掉
+          胶囊带与按钮带之间的全部剩余空间，几何上不可能再重叠（旧 43% 屏高锚在小于
+          iPhone 11 的屏上会压进按钮带）。顶部留白带 = 17% 屏高（与旧 top:17% 同锚，
+          胶囊 morph 起点 window.innerHeight*0.17 与之对应）。
+          时间胶囊（stage 0）：入场 morph（从小胶囊原位放大滑到锁定位）+ 跟手拖拽 + 统一弹簧。
           定位层 / 拖拽层 / motion 层分离（motion 会覆写 transform） */}
-      <div
-        className="absolute inset-x-0 flex flex-col items-center"
-        style={{ top: '17%' }}
-      >
+      <div className="flex-none w-full" style={{ height: '17%' }} />
+      {/* ★relative：容器须为定位元素——暗场是 absolute 兄弟节点，static 子树的普通文本
+          会画进暗场之下（胶囊时间文字隐形的实锤坑）；定位后整棵子树回到暗场上方 */}
+      <div className="relative flex-none flex flex-col items-center">
         <motion.div
           animate={{ y: dragY, scale: capsulePressed && dragY === 0 ? LOCK_MOTION.pressScale : 1 }}
           transition={LOCK_MOTION.spring}
@@ -855,18 +939,19 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         </motion.div>
       </div>
 
-      {/* 【中间】信息视窗（stage 1）：★固定圆角玻璃窗（340×272，2026-09-17 用户拍板+重叠修正：
-          300→272、top 46%→43%——iPhone 11 896pt 屏上 300 高窗底(≈562)与按钮区顶(=554)静止态即重叠 8px，
-          休息态双钮时副按钮撞进窗内（用户实锤）。272 高信息内容(≈246)仍放得下，与胶囊/按钮均留 13px+ 间隙）——
+      {/* 【中间·信息带】信息视窗（stage 1）：★固定圆角玻璃窗（340×272，2026-09-17 用户拍板）。
+          #127 区带化：窗在 flex-1 信息带内居中（不再锚 43% 屏高），与胶囊带/按钮带各留天然间隙；
+          小屏带高不足 272 时 maxHeight 收窗（内容居中裁剪，设计的降级形态），永不溢出压带——
           所有状态（运动/休息/倒计时/全部完成）共用同一视窗排版，内容在窗内居中、
           超出裁剪（overflow hidden），状态切换 = 交叉溶解（AnimatePresence popLayout） */}
       <motion.div
-        className="absolute inset-x-0 flex justify-center"
-        style={{ top: '43%', transform: 'translateY(-50%)' }}
+        data-testid="lock-info-band"
+        className="flex-1 min-h-0 flex justify-center items-center"
       >
         <div
+          data-testid="lock-info-window"
           className="rounded-[28px] border border-white/10 bg-white/[0.06] overflow-hidden"
-          style={{ width: 340, height: 272, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+          style={{ width: 340, height: 272, maxHeight: '100%', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.div
@@ -880,13 +965,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         </div>
       </motion.div>
 
-      {/* 【下方】交互按钮区：★固定锚位——容器恒高 172px（主92+间距16+副64），内容底对齐。
-          单/双按钮状态切换时主按钮位置纹丝不动（双钮向上生长），拇指肌肉记忆不失效 */}
+      {/* 【下方·按钮带】交互按钮区：★固定区带——恒高 172px（副64+间距16+主92），内容底对齐，
+          底锚 safe-bottom+170 不变。#127 主钮语义收口：主按钮（白色大钮）恒压底——
+          训练态「完成第 N 组」、休息态「结束休息」、倒计时态「结束并记录」底边几何恒定，
+          两态切换不跳位；双钮时只有副按钮向上生长 */}
       <div
-        className="absolute inset-x-0 flex justify-center items-end"
+        data-testid="lock-button-band"
+        className="flex-none flex justify-center items-end"
         style={{
-          bottom: 'calc(var(--safe-bottom, 0px) + 170px)',
-          height: 172
+          height: 172,
+          marginBottom: 'calc(var(--safe-bottom, 0px) + 170px)'
         }}
       >
         {/* ★恒定高度 172 + 内容底对齐：主按钮底边在所有状态（rest 双钮 / confirm 单钮 /
