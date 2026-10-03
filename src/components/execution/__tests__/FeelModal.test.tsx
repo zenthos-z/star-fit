@@ -1,17 +1,21 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, fireEvent, act } from '@testing-library/react';
-import { FeelModal, type FeelModalTarget, type FeelPatch } from '../FeelModal';
+import FeelModal from '../FeelModal';
+import type { FeelModalTarget, FeelConfirmPatch } from '../feelGate';
 import { ExerciseSetEntrySchema } from 'shared/contracts';
 
 /**
- * 组后感受弹窗测试（issue #98）：
- * - 滑块值绑定 feel 契约范围 0-100（含闭区间端点，payload 过 ExerciseSetEntrySchema 校验）
- * - 空备注不写 feel_note、有备注原样携带（≤500 契约约束）
- * - 跳过路径：不写任何字段直接关（onSkip 且 onConfirm 不触发）
+ * 组后感受聚合表单测试（issue #98 v2，2026-10-01 重设计；同日返工闸门改窄卡）：
+ * - N 行聚合渲染：每行一条滑块（等宽组号徽章 + 参数摘要），已填组回显、未填默认 50
+ * - 批量确认：右上角对勾一次提交全部行（exId+setId+feel 定位写回，payload 过契约校验）
+ * - 动作级语义补充：语音/文本 note 只写收尾组 feel_note（≤500 契约约束），空 note 不写字段
+ * - 跳过路径：点外部区域 = 跳过，不写任何字段直接关（onSkip 且 onConfirm 不触发）
  * - 语音按钮：触发转写链路（权限→启动→partial 轮询回填→停止取最终文本），
  *   mock 的是 @ 对话框同源 speechInput 模块；web（不支持）时入口隐藏
  * - 卸载兜底清理录音会话
+ * 纯函数层（触发判定/闸门扫描/批量写回）另见 feelGate.test.ts；
+ * 结算闸门窄卡（FeelGateAlert，只分流不写值）另见 FeelGateAlert.test.tsx。
  */
 
 // speechInput 是 Capacitor 桥模块（jsdom 为 web 环境全 null），整体 mock 掉；
@@ -27,42 +31,63 @@ const speechMocks = vi.hoisted(() => ({
 
 vi.mock('../../../lib/speechInput', () => speechMocks);
 
-const target: FeelModalTarget = {
-  exId: 'ex-1',
-  setId: 'set-2',
-  exName: '杠铃卧推',
-  setNo: 2,
-  total: 4,
+/** 3 组动作、第 1 组已填 70（回显），第 2/3 组未填（默认 50） */
+const actionTarget: FeelModalTarget = {
+  groups: [{
+    exId: 'ex-1',
+    exName: '杠铃卧推',
+    sets: [
+      { setId: 'set-1', setNo: 1, weight: 60, reps: 8, feel: 70 },
+      { setId: 'set-2', setNo: 2, weight: 60, reps: 8 },
+      { setId: 'set-3', setNo: 3, weight: 60, reps: 8 },
+    ],
+  }],
 };
 
-const renderModal = (onConfirm = vi.fn(), onSkip = vi.fn()) => {
-  const utils = render(
-    <FeelModal target={target} onConfirm={onConfirm} onSkip={onSkip} />,
-  );
-  const slider = utils.getByLabelText('感受强度') as HTMLInputElement;
-  const confirmBtn = utils.getByRole('button', { name: '记下这组' });
-  const skipBtn = utils.getByRole('button', { name: '跳过' });
-  return { slider, confirmBtn, skipBtn, onConfirm, onSkip, ...utils };
+/** 多动作补记目标（闸门[去补记]携多组进来）：分组段标语义 */
+const multiTarget: FeelModalTarget = {
+  groups: [
+    {
+      exId: 'ex-1',
+      exName: '杠铃卧推',
+      sets: [
+        { setId: 'set-2', setNo: 2, weight: 60, reps: 8 },
+        { setId: 'set-3', setNo: 3, weight: 60, reps: 8 },
+      ],
+    },
+    { exId: 'ex-2', exName: '杠铃划船', sets: [{ setId: 'set-b1', setNo: 1, weight: 40, reps: 10 }] },
+  ],
 };
 
-/** 把滑块拖到指定值并确认，返回 onConfirm 收到的 patch */
-const dragAndConfirm = (utils: ReturnType<typeof renderModal>, value: number): FeelPatch => {
+const renderModal = (target: FeelModalTarget, onConfirm = vi.fn(), onSkip = vi.fn()) => {
+  const utils = render(<FeelModal target={target} onConfirm={onConfirm} onSkip={onSkip} />);
+  return { onConfirm, onSkip, ...utils };
+};
+
+const getSliders = (utils: ReturnType<typeof renderModal>) =>
+  utils.getAllByRole('slider') as HTMLInputElement[];
+
+/** 把第 n 条滑块（1-based）拖到指定值 */
+const dragRow = (utils: ReturnType<typeof renderModal>, rowNo: number, value: number) => {
   act(() => {
-    fireEvent.change(utils.slider, { target: { value: String(value) } });
+    fireEvent.change(getSliders(utils)[rowNo - 1], { target: { value: String(value) } });
   });
+};
+
+const confirmAction = (utils: ReturnType<typeof renderModal>) => {
   act(() => {
-    fireEvent.click(utils.confirmBtn);
+    fireEvent.click(utils.getByRole('button', { name: '确认记录全部组感受' }));
   });
-  return utils.onConfirm.mock.calls[0][0] as FeelPatch;
+  return utils.onConfirm.mock.calls[0][0] as FeelConfirmPatch[];
 };
 
 /** 契约绑定校验：feel/feel_note 子集必须过 ExerciseSetEntrySchema（0-100 int / ≤500 字符） */
-const expectContractValid = (patch: FeelPatch) => {
+const expectContractValid = (patch: FeelConfirmPatch) => {
   const parsed = ExerciseSetEntrySchema.pick({ feel: true, feel_note: true }).safeParse(patch);
   expect(parsed.success).toBe(true);
 };
 
-describe('FeelModal（组后感受弹窗 #98）', () => {
+describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
   beforeEach(() => {
     vi.useFakeTimers();
     speechMocks.isSpeechInputSupported = true;
@@ -76,72 +101,105 @@ describe('FeelModal（组后感受弹窗 #98）', () => {
     vi.useRealTimers();
   });
 
-  describe('滑块值绑定 feel 契约（0-100 int 原值）', () => {
-    it('默认值 50（中立，一拖即达）', () => {
-      const { slider } = renderModal();
-      expect(slider.value).toBe('50');
+  describe('聚合渲染（N 行滑块）', () => {
+    it('动作全部组各一行滑块，等宽组号徽章 + 参数摘要齐备', () => {
+      const utils = renderModal(actionTarget);
+      expect(getSliders(utils)).toHaveLength(3);
+      expect(utils.getByText('01')).toBeTruthy();
+      expect(utils.getByText('02')).toBeTruthy();
+      expect(utils.getByText('03')).toBeTruthy();
+      expect(utils.getAllByText('60kg × 8次')).toHaveLength(3);
     });
 
-    it('拖到 73 确认 → onConfirm 收到 feel=73 且过契约校验', () => {
-      const utils = renderModal();
-      const patch = dragAndConfirm(utils, 73);
-      expect(patch).toEqual({ feel: 73 });
-      expectContractValid(patch);
+    it('已填组回显原值，未填组默认 50', () => {
+      const utils = renderModal(actionTarget);
+      const sliders = getSliders(utils);
+      expect(sliders[0].value).toBe('70');
+      expect(sliders[1].value).toBe('50');
+      expect(sliders[2].value).toBe('50');
     });
 
-    it.each([0, 100])('闭区间端点 feel=%s 合法并过契约校验', (value) => {
-      const utils = renderModal();
-      const patch = dragAndConfirm(utils, value);
-      expect(patch.feel).toBe(value);
-      expectContractValid(patch);
-    });
-
-    it('范围外的输入被夹回 0-100（防御层，契约红线）', () => {
-      const utils = renderModal();
-      act(() => {
-        fireEvent.change(utils.slider, { target: { value: '150' } });
-      });
-      act(() => {
-        fireEvent.change(utils.slider, { target: { value: '-5' } });
-      });
-      // range input 自身钳制：浏览器把越界值夹到 min/max
-      expect(Number(utils.slider.value)).toBeLessThanOrEqual(100);
-      expect(Number(utils.slider.value)).toBeGreaterThanOrEqual(0);
+    it('闭区间端点 0/100 拖动后原值写回（契约红线）', () => {
+      const utils = renderModal(actionTarget);
+      dragRow(utils, 2, 0);
+      dragRow(utils, 3, 100);
+      const patches = confirmAction(utils);
+      expect(patches.find(p => p.setId === 'set-2')?.feel).toBe(0);
+      expect(patches.find(p => p.setId === 'set-3')?.feel).toBe(100);
     });
   });
 
-  describe('语义补充（feel_note）', () => {
-    it('有备注 → 原样携带且过契约校验', () => {
-      const utils = renderModal();
+  describe('批量确认（一次写回全部行）', () => {
+    it('确认 → onConfirm 收到全部 N 行补丁，exId+setId 定位，拖动值生效，payload 过契约校验', () => {
+      const utils = renderModal(actionTarget);
+      dragRow(utils, 2, 73);
+      const patches = confirmAction(utils);
+      expect(patches).toHaveLength(3);
+      expect(patches.map(p => p.setId)).toEqual(['set-1', 'set-2', 'set-3']);
+      expect(patches[0]).toMatchObject({ exId: 'ex-1', setId: 'set-1', feel: 70 }); // 已填组原值回写
+      expect(patches[1]).toMatchObject({ exId: 'ex-1', setId: 'set-2', feel: 73 });
+      patches.forEach(expectContractValid);
+    });
+
+    it('未拖动的行提交默认 50（聚合补记语义）', () => {
+      const utils = renderModal(actionTarget);
+      const patches = confirmAction(utils);
+      expect(patches.map(p => p.feel)).toEqual([70, 50, 50]);
+    });
+
+    it('语义补充只写收尾组 feel_note，原样携带且过契约校验', () => {
+      const utils = renderModal(actionTarget);
       act(() => {
         fireEvent.change(utils.getByLabelText('感受补充说明'), {
           target: { value: '左肩有点疼，力量比上周大' },
         });
       });
-      const patch = dragAndConfirm(utils, 42);
-      expect(patch).toEqual({ feel: 42, feel_note: '左肩有点疼，力量比上周大' });
-      expectContractValid(patch);
+      dragRow(utils, 3, 42);
+      const patches = confirmAction(utils);
+      expect(patches[0].feel_note).toBeUndefined();
+      expect(patches[1].feel_note).toBeUndefined();
+      expect(patches[2]).toEqual({ exId: 'ex-1', setId: 'set-3', feel: 42, feel_note: '左肩有点疼，力量比上周大' });
+      patches.forEach(expectContractValid);
     });
 
-    it('空备注 → 不写 feel_note 字段（undefined 语义，非空串）', () => {
-      const utils = renderModal();
-      const patch = dragAndConfirm(utils, 60);
-      expect(patch).toEqual({ feel: 60 });
-      expect('feel_note' in patch).toBe(false);
+    it('空补充 → 任何行都不写 feel_note 字段（undefined 语义，非空串）', () => {
+      const utils = renderModal(actionTarget);
+      const patches = confirmAction(utils);
+      patches.forEach(p => expect('feel_note' in p).toBe(false));
     });
   });
 
-  describe('跳过路径（不填不劣待）', () => {
-    it('跳过 → onSkip 触发、onConfirm 不触发（不写任何字段）', () => {
-      const utils = renderModal();
+  describe('跳过路径（点外部区域 = 跳过，不填不劣待）', () => {
+    it('点暗场 → onSkip 触发、onConfirm 不触发（未确认的拖动全部丢弃）', () => {
+      const utils = renderModal(actionTarget);
+      dragRow(utils, 1, 88);
       act(() => {
-        fireEvent.change(utils.slider, { target: { value: '88' } });
-      });
-      act(() => {
-        fireEvent.click(utils.skipBtn);
+        fireEvent.click(utils.getByTestId('feel-backdrop'));
       });
       expect(utils.onSkip).toHaveBeenCalledTimes(1);
       expect(utils.onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('多动作补记（闸门[去补记]携多组进来）', () => {
+    it('按动作分段展示段标 + 组号沿用原组号（不重新编号），全部行可写', () => {
+      const utils = renderModal(multiTarget);
+      expect(getSliders(utils)).toHaveLength(3);
+      // 段标只出现在各动作首行
+      expect(utils.getByText('杠铃卧推')).toBeTruthy();
+      expect(utils.getByText('杠铃划船')).toBeTruthy();
+      expect(utils.getByText('01')).toBeTruthy();
+      expect(utils.getByText('02')).toBeTruthy();
+      // 批量确认：全部行一次写回，exId 各归各动作
+      const patches = confirmAction(utils);
+      expect(patches.map(p => p.exId)).toEqual(['ex-1', 'ex-1', 'ex-2']);
+      patches.forEach(expectContractValid);
+    });
+
+    it('多动作时标题只报总组数（单动作才带动作名语境）', () => {
+      const utils = renderModal(multiTarget);
+      expect(utils.getByText('感觉如何？')).toBeTruthy();
+      expect(utils.getByText('共 3 组')).toBeTruthy();
     });
   });
 
@@ -152,7 +210,7 @@ describe('FeelModal（组后感受弹窗 #98）', () => {
       utils.getByRole('button', { name: '语音输入' });
 
     it('点麦克风 → 要权限并启动识别，进入聆听态', async () => {
-      const utils = renderModal();
+      const utils = renderModal(actionTarget);
       await act(async () => {
         fireEvent.click(getMic(utils));
       });
@@ -163,9 +221,9 @@ describe('FeelModal（组后感受弹窗 #98）', () => {
       expect(utils.getByRole('button', { name: '停止语音输入' })).toBeTruthy();
     });
 
-    it('partial 轮询回填输入框，停止后取最终文本', async () => {
+    it('partial 轮询回填输入框，停止后取最终文本，确认时落入收尾组 feel_note', async () => {
       speechMocks.getSpeechPartial.mockResolvedValue({ text: '左肩有点疼', running: true });
-      const utils = renderModal();
+      const utils = renderModal(actionTarget);
       await act(async () => {
         fireEvent.click(getMic(utils));
       });
@@ -181,15 +239,16 @@ describe('FeelModal（组后感受弹窗 #98）', () => {
       });
       expect(speechMocks.stopSpeechInput).toHaveBeenCalledTimes(1);
       expect(getNote(utils).value).toBe('左肩有点疼');
-      // 确认：feel_note 带上转写文本
-      const patch = dragAndConfirm(utils, 35);
-      expect(patch.feel_note).toBe('左肩有点疼');
-      expectContractValid(patch);
+      // 确认：feel_note 带上转写文本（收尾组）
+      dragRow(utils, 3, 35);
+      const patches = confirmAction(utils);
+      expect(patches[2].feel_note).toBe('左肩有点疼');
+      patches.forEach(expectContractValid);
     });
 
     it('聆听中确认 → 先停识别再提交（录音资源不挂着）', async () => {
       speechMocks.getSpeechPartial.mockResolvedValue({ text: '太重了', running: true });
-      const utils = renderModal();
+      const utils = renderModal(actionTarget);
       await act(async () => {
         fireEvent.click(getMic(utils));
       });
@@ -197,22 +256,23 @@ describe('FeelModal（组后感受弹窗 #98）', () => {
         vi.advanceTimersByTime(360);
       });
       act(() => {
-        fireEvent.click(utils.confirmBtn);
+        fireEvent.click(utils.getByRole('button', { name: '确认记录全部组感受' }));
       });
       expect(speechMocks.stopSpeechInput).toHaveBeenCalledTimes(1);
       expect(utils.onConfirm).toHaveBeenCalledTimes(1);
-      expect((utils.onConfirm.mock.calls[0][0] as FeelPatch).feel_note).toBe('太重了');
+      const patches = utils.onConfirm.mock.calls[0][0] as FeelConfirmPatch[];
+      expect(patches[2].feel_note).toBe('太重了');
     });
 
     it('web（不支持 STT）语音入口隐藏——与 @ 对话框同规则', () => {
       speechMocks.isSpeechInputSupported = false;
-      const utils = renderModal();
+      const utils = renderModal(actionTarget);
       expect(utils.queryByRole('button', { name: '语音输入' })).toBeNull();
     });
 
     it('权限被拒 → 不启动识别、不进聆听态', async () => {
       speechMocks.requestSpeechPermissions.mockResolvedValue({ speech: 'denied', mic: 'denied' });
-      const utils = renderModal();
+      const utils = renderModal(actionTarget);
       await act(async () => {
         fireEvent.click(getMic(utils));
       });
@@ -221,7 +281,7 @@ describe('FeelModal（组后感受弹窗 #98）', () => {
     });
 
     it('聆听中卸载 → 兜底 cancel 录音会话', async () => {
-      const utils = renderModal();
+      const utils = renderModal(actionTarget);
       await act(async () => {
         fireEvent.click(getMic(utils));
       });

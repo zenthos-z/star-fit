@@ -7,7 +7,18 @@ import { computeSettlementSummary } from './lib/settlementSummary';
 import { LoadAnchors } from './types/protocol';
 import TimerCapsule from './components/TimerCapsule';
 import LockScreen from './components/execution/LockScreen';
-import FeelModal, { type FeelModalTarget, type FeelPatch } from './components/execution/FeelModal';
+import FeelModal from './components/execution/FeelModal';
+import FeelGateAlert from './components/execution/FeelGateAlert';
+import {
+  STRENGTH_SET_TYPES,
+  buildFeelTrigger,
+  buildActionFeelTarget,
+  collectUnfilledFeelGroups,
+  applyFeelPatchesToSession,
+  type FeelConfirmPatch,
+  type FeelModalGroup,
+  type FeelModalTarget,
+} from './components/execution/feelGate';
 import { ExerciseCardV2 } from './components/execution/ExerciseCardV2';
 import ReorderMode from './components/execution/ReorderMode';
 import SettlementV2 from './components/settlement/SettlementV2';
@@ -73,15 +84,6 @@ interface ChatMessage {
     planData?: any[]; // Stores the raw plan data from AI before adding to session
     isThinking?: boolean;
 }
-
-/**
- * 力量类动作类型：组完成后存在组间休息（handleUpdateSet 塞默认 60s 倒计时），
- * 也是组后感受弹窗（#98）的触发集合——有氧/户外是持续运动，完成后无休息语境不弹。
- * ★与 handleUpdateSet 内休息赋值分支共用同一清单，两处语义必须同步。
- */
-const STRENGTH_SET_TYPES: ExerciseType[] = [
-  'resistance', 'bodyweight', 'assisted', 'unilateral', 'weight_only', 'reps_only', 'isometric',
-];
 
 /**
  * 将 Exercise 转换为 ExerciseAction 用于 ExerciseSettingsModal
@@ -515,6 +517,10 @@ const App: React.FC = () => {
   // 组后感受弹窗（#98）：当前待评价的组。确认 → feel/feel_note 写回该组
   // （经 handleUpdateSet，sync 原样携带入库）；跳过 → 不写任何字段直接关。
   const [feelTarget, setFeelTarget] = useState<FeelModalTarget | null>(null);
+  // 结算闸门（#98 返工②）：FeelGateAlert 窄卡只分流（仍要结束/去补记），不经 FeelModal
+  const [feelGateGroups, setFeelGateGroups] = useState<FeelModalGroup[] | null>(null);
+  // 补记来源标记：闸门[去补记]打开表单 → 确认后拿补写快照直接结算
+  const [feelFormFromGate, setFeelFormFromGate] = useState(false);
 
   // Reorder Mode State
   const [reorderMode, setReorderMode] = useState<{ 
@@ -1054,22 +1060,16 @@ const App: React.FC = () => {
       }
     }
 
-    // 组后感受弹窗（#98）：力量类组完成跃迁即弹（组间休息语境）。触发点收口在
-    // handleUpdateSet——锁屏大按钮 / 训练卡片 / 手表遥控三条完成路径全经过这里，
-    // 手表端完成组手机同样弹窗。有氧/户外无休息语境不弹（STRENGTH_SET_TYPES 注释）。
+    // 组后感受聚合表单（#98 v2）：力量类「最后一组」完成跃迁才弹，聚合该动作全部组
+    // （已填组回显、未填组默认 50），一次确认批量写回；中间组静默完成不再逐组打断。
+    // 触发点收口在 handleUpdateSet——锁屏大按钮 / 训练卡片 / 手表遥控三条完成路径
+    // 全经过这里，手表端完成组手机同样弹窗。有氧/户外无休息语境不弹（feelGate 注释）。
     if (updates.completed === true) {
       const ex = session.exercises.find(e => e.id === exId);
       const oldSet = ex?.sets.find(s => s.id === setId);
-      const isStrength = STRENGTH_SET_TYPES.includes(ex?.type as ExerciseType) || ex?.type == null;
-      if (ex && oldSet && !oldSet.completed && isStrength) {
-        const setIdx = ex.sets.findIndex(s => s.id === setId);
-        setFeelTarget({
-          exId,
-          setId,
-          exName: ex.name,
-          setNo: setIdx + 1,
-          total: ex.sets.length,
-        });
+      if (ex && oldSet) {
+        const trigger = buildFeelTrigger(ex, setId, oldSet.completed === true);
+        if (trigger) setFeelTarget(trigger);
       }
     }
 
@@ -1142,16 +1142,44 @@ const App: React.FC = () => {
     handleUpdateSet(exId, setId, { restEndTime: cur + extraSec * 1000 });
   };
 
-  // --- 组后感受弹窗（#98）：确认写当前组 feel/feel_note，跳过不写任何字段 ---
+  // --- 组后感受聚合表单（#98 v2）：批量写回 + 结算闸门（§1/§3） ---
 
-  const handleFeelConfirm = (patch: FeelPatch) => {
-    if (!feelTarget) return;
-    handleUpdateSet(feelTarget.exId, feelTarget.setId, patch);
+  /** 卡片全部组完成态的「感受」入口：打开该动作聚合表单补记 */
+  const openFeelEntry = (exId: string) => {
+    const ex = session.exercises.find(e => e.id === exId);
+    if (ex) setFeelTarget(buildActionFeelTarget(ex));
+  };
+
+  const handleFeelConfirm = (patches: FeelConfirmPatch[]) => {
+    // 纯函数补写 → 一次 setSession（单次渲染）；闸门路径直接拿补写后的快照结算，
+    // 不读 setSession 异步前的旧闭包（否则结算页丢感受）
+    const patchedSession = applyFeelPatchesToSession(session, patches);
+    const fromGate = feelFormFromGate;
     setFeelTarget(null);
+    setSession(patchedSession);
+    if (fromGate) {
+      setFeelFormFromGate(false);
+      finalizeSession(patchedSession);
+    }
   };
 
   const handleFeelSkip = () => {
     setFeelTarget(null);
+    // 闸门[去补记]进来的表单被跳过 → 放弃补记留在训练页（不再结算，闸门语义到此为止）
+    setFeelFormFromGate(false);
+  };
+
+  // 闸门[仍要结束]：不写任何字段直接结算（未填组保持空感受落库）
+  const handleGateEnd = () => {
+    setFeelGateGroups(null);
+    finalizeSession(session);
+  };
+
+  // 闸门[去补记]：关闸门 → 打开聚合表单（未填组行必然默认 50 起步）
+  const handleGateFill = () => {
+    setFeelGateGroups(null);
+    setFeelFormFromGate(true);
+    setFeelTarget({ groups: feelGateGroups ?? [] });
   };
 
   // 手表遥控上行（2026-09-20 上提 App 层）：手表「完成本组/休息按钮」→ 手机状态机。
@@ -1312,32 +1340,46 @@ const App: React.FC = () => {
     return anomalies;
   };
 
+  // 结算收口（#98 v2 §3，返工②改形态）：handleEndSession 是唯一入口（TimerCapsule
+  // 红色停止 + LockScreen onEnd 两处调用全经此），先过感受闸门再放行结算。
+  // 闸门 = FeelGateAlert 窄卡意图分流：[仍要结束] 直接结算 / [去补记] 开表单，
+  // 写值只发生在表单本体（闸门自身不写任何字段）
   const handleEndSession = () => {
     console.log('[App] handleEndSession called');
-    const finishedSession: Session = { ...session, status: 'finished', endTime: Date.now() };
+    const pendingGroups = collectUnfilledFeelGroups(session.exercises);
+    if (pendingGroups.length > 0) {
+      setFeelGateGroups(pendingGroups);
+      return;
+    }
+    finalizeSession(session);
+  };
+
+  const finalizeSession = (sess: Session) => {
+    console.log('[App] finalizeSession called');
+    const finishedSession: Session = { ...sess, status: 'finished', endTime: Date.now() };
 
     // [TRACKING] Session Finished
     eventTracking.track(TrackingEvent.HITL_RESPONSE, {
       type: 'session_finished',
-      exerciseCount: session.exercises.length,
+      exerciseCount: sess.exercises.length,
       duration: finishedSession.endTime! - finishedSession.startTime
     });
 
     // 1. Calculate local stats immediately
-    const stats = calculateWorkoutStats(session.exercises);
+    const stats = calculateWorkoutStats(sess.exercises);
     // Fix: Subtract pausedDuration to get actual workout time (not including pauses)
     const durationMinutes = Math.floor((finishedSession.endTime! - finishedSession.startTime - finishedSession.pausedDuration) / 60000);
 
     console.log('[App] Stats calculated:', stats, 'duration:', durationMinutes);
 
     // 2. Detect training anomalies for personalized questions
-    const trainingAnomalies = detectTrainingAnomalies(session.exercises);
+    const trainingAnomalies = detectTrainingAnomalies(sess.exercises);
 
     console.log('[App] Training anomalies:', trainingAnomalies);
 
     // 3. Build local SUMMARY_CARD data (for quick display while Agent processes)
     const localSummaryData = {
-      startTime: session.startTime,
+      startTime: sess.startTime,
       endTime: finishedSession.endTime,
       pausedDuration: finishedSession.pausedDuration,
       stats: {
@@ -1346,7 +1388,7 @@ const App: React.FC = () => {
         durationMinutes,
         avgHr: stats.avgHr
       },
-      exercises: session.exercises,  // raw sets preserved; useAICoach pre-formats via workoutSummary
+      exercises: sess.exercises,  // raw sets preserved; useAICoach pre-formats via workoutSummary
       anomalies: trainingAnomalies
     };
 
@@ -1368,12 +1410,12 @@ const App: React.FC = () => {
     // 5. [Phase 2] Trigger Agent analysis (Agent reads from DB via load_history)
     console.log('[App] Calling openAiCoach with:', {
       type: 'workout_complete',
-      sessionId: session.id
+      sessionId: sess.id
     });
 
     openAiCoach({
       type: 'workout_complete',
-      sessionId: session.id,
+      sessionId: sess.id,
       data: localSummaryData
     });
 
@@ -1487,6 +1529,7 @@ const App: React.FC = () => {
                       pauseStartTime={session.pauseStartTime}
                       loadAnchors={loadAnchors}
                       onUpdateSet={handleUpdateSet}
+                      onFeelEntry={openFeelEntry}
                       onOpenSettings={setShowSettingsId}
                       onOpenTutorial={handleOpenTutorial}
                       onDelete={handleDeleteExercise}
@@ -1628,6 +1671,11 @@ const App: React.FC = () => {
           />
         )}
       </AnimatePresence>
+
+      {/* 结算闸门窄卡（#98 返工②）：只在表单未开时挂载，意图分流 [仍要结束]/[去补记] */}
+      {feelGateGroups && !feelTarget && (session.status === 'active' || session.status === 'paused') && (
+        <FeelGateAlert groups={feelGateGroups} onEnd={handleGateEnd} onGoFill={handleGateFill} />
+      )}
 
       <AnimatePresence>
         {(currentRoute === AppRoute.HISTORY || currentRoute === AppRoute.SETTINGS || viewHistorySession || isAiOverlayOpen || pendingExercise || (showSettingsId && session.exercises.find(e => e.id === showSettingsId))) && (

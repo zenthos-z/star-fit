@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
+import { SmilePlus } from 'lucide-react';
 import { ExerciseAction, LoadAnchors, LoadAnchor } from '../../../types/protocol';
 import { deviationBuffer } from '../../../services/DeviationBuffer';
 import { DeviationWarningModal } from '../../DeviationWarningModal';
@@ -25,6 +26,8 @@ interface ResistanceCardProps {
   pauseStartTime?: number;
   loadAnchors?: LoadAnchors;
   onUpdate?: (updates: Partial<ExerciseAction>) => void;
+  /** #98 全部组完成态「感受」入口：打开动作级聚合感受表单（App 层接线） */
+  onFeelEntry?: () => void;
 }
 
 /**
@@ -38,7 +41,8 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
   exerciseIndex = 0,
   isPaused,
   pauseStartTime,
-  onUpdate
+  onUpdate,
+  onFeelEntry
 }) => {
   const [showDeviationModal, setShowDeviationModal] = useState(false);
   const [pendingDeviation, setPendingDeviation] = useState<{
@@ -268,11 +272,38 @@ export const ResistanceCard: React.FC<ResistanceCardProps> = ({
   const targetRpe = exercise.metadata?.targetRpe;
   const completedCount = exercise.sets.filter(s => s.status === 'COMPLETED').length;
   const totalCount = exercise.sets.length;
+  // #98 两态翻转：全部组完成 → 类型标签退位，feel 椭圆入口顶替（补记动作级感受）
+  const allSetsCompleted = totalCount > 0 && completedCount === totalCount;
 
   return (
     <div className="p-8 bg-white rounded-[40px] shadow-sm border border-gray-50">
       {/* Header */}
-      <CardHeader name={exerciseName} type={exercise.type} />
+      <CardHeader
+        name={exerciseName}
+        type={exercise.type}
+        feelEntry={allSetsCompleted ? (
+          /* #98 feel 入口（2026-10-01 项目主人修正版：纯文字灰胶囊；同日返工④补按钮质感、
+             ⑤文字改人头图标、返工③-①质感减重）。形态：48×48 正圆——与对齐目标（组行
+             勾选圆列 48px 圆）同径，图标居中视觉平衡优于竖胶囊；水平对齐硬规则不变：
+             圆心 = 勾选圆列水平中心线，48px 宽右缘贴 header 右缘时圆心在右缘内 24px →
+             mr-[16px] 左移 16px 恰好同心。垂直随 header 行居中；-my-2.5 抵消 48px 圆的
+             行高膨胀（同 -my-2@44px 等效），两态标题不跳。图标：lucide SmilePlus（「加一条
+             主观感受」语义，iMessage 同族），1.8pt 线条对齐卡头 SF Symbols 复刻体系。
+             质感（返工③-①减重定案）：去 border-2 描边，只留彩色投影（shadow-gray-400/40）
+             + 同款扫光层——轻量「可按」暗示，不与勾选圆的重描边语言抢层级 */
+          <button
+            type="button"
+            aria-label={`记录${exerciseName}全部组感受`}
+            onClick={() => { haptic('light'); onFeelEntry?.(); }}
+            className="mr-[16px] -my-2.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-full
+              bg-gray-100 text-gray-500 shadow-lg shadow-gray-400/40 transition-transform duration-200 active:scale-95 focus:outline-none relative overflow-hidden"
+          >
+            {/* 勾选圆同款 shimmer 扫光（白带加强到 /60：灰底上保持可感知的微光扫过） */}
+            <span className="absolute inset-0 w-full h-full bg-gradient-to-r from-transparent via-white/60 to-transparent -translate-x-full animate-[shimmer_2s_infinite] pointer-events-none" />
+            <SmilePlus className="relative h-[22px] w-[22px]" strokeWidth={1.8} aria-hidden="true" />
+          </button>
+        ) : undefined}
+      />
 
       {/* Sets List */}
       <div className="space-y-10">

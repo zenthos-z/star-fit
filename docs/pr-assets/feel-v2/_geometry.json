@@ -1,0 +1,16 @@
+{
+  "stateA_h3": {
+    "top": 226,
+    "height": 28,
+    "centerY": 240
+  },
+  "stateB": {
+    "btnCenterX": 312,
+    "circleCenterX": 312,
+    "centerXDelta": 0,
+    "btnCenterY": 240,
+    "h3CenterY": 240,
+    "btnW": 48,
+    "btnH": 44
+  }
+}

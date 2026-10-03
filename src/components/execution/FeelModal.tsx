@@ -1,6 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import type { ExerciseSetEntry } from '../../../shared/contracts';
 import {
   isSpeechInputSupported,
   requestSpeechPermissions,
@@ -10,52 +9,165 @@ import {
   getSpeechPartial,
 } from '../../lib/speechInput';
 import { haptic } from '../../lib/nativeHaptics';
+import type {
+  FeelModalGroup,
+  FeelModalRow,
+  FeelModalTarget,
+  FeelConfirmPatch,
+} from './feelGate';
 
 /**
- * 组后感受弹窗（issue #98，采集 UI 批）：
- * 每组（力量类）完成后在组间休息语境弹出——无级滑块 0-100 快速选感受，
- * 附语义文本补充（受伤/疼痛/力量过大等滑块说不清的内容），语音按钮复用
- * @ 对话框已实现的语音转文本链路（iOS 原生 STT，原始音频不存）。
+ * 组后感受聚合表单（issue #98 v2，2026-10-01 重设计；同日返工收敛材质）：
+ * 力量类最后一组完成时弹出，聚合本动作全部组——每行一条无级滑块（0-100 连续值，
+ * 已填组回显、未填组默认 50），右上角圆形对勾一次确认批量写回（删除逐组弹窗与
+ * 「跳过」文字链：点外部区域 = 跳过，未确认的拖动全部丢弃）。
+ * 结算闸门不在此组件：闸门 = FeelGateAlert 窄卡意图分流（补记入口可携多组进来）。
  *
- * 数据落点：写当前组的 feel / feel_note（契约 ExerciseSetEntry，#97 已备），
- * 组间形成对比序列供 Agent 分析。表单定稿 = 滑块 + 补充 + 确认，无多余元素；
- * 跳过（不填）路径必须存在且不劣待（不写任何字段直接关）。
+ * 材质真源对齐（2026-10-01 项目主人返工①）：Apple glassEffect 语义映射——
+ * .regular 材质 = 高不透明中性白磨砂（bg-white/95 + backdrop-blur-xl）+ 中性白
+ * specular rim 边缘光（白色顶缘描边 + 内侧高光），禁彩虹色散/饱和度戏法；
+ * 圆角/层次与 DeviationWarningModal（项目已拍板 iOS 模态模板）同一语言。
  *
- * 视觉/交互曲线对齐既有弹层规范：底部 sheet 圆角 40px + transitions.sheet
- * 曲线（transform 420ms cubic-bezier(0.32,0.72,0,1)，与 AICoachOverlay 同族）。
+ * 视觉：底部 sheet 420ms cubic-bezier(0.32,0.72,0,1)（既有弹层规范曲线）；
+ * 滑块水滴拇指（径向高光渐变）+ 拖动中当前值浮动回显（松手淡出）；触感按阈值
+ * 触发（跨越 25/50/75 轻点、≥90 单次重击），确认 success、跳过不震；全程无声。
+ * 仅浅色模式硬编码色值（材质不随暗色主题翻色）。
  */
 
-/** 确认时写回组级字段的补丁（契约子集，类型从 shared/contracts 导入） */
-export type FeelPatch = Pick<ExerciseSetEntry, 'feel' | 'feel_note'>;
-
-export interface FeelModalTarget {
-  exId: string;
-  setId: string;
-  exName: string;
-  setNo: number;
-  total: number;
-}
-
-interface FeelModalProps {
-  target: FeelModalTarget;
-  onConfirm: (patch: FeelPatch) => void;
-  onSkip: () => void;
-}
-
-/** sheet 进出场曲线（transitions.sheet 的 CSS 等价，与 AICoachOverlay 同一串） */
-const SHEET_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+export type { FeelModalTarget, FeelConfirmPatch, FeelPatch } from './feelGate';
 
 /** 感受滑块默认值：中立 50，单手一拖即达（契约范围 0-100 闭区间） */
 const FEEL_DEFAULT = 50;
 
+/** sheet 进出场曲线（transitions.sheet 的 CSS 等价，与 AICoachOverlay 同一串） */
+const SHEET_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
+
+/** 越界输入夹回契约闭区间（防御层：原生 range 已钳制，这里保 payload 契约红线） */
+const clampFeel = (raw: number): number => Math.max(0, Math.min(100, Math.round(raw)));
+
+/** 行参数摘要（等宽数字）：60kg × 8；自重动作 weight=0 → 自重 × 8 */
+const paramLabel = (s: FeelModalRow): string => {
+  const parts: string[] = [];
+  if (s.weight != null) parts.push(s.weight === 0 ? '自重' : `${s.weight}kg`);
+  if (s.reps != null) parts.push(`${s.reps}次`);
+  return parts.join(' × ') || '—';
+};
+
+/** 行内滑块：可视轨/填充/水滴拇指 + 阈值触感 + 浮动值回显，原生 range 透明覆盖（可达性） */
+const FeelSliderRow: React.FC<{
+  row: FeelModalRow;
+  value: number;
+  dragging: boolean;
+  showGroupLabel: boolean;
+  groupName?: string;
+  onChange: (setId: string, raw: number) => void;
+  onDragStart: (setId: string) => void;
+  onDragEnd: () => void;
+}> = ({ row, value, dragging, showGroupLabel, groupName, onChange, onDragStart, onDragEnd }) => (
+  // 多动作补记（闸门[去补记]携多组进来）按动作分段展示；单动作平铺不带段标
+  <div>
+    {showGroupLabel && (
+      <p className="mb-2 text-[11px] font-bold uppercase tracking-widest text-gray-400">{groupName}</p>
+    )}
+    <div className="flex items-baseline gap-3">
+      <span className="w-6 shrink-0 font-mono text-[13px] font-bold leading-none text-gray-400">
+        {String(row.setNo).padStart(2, '0')}
+      </span>
+      <span
+        className="min-w-0 flex-1 truncate text-[13px] font-semibold text-gray-700"
+        style={{ fontFeatureSettings: "'tnum'", fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace' }}
+      >
+        {paramLabel(row)}
+      </span>
+    </div>
+    <div className="relative mt-1 h-9">
+      {/* 浮动值回显：拖动中跟随拇指上方，松手淡出（left 夹在轨内防两端裁切） */}
+      <div
+        data-testid={`feel-echo-${row.setId}`}
+        aria-hidden="true"
+        className={`pointer-events-none absolute -top-7 -translate-x-1/2 rounded-full bg-[#1B2436] px-2 py-0.5
+          text-[11px] font-bold leading-none text-white transition-opacity duration-300 ${
+            dragging ? 'opacity-100' : 'opacity-0'
+          }`}
+        style={{
+          left: `${Math.max(8, Math.min(92, value))}%`,
+          fontFeatureSettings: "'tnum'",
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+        }}
+      >
+        {value}
+      </div>
+      {/* 轨道 + 填充（无刻度） */}
+      <div className="pointer-events-none absolute top-1/2 h-1.5 w-full -translate-y-1/2 rounded-full bg-gray-900/10" />
+      <div
+        className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#1B2436]"
+        style={{ width: `${value}%` }}
+      />
+      {/* 水滴拇指：径向高光渐变 + 内外双层投影（Liquid Glass 同族材质） */}
+      <div
+        aria-hidden="true"
+        className="pointer-events-none absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full"
+        style={{
+          left: `${value}%`,
+          background: 'radial-gradient(circle at 35% 30%, #ffffff 0%, #f8fafc 65%, #dbe2ea 100%)',
+          border: '0.5px solid rgba(255,255,255,0.85)',
+          boxShadow:
+            '0 2px 10px rgba(15,23,42,0.28), inset 0 1px 1px rgba(255,255,255,0.9), inset 0 -1px 2px rgba(15,23,42,0.08)',
+        }}
+      />
+      {/* 原生 range 透明覆盖整行（键盘/读屏/测试可达；拇指放大接管命中区） */}
+      <input
+        type="range"
+        min={0}
+        max={100}
+        step={1}
+        value={value}
+        aria-label={`第 ${row.setNo} 组感受强度`}
+        data-testid={`feel-slider-${row.setId}`}
+        onChange={(e) => onChange(row.setId, Number(e.target.value))}
+        onPointerDown={() => onDragStart(row.setId)}
+        onPointerUp={onDragEnd}
+        onPointerCancel={onDragEnd}
+        onBlur={onDragEnd}
+        onKeyDown={() => onDragStart(row.setId)}
+        onKeyUp={onDragEnd}
+        className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent focus:outline-none
+          [&::-webkit-slider-thumb]:h-9 [&::-webkit-slider-thumb]:w-9 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:opacity-0
+          [&::-moz-range-thumb]:h-9 [&::-moz-range-thumb]:w-9 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:opacity-0
+          [&::-moz-range-track]:bg-transparent"
+      />
+    </div>
+  </div>
+);
+
+interface FeelModalProps {
+  target: FeelModalTarget;
+  /** 批量确认：全部行（含未拖动的默认 50 行）一次写回 */
+  onConfirm: (patches: FeelConfirmPatch[]) => void;
+  /** 跳过：关闭不写任何字段。入口 = 点外部区域（暗场） */
+  onSkip: () => void;
+}
+
 export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip }) => {
-  const [feel, setFeel] = useState(FEEL_DEFAULT);
+  const totalRows = target.groups.reduce((n, g) => n + g.sets.length, 0);
+
+  const [values, setValues] = useState<Record<string, number>>(() =>
+    Object.fromEntries(target.groups.flatMap(g => g.sets.map(s => [s.setId, s.feel ?? FEEL_DEFAULT]))),
+  );
   const [note, setNote] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [draggingSetId, setDraggingSetId] = useState<string | null>(null);
   const speechPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   // 语音识别中用户手动编辑（删除/修改 partial 文本）→ 打开写保护，轮询停止回填
   // （@ 对话框 2026-09-17 bug 1 同源：删一个字 350ms 后被识别结果填回来）
   const userEditedRef = useRef(false);
+  // 阈值触感游标：一次拖动手势内记忆上次值——跨越 25/50/75 轻点，≥90 重击一次
+  const tickRef = useRef<{ setId: string; last: number; heavyFired: boolean } | null>(null);
+
+  // target 换目标（复用挂载）→ 行值重开（已填回显，未填默认）
+  useEffect(() => {
+    setValues(Object.fromEntries(target.groups.flatMap(g => g.sets.map(s => [s.setId, s.feel ?? FEEL_DEFAULT]))));
+  }, [target]);
 
   const stopSpeechPolling = () => {
     if (speechPollRef.current !== null) {
@@ -113,119 +225,171 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     setNote(e.target.value);
   };
 
+  // 滑块变更：值夹回契约区间 + 阈值触感（跨 25/50/75 轻点，≥90 单次重击/手势）
+  const handleSliderChange = (setId: string, raw: number) => {
+    const v = clampFeel(raw);
+    setValues(prev => ({ ...prev, [setId]: v }));
+    const t = tickRef.current;
+    if (!t || t.setId !== setId) {
+      if (v >= 90) haptic('heavy');
+      tickRef.current = { setId, last: v, heavyFired: v >= 90 };
+      return;
+    }
+    for (const th of [25, 50, 75]) {
+      if ((t.last < th && v >= th) || (t.last >= th && v < th)) haptic('light');
+    }
+    if (v >= 90 && !t.heavyFired) {
+      haptic('heavy');
+      t.heavyFired = true;
+    }
+    t.last = v;
+  };
+
+  const handleDragStart = (setId: string) => {
+    setDraggingSetId(setId);
+    tickRef.current = null; // 新手势重新计阈值
+  };
+
+  /** 全部行打包：动作级语义补充写入首个动作的收尾组（组级字段的动作级落点，§1） */
+  const buildPatches = (): FeelConfirmPatch[] => {
+    const trimmed = note.trim().slice(0, 500);
+    const patches: FeelConfirmPatch[] = [];
+    target.groups.forEach(g => {
+      g.sets.forEach((s, i) => {
+        const p: FeelConfirmPatch = { exId: g.exId, setId: s.setId, feel: values[s.setId] ?? FEEL_DEFAULT };
+        if (g === target.groups[0] && i === g.sets.length - 1 && trimmed) {
+          p.feel_note = trimmed;
+        }
+        patches.push(p);
+      });
+    });
+    return patches;
+  };
+
   const handleConfirm = () => {
     if (isListening) stopListening('stop');
     haptic('success');
-    const trimmed = note.trim().slice(0, 500);
-    onConfirm({ feel, ...(trimmed ? { feel_note: trimmed } : {}) });
+    onConfirm(buildPatches());
   };
 
+  // 跳过：不写任何字段直接关（不弹二次确认；跳过路径不震动）
   const handleSkip = () => {
     if (isListening) stopListening('cancel');
-    haptic('light');
     onSkip();
   };
 
+  const actionGroup = target.groups[0];
+
   return (
     <div className="fixed inset-0 z-[150]">
-      {/* 暗场：盖住锁屏/训练列表，衬托 sheet */}
+      {/* 暗场：点外部区域 = 跳过（§4 删除二次确认与「跳过」文字链） */}
       <motion.div
+        data-testid="feel-backdrop"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
         transition={{ duration: 0.3, ease: 'easeOut' }}
+        onClick={handleSkip}
         className="absolute inset-0 bg-black/45"
       />
 
-      {/* 底部 sheet：rounded-t-[40px] + transitions.sheet 曲线（既有弹层规范） */}
+      {/* 底部 sheet：rounded-t-[40px] + glassEffect .regular 语义材质（中性白磨砂 + specular rim） */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ duration: 0.42, ease: SHEET_EASE }}
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-[40px] bg-[#FAFAFA] shadow-[0_-8px_40px_rgba(0,0,0,0.18)]"
-        style={{ paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)' }}
+        data-testid="feel-modal"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-[40px] border-t border-white"
+        style={{
+          background: 'rgba(255,255,255,0.95)',
+          backdropFilter: 'blur(24px)',
+          WebkitBackdropFilter: 'blur(24px)',
+          boxShadow: '0 -25px 50px -12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.95)',
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+        }}
       >
         {/* 抓手条 */}
         <div className="flex justify-center pt-3">
-          <div className="h-1.5 w-10 rounded-full bg-gray-200" />
+          <div className="h-1.5 w-10 rounded-full bg-gray-900/15" />
+        </div>
+
+        {/* 语境头：唯一主动作 = 右上角圆形对勾（深藏青，一次确认全部行） */}
+        <div className="relative flex items-center justify-center px-7 pt-4">
+          <div className="text-center">
+            <p className="text-[20px] font-bold text-gray-900">感觉如何？</p>
+            <p className="mt-1 text-[13px] font-medium text-gray-500">
+              {target.groups.length > 1
+                ? `共 ${totalRows} 组`
+                : `${actionGroup.exName} · 共 ${actionGroup.sets.length} 组`}
+            </p>
+          </div>
+          <motion.button
+            type="button"
+            data-testid="feel-confirm"
+            aria-label="确认记录全部组感受"
+            whileTap={{ scale: 0.9 }}
+            onClick={handleConfirm}
+            className="absolute right-7 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center
+              rounded-full bg-[#1B2436] text-white shadow-lg shadow-[#1B2436]/30 focus:outline-none"
+          >
+            <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
+              <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
+            </svg>
+          </motion.button>
         </div>
 
         <div className="px-7 pt-5">
-          {/* 语境头：评的是哪一组（定位信息，非表单字段） */}
-          <p className="text-center text-[20px] font-bold text-gray-900">这组感觉如何？</p>
-          <p className="mt-1.5 text-center text-[13px] font-medium text-gray-400">
-            {target.exName} · 第 {target.setNo} / {target.total} 组
-          </p>
-
-          {/* 当前值：大数字实时可见（tnum 与锁屏 hero 同族） */}
-          <div className="mt-6 flex items-end justify-center gap-1" aria-live="polite">
-            <span
-              style={{ fontFeatureSettings: "'tnum'" }}
-              className="text-[56px] font-semibold leading-none tracking-tight text-gray-900"
-            >
-              {feel}
-            </span>
-            <span className="pb-1 text-[14px] font-medium text-gray-400">/ 100</span>
+          {/* 行区：多动作（闸门[去补记]携多组）按动作分段；单动作平铺。超高滚动（组多不顶出屏） */}
+          <div className="max-h-[38vh] space-y-4 overflow-y-auto overscroll-contain pb-1">
+            {target.groups.map(g =>
+              g.sets.map((s, rowIdx) => (
+                <FeelSliderRow
+                  key={s.setId}
+                  row={s}
+                  value={values[s.setId] ?? FEEL_DEFAULT}
+                  dragging={draggingSetId === s.setId}
+                  showGroupLabel={target.groups.length > 1 && rowIdx === 0}
+                  groupName={g.exName}
+                  onChange={handleSliderChange}
+                  onDragStart={handleDragStart}
+                  onDragEnd={() => setDraggingSetId(null)}
+                />
+              )),
+            )}
           </div>
 
-          {/* 无级滑块（0-100 连续，step=1 整数刻度落契约 int，禁分档离散化）。
-              轨道填充经 CSS 变量注入 runnable-track（Tailwind 任意值吃不了动态值） */}
-          <input
-            type="range"
-            min={0}
-            max={100}
-            step={1}
-            value={feel}
-            aria-label="感受强度"
-            onChange={(e) => setFeel(Math.round(Number(e.target.value)))}
-            onPointerUp={() => haptic('light')}
-            onKeyUp={() => haptic('light')}
-            className="mt-5 h-9 w-full cursor-pointer appearance-none bg-transparent focus:outline-none
-              [&::-webkit-slider-runnable-track]:h-1.5 [&::-webkit-slider-runnable-track]:rounded-full
-              [&::-webkit-slider-runnable-track]:bg-[image:var(--feel-track)]
-              [&::-webkit-slider-thumb]:mt-[-11px] [&::-webkit-slider-thumb]:h-8 [&::-webkit-slider-thumb]:w-8
-              [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:rounded-full
-              [&::-webkit-slider-thumb]:border [&::-webkit-slider-thumb]:border-gray-100
-              [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:shadow-[0_2px_10px_rgba(0,0,0,0.18)]"
-            style={
-              {
-                '--feel-track': `linear-gradient(to right, #3B82F6 ${feel}%, #E5E7EB ${feel}%)`,
-              } as React.CSSProperties
-            }
-          />
-          {/* 轴端标签：0 = 轻松，100 = 极限（解释量纲，非表单字段） */}
-          <div className="mt-1 flex justify-between text-[12px] font-medium text-gray-400">
-            <span>轻松</span>
-            <span>极限</span>
-          </div>
-
-          {/* 语义补充：文本 + 语音按钮（复用 @ 对话框 STT，iOS 原生，不存音频） */}
-          <div className="mt-6 flex items-end gap-2.5">
+          {/* 语义补充：动作级一句话（支持语音）；胶囊输入（rounded-full，多行时自然撑成
+              stadium）；底色/描边比 sheet 材质深一档（gray-100/gray-200，返工③-③对比度）；
+              确认走右上角对勾，底部无按钮 */}
+          <div className="mt-5 flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2">
             <textarea
-              rows={2}
+              rows={1}
               maxLength={500}
               value={note}
               onChange={handleNoteChange}
-              placeholder={isListening ? '正在聆听…' : '补充说明（选填）'}
+              data-testid="feel-note"
               aria-label="感受补充说明"
-              className="min-h-[56px] flex-1 resize-none rounded-2xl border border-gray-200 bg-white px-4 py-3
-                text-[15px] leading-snug text-gray-900 placeholder:text-gray-400 focus:border-gray-300 focus:outline-none"
+              placeholder={isListening ? '正在聆听…' : '记录细节（支持语音）'}
+              className="max-h-24 min-h-[36px] w-full resize-none bg-transparent py-2 text-[15px] leading-snug
+                text-gray-900 placeholder:text-gray-400 focus:outline-none"
             />
             {isSpeechInputSupported && (
               <motion.button
                 type="button"
+                data-testid="feel-mic"
                 whileTap={{ scale: 0.92 }}
                 onClick={handleMicTap}
                 aria-label={isListening ? '停止语音输入' : '语音输入'}
-                className={`relative flex h-[56px] w-[56px] shrink-0 items-center justify-center rounded-2xl transition-colors duration-200 ${
-                  isListening ? 'bg-rose-500/10 text-rose-500' : 'bg-gray-100 text-gray-500'
-                }`}
+                className={`relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full
+                  transition-colors duration-200 ${
+                    isListening ? 'bg-rose-500/10 text-rose-500' : 'bg-[#1B2436]/[0.08] text-gray-500'
+                  }`}
               >
                 {isListening && (
-                  <span className="absolute right-1.5 top-1.5 flex w-2 h-2">
-                    <span className="absolute inline-flex w-full h-full rounded-full bg-rose-500 opacity-60 animate-ping" />
-                    <span className="relative inline-flex w-2 h-2 rounded-full bg-rose-500" />
+                  <span className="absolute right-1 top-1 flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-rose-500 opacity-60" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-rose-500" />
                   </span>
                 )}
                 <svg
@@ -236,7 +400,7 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
                   strokeWidth={2}
                   strokeLinecap="round"
                   strokeLinejoin="round"
-                  className="w-6 h-6"
+                  className="h-5 w-5"
                 >
                   <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
                   <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
@@ -245,31 +409,13 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
               </motion.button>
             )}
           </div>
-
-          {/* 确认：写当前组 feel/feel_note（组间形成对比序列） */}
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.96 }}
-            onClick={handleConfirm}
-            className="mt-6 h-14 w-full rounded-2xl bg-blue-500 text-[16px] font-semibold text-white
-              shadow-lg shadow-blue-500/25 focus:outline-none"
-          >
-            记下这组
-          </motion.button>
-
-          {/* 跳过：不写任何字段直接关（不填路径存在且不劣待——同宽全幅可点） */}
-          <motion.button
-            type="button"
-            whileTap={{ scale: 0.98 }}
-            onClick={handleSkip}
-            className="mt-2 h-12 w-full rounded-2xl text-[15px] font-medium text-gray-400 focus:outline-none"
-          >
-            跳过
-          </motion.button>
         </div>
       </motion.div>
     </div>
   );
 };
+
+/** 供 App/闸门引用的行组类型再导出（组级聚合结构唯一定义源在 feelGate.ts） */
+export type { FeelModalGroup, FeelModalRow };
 
 export default FeelModal;
