@@ -47,8 +47,11 @@ const legacySession = (over: Record<string, unknown> = {}) => ({
   status: 'finished',
   exercises: [
     {
-      id: 'V1StGXR8_Z5jdHi6B-myT', // 动作库 NanoID 引用
-      libraryId: 'V1StGXR8_Z5jdHi6B-myT',
+      // #124 真实双 ID 形态（App.tsx buildExercisesFromPlan 写路径实测）：
+      // id = 每次训练现生成的实例 UUID；libraryId = 动作库 NanoID 主键引用。
+      // （#100 旧 fixture 把两者写成同值，?? 顺序盲区导致门卫带病合入。）
+      id: 'd92bebe4-f051-4ff2-9b2e-7a6a74a5afb4', // 实例 UUID（真机 #124 指纹）
+      libraryId: 'V1StGXR8_Z5jdHi6B-myT', // 动作库 NanoID 引用（exercises.id 主键）
       name: '深蹲',
       type: 'resistance',
       sets: [legacySet(), legacySet({ id: 'set-id-2' })],
@@ -414,3 +417,111 @@ describe('#97 契约：批量门卫', () => {
     expect(gate.rejected).toHaveLength(0);
   });
 });
+
+// ---------------------------------------------------------------------------
+// 7. #124 动作引用字段优先级（libraryId 优先，实例 UUID 不再拒付）
+// ---------------------------------------------------------------------------
+
+describe('#124 契约：动作引用字段优先级', () => {
+  // 真库形态指纹（研究批 exercise-id-mismatch.md §2.1/§2.3）
+  const LIB_ID = 'a3v7r7ieNN6LnPJmofFjE'; // exercises.id 主键（22 字符 NanoID）
+  const INSTANCE_UUID = 'd92bebe4-f051-4ff2-9b2e-7a6a74a5afb4'; // 真机实例 UUID（#124 报障原值）
+  const knownIds = new Set([LIB_ID]);
+
+  /** 现网写路径真实双 ID 形态（App.tsx buildExercisesFromPlan） */
+  const dualIdSession = () =>
+    legacySession({
+      exercises: [
+        {
+          id: INSTANCE_UUID,
+          libraryId: LIB_ID,
+          metadata: { libraryId: LIB_ID, id: LIB_ID },
+          name: '髋部环绕活动',
+          type: 'flexibility',
+          sets: [{ reps: 1, completedAt: START_MS + 60_000 }],
+        },
+      ],
+    });
+
+  it('双 ID 形态（id=实例 UUID + libraryId=库 NanoID）：取 libraryId，JOIN 命中过门', () => {
+    const s = normalizeAndValidateAgentSession(dualIdSession(), { knownExerciseIds: knownIds });
+    expect(s.exercises[0].exercise_id).toBe(LIB_ID); // 实例 UUID 不再被当成库引用
+    expect(() =>
+      validateAgentSessionDelivery(normalizeSessionForAgentDelivery(dualIdSession()), {
+        knownExerciseIds: knownIds,
+      }),
+    ).not.toThrow();
+  });
+
+  it('门卫批级：双 ID session 全量过门，reference 零拒付（#124 修复后 0%）', () => {
+    const gate = gateSessionsForAgentDelivery([dualIdSession()], { knownExerciseIds: knownIds });
+    expect(gate.delivered).toHaveLength(1);
+    expect(gate.rejected).toHaveLength(0);
+  });
+
+  it('顶层 libraryId 缺失 → 回退 metadata.libraryId', () => {
+    const session = dualIdSession();
+    delete (session.exercises[0] as Record<string, unknown>).libraryId;
+    const s = normalizeAndValidateAgentSession(session, { knownExerciseIds: knownIds });
+    expect(s.exercises[0].exercise_id).toBe(LIB_ID);
+  });
+
+  it('纯 id 无 libraryId（pickerAdapter 意图形态）：回退 ex.id，id 在库内则过门', () => {
+    const session = legacySession({
+      exercises: [
+        {
+          id: 'V1StGXR8_Z5jdHi6B-myT',
+          name: '深蹲',
+          type: 'resistance',
+          sets: [{ reps: 8, completedAt: START_MS + 60_000 }],
+        },
+      ],
+    });
+    const s = normalizeAndValidateAgentSession(session, {
+      knownExerciseIds: new Set(['V1StGXR8_Z5jdHi6B-myT']),
+    });
+    expect(s.exercises[0].exercise_id).toBe('V1StGXR8_Z5jdHi6B-myT');
+  });
+
+  it('纯 id 无 libraryId 且 id 不在库内：reference 明确拒付（不静默吞）', () => {
+    const session = legacySession({
+      exercises: [{ id: 'ghost-uuid-not-in-library', name: '幽灵', type: 'resistance', sets: [] }],
+    });
+    try {
+      normalizeAndValidateAgentSession(session, { knownExerciseIds: knownIds });
+      expect.unreachable('纯 id 坏引用必须拒付');
+    } catch (err) {
+      expect(err).toBeInstanceOf(AgentDeliveryError);
+      expect((err as AgentDeliveryError).code).toBe('reference');
+    }
+  });
+
+  it('libraryId 为空串 → 跳过空串，回退 metadata.libraryId（?? 挡不住空串）', () => {
+    const session = dualIdSession();
+    (session.exercises[0] as Record<string, unknown>).libraryId = '';
+    const s = normalizeAndValidateAgentSession(session, { knownExerciseIds: knownIds });
+    expect(s.exercises[0].exercise_id).toBe(LIB_ID);
+  });
+
+  it('libraryId 为非字符串 → 跳过回退（非串引用禁喂库校验）', () => {
+    const session = dualIdSession();
+    (session.exercises[0] as Record<string, unknown>).libraryId = 42;
+    const s = normalizeAndValidateAgentSession(session, { knownExerciseIds: knownIds });
+    expect(s.exercises[0].exercise_id).toBe(LIB_ID);
+  });
+
+  it('全候选缺失/空串 → unnormalizable 拒（缺引用 ≠ 坏引用，错误码明确）', () => {
+    const session = legacySession({
+      exercises: [{ id: '', libraryId: '', name: '空 ID', type: 'resistance', sets: [] }],
+    });
+    try {
+      normalizeAndValidateAgentSession(session, { knownExerciseIds: knownIds });
+      expect.unreachable('全空引用必须拒付');
+    } catch (err) {
+      expect(err).toBeInstanceOf(AgentDeliveryError);
+      expect((err as AgentDeliveryError).code).toBe('unnormalizable');
+      expect((err as AgentDeliveryError).message).toContain('缺少动作库引用');
+    }
+  });
+});
+
