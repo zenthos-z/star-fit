@@ -41,6 +41,22 @@ vi.mock('../../../lib/nativeTabBar', async importOriginal => {
   return { ...actual, setTabBarHidden: setTabBarHiddenMock };
 });
 
+// @capacitor/keyboard mock（#119 返工④②）：收集原生键盘事件回调，测试手动触发
+// （组件挂载即注册 keyboardWillShow/Hide/DidShow——真机由系统键盘驱动避让层）
+const kbListeners = vi.hoisted(
+  () => new Map<string, (info?: { keyboardHeight?: number }) => void>(),
+);
+vi.mock('@capacitor/keyboard', () => ({
+  Keyboard: {
+    addListener: vi.fn(
+      async (event: string, cb: (info?: { keyboardHeight?: number }) => void) => {
+        kbListeners.set(event, cb);
+        return { remove: vi.fn() };
+      },
+    ),
+  },
+}));
+
 /** 3 组动作、第 1 组已填 70（回显），第 2/3 组未填（默认 50） */
 const actionTarget: FeelModalTarget = {
   groups: [{
@@ -129,6 +145,13 @@ const expectContractValid = (patch: FeelConfirmPatch) => {
 };
 
 describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
+  beforeAll(async () => {
+    // 预热 mock 模块评估：vitest mocker 对动态 import 的首评估跨 tick 且偶发
+    // 竞态（全文件运行时一次拿到真模块 → web 未实现异常进 catch、注册丢失）。
+    // beforeAll 里先解析一次，把首评估钉死在 mock 工厂——后续组件内动态 import
+    // 全部命中缓存，注册在挂载后的微任务链内完成
+    await import('@capacitor/keyboard');
+  });
   beforeEach(() => {
     vi.useFakeTimers();
     speechMocks.isSpeechInputSupported = true;
@@ -138,6 +161,7 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
     speechMocks.cancelSpeechInput.mockReset().mockResolvedValue(undefined);
     speechMocks.getSpeechPartial.mockReset().mockResolvedValue({ text: '', running: false });
     setTabBarHiddenMock.mockClear();
+    kbListeners.clear();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -168,6 +192,17 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       const patches = confirmAction(utils);
       expect(patches.find(p => p.setId === 'set-2')?.feel).toBe(0);
       expect(patches.find(p => p.setId === 'set-3')?.feel).toBe(100);
+    });
+
+    it('行区让出拖动值气泡上探空间——overflow 裁切容器带 8px 顶垫（#119 返工④①）', () => {
+      const utils = renderModal(actionTarget);
+      const rows = utils.getByTestId('feel-rows');
+      // jsdom 无布局，放宽为布局参数断言：裁切容器（overflow-y-auto）有 pt-2=8px 顶垫
+      // ≥ 气泡净探出量（-top-7=28px 上探 − 参数行 19.5px − mt-1 4px ≈ 4.5px），
+      // 首行拖动全程数字完整可见；气泡本体挂在行结构内（feel-echo-*）
+      expect(rows.className).toContain('overflow-y-auto');
+      expect(rows.className).toContain('pt-2');
+      expect(utils.getByTestId('feel-echo-set-1')).toBeTruthy();
     });
   });
 
@@ -225,6 +260,23 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       expect(sheet.style.bottom).toBe(''); // 不再有 inline bottom 抬升
       expect(sheet.className).toContain('bottom-0'); // 贴底类回归（className 主导）
       expect(sheet.style.paddingBottom).toContain('safe-area-inset-bottom'); // home indicator 安全区保留
+    });
+  });
+
+  describe('键盘避让（#119 返工④②：KeyboardResize.None 下键盘不遮表单）', () => {
+    it('keyboardWillShow(kb=300) → 避让层上移 300px；keyboardWillHide → 归零', async () => {
+      const utils = renderModal(actionTarget);
+      const lift = utils.getByTestId('feel-kb-lift');
+      expect(lift.style.transform).toBe('translateY(0)'); // 键盘未起：贴底原位
+      await act(async () => {}); // 冲刷微任务链（模块已 beforeAll 预热，注册即完成）
+      await act(async () => {
+        kbListeners.get('keyboardWillShow')!({ keyboardHeight: 300 });
+      });
+      expect(lift.style.transform).toBe('translateY(-300px)'); // sheet 整层抬到键盘上方
+      await act(async () => {
+        kbListeners.get('keyboardWillHide')!();
+      });
+      expect(lift.style.transform).toBe('translateY(0)'); // 收起归零（表单回贴底）
     });
   });
 
@@ -321,6 +373,53 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       expect(note.value).toBe(longText);      // 换行符原样回填（soft wrap + \n 皆生效）
       expect(note.style.height).toBe('98px'); // 高度随内容撑开（多行形态，非单行锁死）
       expect(note.scrollTop).toBe(98);        // 语音回填后滚到底部，最新文字可视
+    });
+
+    it('已有 note 为基底语音续写：轮询与停止 final 均为 base+识别文本（#119 返工④③）', async () => {
+      const utils = renderModal(actionTarget);
+      const note = getNote(utils);
+      act(() => {
+        fireEvent.change(note, { target: { value: '热身充分，' } });
+      });
+      await act(async () => {
+        fireEvent.click(getMic(utils));
+      });
+      speechMocks.getSpeechPartial.mockResolvedValue({ text: '最后一组略吃力', running: true });
+      await act(async () => {
+        vi.advanceTimersByTime(360);
+      });
+      expect(note.value).toBe('热身充分，最后一组略吃力'); // 追加在基底后，不覆盖
+      speechMocks.stopSpeechInput.mockResolvedValue('最后一组略吃力，杠铃轨迹稳');
+      await act(async () => {
+        fireEvent.click(utils.getByRole('button', { name: '停止语音输入' }));
+      });
+      // final 段权威替换 partial 段、基底保留（同为追加语义）
+      expect(note.value).toBe('热身充分，最后一组略吃力，杠铃轨迹稳');
+    });
+
+    it('聆听中手动编辑后：轮询与 final 都不再回填（用户文本优先，#119 返工④③）', async () => {
+      speechMocks.getSpeechPartial.mockResolvedValue({ text: '识别中', running: true });
+      const utils = renderModal(actionTarget);
+      await act(async () => {
+        fireEvent.click(getMic(utils));
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(360);
+      });
+      const note = getNote(utils);
+      expect(note.value).toBe('识别中');
+      act(() => {
+        fireEvent.change(note, { target: { value: '手改文本' } });
+      });
+      await act(async () => {
+        vi.advanceTimersByTime(720); // 后续轮询不再覆盖
+      });
+      expect(note.value).toBe('手改文本');
+      speechMocks.stopSpeechInput.mockResolvedValue('最终识别');
+      await act(async () => {
+        fireEvent.click(utils.getByRole('button', { name: '停止语音输入' }));
+      });
+      expect(note.value).toBe('手改文本'); // final 同样尊重用户文本，不追加不覆盖
     });
 
     it('聆听中确认 → 先停识别再提交（录音资源不挂着）', async () => {
