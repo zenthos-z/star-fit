@@ -388,10 +388,39 @@ Agent 提案轮（编排，无写入工具）
 
 **前置门槛（先于本表）**：`load_history` 后关键输入（目标/经验/器械/频次/
 伤病/体重）大多未知（典型空档案新用户）先发 **survey_card** 调研，不按保守
-假设排计划（「档案空按最保守自重排一周」违规）。问卷轮交付 = ```json
-survey_card 卡（questions=[{id,question,input:text|number|select|checkbox,
-required?,options:[{label,value}]}]），**纯文本问题清单 = 失败交付**；
-问卷轮不带 data.apply，完成后下一轮按 #1 出整周卡。
+假设排计划（「档案空按最保守自重排一周」违规）。
+
+问卷题库单一真源 = `shared/contracts/survey.ts` 的 `PROFILE_INTAKE_QUESTIONS`
+（与 App 首用问卷同源，#114 起双真源收敛）：
+
+- 新用户（画像大多为空）→ `data.purpose: "profile_intake"`，题库全量一次问完；
+- 仅个别字段缺口 → `data.purpose: "plan_gap"` + 缺口对应的题库 id 子集
+  （缺哪几项发哪几题，禁止自造同义题、禁止重问已答字段）；
+- 出卡只需给对 `purpose` + 题库 id + `title`/`message` 话术——题目文案/选项/
+  二级菜单/inputType 由后端按 id 从题库原文替换（题面写了也会被对齐，写对
+  id 才是关键；id 全不在题库 → 校验回路打回）；
+- 条件题：`age` 仅 goal ∈ {fat_loss, general_fitness} 时渲染——含 `age` 的
+  子集必须同时含 `goal`。
+
+题库 id → 画像缺口映射（plan_gap 选 id 依据；字段名注意是 `inputType` 不是
+`input`）：
+
+| 题库 id                                    | 收集内容                                                          | 画像落点                                                                  |
+| ------------------------------------------ | ----------------------------------------------------------------- | ------------------------------------------------------------------------- |
+| `goal`                                     | 目标（muscle_gain/fat_loss/strength/general_fitness/body_recomp） | `preferences.goal`（value 直写）                                          |
+| `experience`                               | 训练经验四档（beginner_zero/beginner/intermediate/advanced）      | `basic_info.training_age`（写库端确定性换算月数）                         |
+| `weight_kg`                                | 体重（number 30-250）                                             | `basic_info.weight`                                                       |
+| `equipment_venue`                          | 场地单选（gym/home/outdoor，children 二级菜单）                   | 派生题，驱动 `equipment_items`                                            |
+| `equipment_items`                          | 器材多选（childKey 答案键，值=EXERCISE_EQUIPMENT）                | `preferences.equipment`（写库端追加 bodyweight）                          |
+| `weekly_frequency`                         | 每周次数（1-6 单值）                                              | `preferences.weekly_frequency_days`                                       |
+| `injuries`                                 | 伤病部位多选（none/knee/lower_back/shoulder/wrist/neck/other）    | 部位交 Agent 确认后登记 `active_limitations`（原文进 `note`）             |
+| `age`                                      | 年龄（number 14-90，条件必答）                                    | `basic_info.age`                                                          |
+| `height_cm` / `gender` / `session_minutes` | 选答补充                                                          | `basic_info.height` / `basic_info.gender` / `preferences.time_constraint` |
+| `notes`                                    | 自由补充（textarea，≤500 字）                                     | 对话上下文 / `write_memory`                                               |
+
+问卷轮交付 = ```json survey_card 卡（data.purpose + questions=[题库 id 子集]），
+**纯文本问题清单 = 失败交付**；问卷轮不带 data.apply，完成后下一轮按 #1 出
+整周卡。
 
 <!-- prettier-ignore -->
 | # | 条件 | 动作 | scope |

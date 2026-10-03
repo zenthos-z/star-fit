@@ -118,6 +118,7 @@ update_profile({
   "type": "survey_card",
   "data": {
     "title": "训练反馈",
+    "purpose": "workout_feedback",
     "sessionId": "from request metadata",
     "questions": [
       {
@@ -156,28 +157,11 @@ update_profile({
 
 #### survey_card Schema
 
-```typescript
-{
-  type: "survey_card",
-  data: {
-    title?: string,           // 卡片标题
-    subtitle?: string,        // 副标题
-    sessionId?: string,       // 关联的 session ID
-    questions: [              // 问题数组（1-3 个）
-      {
-        id: string,           // 问题唯一标识
-        question: string,     // 问题文本
-        required?: boolean,   // 是否必填（默认 false）
-        options?: [           // 选项（有则显示按钮）
-          { label: string, value: string }
-        ],
-        inputType?: "text" | "number" | "checkbox",  // checkbox=多选题（有 options 时用，用户可选多项）
-        placeholder?: string  // 输入框占位符
-      }
-    ]
-  }
-}
-```
+单一真源 = `shared/contracts/survey.ts`（经 `backend/src/services/agent/schemas/uiHintSchemas.ts` 再导出，校验回路按它裁决）——此处不抄录 schema，只列练后反馈卡要点：
+
+- `data.purpose: "workout_feedback"`（#114 起打标；题目仍按上文 Smart Survey 规则自由组织，≤3 问）；
+- `data.questions[]`：`id` / `question` / `required?` / `options?[{label, value, children?}]` / `inputType?`（枚举 `text | number | checkbox | select | textarea`，checkbox=多选） / `placeholder?`；
+- 画像域调研（首用/缺口补全）不属于本技能——那走 plan-generation 知识库 §11.1 的共享题库收敛路径（`purpose=profile_intake/plan_gap`，题目按题库 id 由后端对齐）。
 
 ### Step 5: 生成总结文字
 

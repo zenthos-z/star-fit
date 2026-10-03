@@ -2,7 +2,7 @@
 name: "plan-generation"
 description: "计划生成能力包 - 周计划提案-确认、三段式（策略→选动作→配参数）、结构化四件套输出、周/日粒度、容量与格式验证"
 category: "planning"
-version: "5.4.0"
+version: "5.5.0"
 ---
 
 # 计划生成
@@ -29,7 +29,7 @@ version: "5.4.0"
 
 ## 周/日粒度判定（单一真源 → knowledge §11.1）
 
-**周计划=训练框架，日计划=框架内某天的覆盖**。先 `get_current_plan` 判框架，再查五规则判定表（全文=§11.1）。要点：无框架一律先整周；临时原因只改该天（scope=days）；框架级原因整周重算（scope=week）；**原因不明必须先反问时长，原话无线索禁止出卡**；空档案先 survey_card 不按保守假设排计划。
+**周计划=训练框架，日计划=框架内某天的覆盖**。先 `get_current_plan` 判框架，再查五规则判定表（全文=§11.1）。要点：无框架一律先整周；临时原因只改该天（scope=days）；框架级原因整周重算（scope=week）；**原因不明必须先反问时长，原话无线索禁止出卡**；空档案先 survey_card（题库收敛 #114：purpose=profile_intake/plan_gap，题库 id 映射见 §11.1）不按保守假设排计划。
 
 ## 流程骨架
 
@@ -57,3 +57,4 @@ version: "5.4.0"
 - 算术留 Service；数据只经 mcpTools；user_id 服务器注入；落库只经用户确认（先落库再告知=违规）
 
 v5.4.0 T9 (#66)：结构化输出四字段一次成型；粒度判定表迁 knowledge §11.1。
+v5.5.0 #114 B5c：问卷收敛共享题库——survey_card 画像域出卡改 purpose=profile_intake/plan_gap + 题库 id 子集，题目内容后端按 PROFILE_INTAKE_QUESTIONS 对齐；§11.1 前置门槛 + novice-starting §3.2.0 门禁表加题库 id 列。

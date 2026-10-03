@@ -16,7 +16,12 @@
  */
 
 // exercise_type 词表单一真源（#88 分册1）：枚举列表由 shared card-types 生成，禁手抄
-import { EXERCISE_TYPE_VALUES } from "shared/contracts";
+// survey 题库 id 清单同理由共享题库常量派生（#114 B5c）——prompt 文本与
+// PROFILE_INTAKE_QUESTIONS 不可能漂移。
+import {
+  EXERCISE_TYPE_VALUES,
+  PROFILE_INTAKE_QUESTIONS,
+} from "shared/contracts";
 
 /**
  * The card types the agent is allowed to emit. Kept as a runtime
@@ -39,6 +44,15 @@ export const ALLOWED_UIHINT_TYPES = [
  * prompt text).
  */
 export const BLACKLISTED_UIHINT_TYPES = ["hitl_confirm"] as const;
+
+/**
+ * 首用画像问卷题库 id 清单（#114 B5c）——运行时从 PROFILE_INTAKE_QUESTIONS
+ * 派生（id + 题干），注入下方 survey_card 段落。单一真源：题库增删题时
+ * 本清单自动跟随，prompt 永不手抄题面。
+ */
+const PROFILE_BANK_ID_LIST: string = PROFILE_INTAKE_QUESTIONS.map(
+  (q) => `${q.id}（${q.question}${q.required ? "" : "，选答"}）`,
+).join(" · ");
 
 /**
  * Build the uiHint card-format skill text for systemPrompt injection.
@@ -120,36 +134,42 @@ export function loadUiHintFormatSkill(): string {
     "- `summary_card` — workout/session summary. `data`: `summary` (non-empty",
     "  string), optional `title`, `highlights` (string[]), `metrics` (record of",
     "  string|number).",
-    "- `survey_card` — interactive questionnaire, TWO canonical uses: (1)",
-    "  FIRST-USE profile survey for a brand-new user whose goal/experience/",
-    "  equipment/frequency are unknown — collect them BEFORE any plan; a",
-    "  plain-text question list is a FAILED delivery (the app can only render",
-    "  interactive surveys from this card); (2) post-workout survey questions.",
-    "  `data`: `questions` (array",
-    "  of objects), each question: `id` (string), `question` (string), optional",
-    '  `options` (array of {label, value}), optional `inputType` ("text", "number",',
-    '  or "checkbox" — checkbox = MULTI-SELECT question, user picks 1+ options),',
-    "  optional `placeholder`, optional `required` (boolean). Optional top-level",
-    "  `title`, `subtitle`, `sessionId`. Maximum 3 questions. Smart survey: for",
-    "  the post-workout use, only ask questions relevant to the workout (e.g.,",
-    "  fatigue if weight adjusted, discomfort if unusual pattern).",
+    "- `survey_card` — interactive questionnaire, tagged with `data.purpose`",
+    "  (one of `profile_intake` / `plan_gap` / `workout_feedback`):",
+    "  * `profile_intake` — FIRST-USE profile survey for a brand-new user whose",
+    "    goal/experience/equipment/frequency/injuries/weight are mostly unknown.",
+    "    Emit it BEFORE any plan; a plain-text question list in prose is a FAILED",
+    "    delivery (the app can only render interactive surveys from this card).",
+    "  * `plan_gap` — targeted gap-fill: the profile exists but specific bank",
+    "    items are still missing (e.g. only weight + injuries unknown). Include",
+    "    ONLY the missing ids — do not re-ask answered fields.",
+    "  * `workout_feedback` — post-workout feedback (≤3 free-form questions,",
+    "    only what THIS workout makes relevant: fatigue after weight changes,",
+    "    discomfort after unusual patterns).",
     "",
-    "  ** survey_card option menus (PRE-DECLARED — never invent new values) **",
-    "  When a question maps to a profile field below, use EXACTLY these options",
-    "  (label / value) so the frontend renders a picker instead of free text, and",
-    "  the value parses cleanly into the profile:",
-    "  - experience (training experience): 「完全新手」/beginner ·",
-    "    「有一定经验」/intermediate · 「资深练家」/advanced",
-    "  - pre_test (首次配重方式): 「教练带我测」/coach_tested ·",
-    "    「我自己会测」/self_tested · 「先随便练找感觉」/self_select",
-    "  - goal: 「增肌」/muscle_gain · 「减脂」/fat_loss · 「力量」/strength ·",
-    "    「健康」/health",
-    "  - frequency (weekly): 「2次」/2 · 「3次」/3 · 「4次」/4 · 「5次及以上」/5",
-    "  - equipment: 「健身房」/gym · 「哑铃杠铃」/free_weights ·",
-    "    「自重」/bodyweight · 「弹力带」/bands (inputType=checkbox, multi-select)",
-    "  For any question NOT in this table, free-text (inputType omitted) is fine.",
-    "  Reuse the option VALUES the user already answered in earlier surveys when",
-    "  referencing their experience/pre_test — do not re-ask answered fields.",
+    "  ** Profile-domain surveys CONVERGE on the shared question bank (#114): **",
+    "  For `profile_intake` / `plan_gap`, the question set comes from the single",
+    "  source bank PROFILE_INTAKE_QUESTIONS (shared/contracts/survey.ts — the",
+    "  SAME bank the app's first-use survey renders; the id→profile-field map",
+    "  lives in plan-generation knowledge.md §11.1). The backend REPLACES your",
+    "  question content (wording / options / two-level menus / inputType) with",
+    "  the canonical bank text BY ID before the card reaches the app. So you",
+    "  supply ONLY: `purpose` + the bank question `id`s (for plan_gap) + your",
+    "  own `title`/`message` prose. NEVER invent profile question wording,",
+    "  options, or ids; off-bank ids are dropped (a card with zero valid ids is",
+    "  rejected and retried).",
+    `  Bank ids (the ONLY valid profile ids): ${PROFILE_BANK_ID_LIST}.`,
+    "  Conditional pick rule: `age` only renders when goal ∈ {fat_loss,",
+    "  general_fitness} — whenever you include `age`, also include `goal`.",
+    "",
+    "  Question object shape (free-form `workout_feedback` questions use it",
+    "  directly; profile-domain questions are canonicalized by id anyway):",
+    "  `id` (string), `question` (string), optional `options` (array of",
+    '  {label, value}), optional `inputType` ("text" | "number" | "checkbox" |',
+    '  "select" | "textarea" — checkbox = MULTI-SELECT, user picks 1+ options;',
+    "  select = single-choice; textarea = free-text supplement), optional",
+    "  `placeholder`, optional `required` (boolean). Optional top-level `title`,",
+    "  `subtitle`, `sessionId`, `purpose`.",
     "- `deviation_card` — plan deviation needing adjustment. `data`: `reason`",
     "  (non-empty string), optional `suggestion`.",
     "- `audit_complete` — profile audit finished. `data`: `message` (non-empty",
@@ -191,7 +211,9 @@ export function loadUiHintFormatSkill(): string {
     "- `data` shape MUST match its type (discriminated by `type`).",
     "- For `plan_card`, `data` MUST be a JSON array, never an object/map.",
     "- For `weekly_plan`, `data` MUST be a JSON OBJECT (days inside it is an array).",
-    "- For `survey_card`, `questions` MUST be an array (1-3 questions max).",
+    "- For `survey_card`, `questions` MUST be an array. Profile-domain cards",
+    "  (`profile_intake` full bank / `plan_gap` missing-id subset) are NOT",
+    "  capped at 3; the 3-question cap applies to `workout_feedback` only.",
     "- For `profile_update_confirm`, `proposals` MUST be an array (1+ items).",
     "- ALWAYS wrap the card in a ```json fenced block (the fence is the primary",
     "  extraction path — an unfenced card with any JSON typo leaks as prose).",
