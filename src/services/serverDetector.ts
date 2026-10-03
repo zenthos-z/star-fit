@@ -10,12 +10,25 @@
  */
 
 import { loadServerHistory } from '@/storage';
+import { getNativeLanIpv4 } from '../lib/nativeNetwork';
 
 /**
- * Get client's local IP address using WebRTC
+ * 取本机局域网 IPv4：优先 Capacitor 原生桥（getifaddrs）——iOS WKWebView
+ * 对 WebRTC host candidate 做 mDNS 混淆（xxx.local）拿不到真实 IP；
+ * 原生桥不可用（dev 浏览器 / Android / 旧二进制）时回退 WebRTC。
  * @returns Local IP address (e.g., "192.168.31.50") or null
  */
 async function getLocalIpAddress(): Promise<string | null> {
+  const nativeIp = await getNativeLanIpv4();
+  if (nativeIp) return nativeIp;
+  return getLocalIpAddressViaWebRtc();
+}
+
+/**
+ * WebRTC fallback: get client's local IP address from ICE candidates
+ * @returns Local IP address (e.g., "192.168.31.50") or null
+ */
+async function getLocalIpAddressViaWebRtc(): Promise<string | null> {
   return new Promise((resolve) => {
     const rtc = new RTCPeerConnection({ iceServers: [] });
     rtc.createDataChannel('');
@@ -52,14 +65,15 @@ async function getLocalIpAddress(): Promise<string | null> {
 /**
  * Extract subnet from IP address
  * @param ip - IP address (e.g., "192.168.31.50")
- * @returns Subnet (e.g., "192.168.31")
+ * @returns Subnet (e.g., "192.168.31"); null if not a dotted quad
+ *          （不再回退硬编码网段——错误网段全扫只会 miss）
  */
-function extractSubnet(ip: string): string {
+function extractSubnet(ip: string): string | null {
   const parts = ip.split('.');
   if (parts.length >= 3) {
     return `${parts[0]}.${parts[1]}.${parts[2]}`;
   }
-  return '192.168.1'; // fallback
+  return null;
 }
 
 export interface ServerCandidate {
@@ -338,6 +352,34 @@ function generateFullSubnetCandidates(subnet: string): ServerCandidate[] {
 }
 
 /**
+ * 从连接历史提取私网网段（去重、保序）。
+ * 拿不到本机 IP（mDNS 混淆且无原生桥）时的候选记忆：历史连过哪台，
+ * 其网段大概率就是当前网段——换网场景下凭历史网段扫描仍优于瞎猜。
+ */
+async function getHistorySubnets(): Promise<string[]> {
+  try {
+    const history = await loadServerHistory();
+    const subnets: string[] = [];
+    for (const entry of history) {
+      let host: string;
+      try {
+        host = new URL(entry.url).hostname;
+      } catch {
+        continue;
+      }
+      // 公网/隧道地址的网段不能扫（254 个公网地址没有意义），回环同理
+      if (!isLanUrl(entry.url) || host.startsWith('127.')) continue;
+      const subnet = extractSubnet(host);
+      if (subnet && !subnets.includes(subnet)) subnets.push(subnet);
+    }
+    return subnets;
+  } catch (e) {
+    console.warn('[ServerDetector] Failed to derive subnets from history:', e);
+    return [];
+  }
+}
+
+/**
  * Detect all available Starfit servers on the LAN (issue #84 多后端命中列出全部)
  * @param onProgress - Callback for progress updates
  * @returns All detected servers, LAN addresses first then public/tunnel,
@@ -347,8 +389,10 @@ function generateFullSubnetCandidates(subnet: string): ServerCandidate[] {
  * 0. 已知地址直查（history / env / 本机 dev server / mobile fallback）并发探测，
  *    全部命中保留——不再命中即 return（隧道地址可能只是同一后端的公网入口，
  *    短路会让用户错过局域网直连）
- * 1. **无论 Phase 0 是否命中都执行**：WebRTC 拿本机 IP → 定位网段 →
- *    **全网段 .1-.254 一轮并发扫描收集全部响应者**
+ * 1. **无论 Phase 0 是否命中都执行**：原生桥（getifaddrs，iOS WKWebView 下
+ *    WebRTC 被 mDNS 混淆拿不到真实 IP）优先拿本机 IP → 定位网段 →
+ *    **全网段 .1-.254 一轮并发扫描收集全部响应者**；拿不到 IP 时退候选记忆
+ *    （连接历史的历史网段），绝不赌硬编码网段
  *    （60 并发、800ms 超时、窗口内命中全收；固定端口 43111 + /health starfit 标识精确识别）
  * 2. 合并去重（同 url 一条，Phase 0 来源更具体故优先保留），局域网地址排前、
  *    其后公网/隧道地址，同组内按延迟升序
@@ -385,11 +429,17 @@ export async function detectServers(
   const localIp = await getLocalIpAddress().catch(() => null);
   console.log('[ServerDetector] Client IP:', localIp);
 
-  const subnet = localIp ? extractSubnet(localIp) : '192.168.1';
-  console.log(`[ServerDetector] Scanning ${subnet}.1-.254 for all responders ...`);
-  const lanCandidates = generateFullSubnetCandidates(subnet);
+  // 扫描网段：优先本机 IP 推断；拿不到（mDNS 混淆且无原生桥）时走候选
+  // 记忆（连接历史的历史网段）——不赌硬编码 192.168.1，错误网段全扫
+  // 只会 miss，只剩公网候选能命中（#84 真机返工根因）
+  const subnet = localIp ? extractSubnet(localIp) : null;
+  const scanSubnets = subnet ? [subnet] : await getHistorySubnets();
+  console.log('[ServerDetector] Scan subnets:', scanSubnets);
 
-  const scanHits = await collectScanHits(lanCandidates, onProgress, 60, 800);
+  const lanCandidates = scanSubnets.flatMap(s => generateFullSubnetCandidates(s));
+  const scanHits = lanCandidates.length > 0
+    ? await collectScanHits(lanCandidates, onProgress, 60, 800)
+    : [];
 
   // 合并去重：同 url 只留一条；Phase 0 来源（history/login/local…）比 scan 更具体，优先保留
   const merged = new Map<string, DetectionResult>();

@@ -37,17 +37,10 @@
  * here — M5 wraps it, INT AC4 verifies it.
  */
 
-import {
-  createDeepAgent,
-  type DeepAgent,
-  TASK_SYSTEM_PROMPT,
-} from "deepagents";
+import { createDeepAgent, type DeepAgent } from "deepagents";
 import { AIMessageChunk } from "@langchain/core/messages";
-import { HumanMessage, SystemMessage } from "@langchain/core/messages";
-import {
-  createMiddleware,
-  TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT,
-} from "langchain";
+import { HumanMessage } from "@langchain/core/messages";
+import { createMiddleware } from "langchain";
 
 import type { AgentEvent, ChatRequest } from "shared/contracts";
 import type { AgentService } from "./AgentService.js";
@@ -61,7 +54,9 @@ import {
 // exact shape the M5 validator (and the INT extraction layer) expect.
 import { loadUiHintFormatSkill } from "./uiHintFormat.js";
 // MCP domain tools (R3): the Agent-only data adapter over the Repository layer.
-import { buildMcpTools } from "./mcpTools.js";
+// turnToolCacheMiddleware（#116）：同轮幂等只读工具结果缓存，实现见 mcpTools
+// （Agent 工具执行层单一收口，覆盖 mcpTools 读工具 + deepagents read_file）。
+import { buildMcpTools, turnToolCacheMiddleware } from "./mcpTools.js";
 // R5: mount every GOLD knowledge skill + operational skill via native
 // deepagents Skills + Filesystem (read on demand).
 import { mountAllSkills } from "./skillLoader.js";
@@ -465,9 +460,14 @@ export class DeepAgentService implements AgentService {
     // 42b (issue #42)：框架死重裁剪中间件对文本/带图两种 agent 都挂——
     // subagent(task)/todo(write_todos) 与只读场景用不到的 edit_file/write_file
     // schema 不再进模型上下文，TASK/todo 系统提示同步剥离（见该中间件注释）。
+    // turnToolCacheMiddleware（#116）：同轮幂等工具缓存，两种 agent 同挂。
     const middleware = hasImage
-      ? [frameworkTrimMiddleware]
-      : [stripImageMiddleware, frameworkTrimMiddleware];
+      ? [frameworkTrimMiddleware, turnToolCacheMiddleware]
+      : [
+          stripImageMiddleware,
+          frameworkTrimMiddleware,
+          turnToolCacheMiddleware,
+        ];
 
     // P006: checkpointer injected from M-RT (agent_runtime schema). Ensure the
     // schema exists before the graph first reads/writes checkpoint state.
@@ -652,6 +652,13 @@ export async function* classifyAgentStream(
 ): AsyncIterable<AgentEvent> {
   let leakedThinking = ""; // reasoning stripped from terminal messages
 
+  // ★空终步守卫（refs #110 §5.4 / #112）：记录本轮是否放过任何答案载荷。
+  // uiHint 卡只能随 token 文本下发（extractUiHintEvents 在本层下游剥卡），
+  // 故「零 token」⟺「零 token 且零 uiHint」。整轮零载荷时在 done 前发
+  // error 兜底事件——前端走既有 error 渲染路径，「正在解析数据…」死占位
+  // 由后端保证不再出现（thinking 不算答案：纯思考轮对用户同样是空轮）。
+  let sawAnswerPayload = false;
+
   // ★吞卡修复（refs #73）：本轮（含 before_agent 重放的历史）全部工具返回的
   // 扁平文本（去空白）。卡片段若逐字出现在任一工具返回里 → 是复述不是交付
   // （典型：read_file plan-generation knowledge.md §9 的示例卡围栏被复述），
@@ -720,6 +727,7 @@ export async function* classifyAgentStream(
               : gated.echoes;
           }
           if (gated.tokens) {
+            sawAnswerPayload = true;
             for (const chunk of chunkAnswerText(gated.tokens)) {
               yield { type: "token", text: chunk };
             }
@@ -794,6 +802,7 @@ export async function* classifyAgentStream(
           yield { type: "thinking", text: rest.trim() };
         }
         for (const card of cards) {
+          sawAnswerPayload = true;
           yield { type: "token", text: card };
         }
       }
@@ -842,6 +851,7 @@ export async function* classifyAgentStream(
             : mid.echo;
         }
         if (mid.rest) {
+          sawAnswerPayload = true;
           for (const chunk of chunkAnswerText(mid.rest)) {
             yield { type: "token", text: chunk };
           }
@@ -874,6 +884,7 @@ export async function* classifyAgentStream(
       : gateTail.echoes;
   }
   if (gateTail.tokens) {
+    sawAnswerPayload = true;
     for (const chunk of chunkAnswerText(gateTail.tokens)) {
       yield { type: "token", text: chunk };
     }
@@ -890,6 +901,23 @@ export async function* classifyAgentStream(
 
   // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。
   //   最终答案同样已在循环内逐段/逐 token 实时转发，流尾不再补发。）
+
+  // ★空终步守卫（refs #110 §5.4 / #112）：整轮零 token 零 uiHint 零 error
+  // 而流正常收尾 → 发兜底 error 事件（消息内嵌 EMPTY_ANSWER 标识，code 用
+  // 契约既有 MODEL_ERROR——AgentErrorCode 为封闭枚举且本任务冻结
+  // shared/contracts，见 PR 说明），随后 done 照常收流。中间件重滚（见
+  // frameworkTrimMiddleware）已挡住 #110 的主签名，这里是同链路纵深：任何
+  // 残余形态的空轮（真空回、纯思考轮等）都不再以「正在解析数据…」死占位
+  // 呈现给用户。
+  if (!sawAnswerPayload) {
+    yield {
+      type: "error",
+      error: {
+        code: "MODEL_ERROR",
+        message: "本轮回复为空（EMPTY_ANSWER）——模型未产生任何内容，请重试。",
+      },
+    };
+  }
   yield { type: "done" };
 }
 
@@ -1163,8 +1191,18 @@ export async function buildUserContent(
   return blocks;
 }
 
-/** Normalise a thrown value into an `AgentEvent` error element. */
-function toErrorEvent(err: unknown): AgentEvent {
+/**
+ * Normalise a thrown value into an `AgentEvent` error element.
+ *
+ * ★#112：EmptyAgentTurnError（空终步重滚穷尽，见 emptyTurnRetry.ts）映射
+ * 分支拆到 emptyTurnToErrorEvent（jest 可直接断言）；其余错误照旧 INTERNAL。
+ * 导出仅供测试断言映射；运行时仅模块内部调用。
+ */
+export function toErrorEvent(err: unknown): AgentEvent {
+  const emptyTurn = emptyTurnToErrorEvent(err);
+  if (emptyTurn !== null) {
+    return emptyTurn;
+  }
   const message =
     err instanceof Error
       ? err.message
@@ -1220,75 +1258,22 @@ const stripImageMiddleware = createMiddleware({
 // 框架死重裁剪（42b，issue #42）
 // ---------------------------------------------------------------------------
 
-/**
- * 本项目零使用的 deepagents 框架件（grep 全仓验证，2026-09-28）：subagent
- * （task 工具 + general-purpose 子智能体 + TASK_SYSTEM_PROMPT 2,194 字符）与
- * todo（write_todos 工具 + todo 系统提示）。单 Agent 架构（修订①）下两者均
- * 无调用方；general-purpose 子智能体只能经 task 工具触达，工具不入上下文即
- * 不可达。edit_file/write_file 在 GOLD 只读权限下（skillLoader permissions
- * 仅 read）本就无法执行，但框架只挡执行不挡展示——schema 仍占上下文，一并裁。
- * read_file / grep / glob / ls 保留（progressive disclosure 的技能正文依赖它们）。
- *
- * 实现机制：deepagents 的 createDeepAgent 不暴露关闭这两个默认中间件的参数，
- * 且 SubAgentMiddleware 属于 REQUIRED_MIDDLEWARE_NAMES 不可排除；但自定义
- * middleware 在数组末位 = wrapModelCall 链最内层，晚于全部框架注入执行——
- * 在此把裁剪目标从最终请求里摘除（与库自身 _ToolExclusionMiddleware 同款手法）。
- * 若未来 deepagents 升级改变注入文本/工具名，断言测试（tests + probe）会红。
- */
-const FRAMEWORK_TRIM_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "task",
-  "write_todos",
-  "edit_file",
-  "write_file",
-]);
-
-/** 导出给探针（scripts/system-area-probe.mjs）复用同一份裁剪逻辑测量 AFTER 口径。 */
-export const frameworkTrimMiddleware = createMiddleware({
-  name: "frameworkDeadweightTrim",
-  wrapModelCall: async (request, handler) => {
-    const tools = (request.tools ?? []).filter(
-      (t) => !FRAMEWORK_TRIM_TOOL_NAMES.has((t as { name: string }).name),
-    );
-    const text = request.systemMessage?.text ?? "";
-    // 两种 join 形态都剥（探针实测 2026-09-28）：todoListMiddleware 以
-    // "\n\n" + 常量全文 concat；SubAgentMiddleware 把 TASK_SYSTEM_PROMPT
-    // 无分隔符直拼在文末（紧贴 filesystem 工具清单，不带 \n\n）。
-    // 常量为 2,000+ 字符的独有 blob，裸 replace 无误伤风险。
-    const trimmed = text
-      .replace(`\n\n${TASK_SYSTEM_PROMPT}`, "")
-      .replace(TASK_SYSTEM_PROMPT, "")
-      .replace(`\n\n${TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT}`, "")
-      .replace(TODO_LIST_MIDDLEWARE_SYSTEM_PROMPT, "");
-    const touched = tools.length !== (request.tools ?? []).length;
-    const req2 =
-      touched || trimmed !== text
-        ? {
-            ...request,
-            tools,
-            ...(trimmed !== text
-              ? { systemMessage: new SystemMessage(trimmed) }
-              : null),
-          }
-        : request;
-    const res = await handler(req2);
-    // GLM 的 OpenAI 兼容流偶发尾包（空 content / 无 role 的末 chunk）会把聚合
-    // 结果映射成 ChatMessageChunk —— 它不是 AIMessage 子类，AgentNode 的
-    // wrapModelCall 返回值校验（AIMessage|Command|structuredResponse）会以
-    // "got object" 拒绝（2026-09-28 E2E 实测 2/4 轮命中，与 llm.ts 注释里
-    // maxTokens 规避的 args 截断是同族 provider 互操作问题）。本中间件位于
-    // wrapModelCall 链最内层、最先见到模型返回——在此把字段同构的
-    // ChatMessageChunk 重水化回 AIMessageChunk，语义零改动，只补类型。
-    if (
-      res != null &&
-      typeof res === "object" &&
-      (res as { constructor?: { name?: string } }).constructor?.name ===
-        "ChatMessageChunk"
-    ) {
-      return new AIMessageChunk({ ...(res as object) });
-    }
-    return res;
-  },
-});
+// 空终步检测 + 模型重滚（refs #110 #111，#112）随框架裁剪中间件一起拆到
+// emptyTurnRetry.ts（2026-10-03）：DeepAgentService 顶层 import 链含
+// skillLoader 的 import.meta，jest CJS 加载不了整条链；拆出后核心语义
+// （三条件谓词 / 重滚一次 / abort 守卫 / EmptyAgentTurnError）可在
+// `npm run test:unit`（tests/unit/services/agent/emptyTurnRetry.test.ts）
+// 里直接测试（与 splitLeakedReasoning 的拆分同款先例）。
+// 重导出保持既有消费方（scripts/system-area-probe.mjs、测试）的导入面不变。
+export {
+  frameworkTrimMiddleware,
+  EmptyAgentTurnError,
+} from "./emptyTurnRetry.js";
+import {
+  EmptyAgentTurnError,
+  emptyTurnToErrorEvent,
+  frameworkTrimMiddleware,
+} from "./emptyTurnRetry.js";
 
 // ---------------------------------------------------------------------------
 // Default export: a shared singleton instance (consumers inject this as needed).

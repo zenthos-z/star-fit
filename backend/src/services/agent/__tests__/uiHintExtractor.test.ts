@@ -16,6 +16,7 @@ import assert from "node:assert/strict";
 import {
   extractUiHintEvents,
   findFenceOpen,
+  isDegradedCardFragment,
   tryParseCard,
 } from "../uiHintExtractor.js";
 import type { AgentEvent, ChatRequest } from "shared/contracts";
@@ -443,4 +444,45 @@ test("leak guard A 防误伤: prose braces（{ 目标 }）不缓冲、不降级"
     out.some((e) => e.type === "thinking"),
     false,
   );
+});
+
+// ---------------------------------------------------------------------------
+// isDegradedCardFragment — 泄漏残片谓词（refs #73/#56 机制升级）
+// ---------------------------------------------------------------------------
+
+test("isDegradedCardFragment: 括号平衡但语法破损的 weekly_plan → 残片", () => {
+  const broken =
+    '{"type": "weekly_plan", "data": { "week_label": "第 2 周", "days": [{"entry_date": "2026-10-05", "rest": false,}] }}';
+  assert.equal(isDegradedCardFragment(broken), true);
+});
+
+test("isDegradedCardFragment: 未闭合截断卡 → 残片", () => {
+  const truncated =
+    '{"type": "weekly_plan", "data": { "week_label": "第 2 周", "days": [{"entry_date": "2026-10-05"';
+  assert.equal(isDegradedCardFragment(truncated), true);
+});
+
+test("isDegradedCardFragment: 完整可解析的卡 JSON（工具复述）→ 非残片", () => {
+  assert.equal(isDegradedCardFragment(PLAN_CARD), false);
+  // 复述形态：叙述 + 围栏内完整示例卡（read_file 技能文档回显）——不触发重试
+  const echoNarration =
+    "好的，我来看下技能文档的示例卡：\n```json\n" + PLAN_CARD + "\n```";
+  assert.equal(isDegradedCardFragment(echoNarration), false);
+});
+
+test("isDegradedCardFragment: 散文括号 / 工具行 JSON → 非残片", () => {
+  assert.equal(isDegradedCardFragment("{ 目标 } 拆解完成"), false);
+  // list_exercises 行对象：type 非卡型、无 data —— 不触发重试
+  assert.equal(
+    isDegradedCardFragment(
+      '{"id": "abc123", "name": "Squat", "type": "compound"}',
+    ),
+    false,
+  );
+});
+
+test("isDegradedCardFragment: {type,data} 卡形态但 type 不在白名单（破损）→ 残片", () => {
+  const unknownTypeBroken =
+    '{"type": "plan_card_v2", "data": { "days": [1, 2,]';
+  assert.equal(isDegradedCardFragment(unknownTypeBroken), true);
 });

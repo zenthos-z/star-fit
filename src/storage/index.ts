@@ -262,6 +262,36 @@ export async function clearLoginCredentials(): Promise<void> {
 }
 
 /**
+ * 会话清理共用路径（useLoginStatus.logout 与 #108 401 强制登出共用）：
+ * 同步 localStorage 部分先行（写墓碑 + 清凭据镜像，同步必然成功，reload 后
+ * 必落登录页）；IDB 凭据清除 best-effort（WKWebView 的 IDB 可能挂起，登出
+ * 墓碑保证下次启动懒清除陈旧凭据）。双墓碑 lastUserId / lastServerUrl 供
+ * 下次登录检测切号（#82）与切服务器（#108 机制二）。
+ */
+export async function clearLoginSession(): Promise<void> {
+  const uid = localStorage.getItem('starfit_user_id');
+  if (uid) {
+    localStorage.setItem(Keys.lastUserId, uid);
+  }
+  const curServer = localStorage.getItem('starfit_server_url');
+  if (curServer) {
+    localStorage.setItem(Keys.lastServerUrl, curServer);
+  }
+  localStorage.setItem('starfit_logged_out', '1');
+  localStorage.removeItem('starfit_user_id');
+  localStorage.removeItem('starfit_server_url');
+  localStorage.removeItem('starfit_server_ip');
+  try {
+    await Promise.race([
+      clearLoginCredentials(),
+      new Promise<void>((r) => setTimeout(r, 2000)),
+    ]);
+  } catch (e) {
+    console.warn('[Storage] clearLoginSession: IDB credential clear failed (non-fatal):', e);
+  }
+}
+
+/**
  * Load server history from IDB
  */
 export async function loadServerHistory(): Promise<ServerHistoryEntry[]> {
@@ -331,6 +361,96 @@ export async function clearUserStateStorage(): Promise<number> {
   }
   console.log(`[Storage] clearUserStateStorage: removed ${removed} user-state key(s)`);
   return removed;
+}
+
+// ========== [#108 机制二] 服务器切换 → 用户数据缓存整体作废 ==========
+
+/**
+ * 作废的精确键：用户数据（按 Keys 全集逐键判定）+ 指向旧数据宇宙的同步队列。
+ * 未列入者要么是设备级/凭据键（见下方豁免注释），要么由 sync/pull 随新服务器覆写。
+ */
+const SERVER_SWITCH_INVALIDATE_EXACT = [
+  Keys.history,              // legacy 全局历史（迁移前）
+  Keys.sessionActive,        // 进行中会话
+  Keys.pendingSummary,       // 待总结标记
+  Keys.nextPlan,             // 下次计划
+  Keys.exerciseLibrary,      // 动作库缓存（新服务器拉取重建）
+  Keys.exerciseLibraryMeta,
+  Keys.suggestionCache,      // 动作建议缓存（用户数据衍生）
+  'STARFIT_SYNC_QUEUE',      // 同步队列：指向旧服务器宇宙的会话引用
+  'STARFIT_DELETE_QUEUE',
+  'STARFIT_SYNC_STATE',
+];
+/** 作废的键前缀：按 deviceId / 日期 / 会话 ID 展开的用户数据 */
+const SERVER_SWITCH_INVALIDATE_PREFIXES = [
+  'starfit_history:',        // historyForDevice（当前历史）
+  'starfit_day_plan:',       // 按天训练计划
+  'workout_draft:',          // 训练草稿（Keys.draft）
+  'chat_draft:',             // legacy 会话草稿（迁移前）
+  'chat_thread_list:',       // 会话线程列表
+  'chat_messages:',          // 会话消息
+  'starfit_poster:',         // 海报缓存（训练衍生用户数据）
+];
+
+function isServerSwitchInvalidateKey(key: string): boolean {
+  if (SERVER_SWITCH_INVALIDATE_EXACT.includes(key)) return true;
+  return SERVER_SWITCH_INVALIDATE_PREFIXES.some((p) => key.startsWith(p));
+}
+
+/**
+ * 扫除所有用户数据缓存键（双后端：IDB kv 库 + localStorage）。
+ * 豁免（设备级 / 凭据 / 跨服务器内容缓存，不作废）：deviceId、userId/serverUrl/
+ * serverHistory/lastUserId/lastServerUrl（凭据与记录）、aiConfig、prefs:*、
+ * tutorial:*（服务端内容缓存）、firstUseCoachTriage:*（userId 维度）、
+ * serverHistory、starfit_logged_out / starfit_login_username。
+ * @returns 清除的键数量（双后端合计）
+ */
+export async function invalidateUserDataStorage(): Promise<number> {
+  let removed = 0;
+  if (useIDB) {
+    try {
+      for (const k of await idbKeys()) {
+        if (isServerSwitchInvalidateKey(k)) {
+          await idbRemove(k);
+          removed++;
+        }
+      }
+    } catch (e) {
+      console.warn('[Storage] invalidateUserDataStorage: IDB pass failed:', e);
+    }
+  }
+  try {
+    for (const k of lsKeys()) {
+      if (isServerSwitchInvalidateKey(k)) {
+        lsRemove(k);
+        removed++;
+      }
+    }
+  } catch (e) {
+    console.warn('[Storage] invalidateUserDataStorage: localStorage pass failed:', e);
+  }
+  console.log(`[Storage] invalidateUserDataStorage: removed ${removed} key(s)`);
+  return removed;
+}
+
+/**
+ * 登录成功时检测服务器变更 → 用户数据缓存整体作废（#108 机制二）。
+ * 一把梭语义：换了服务器 = 换了数据宇宙，不做键级指纹（YAGNI）。
+ * 比对基准 = 跨登出存活的 Keys.lastServerUrl（凭据在 logout 时会被清，
+ * 首次登录无记录 = 无从谈「变化」，不触发作废）。无论是否变更都记录本次 URL。
+ * 必须在覆写凭据 / onLogin（App 随即 reload，异步作废会与 reload 竞态）之前 await。
+ * @returns 作废的键数量（未变更时为 0）
+ */
+export async function invalidateUserDataOnServerChange(newServerUrl: string): Promise<number> {
+  const last = localStorage.getItem(Keys.lastServerUrl);
+  if (last && last !== newServerUrl) {
+    console.log(`[Storage] Server changed (${last} → ${newServerUrl}), invalidating user data cache`);
+    const removed = await invalidateUserDataStorage();
+    localStorage.setItem(Keys.lastServerUrl, newServerUrl);
+    return removed;
+  }
+  localStorage.setItem(Keys.lastServerUrl, newServerUrl);
+  return 0;
 }
 
 /**

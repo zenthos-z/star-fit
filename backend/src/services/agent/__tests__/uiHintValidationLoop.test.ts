@@ -23,6 +23,8 @@ import {
   chatWithValidationLoop,
   RETRY_STATUS_TOKEN,
 } from "../uiHintValidationLoop.js";
+// 泄漏重试测试走生产同构组装（raw → extractUiHintEvents → 校验循环）
+import { extractUiHintEvents } from "../uiHintExtractor.js";
 
 // ---------------------------------------------------------------------------
 // Probe: a scripted AgentService
@@ -633,6 +635,271 @@ describe("chatWithValidationLoop — cheap retry (card-only correction)", () => 
       events.some((e) => e.type === "token" && e.text?.includes("草稿叙述")),
       false,
       "rejected-round prose never appears as answer text",
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// 泄漏终态自动重生成（refs #73/#56 机制升级）
+// ---------------------------------------------------------------------------
+
+/**
+ * 破损 weekly_plan 残片：括号平衡、非围栏、trailing comma 语法破损——
+ * 「模型把卡片 JSON 写歪在正文」的实锤形态（提取器终态降级 thinking）。
+ */
+const BROKEN_WEEKLY_FRAGMENT =
+  '{"type": "weekly_plan", "data": { "week_label": "第 2 周", "split_summary": "推拉腿 · 每周 3 练", "days": [{"entry_date": "2026-10-05", "rest": false,}] }}';
+
+/** 合法 weekly_plan 卡（过 M5b 校验器）。 */
+const VALID_WEEKLY: unknown = {
+  type: "weekly_plan",
+  data: {
+    week_label: "第 2 周",
+    split_summary: "推拉腿 · 每周 3 练",
+    days: [
+      {
+        entry_date: "2026-10-05",
+        rest: false,
+        exercises: [
+          {
+            exercise_id: "abcdefgh12345678",
+            name: "卧推",
+            sets: [{ set: 1, weight: 60, reps: 8 }],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+describe("chatWithValidationLoop — 泄漏终态自动重生成（refs #73/#56）", () => {
+  it("破损 weekly_plan 写进正文（非围栏）→ 触发重试轮；重试产出合法卡后无降级残片外漏", async () => {
+    // 生产组装同构：raw token 流 → extractUiHintEvents → 校验循环
+    const raw = new ScriptedAgent([
+      [
+        { type: "token", text: "这是你本周的计划：" },
+        { type: "token", text: BROKEN_WEEKLY_FRAGMENT },
+        { type: "done" },
+      ],
+      [
+        {
+          type: "token",
+          text: "```json\n" + JSON.stringify(VALID_WEEKLY) + "\n```",
+        },
+        { type: "done" },
+      ],
+    ]);
+    const service: AgentService = {
+      async *chat(req: ChatRequest): AsyncIterable<AgentEvent> {
+        yield* chatWithValidationLoop(
+          {
+            async *chat(r) {
+              yield* extractUiHintEvents(raw.chat(r));
+            },
+          },
+          req,
+        );
+      },
+    };
+
+    const events = await drain(service.chat(baseReq));
+
+    // 重试轮真的发生了（chat 被再次调用）
+    assert.equal(
+      raw.calls.length,
+      2,
+      "泄漏残片必须触发重试轮（chat 被再次调用）",
+    );
+
+    // 最终流含 uiHint（重试产出的合法 weekly_plan）
+    const uiHints = events.filter((e) => e.type === "uiHint");
+    assert.equal(uiHints.length, 1);
+    assert.equal((uiHints[0].card as { type: string }).type, "weekly_plan");
+
+    // 正文（token 拼接）无破损 JSON 残片、无降级文案；thinking 通道也无残片
+    const tokenText = events
+      .filter((e) => e.type === "token")
+      .map((e) => e.text)
+      .join("");
+    assert.equal(
+      tokenText.includes("weekly_plan"),
+      false,
+      "破损卡 JSON 不得留在正文",
+    );
+    assert.equal(
+      events.some(
+        (e) =>
+          (e.type === "token" || e.type === "thinking") &&
+          (e.text ?? "").includes("week_label"),
+      ),
+      false,
+      "重试成功后原降级片段从流中剥离（不下发 degraded 内容）",
+    );
+
+    // 复用重试回路的既有感知：RETRY_STATUS_TOKEN 恰一次、无 error
+    assert.equal(
+      events.filter((e) => e.type === "token" && e.text === RETRY_STATUS_TOKEN)
+        .length,
+      1,
+    );
+    assert.equal(
+      events.some((e) => e.type === "error"),
+      false,
+    );
+    assert.ok(events.some((e) => e.type === "done"));
+
+    // 反馈请求携带残片原文 + 围栏协议结构化错误
+    const feedbackReq = raw.calls[1];
+    assert.ok(
+      feedbackReq.message.includes(BROKEN_WEEKLY_FRAGMENT),
+      "反馈必须内嵌降级残片原文",
+    );
+    assert.match(feedbackReq.message, /```json fence/);
+    const meta = feedbackReq.metadata as Record<string, unknown> | undefined;
+    const fb = meta?.uiHintValidationFeedback as
+      | {
+          errors?: Array<{ code?: string }>;
+          leakFragments?: string[];
+        }
+      | undefined;
+    assert.equal(fb?.errors?.[0]?.code, "card_leak");
+    assert.deepEqual(fb?.leakFragments, [BROKEN_WEEKLY_FRAGMENT]);
+  });
+
+  it("重试耗尽 → 维持现状：残片以 thinking 降级放行 + done 收尾，无 uiHint、无新增 error", async () => {
+    const raw = new ScriptedAgent([
+      [
+        { type: "token", text: "计划如下：" },
+        { type: "token", text: BROKEN_WEEKLY_FRAGMENT },
+        { type: "done" },
+      ],
+    ]);
+    const service: AgentService = {
+      async *chat(req: ChatRequest): AsyncIterable<AgentEvent> {
+        yield* chatWithValidationLoop(
+          {
+            async *chat(r) {
+              yield* extractUiHintEvents(raw.chat(r));
+            },
+          },
+          req,
+        );
+      },
+    };
+
+    const events = await drain(service.chat(baseReq));
+
+    // 1 首轮 + 2 重试轮（DEFAULT_MAX_RETRIES）
+    assert.equal(raw.calls.length, 3);
+    // 无 uiHint、无 error（不新增用户可见错误——前端兜底文案仍是最后防线）
+    assert.equal(
+      events.some((e) => e.type === "uiHint"),
+      false,
+    );
+    assert.equal(
+      events.some((e) => e.type === "error"),
+      false,
+    );
+    // 末两事件 = 降级 thinking（末轮残片）+ done（现状语义）
+    const lastTwo = events.slice(-2);
+    assert.equal(lastTwo[0]?.type, "thinking");
+    assert.equal(lastTwo[0]?.text, BROKEN_WEEKLY_FRAGMENT);
+    assert.equal(lastTwo[1]?.type, "done");
+    // 两个重试轮各一次 RETRY_STATUS_TOKEN
+    assert.equal(
+      events.filter((e) => e.type === "token" && e.text === RETRY_STATUS_TOKEN)
+        .length,
+      2,
+    );
+  });
+
+  it("回路级：thinking 残片 + done（无卡可校验）→ 打回重试，重试出卡后残片剥离", async () => {
+    const agent = new ScriptedAgent([
+      [
+        { type: "thinking", text: BROKEN_WEEKLY_FRAGMENT },
+        { type: "token", text: "收尾。" },
+        { type: "done" },
+      ],
+      [uiHint(VALID_PLAN), { type: "done" }],
+    ]);
+
+    const events = await drain(chatWithValidationLoop(agent, baseReq));
+
+    assert.equal(agent.calls.length, 2, "残片触发重试轮");
+    const uiHints = events.filter((e) => e.type === "uiHint");
+    assert.equal(uiHints.length, 1, "重试产出的合法卡照常转发");
+    assert.equal(
+      events.some((e) => (e.text ?? "").includes("week_label")),
+      false,
+      "原残片重试成功后不再以任何事件下发",
+    );
+    // 反馈请求是围栏协议纠错（非 Zod shape 错误）
+    assert.match(agent.calls[1].message, /围栏/);
+  });
+
+  it("误伤防线：完整可解析卡 JSON 的 thinking（工具复述）不触发重试", async () => {
+    const echoThinking =
+      "好的，我来看下技能文档的示例卡：\n```json\n" +
+      JSON.stringify(VALID_PLAN) +
+      "\n```";
+    const agent = new ScriptedAgent([
+      [
+        { type: "thinking", text: echoThinking },
+        { type: "token", text: "普通回答，无卡。" },
+        { type: "done" },
+      ],
+    ]);
+
+    const events = await drain(chatWithValidationLoop(agent, baseReq));
+
+    assert.equal(
+      agent.calls.length,
+      1,
+      "复述（完整可解析卡 JSON）不得误燃重试轮",
+    );
+    assert.ok(
+      events.some((e) => e.type === "thinking" && e.text === echoThinking),
+      "复述 thinking 照现状即时放行",
+    );
+    assert.ok(events.some((e) => e.type === "done"));
+  });
+
+  it("已有合法卡时残片不触发重试：卡片转发 + 残片按现状 thinking 放行", async () => {
+    const agent = new ScriptedAgent([
+      [
+        uiHint(VALID_PLAN),
+        { type: "thinking", text: BROKEN_WEEKLY_FRAGMENT },
+        { type: "done" },
+      ],
+    ]);
+
+    const events = await drain(chatWithValidationLoop(agent, baseReq));
+
+    assert.equal(agent.calls.length, 1, "已发卡的轮不重试");
+    assert.equal(events.filter((e) => e.type === "uiHint").length, 1);
+    assert.ok(
+      events.some(
+        (e) => e.type === "thinking" && e.text === BROKEN_WEEKLY_FRAGMENT,
+      ),
+      "首卡后的残片按现状放行（前端已有卡时静默摘除）",
+    );
+    assert.ok(events.some((e) => e.type === "done"));
+  });
+
+  it("残片 + error 终态：不重试，残片按现状放行后 error 透传", async () => {
+    const agent = new ScriptedAgent([
+      [
+        { type: "thinking", text: BROKEN_WEEKLY_FRAGMENT },
+        { type: "error", error: { code: "MODEL_ERROR", message: "boom" } },
+      ],
+    ]);
+
+    const events = await drain(chatWithValidationLoop(agent, baseReq));
+
+    assert.equal(agent.calls.length, 1, "error 终态不重试（既有语义）");
+    assert.deepEqual(
+      events.map((e) => e.type),
+      ["thinking", "error"],
     );
   });
 });

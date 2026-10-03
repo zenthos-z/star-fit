@@ -1463,11 +1463,19 @@ const App: React.FC = () => {
   if (!isLoggedIn) {
     return (
       <LoginV2
-        onLogin={(userId, serverUrl) => {
-          // 使用 useLoginStatus 的 login 方法
-          login(userId, serverUrl, serverUrl.replace('http://', '').replace('/api', '').split(':')[0]);
-          // Reload to ensure all services use the new config
-          window.location.reload();
+        onLogin={async (userId, serverUrl) => {
+          // 使用 useLoginStatus 的 login 方法（[#115 ③] 凭据镜像已在首个 await
+          // 之前同步落盘，主界面靠 isLoggedIn 状态切换渲染，不再无条件 reload）。
+          await login(userId, serverUrl, serverUrl.replace('http://', '').replace('/api', '').split(':')[0]);
+          // [#115 ①] 服务器的 URL 配置在各服务模块是导入时定型的（geminiService
+          // 的 API_BASE IIFE 导入时读一次 starfit_server_url，WS 单例导入即连）：
+          // 本次登录服务器与导入时一致（boot 镜像直连的常态路径）→ 凭据动态读，
+          // 纯状态切换即可；不一致（首次登录/登出后重登/切服务器）→ 冻结 URL 已
+          // 过期，一次受控 reload 重建模块态——此时镜像已 durable 落盘，reload
+          // 后 boot 快速判定直达主界面，不会再落回登录页（结构性断开旧循环）。
+          if (API_BASE !== serverUrl) {
+            window.location.reload();
+          }
         }}
       />
     );
