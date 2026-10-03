@@ -70,15 +70,36 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
         // 2026-09-20 三轮：真机 RMS=0 实锤「权限granted但音频为零」= TCC 实际拒绝
         // 而旧 requestRecordPermission 回调的是缓存值。改用 AVAudioApplication
         // 读真实 TCC 状态 + 埋点对照。
+        // 2026-10-03 #119 缺陷2 根修：纯读 TCC 有副作用——「从未请求过麦克风」的设备上
+        // recordPermission 恒 .undetermined，而真正会弹系统授权的 audioEngine.start()
+        // 在 JS 侧权限闸（mic !== 'granted' 即 return）之后，永远走不到 → 授权弹窗
+        // 只出了语音识别那张（SFSpeechRecognizer），麦克风 TCC 无人触发，用户授权后
+        // 再点麦克风被 JS 静默拦下（真机实锤「授权后点击无反应」）。
+        // 修法：.undetermined 时先用 AVAudioApplication.requestRecordPermission（iOS 17+
+        // 官方替代 API）触发系统弹窗，回调后再读 recordPermission 取真实 TCC——
+        // 既恢复「首次使用会弹麦克风授权」，又保留 09-20 修法「以真实 TCC 为准」的语义。
         if #available(iOS 17.0, *) {
             let real = AVAudioApplication.shared.recordPermission
             NSLog("[SRS] AVAudioApplication recordPermission = %@", String(describing: real))
-            switch real {
-            case .granted: micStatus = "granted"
-            case .denied: micStatus = "denied"
-            default: micStatus = "notDetermined"
+            if real == .undetermined {
+                AVAudioApplication.shared.requestRecordPermission { _ in
+                    let after = AVAudioApplication.shared.recordPermission
+                    NSLog("[SRS] requestRecordPermission -> real TCC = %@", String(describing: after))
+                    switch after {
+                    case .granted: micStatus = "granted"
+                    case .denied: micStatus = "denied"
+                    default: micStatus = "notDetermined"
+                    }
+                    group.leave()
+                }
+            } else {
+                switch real {
+                case .granted: micStatus = "granted"
+                case .denied: micStatus = "denied"
+                default: micStatus = "notDetermined"
+                }
+                group.leave()
             }
-            group.leave()
         } else {
             AVAudioSession.sharedInstance().requestRecordPermission { granted in
                 micStatus = granted ? "granted" : "denied"
