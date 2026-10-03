@@ -19,6 +19,7 @@ import {
   type FeelModalGroup,
   type FeelModalTarget,
 } from './components/execution/feelGate';
+import { shouldAutoActivateTimer, activateSessionTimer } from './components/execution/timerActivation';
 import { ExerciseCardV2 } from './components/execution/ExerciseCardV2';
 import ReorderMode from './components/execution/ReorderMode';
 import SettlementV2 from './components/settlement/SettlementV2';
@@ -920,14 +921,8 @@ const App: React.FC = () => {
     // 空状态点击「开始」不再直接开动作库：TimerCapsule 会弹分裂菜单（挑选动作/AI 教练/载入计划·今日休息）
 
     if (session.status === 'idle' || session.status === 'finished') {
-      setSession(prev => ({
-        ...prev,
-        id: uuidv4(),
-        startTime: Date.now(),
-        pausedDuration: 0, // Reset pause duration on start
-        status: 'active',
-        exercises: prev.exercises
-      }));
+      // #123：跃迁收口到 activateSessionTimer——手动开始与卡片完成自动激活共用同一套计时启动代码
+      setSession(prev => activateSessionTimer(prev, Date.now()));
       haptic('medium'); // 开始训练：主操作触感
     }
   };
@@ -1065,6 +1060,13 @@ const App: React.FC = () => {
     // 触发点收口在 handleUpdateSet——锁屏大按钮 / 训练卡片 / 手表遥控三条完成路径
     // 全经过这里，手表端完成组手机同样弹窗。有氧/户外无休息语境不弹（feelGate 注释）。
     if (updates.completed === true) {
+      // #123：全局计时未激活（idle）时完成动作 = 训练已开始 → 自动激活全局计时，
+      // 复用手动「开始训练」的同一跃迁（锁屏大按钮 / 训练卡片 / 手表遥控三条完成路径
+      // 全经过 handleUpdateSet，此处一处收口全覆盖）。激活后 status 变 active，
+      // 下方感受表单的 active/paused 渲染闸门随之放行（#98 语义：激活后完成应弹表单）。
+      if (shouldAutoActivateTimer(session.status, updates.completed)) {
+        setSession(prev => activateSessionTimer(prev, Date.now()));
+      }
       const ex = session.exercises.find(e => e.id === exId);
       const oldSet = ex?.sets.find(s => s.id === setId);
       if (ex && oldSet) {
