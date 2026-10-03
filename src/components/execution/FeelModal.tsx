@@ -9,7 +9,7 @@ import {
   getSpeechPartial,
 } from '../../lib/speechInput';
 import { haptic } from '../../lib/nativeHaptics';
-import { isNativeTabBar } from '../../lib/nativeTabBar';
+import { setTabBarHidden } from '../../lib/nativeTabBar';
 import type {
   FeelModalGroup,
   FeelModalRow,
@@ -45,14 +45,6 @@ const SHEET_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
 /** 越界输入夹回契约闭区间（防御层：原生 range 已钳制，这里保 payload 契约红线） */
 const clampFeel = (raw: number): number => Math.max(0, Math.min(100, Math.round(raw)));
-
-/**
- * 避让 iOS 原生 Tab Bar（#119 缺陷1，#104 BatchAddBanner 同款避让常量）：
- * 原生 bar 悬浮在 WebView 之上（Liquid Glass 常驻），z-index 无法穿透——sheet 底缘
- * 抬到 bar 顶沿（safe-area + 72px = MainTabBar body 避让常量）。CSS 回落端 tab bar
- * z-105 在本表单 z-[150] 之下，按项目「sheet 盖 tab」规范维持贴底不抬。
- */
-const TABBAR_CLEARANCE = 'calc(env(safe-area-inset-bottom, 0px) + 72px)';
 
 /** 语音启动失败提示的自动消退时长（ms）——失败可见但不打断表单语境 */
 const MIC_ERROR_TTL_MS = 3500;
@@ -208,6 +200,17 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     }
   };
 
+  // Tab Bar 隐藏（#119 缺陷1 返工②：抬高避让被否决——留空白带）：原生 bar 悬浮在
+  // WebView 之上（Liquid Glass），z-index 无法穿透也不可被 sheet 覆盖——改为挂载期间
+  // 隐藏、卸载恢复，表单贴底完整展示。setTabBarHidden 引用计数层叠安全（与结算闸门
+  // FeelGateAlert 叠开时，谁后开谁先关都归最后一个隐藏者恢复），生命周期同款模式 =
+  // FeelGateAlert / DeviationWarningModal；web 回落端 no-op（CSS tab bar z-105 在
+  // 本表单 z-[150] 之下，按项目「sheet 盖 tab」规范本就盖住）
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
+
   // 卸载时兜底清理录音轮询、失败提示计时与原生会话（确认/跳过/父层条件卸载都走这里）
   useEffect(() => {
     return () => {
@@ -338,23 +341,22 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
       />
 
       {/* 底部 sheet：rounded-t-[40px] + glassEffect .regular 语义材质（中性白磨砂 + specular rim）。
-          iOS 原生端底缘抬到原生 Tab Bar 之上（#119 缺陷1：bottom-0 下半部被悬浮 WebView
-          之上的原生 bar 盖住，note 输入与后段滑块不可见不可点）；web 回落端维持贴底 */}
+          贴底零空白带（#119 缺陷1 返工②）：Tab Bar 已在挂载时隐藏（见上方 effect），
+          底缘直落屏幕底，paddingBottom 让出 home indicator 安全区 + 内容呼吸余量 */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ duration: 0.42, ease: SHEET_EASE }}
         data-testid="feel-modal"
-        className="absolute inset-x-0 mx-auto w-full max-w-md rounded-t-[40px] border-t border-white"
+        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-[40px] border-t border-white"
         style={{
-          bottom: isNativeTabBar ? TABBAR_CLEARANCE : 0,
           background: 'rgba(255,255,255,0.95)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           boxShadow: '0 -25px 50px -12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.95)',
-          // 抬升端已让出安全区（底缘 = safe-area + 72px），只留内容呼吸余量
-          paddingBottom: isNativeTabBar ? '24px' : 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+          // home indicator 安全区 + 内容呼吸余量（表单贴底但内容不被指示条压住）
+          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
         }}
       >
         {/* 抓手条 */}

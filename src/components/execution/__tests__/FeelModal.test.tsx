@@ -31,6 +31,16 @@ const speechMocks = vi.hoisted(() => ({
 
 vi.mock('../../../lib/speechInput', () => speechMocks);
 
+// Tab Bar 隐藏 spy（#119 缺陷1 返工②）：仅替换 setTabBarHidden，其余走真实模块
+// （jsdom 为 web 态，isNativeTabBar=false——组件直接调，模块内部自守卫）
+const { setTabBarHiddenMock } = vi.hoisted(() => ({
+  setTabBarHiddenMock: vi.fn(),
+}));
+vi.mock('../../../lib/nativeTabBar', async importOriginal => {
+  const actual = await importOriginal<typeof import('../../../lib/nativeTabBar')>();
+  return { ...actual, setTabBarHidden: setTabBarHiddenMock };
+});
+
 /** 3 组动作、第 1 组已填 70（回显），第 2/3 组未填（默认 50） */
 const actionTarget: FeelModalTarget = {
   groups: [{
@@ -127,6 +137,7 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
     speechMocks.stopSpeechInput.mockReset().mockResolvedValue('');
     speechMocks.cancelSpeechInput.mockReset().mockResolvedValue(undefined);
     speechMocks.getSpeechPartial.mockReset().mockResolvedValue({ text: '', running: false });
+    setTabBarHiddenMock.mockClear();
   });
   afterEach(() => {
     vi.useRealTimers();
@@ -197,6 +208,23 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       const utils = renderModal(actionTarget);
       const patches = confirmAction(utils);
       patches.forEach(p => expect('feel_note' in p).toBe(false));
+    });
+  });
+
+  describe('Tab Bar 隐藏（#119 缺陷1 返工②：抬高避让被否决，挂载隐藏贴底展示）', () => {
+    it('挂载即隐藏原生 TabBar，卸载恢复（引用计数，与 FeelGateAlert 叠开安全）', () => {
+      const utils = renderModal(actionTarget);
+      expect(setTabBarHiddenMock).toHaveBeenCalledWith(true);
+      utils.unmount();
+      expect(setTabBarHiddenMock).toHaveBeenLastCalledWith(false);
+    });
+
+    it('表单贴底零空白带：sheet 底缘 = 视口底（不再有 safe-area+72px 抬升量）', () => {
+      const utils = renderModal(actionTarget);
+      const sheet = utils.getByTestId('feel-modal');
+      expect(sheet.style.bottom).toBe(''); // 不再有 inline bottom 抬升
+      expect(sheet.className).toContain('bottom-0'); // 贴底类回归（className 主导）
+      expect(sheet.style.paddingBottom).toContain('safe-area-inset-bottom'); // home indicator 安全区保留
     });
   });
 
