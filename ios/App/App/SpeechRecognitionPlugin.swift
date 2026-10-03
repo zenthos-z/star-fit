@@ -82,7 +82,9 @@ public class SpeechRecognitionPlugin: CAPPlugin, CAPBridgedPlugin {
             let real = AVAudioApplication.shared.recordPermission
             NSLog("[SRS] AVAudioApplication recordPermission = %@", String(describing: real))
             if real == .undetermined {
-                AVAudioApplication.shared.requestRecordPermission { _ in
+                // requestRecordPermission 是类方法（iOS 17+ 官方签名
+                // AVAudioApplication.requestRecordPermission(_:)），不可经 shared 实例调用
+                AVAudioApplication.requestRecordPermission { _ in
                     let after = AVAudioApplication.shared.recordPermission
                     NSLog("[SRS] requestRecordPermission -> real TCC = %@", String(describing: after))
                     switch after {
