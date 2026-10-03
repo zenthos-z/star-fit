@@ -224,6 +224,9 @@ export type LoadAnchors = z.infer<typeof LoadAnchorsSchema>;
  * @returns True if the limitation has expired
  */
 export function isLimitationExpired(limitation: ActiveLimitation): boolean {
+  // auto_heal:false = 长期旧伤显式不过期（#114 OQ4 拍板 A）：读取侧无视
+  // expire_at（该值仅远期占位），只有自动愈合窗口才按 expire_at 判定。
+  if (limitation.auto_heal === false) return false;
   return new Date(limitation.expire_at) < new Date();
 }
 
@@ -250,24 +253,36 @@ export function calculateExpirationTime(severity: number): string {
 }
 
 /**
+ * auto_heal:false（长期旧伤）的过期时间占位：schema 要求 expire_at 必填，
+ * 但读取侧 isLimitationExpired 对 auto_heal:false 恒返回不过期，此值仅展示用。
+ */
+export const LONG_TERM_INJURY_EXPIRE_AT = '2999-12-31T00:00:00.000Z';
+
+/**
  * Create a new active limitation with automatic expiration calculation
  * @param part - Body part
  * @param severity - Severity level (1-10)
- * @param note - Description (optional)
+ * @param note - Description (optional) — 伤病/旧伤原文（#114）
+ * @param options.autoHeal - false = 长期旧伤显式不过期（默认 true 走 severity 过期）
  * @returns New active limitation
  */
 export function createActiveLimitation(
   part: string,
   severity: number,
-  note?: string
+  note?: string,
+  options?: { autoHeal?: boolean }
 ): ActiveLimitation {
   const now = new Date().toISOString();
+  const autoHeal = options?.autoHeal ?? true;
   return {
     part,
     severity,
-    expire_at: calculateExpirationTime(severity),
+    ...(note !== undefined ? { note } : {}),
+    expire_at: autoHeal
+      ? calculateExpirationTime(severity)
+      : LONG_TERM_INJURY_EXPIRE_AT,
     logged_at: now,
-    auto_heal: true,
+    auto_heal: autoHeal,
   };
 }
 
@@ -343,7 +358,15 @@ export const PreferencesSchema = z.object({
   avoided: z.array(z.string()).optional(), // ['injury', 'equipment']
   time_constraint: z.number().optional(), // minutes per session
   equipment: z.array(z.string()).optional(), // available equipment
-  goal: z.enum(['muscle_gain', 'fat_loss', 'strength', 'health', 'general_fitness']).optional(), // 训练目标
+  // #114 拍板 §2.6：goal 新增 body_recomp 档（减脂增肌两档都套不上「塑形/
+  // 体态改善」用户）；health 保留合法（存量画像读取侧归一，题库不再出新值）。
+  goal: z.enum(['muscle_gain', 'fat_loss', 'strength', 'health', 'general_fitness', 'body_recomp']).optional(), // 训练目标
+  // #114 修法 1（缺口 3a+3b）：每周训练频次（天）。此前契约无定义 + 前端写
+  // staticPatch 顶层被 PUT /profile/static 嵌套分支静默丢弃——从未落库。
+  // z.coerce 兼容表单字符串（同本文件 age/weight 先例）；题库已改单值 1-6，
+  // 区间字符串（'3-4'）在契约层显式失败（NaN → ZodError 抛错），不再被
+  // parseInt 静默取区间下界。
+  weekly_frequency_days: z.coerce.number().int().min(1).max(7).optional(),
 });
 
 export type Preferences = z.infer<typeof PreferencesSchema>;
@@ -452,6 +475,10 @@ export const ActiveLimitationSchema = z.object({
   expire_at: z.string().datetime(), // ISO 8601 UTC - auto-heal timestamp
   logged_at: z.string().datetime(), // ISO 8601 UTC - when logged
   auto_heal: z.boolean().default(true), // Whether to auto-expire
+  // #114 OQ4 拍板 A：伤病/旧伤原文（自由文本，如「2024 年左膝半月板术后，
+  // 深蹲超过 60kg 不适」）。severity 1-10 装不下文字细节，note 承载原文；
+  // Agent update_profile 登记与问卷链路共用（替代从未落库的顶层 raw_injuries）。
+  note: z.string().optional(),
 });
 
 export type ActiveLimitation = z.infer<typeof ActiveLimitationSchema>;
@@ -1450,3 +1477,29 @@ export {
   dedupeRecentRegions,
   rankWithRecent,
 } from './exercise-sort.js';
+
+// ============================================================================
+// Survey Contracts (问卷契约单一真源 — issue #114 契约批 B5a)
+// ============================================================================
+// survey_card 卡的 data 面契约（SurveyQuestion/SurveyOption/children 二级
+// 菜单/textarea/purpose）与共享题库 PROFILE_INTAKE_QUESTIONS 详见
+// survey.ts。后端校验回路经 backend/src/services/agent/schemas/uiHintSchemas.ts
+// 再导出，import 路径不变。
+export {
+  // Schemas
+  SurveyQuestionOptionSchema,
+  SurveyQuestionSchema,
+  SurveyCardDataSchema,
+
+  // Constants
+  PURPOSE_ENUM,
+  PROFILE_INTAKE_QUESTIONS,
+  PROFILE_INTAKE_QUESTION_IDS,
+
+  // Types
+  type SurveyQuestionOption,
+  type SurveyQuestion,
+  type SurveyCardData,
+  type SurveyPurpose,
+  type ProfileIntakeQuestionId,
+} from './survey.js';

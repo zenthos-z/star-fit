@@ -1553,3 +1553,433 @@ describe("Contract Tests: Schedule Summary (start-workout routing)", () => {
     });
   });
 });
+
+// ============================================================================
+// #114 契约批 B5a：问卷契约（survey.ts）+ 画像新字段（weekly_frequency_days /
+// goal+body_recomp / active_limitations.note+auto_heal:false）+ 落库白名单链路
+// ============================================================================
+import {
+  SurveyQuestionOptionSchema,
+  SurveyQuestionSchema,
+  SurveyCardDataSchema,
+  PURPOSE_ENUM,
+  PROFILE_INTAKE_QUESTIONS,
+  PROFILE_INTAKE_QUESTION_IDS,
+  PreferencesSchema,
+  ActiveLimitationSchema,
+  createActiveLimitation,
+  isLimitationExpired,
+  filterExpiredLimitations,
+  LONG_TERM_INJURY_EXPIRE_AT,
+  ExerciseEquipmentSchema,
+} from "../../shared/contracts/index.js";
+import { UserProfileService } from "../src/services/userProfileService.js";
+
+describe("#114 survey contracts — SurveyQuestion/SurveyCardData 扩展", () => {
+  test("旧形态问卷卡（无任何新字段）原样通过（向后兼容断言）", () => {
+    // uiHintValidator.test.ts 旧 fixture 同款形状：仅 id/question/required
+    const legacy = {
+      title: "Feedback",
+      questions: [{ id: "q1", question: "How was it?", required: false }],
+    };
+    assert.ok(SurveyCardDataSchema.safeParse(legacy).success);
+  });
+
+  test("children 二级菜单：选项可携带递归子选项（器材 场地→器材多选）", () => {
+    const card = {
+      purpose: "profile_intake",
+      questions: [
+        {
+          id: "equipment_venue",
+          question: "主要训练场地",
+          required: true,
+          inputType: "select",
+          childKey: "equipment_items",
+          options: [
+            {
+              label: "健身房",
+              value: "gym",
+              children: [
+                { label: "杠铃", value: "barbell" },
+                { label: "深蹲架", value: "rack" },
+              ],
+            },
+            { label: "户外", value: "outdoor", children: [] },
+          ],
+        },
+      ],
+    };
+    const parsed = SurveyCardDataSchema.safeParse(card);
+    assert.ok(parsed.success);
+    if (parsed.success) {
+      const q = parsed.data.questions[0];
+      assert.equal(q.childKey, "equipment_items");
+      assert.equal(q.options?.[0].children?.length, 2);
+      assert.equal(q.options?.[0].children?.[0].value, "barbell");
+    }
+  });
+
+  test("children 递归两层：孙选项形状仍受校验（坏 value 被拒）", () => {
+    const bad = SurveyQuestionOptionSchema.safeParse({
+      label: "场地",
+      value: "gym",
+      children: [{ label: "杠铃", value: "" }], // 空 value 违反 min(1)
+    });
+    assert.ok(!bad.success);
+  });
+
+  test("inputType 枚举扩容：select / textarea 通过，旧值 text/number/checkbox 仍通过", () => {
+    for (const t of ["text", "number", "checkbox", "select", "textarea"]) {
+      assert.ok(
+        SurveyQuestionSchema.safeParse({
+          id: "q",
+          question: "q",
+          required: false,
+          inputType: t,
+        }).success,
+        `inputType=${t} 应通过`,
+      );
+    }
+    assert.ok(
+      !SurveyQuestionSchema.safeParse({
+        id: "q",
+        question: "q",
+        required: false,
+        inputType: "radio",
+      }).success,
+    );
+  });
+
+  test("textarea 补充框全字段：maxLength/placeholder/section/hint 落位", () => {
+    const parsed = SurveyQuestionSchema.safeParse({
+      id: "notes",
+      question: "还有什么想让教练知道的？",
+      required: false,
+      inputType: "textarea",
+      section: "自由补充",
+      maxLength: 500,
+      placeholder: "夜班倒班、产后恢复……",
+    });
+    assert.ok(parsed.success);
+    if (parsed.success) {
+      assert.equal(parsed.data.maxLength, 500);
+      assert.equal(parsed.data.section, "自由补充");
+    }
+  });
+
+  test("condition 条件显示：equals 单值与数组均可表达", () => {
+    assert.ok(
+      SurveyQuestionSchema.safeParse({
+        id: "age",
+        question: "年龄",
+        required: true,
+        inputType: "number",
+        min: 14,
+        max: 90,
+        condition: {
+          questionId: "goal",
+          equals: ["fat_loss", "general_fitness"],
+        },
+      }).success,
+    );
+    assert.ok(
+      SurveyQuestionSchema.safeParse({
+        id: "x",
+        question: "x",
+        required: false,
+        condition: { questionId: "goal", equals: "fat_loss" },
+      }).success,
+    );
+  });
+
+  test("purpose 卡级枚举：三用途通过，未知值拒绝", () => {
+    for (const p of PURPOSE_ENUM) {
+      assert.ok(
+        SurveyCardDataSchema.safeParse({
+          purpose: p,
+          questions: [{ id: "q", question: "q", required: false }],
+        }).success,
+      );
+    }
+    assert.ok(
+      !SurveyCardDataSchema.safeParse({
+        purpose: "onboarding_v9",
+        questions: [{ id: "q", question: "q", required: false }],
+      }).success,
+    );
+  });
+});
+
+describe("#114 survey contracts — PROFILE_INTAKE_QUESTIONS 题库定稿", () => {
+  test("整库通过 SurveyCardDataSchema（purpose=profile_intake）", () => {
+    const parsed = SurveyCardDataSchema.safeParse({
+      purpose: "profile_intake",
+      title: "训练画像调研",
+      questions: PROFILE_INTAKE_QUESTIONS,
+    });
+    assert.ok(
+      parsed.success,
+      JSON.stringify((parsed as any).error?.issues ?? []),
+    );
+  });
+
+  test("题目 id 唯一，且 id+childKey 恰好覆盖 PROFILE_INTAKE_QUESTION_IDS（防漂移）", () => {
+    const ids = PROFILE_INTAKE_QUESTIONS.map((q) => q.id);
+    assert.equal(new Set(ids).size, ids.length, "题目 id 不得重复");
+    const answerKeys = new Set([
+      ...ids,
+      ...PROFILE_INTAKE_QUESTIONS.flatMap((q) =>
+        q.childKey ? [q.childKey] : [],
+      ),
+    ]);
+    assert.deepEqual(
+      [...answerKeys].sort(),
+      [...PROFILE_INTAKE_QUESTION_IDS].sort(),
+    );
+  });
+
+  test("门禁六项必答题齐备（goal/经验/体重/器材/频次/伤病）", () => {
+    const byId = new Map(PROFILE_INTAKE_QUESTIONS.map((q) => [q.id, q]));
+    for (const id of [
+      "goal",
+      "experience",
+      "weight_kg",
+      "equipment_venue",
+      "weekly_frequency",
+      "injuries",
+    ]) {
+      const q = byId.get(id);
+      assert.ok(q, `必答题 ${id} 缺失`);
+      assert.equal(q.required, true, `${id} 必须 required`);
+    }
+    // 器材二级菜单答案键 = equipment_items（spec §2.5 childKey 语义）
+    assert.equal(byId.get("equipment_venue")?.childKey, "equipment_items");
+  });
+
+  test("器材二级子选项 value 全部 ∈ EXERCISE_EQUIPMENT（与 find_exercises 零转换）", () => {
+    for (const option of PROFILE_INTAKE_QUESTIONS.flatMap(
+      (q) => q.options ?? [],
+    )) {
+      for (const child of option.children ?? []) {
+        assert.ok(
+          ExerciseEquipmentSchema.safeParse(child.value).success,
+          `器材子选项 ${child.value} 不在 EXERCISE_EQUIPMENT 枚举内`,
+        );
+      }
+    }
+  });
+
+  test("频次题为单值 1-6 select（消灭区间字符串）", () => {
+    const freq = PROFILE_INTAKE_QUESTIONS.find(
+      (q) => q.id === "weekly_frequency",
+    );
+    assert.ok(freq);
+    assert.equal(freq.inputType, "select");
+    assert.deepEqual(
+      freq.options?.map((o) => o.value),
+      ["1", "2", "3", "4", "5", "6"],
+    );
+  });
+
+  test("age 条件必答：goal ∈ {fat_loss, general_fitness} 才渲染（spec §2.2）", () => {
+    const age = PROFILE_INTAKE_QUESTIONS.find((q) => q.id === "age");
+    assert.ok(age);
+    assert.equal(age.condition?.questionId, "goal");
+    assert.deepEqual(age.condition?.equals, ["fat_loss", "general_fitness"]);
+    assert.equal(age.min, 14);
+    assert.equal(age.max, 90);
+  });
+
+  test("weight_kg 硬性要求：min 30 / max 250 / unit kg / hint 在位", () => {
+    const w = PROFILE_INTAKE_QUESTIONS.find((q) => q.id === "weight_kg");
+    assert.ok(w);
+    assert.equal(w.min, 30);
+    assert.equal(w.max, 250);
+    assert.equal(w.unit, "kg");
+    assert.ok(w.hint);
+  });
+});
+
+describe("#114 PreferencesSchema — weekly_frequency_days + goal body_recomp", () => {
+  test("weekly_frequency_days：数字直过、表单字符串 coerce、越界拒绝", () => {
+    assert.equal(
+      PreferencesSchema.parse({ weekly_frequency_days: 3 })
+        .weekly_frequency_days,
+      3,
+    );
+    assert.equal(
+      PreferencesSchema.parse({ weekly_frequency_days: "4" })
+        .weekly_frequency_days,
+      4,
+    );
+    assert.ok(
+      !PreferencesSchema.safeParse({ weekly_frequency_days: 0 }).success,
+    );
+    assert.ok(
+      !PreferencesSchema.safeParse({ weekly_frequency_days: 8 }).success,
+    );
+    assert.ok(
+      !PreferencesSchema.safeParse({ weekly_frequency_days: 2.5 }).success,
+    );
+  });
+
+  test("频次区间字符串 '3-4' 显式失败（不再 parseInt 静默取下界）", () => {
+    // 旧断裂：前端 parseInt('3-4')=3 静默取区间下界（useAICoach.ts:549-553）。
+    // 拍板 OQ7=A：题库改单值，契约层对区间字符串 loud failure（红线：Zod
+    // 校验失败必须抛错，不静默入库）。
+    const res = PreferencesSchema.safeParse({ weekly_frequency_days: "3-4" });
+    assert.ok(!res.success);
+  });
+
+  test("旧 payload 无新字段仍解析通过（兼容断言：存量画像不受影响）", () => {
+    const legacy = PreferencesSchema.safeParse({
+      goal: "muscle_gain",
+      equipment: ["barbell"],
+      time_constraint: 60,
+    });
+    assert.ok(legacy.success);
+    if (legacy.success) {
+      assert.equal(legacy.data.weekly_frequency_days, undefined);
+    }
+  });
+
+  test("goal 枚举：body_recomp 新档通过，health 存量档保留，未知值拒绝", () => {
+    assert.equal(
+      PreferencesSchema.parse({ goal: "body_recomp" }).goal,
+      "body_recomp",
+    );
+    assert.equal(PreferencesSchema.parse({ goal: "health" }).goal, "health");
+    assert.ok(!PreferencesSchema.safeParse({ goal: "增肌塑形" }).success);
+  });
+});
+
+describe("#114 ActiveLimitationSchema — note 原文 + auto_heal:false 长期旧伤", () => {
+  test("note optional：带原文通过，不带原文的旧数据仍通过（兼容断言）", () => {
+    const withNote = ActiveLimitationSchema.safeParse({
+      part: "left_knee",
+      severity: 4,
+      expire_at: "2026-10-10T00:00:00.000Z",
+      logged_at: "2026-10-03T00:00:00.000Z",
+      note: "2024 年半月板术后，深蹲超过 60kg 不适",
+    });
+    assert.ok(withNote.success);
+    const legacy = ActiveLimitationSchema.safeParse({
+      part: "left_knee",
+      severity: 4,
+      expire_at: "2026-10-10T00:00:00.000Z",
+      logged_at: "2026-10-03T00:00:00.000Z",
+    });
+    assert.ok(legacy.success);
+  });
+
+  test("auto_heal:false 显式通道通过 schema", () => {
+    assert.ok(
+      ActiveLimitationSchema.safeParse({
+        part: "lower_back",
+        severity: 3,
+        expire_at: LONG_TERM_INJURY_EXPIRE_AT,
+        logged_at: "2026-10-03T00:00:00.000Z",
+        auto_heal: false,
+        note: "长期旧伤，不会自愈",
+      }).success,
+    );
+  });
+
+  test("createActiveLimitation 默认行为回归：auto_heal true + severity 过期", () => {
+    const acute = createActiveLimitation(
+      "left_shoulder",
+      5,
+      "Rotator cuff strain",
+    );
+    assert.equal(acute.auto_heal, true);
+    assert.equal(acute.note, "Rotator cuff strain");
+    assert.ok(!isLimitationExpired(acute));
+  });
+
+  test("createActiveLimitation({autoHeal:false}) → 永不过期（长期旧伤）", () => {
+    const chronic = createActiveLimitation("left_knee", 4, "半月板旧伤", {
+      autoHeal: false,
+    });
+    assert.equal(chronic.auto_heal, false);
+    assert.equal(chronic.expire_at, LONG_TERM_INJURY_EXPIRE_AT);
+    assert.ok(!isLimitationExpired(chronic));
+    // 即便存量数据 auto_heal:false 且 expire_at 已过，读取侧也不过期
+    const stale = {
+      ...chronic,
+      expire_at: "2020-01-01T00:00:00.000Z",
+    };
+    assert.ok(!isLimitationExpired(stale));
+    assert.deepEqual(
+      filterExpiredLimitations([stale, ...[createActiveLimitation("wrist", 1)]])
+        .length,
+      2,
+    );
+  });
+});
+
+describe("#114 落库链路 — UserProfileService.validateProfile 白名单", () => {
+  test("weekly_frequency_days 落库用例：嵌套 preferences 键通过白名单清洗并保留", () => {
+    // PUT /profile/static 嵌套分支只转发 basic_info/preferences/... 四键；
+    // 字段定义进 PreferencesSchema 后自动过清洗白名单（spec 修法 1 第 3 步）。
+    const validated = UserProfileService.validateProfile({
+      userId: "15ba86ca-574c-42c1-b14a-eb4217d702c9",
+      modifiedBy: "user",
+      preferences: {
+        goal: "body_recomp",
+        equipment: ["barbell", "dumbbell"],
+        weekly_frequency_days: 3,
+      },
+    });
+    assert.equal(validated.preferences?.weekly_frequency_days, 3);
+    assert.equal(validated.preferences?.goal, "body_recomp");
+  });
+
+  test("weekly_frequency_days 区间字符串在清洗层抛错（不静默取下界入库）", () => {
+    assert.throws(
+      () =>
+        UserProfileService.validateProfile({
+          userId: "15ba86ca-574c-42c1-b14a-eb4217d702c9",
+          modifiedBy: "user",
+          preferences: { weekly_frequency_days: "3-4" },
+        }),
+      /preferences validation failed/,
+    );
+  });
+
+  test("伤病原文白名单用例：active_limitations.note 过清洗并保留（替代顶层 raw_injuries）", () => {
+    // OQ4 拍板 A：伤病原文经 active_limitations[].note 结构化落库
+    // （Agent update_profile / 提案确认 / PUT 清洗共用同一白名单），
+    // 不再在静态画像顶层私造 raw_injuries 键（spec 修法 2）。
+    const validated = UserProfileService.validateProfile({
+      userId: "15ba86ca-574c-42c1-b14a-eb4217d702c9",
+      modifiedBy: "mas",
+      active_limitations: [
+        {
+          part: "left_knee",
+          severity: 4,
+          expire_at: "2999-12-31T00:00:00.000Z",
+          logged_at: "2026-10-03T00:00:00.000Z",
+          auto_heal: false,
+          note: "半月板旧伤，下蹲深处有弹响",
+        },
+      ],
+    });
+    assert.equal(
+      validated.active_limitations?.[0]?.note,
+      "半月板旧伤，下蹲深处有弹响",
+    );
+    assert.equal(validated.active_limitations?.[0]?.auto_heal, false);
+  });
+
+  test("旧 payload 无新字段仍解析通过（兼容断言：v1 问卷时代画像不受影响）", () => {
+    const validated = UserProfileService.validateProfile({
+      userId: "15ba86ca-574c-42c1-b14a-eb4217d702c9",
+      modifiedBy: "user",
+      basic_info: { age: 30, weight: 76 },
+      preferences: { goal: "health", equipment: ["machine"] },
+    });
+    assert.deepEqual(validated.basic_info, { age: 30, weight: 76 });
+    assert.equal(validated.preferences?.goal, "health");
+    assert.equal(validated.preferences?.weekly_frequency_days, undefined);
+  });
+});
