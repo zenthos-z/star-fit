@@ -1259,7 +1259,11 @@ export function buildMcpToolsWith(
     description:
       "Load the current user training history (history_summary, recent sessions), static profile, " +
       "AND dynamic profile (load_anchors, active_limitations, recovery_state). Read-only. Scoped to the calling user. " +
-      "ALWAYS call this before generating a plan — the dynamic profile holds the hard constraints (equipment the user owns, active injuries, recovery).",
+      "ALWAYS call this before generating a plan — the dynamic profile holds the hard constraints (equipment the user owns, active injuries, recovery). " +
+      "profile_static carries the first-use survey values: basic_info (weight/age/height/gender/training_age) and " +
+      "preferences (goal incl. body_recomp / weekly_frequency_days / equipment = EXERCISE_EQUIPMENT values / " +
+      "time_constraint). profile_dynamic.active_limitations entries may carry `note` — the user's original injury " +
+      "wording (旧伤细节); read it, don't infer from severity alone.",
     schema: loadHistorySchema,
     func: async (input, _runManager, config) => {
       const userId = getUserIdFromContext({

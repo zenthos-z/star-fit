@@ -22,14 +22,20 @@
 {
   "userId": "uuid",
   "history_summary": { "sessions": [ { "summary": "...", "date": "...", "exercises": [...], "recorded_at": "..." } ] },
-  "profile_static": { "fitness_level": "BEGINNER", "tags": [...], "red_flags": [...] },
+  "profile_static": {
+    "basic_info": { "weight": 72, "age": 30, "height": 175, "gender": "male", "training_age": 3 },
+    "preferences": { "goal": "muscle_gain", "weekly_frequency_days": 3, "equipment": ["barbell", "rack", "bodyweight"], "time_constraint": "60" },
+    "fitness_level": "BEGINNER", "tags": [...], "red_flags": [...]
+  },
   "profile_dynamic": {
     "load_anchors": { "Back Squat": { "type": "resistance", "best_weight": 100, "best_reps": 5 } },
-    "active_limitations": [ { "part": "left_knee", "severity": 6, "expire_at": "...", "logged_at": "...", "auto_heal": true } ],
+    "active_limitations": [ { "part": "left_knee", "severity": 6, "expire_at": "...", "logged_at": "...", "auto_heal": false, "note": "旧伤：深蹲超过 60kg 不适" } ],
     "recovery_state": { "total_score": 72, "cns_fusing": false, "last_assessed": "..." }
   }
 }
 ```
+
+画像新字段读法（#114 首用问卷落库值）：`preferences.goal` 含 `body_recomp`（体态改善）档；`preferences.weekly_frequency_days` 是 1-7 整数（每周训练日数）；`preferences.equipment` 值 = 动作库 `EXERCISE_EQUIPMENT` 枚举（可直接喂 `find_exercises` 的 equipment 过滤）。`active_limitations[].note` 是伤病/旧伤**原文**（用户原话，长期伤 `auto_heal:false`）——读它再定动作规避，别只看 severity 数字。
 
 **示例**：`load_history({ include_dynamic: true, limit: 5 })`
 
@@ -217,11 +223,11 @@ write_session({
 
 **参数（全部可选，至少传一个）**
 
-| 参数                 | 类型   | 说明                                                                                            |
-| -------------------- | ------ | ----------------------------------------------------------------------------------------------- |
-| `load_anchors`       | map    | `动作名 -> 锚点对象 {type, best_weight/best_reps/best_duration/best_pace...}`。**替换整个 map** |
-| `active_limitations` | array  | `[{ part, severity(1-10), expire_at(ISO), logged_at(ISO), auto_heal? }]`。**替换整个列表**      |
-| `recovery_state`     | object | `{ total_score(0-100), last_assessed(ISO), cns_fusing?, acute_load?, chronic_load? }`。**替换** |
+| 参数                 | 类型   | 说明                                                                                                                                                            |
+| -------------------- | ------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `load_anchors`       | map    | `动作名 -> 锚点对象 {type, best_weight/best_reps/best_duration/best_pace...}`。**替换整个 map**                                                                 |
+| `active_limitations` | array  | `[{ part, severity(1-10), expire_at(ISO), logged_at(ISO), auto_heal?, note? }]`。**替换整个列表**；长期旧伤 `auto_heal:false` + `note` 承载用户原话原文（#114） |
+| `recovery_state`     | object | `{ total_score(0-100), last_assessed(ISO), cns_fusing?, acute_load?, chronic_load? }`。**替换**                                                                 |
 
 **返回**：`{ "ok": true, "userId": "uuid", "updated_fields": ["recovery_state"] }`
 

@@ -35,6 +35,9 @@
 import type { AgentEvent, ChatRequest } from "shared/contracts";
 import type { AgentService } from "./AgentService.js";
 import { validateUiHint, type StructuredError } from "./uiHintValidator.js";
+// #114 B5c：画像域 survey_card 收敛共享题库（Agent 给 purpose+id 意图，
+// Service 按题库原文替换题目内容）——schema 校验通过后、下发前执行。
+import { canonicalizeSurveyCard } from "./surveyConvergence.js";
 // 泄漏重试通道（refs #73/#56 机制升级）：Stage1 降级的卡型残片识别谓词。
 import { isDegradedCardFragment } from "./uiHintExtractor.js";
 import {
@@ -286,11 +289,31 @@ async function* consumeStreamLookingForInvalidCard(
         };
         return; // stop this stream; caller decides retry
       }
+      // #114 B5c：schema 合法后、下发前，把画像域 survey_card（purpose =
+      // profile_intake / plan_gap）的题目集收敛到共享题库原文（Agent 只给
+      // purpose + 题库 id 意图，题目内容由 Service 确定性替换）。子集选不中
+      // 任何题库 id → 结构化错误，走与 Zod shape 错误同一反馈重试通道。
+      const converged = canonicalizeSurveyCard(result.card);
+      if (!converged.ok) {
+        if (heldText) {
+          yield { kind: "rejected_thinking", text: heldText };
+        }
+        yield {
+          kind: "invalid",
+          errors: converged.errors,
+          rejectedCard: event.card,
+          rejectedText: heldText,
+        };
+        return; // stop this stream; caller decides retry
+      }
+      // 运行时卡片载荷是 UIHint 形状（契约 AgentEvent.card 为前向兼容
+      // UiHintCard），与上游 extractor 同一约定——收敛结果原样承载。
+      const canonicalCard = converged.card as typeof event.card;
       // Q1 (workout_complete): schema 合法之后追加数据一致性检测。
       // 引用了与真实训练数据不符数字的卡片按 invalid 处理，走同一反馈重试回路。
       if (sessionFacts) {
         const quality = checkWorkoutCardQuality(
-          cardToCheckableText(event.card),
+          cardToCheckableText(canonicalCard),
           sessionFacts,
         );
         if (!quality.ok) {
@@ -300,7 +323,7 @@ async function* consumeStreamLookingForInvalidCard(
           yield {
             kind: "invalid",
             errors: quality.issues,
-            rejectedCard: event.card,
+            rejectedCard: canonicalCard,
             rejectedText: heldText,
           };
           return;
@@ -313,7 +336,7 @@ async function* consumeStreamLookingForInvalidCard(
         heldText = "";
       }
       pastFirstCard = true;
-      yield { kind: "event", event };
+      yield { kind: "event", event: { ...event, card: canonicalCard } };
       continue;
     }
     if (event.type === "token") {
