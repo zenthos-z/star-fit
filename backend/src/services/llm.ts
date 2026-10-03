@@ -171,7 +171,6 @@ export async function loadModel(
     if (!apiKey) {
       throw new MissingApiKeyError(provider);
     }
-    const { ChatOpenAI } = await import("@langchain/openai");
     // GLM is OpenAI-compatible. No thinking kwargs by default — GLM-5.3-flash
     // streams reasoning_content into additional_kwargs on its own and tool
     // calls work without extra request-body fields. maxTokens 16384 keeps long
@@ -181,7 +180,12 @@ export async function loadModel(
     // modelKwargs (merged into the request body) — GLM supports the
     // `thinking` parameter on the OpenAI-compatible endpoint.
     const disableThinking = THINKING_DISABLED_SCENARIOS.has(scenario);
-    return new ChatOpenAI({
+    // #113: RoleHealingChatOpenAI — GLM 无 role 流根治（转换层补 role 语义，
+    // refs #110 #112）。重型请求下 GLM 整轮流式 delta 高发全程无 role，
+    // 基线 ChatOpenAI 转换层走 ChatMessageChunk 兜底分支静默丢弃
+    // tool_calls / reasoning_content → 空终步。#112 重滚保留为最后防线。
+    const { RoleHealingChatOpenAI } = await import("./llmRoleHealing.js");
+    return new RoleHealingChatOpenAI({
       model: resolved.model || DEFAULT_GLM_MODEL,
       apiKey,
       configuration: { baseURL: resolved.baseURL },
