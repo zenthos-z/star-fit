@@ -54,7 +54,9 @@ import {
 // exact shape the M5 validator (and the INT extraction layer) expect.
 import { loadUiHintFormatSkill } from "./uiHintFormat.js";
 // MCP domain tools (R3): the Agent-only data adapter over the Repository layer.
-import { buildMcpTools } from "./mcpTools.js";
+// turnToolCacheMiddleware（#116）：同轮幂等只读工具结果缓存，实现见 mcpTools
+// （Agent 工具执行层单一收口，覆盖 mcpTools 读工具 + deepagents read_file）。
+import { buildMcpTools, turnToolCacheMiddleware } from "./mcpTools.js";
 // R5: mount every GOLD knowledge skill + operational skill via native
 // deepagents Skills + Filesystem (read on demand).
 import { mountAllSkills } from "./skillLoader.js";
@@ -458,9 +460,14 @@ export class DeepAgentService implements AgentService {
     // 42b (issue #42)：框架死重裁剪中间件对文本/带图两种 agent 都挂——
     // subagent(task)/todo(write_todos) 与只读场景用不到的 edit_file/write_file
     // schema 不再进模型上下文，TASK/todo 系统提示同步剥离（见该中间件注释）。
+    // turnToolCacheMiddleware（#116）：同轮幂等工具缓存，两种 agent 同挂。
     const middleware = hasImage
-      ? [frameworkTrimMiddleware]
-      : [stripImageMiddleware, frameworkTrimMiddleware];
+      ? [frameworkTrimMiddleware, turnToolCacheMiddleware]
+      : [
+          stripImageMiddleware,
+          frameworkTrimMiddleware,
+          turnToolCacheMiddleware,
+        ];
 
     // P006: checkpointer injected from M-RT (agent_runtime schema). Ensure the
     // schema exists before the graph first reads/writes checkpoint state.
