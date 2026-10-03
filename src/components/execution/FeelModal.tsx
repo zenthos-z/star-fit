@@ -174,6 +174,10 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
   const [draggingSetId, setDraggingSetId] = useState<string | null>(null);
   const speechPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const micErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // note 自动增高（#119 返工③：单行锁死被否决）：内容撑高至 ~4 行封顶后内部滚动；
+  // 语音回填置底标志——轮询写回的长文本滚到底部见最新文字，用户手动编辑不强制滚
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  const pinBottomRef = useRef(false);
   // 语音识别中用户手动编辑（删除/修改 partial 文本）→ 打开写保护，轮询停止回填
   // （@ 对话框 2026-09-17 bug 1 同源：删一个字 350ms 后被识别结果填回来）
   const userEditedRef = useRef(false);
@@ -192,6 +196,21 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     setValues(Object.fromEntries(target.groups.flatMap(g => g.sets.map(s => [s.setId, s.feel ?? FEEL_DEFAULT]))));
     setNote(closingNoteOf(target));
   }, [target]);
+
+  // note 自动增高（#119 返工③）：height 随 scrollHeight 撑开——内容少时 min-h 保持
+  // 胶囊单行视觉，换行后自然撑高，max-h 对齐整 4 行（4 × 1.375em 行高 + py-2×2 =
+  // calc(5.5em+1rem) ≈ 98.5px，em 基准随字号走、行界无半行细条）封顶后内部滚动；
+  // 语音回填时滚到底部见最新文字
+  useEffect(() => {
+    const el = noteRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+    if (pinBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      pinBottomRef.current = false;
+    }
+  }, [note]);
 
   const stopSpeechPolling = () => {
     if (speechPollRef.current !== null) {
@@ -235,7 +254,10 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
       setIsListening(false);
       userEditedRef.current = false;
       const finalText = await stopSpeechInput();
-      if (finalText && !note.trim()) setNote(finalText);
+      if (finalText && !note.trim()) {
+        pinBottomRef.current = true; // 语音最终文本同样置底（与轮询回填一致）
+        setNote(finalText);
+      }
       haptic('success');
       return;
     }
@@ -259,7 +281,10 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     speechPollRef.current = setInterval(async () => {
       if (userEditedRef.current) return;
       const { text, error } = await getSpeechPartial();
-      if (text) setNote(text);
+      if (text) {
+        pinBottomRef.current = true; // 长文本回填滚到底部，最新文字保持可视（#119 返工③）
+        setNote(text);
+      }
       if (error) console.warn('[FeelModal] recognizer error:', error);
     }, 350);
   };
@@ -409,11 +434,13 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
             )}
           </div>
 
-          {/* 语义补充：动作级一句话（支持语音）；胶囊输入（rounded-full，多行时自然撑成
-              stadium）；底色/描边比 sheet 材质深一档（gray-100/gray-200，返工③-③对比度）；
-              确认走右上角对勾，底部无按钮 */}
+          {/* 语义补充：动作级一句话（支持语音）；胶囊输入（rounded-full），note 自动增高
+              （#119 返工③：内容换行自然撑开、~4 行封顶内部滚动、语音长文本回填滚底见最新，
+              min-h 保持单行胶囊视觉、多行时容器自然撑成 stadium）；底色/描边比 sheet 材质
+              深一档；确认走右上角对勾，底部无按钮 */}
           <div className="mt-5 flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2">
             <textarea
+              ref={noteRef}
               rows={1}
               maxLength={500}
               value={note}
@@ -421,8 +448,8 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
               data-testid="feel-note"
               aria-label="感受补充说明"
               placeholder={isListening ? '正在聆听…' : '记录细节（支持语音）'}
-              className="max-h-24 min-h-[36px] w-full resize-none bg-transparent py-2 text-[15px] leading-snug
-                text-gray-900 placeholder:text-gray-400 focus:outline-none"
+              className="max-h-[calc(5.5em+1rem)] min-h-[36px] w-full resize-none overflow-y-auto bg-transparent
+                py-2 text-[15px] leading-snug text-gray-900 placeholder:text-gray-400 focus:outline-none"
             />
             {isSpeechInputSupported && (
               <motion.button

@@ -305,6 +305,24 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       patches.forEach(expectContractValid);
     });
 
+    it('长文本含换行回填 → 自动增高多行形态 + 滚到底部见最新文字（#119 返工③）', async () => {
+      const longText = Array.from({ length: 4 }, (_, i) => `第 ${i + 1} 行：训练感受补充内容`).join('\n');
+      speechMocks.getSpeechPartial.mockResolvedValue({ text: longText, running: true });
+      const utils = renderModal(actionTarget);
+      await act(async () => {
+        fireEvent.click(getMic(utils));
+      });
+      const note = getNote(utils);
+      // jsdom 无布局：stub scrollHeight 为 4 行撑开高度，自动增高效果可断言
+      Object.defineProperty(note, 'scrollHeight', { value: 98, configurable: true });
+      await act(async () => {
+        vi.advanceTimersByTime(360);
+      });
+      expect(note.value).toBe(longText);      // 换行符原样回填（soft wrap + \n 皆生效）
+      expect(note.style.height).toBe('98px'); // 高度随内容撑开（多行形态，非单行锁死）
+      expect(note.scrollTop).toBe(98);        // 语音回填后滚到底部，最新文字可视
+    });
+
     it('聆听中确认 → 先停识别再提交（录音资源不挂着）', async () => {
       speechMocks.getSpeechPartial.mockResolvedValue({ text: '太重了', running: true });
       const utils = renderModal(actionTarget);
