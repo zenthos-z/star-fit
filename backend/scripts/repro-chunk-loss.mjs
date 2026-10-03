@@ -23,9 +23,14 @@
  *
  * 用法：
  *   node backend/scripts/repro-chunk-loss.mjs [--label NAME] [--module-root DIR]
+ *   npx tsx backend/scripts/repro-chunk-loss.mjs --healing [--label NAME]
  *
  *   --module-root DIR  从 DIR/node_modules/@langchain/openai 解析被测包
  *                      （缺省从脚本自身位置向上解析 = 仓库运行时真源）
+ *   --healing          被测模型换 RoleHealingChatOpenAI（#113 根治子类，
+ *                      backend/src/services/llmRoleHealing.ts）。须用 tsx 跑
+ *                      （TS 源码直载），且不可与 --module-root 组合——healing
+ *                      子类 extends 的是仓库解析域的 ChatOpenAI。
  *
  * 输出：每条腿的人类可读结论 + 末行 ##RESULT## JSON（矩阵 runner 采集）。
  * 退出码：仅当对照组（openai-normal）未通过时非零（说明脚手架坏了）；
@@ -48,6 +53,11 @@ const readArg = (name) => {
 };
 const LABEL = readArg("--label") ?? "default";
 const MODULE_ROOT = readArg("--module-root");
+const HEALING = argv.includes("--healing");
+if (HEALING && MODULE_ROOT) {
+  console.error("--healing 不可与 --module-root 组合（healing 子类绑定仓库解析域）。");
+  process.exit(2);
+}
 
 // 防御：显式关闭 LangSmith 追踪，保证零外网副作用
 delete process.env.LANGCHAIN_TRACING_V2;
@@ -95,6 +105,14 @@ function readPkg(p) {
 const { mod, messages: messagesMod, openaiVersion, coreVersion } =
   await loadModuleUnderTest();
 const { ChatOpenAI } = mod;
+
+// #113 healing 模式：从仓库源码直载 RoleHealingChatOpenAI（须 tsx 运行时）。
+// 其内部 extends 的 @langchain/openai 从 backend/src 解析链向上解析到仓库
+// 根 node_modules——与缺省 loadModuleUnderTest 同一实例域，instanceof 稳定。
+let RoleHealingChatOpenAI = null;
+if (HEALING) {
+  ({ RoleHealingChatOpenAI } = await import("../src/services/llmRoleHealing.ts"));
+}
 
 // ---------------------------------------------------------------------------
 // mock OpenAI 兼容 SSE 服务：POST /shape/<shape>/chat/completions
@@ -179,7 +197,8 @@ const describeToolCalls = (msg) => {
 };
 
 async function runShape(shape, { HumanMessage }) {
-  const model = new ChatOpenAI({
+  const ModelClass = HEALING ? RoleHealingChatOpenAI : ChatOpenAI;
+  const model = new ModelClass({
     apiKey: "sk-repro-local",
     model: "glm-4.6-repro",
     maxRetries: 0,
@@ -242,7 +261,7 @@ server.close();
 // ---------------------------------------------------------------------------
 // 报告
 // ---------------------------------------------------------------------------
-console.log(`\n[leg: ${LABEL}] @langchain/openai=${openaiVersion}  @langchain/core=${coreVersion}`);
+console.log(`\n[leg: ${LABEL}] @langchain/openai=${openaiVersion}  @langchain/core=${coreVersion}${HEALING ? "  model=RoleHealingChatOpenAI (#113)" : "  model=ChatOpenAI (基线)"}`);
 for (const shape of shapes) {
   const r = legs[shape];
   const note =
