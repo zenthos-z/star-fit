@@ -1,19 +1,18 @@
 /**
  * B3 开始运动子菜单 + 首次使用预调研分流（issue #23）单测
- * 覆盖：三选项条件渲染（有/无计划）、分流决策四象限、画像四题口径、
- *       文案红线（无 emoji / 无禁色值）
+ * 覆盖：三选项条件渲染（有/无计划）、分流决策四象限、文案红线（无 emoji / 无禁色值）
  * T8 #65：开始菜单三态（ready 载入计划 / rest 今日休息 / none 两选项回落）、
  *         优先级规则（今日排期优先，本地暂存 nextPlan 兜底）、课表条目→预填映射
+ * #114 B5b：画像题库收敛进 shared/contracts（NEWBIE_SURVEY_QUESTIONS 删除），
+ *           题库消费断言移至 SurveyCard.test.tsx
  */
 import { describe, expect, it } from 'vitest';
-import { render, screen } from '@testing-library/react';
 import {
   buildStartMenuOptions,
   resolveFirstUseTriage,
   resolveTodayPlanMenuState,
   scheduleEntriesToPlanItems,
   resolveUserHasHistory,
-  NEWBIE_SURVEY_QUESTIONS,
   PLAN_GUIDE_TEXT,
   NEWBIE_SURVEY_TEXT,
   START_OPTION_KEYS,
@@ -260,47 +259,13 @@ describe('Keys.firstUseCoachTriage · 首次标志按用户落键 [fix #23]', ()
   });
 });
 
-describe('NEWBIE_SURVEY_QUESTIONS · 画像四项口径', () => {
-  it('四题依次为 经验/目标/器材/频次，均必填且有选项', () => {
-    expect(NEWBIE_SURVEY_QUESTIONS.map(q => q.id)).toEqual([
-      'experience', 'goal', 'equipment', 'frequency',
-    ]);
-    for (const q of NEWBIE_SURVEY_QUESTIONS) {
-      expect(q.required).toBe(true);
-      expect(q.options.length).toBeGreaterThanOrEqual(3);
-      for (const o of q.options) {
-        expect(o.label.length).toBeGreaterThan(0);
-        expect(o.value.length).toBeGreaterThan(0);
-      }
-    }
-  });
-});
-
 describe('引导话术 · 红线自查', () => {
   it('无 emoji，无禁色值字面量', () => {
     const emoji = /[\u{1F300}-\u{1FAFF}\u{2600}-\u{27BF}]/u;
-    for (const text of [PLAN_GUIDE_TEXT, NEWBIE_SURVEY_TEXT, ...NEWBIE_SURVEY_QUESTIONS.flatMap(q => [q.question, ...q.options.map(o => o.label)])]) {
+    for (const text of [PLAN_GUIDE_TEXT, NEWBIE_SURVEY_TEXT]) {
       expect(emoji.test(text)).toBe(false);
       expect(text).not.toContain('#F3F3F3');
       expect(text).not.toContain('#EA580C');
     }
-  });
-
-  it('调研卡结构渲染SurveyCard 兼容形态（title + questions 可达）', () => {
-    // 形状防御：注入的 uiHint.data 与 SurveyCard props 的结构契约一致
-    const uiHint = {
-      type: 'survey_card' as const,
-      data: { title: '训练画像调研', questions: NEWBIE_SURVEY_QUESTIONS },
-    };
-    expect(uiHint.data.questions).toHaveLength(4);
-    render(
-      <ul>
-        {uiHint.data.questions.map(q => (
-          <li key={q.id}>{q.question}</li>
-        ))}
-      </ul>
-    );
-    expect(screen.getByText('你的训练经验')).toBeInTheDocument();
-    expect(screen.getByText('每周能练几次')).toBeInTheDocument();
   });
 });
