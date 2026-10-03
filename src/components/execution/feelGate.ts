@@ -21,6 +21,8 @@ export interface FeelModalRow {
   reps?: number;
   /** 已填值回显；未填打开时取默认 50 */
   feel?: number;
+  /** 已填语义补充回显（#119 缺陷3：动作级 feel_note 落在收尾组，重开时经行数据带回） */
+  feel_note?: string;
 }
 
 /** 一个动作的行组（结算闸门按动作分组展示） */
@@ -46,7 +48,14 @@ export const buildActionFeelTarget = (ex: Exercise): FeelModalTarget => ({
   groups: [{
     exId: ex.id,
     exName: ex.name,
-    sets: ex.sets.map((s, i) => ({ setId: s.id, setNo: i + 1, weight: s.weight, reps: s.reps, feel: s.feel })),
+    sets: ex.sets.map((s, i) => ({
+      setId: s.id,
+      setNo: i + 1,
+      weight: s.weight,
+      reps: s.reps,
+      feel: s.feel,
+      feel_note: s.feel_note,
+    })),
   }],
 });
 

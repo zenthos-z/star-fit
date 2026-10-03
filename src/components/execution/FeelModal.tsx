@@ -9,6 +9,7 @@ import {
   getSpeechPartial,
 } from '../../lib/speechInput';
 import { haptic } from '../../lib/nativeHaptics';
+import { isNativeTabBar } from '../../lib/nativeTabBar';
 import type {
   FeelModalGroup,
   FeelModalRow,
@@ -44,6 +45,24 @@ const SHEET_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
 /** 越界输入夹回契约闭区间（防御层：原生 range 已钳制，这里保 payload 契约红线） */
 const clampFeel = (raw: number): number => Math.max(0, Math.min(100, Math.round(raw)));
+
+/**
+ * 避让 iOS 原生 Tab Bar（#119 缺陷1，#104 BatchAddBanner 同款避让常量）：
+ * 原生 bar 悬浮在 WebView 之上（Liquid Glass 常驻），z-index 无法穿透——sheet 底缘
+ * 抬到 bar 顶沿（safe-area + 72px = MainTabBar body 避让常量）。CSS 回落端 tab bar
+ * z-105 在本表单 z-[150] 之下，按项目「sheet 盖 tab」规范维持贴底不抬。
+ */
+const TABBAR_CLEARANCE = 'calc(env(safe-area-inset-bottom, 0px) + 72px)';
+
+/** 语音启动失败提示的自动消退时长（ms）——失败可见但不打断表单语境 */
+const MIC_ERROR_TTL_MS = 3500;
+
+/** 动作级语义补充的回显落点：首个动作的收尾组（与 buildPatches 写入落点对称，§1） */
+const closingNoteOf = (t: FeelModalTarget): string => {
+  const g0 = t.groups[0];
+  const closing = g0?.sets[g0.sets.length - 1];
+  return closing?.feel_note ?? '';
+};
 
 /** 行参数摘要（等宽数字）：60kg × 8；自重动作 weight=0 → 自重 × 8 */
 const paramLabel = (s: FeelModalRow): string => {
@@ -154,19 +173,32 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
   const [values, setValues] = useState<Record<string, number>>(() =>
     Object.fromEntries(target.groups.flatMap(g => g.sets.map(s => [s.setId, s.feel ?? FEEL_DEFAULT]))),
   );
-  const [note, setNote] = useState('');
+  // note 初值回显（#119 缺陷3）：打开时刻带出已填的动作级 feel_note（收尾组），
+  // 之前初值恒 ''——确认后再开 note 必空，用户以为记录丢失
+  const [note, setNote] = useState(() => closingNoteOf(target));
   const [isListening, setIsListening] = useState(false);
+  // 语音启动失败提示（#119 缺陷2 硬验收：禁静默 return，失败必须可见）
+  const [micError, setMicError] = useState<string | null>(null);
   const [draggingSetId, setDraggingSetId] = useState<string | null>(null);
   const speechPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const micErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // 语音识别中用户手动编辑（删除/修改 partial 文本）→ 打开写保护，轮询停止回填
   // （@ 对话框 2026-09-17 bug 1 同源：删一个字 350ms 后被识别结果填回来）
   const userEditedRef = useRef(false);
   // 阈值触感游标：一次拖动手势内记忆上次值——跨越 25/50/75 轻点，≥90 重击一次
   const tickRef = useRef<{ setId: string; last: number; heavyFired: boolean } | null>(null);
 
-  // target 换目标（复用挂载）→ 行值重开（已填回显，未填默认）
+  /** 语音失败提示：立即出现、定时自动消退（新失败刷新计时） */
+  const showMicError = (msg: string) => {
+    setMicError(msg);
+    if (micErrorTimerRef.current !== null) clearTimeout(micErrorTimerRef.current);
+    micErrorTimerRef.current = setTimeout(() => setMicError(null), MIC_ERROR_TTL_MS);
+  };
+
+  // target 换目标（复用挂载）→ 行值与 note 重开（已填回显：滑块值 + 动作级 feel_note）
   useEffect(() => {
     setValues(Object.fromEntries(target.groups.flatMap(g => g.sets.map(s => [s.setId, s.feel ?? FEEL_DEFAULT]))));
+    setNote(closingNoteOf(target));
   }, [target]);
 
   const stopSpeechPolling = () => {
@@ -176,10 +208,11 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     }
   };
 
-  // 卸载时兜底清理录音轮询与原生会话（确认/跳过/父层条件卸载都走这里）
+  // 卸载时兜底清理录音轮询、失败提示计时与原生会话（确认/跳过/父层条件卸载都走这里）
   useEffect(() => {
     return () => {
       stopSpeechPolling();
+      if (micErrorTimerRef.current !== null) clearTimeout(micErrorTimerRef.current);
       void cancelSpeechInput();
     };
   }, []);
@@ -203,11 +236,19 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
       haptic('success');
       return;
     }
-    // 开始：先要权限（首次弹系统授权），再启动流式识别
+    // 开始：先要权限（首次弹系统授权），再启动流式识别。
+    // 失败必须有可见反馈（#119 缺陷2 硬验收：禁静默 return——真机实锤授权后点麦克风
+    // 零反应，用户无从判断卡在哪一环）；话术口径对齐 AICoachOverlay 同源分支
     const perms = await requestSpeechPermissions();
-    if (!perms || perms.speech !== 'granted' || perms.mic !== 'granted') return;
+    if (!perms || perms.speech !== 'granted' || perms.mic !== 'granted') {
+      showMicError('语音需要麦克风与语音识别权限，请在系统设置中开启');
+      return;
+    }
     const ok = await startSpeechInput('zh-CN');
-    if (!ok) return;
+    if (!ok) {
+      showMicError('语音启动失败，请稍后重试');
+      return;
+    }
     haptic('light');
     userEditedRef.current = false;
     setIsListening(true);
@@ -250,16 +291,19 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     tickRef.current = null; // 新手势重新计阈值
   };
 
-  /** 全部行打包：动作级语义补充写入首个动作的收尾组（组级字段的动作级落点，§1） */
+  /** 全部行打包：动作级语义补充写入首个动作的收尾组（组级字段的动作级落点，§1）。
+   *  #119 缺陷3 补语义：打开时回显过旧 note 而用户清空 → 显式写空串清除存量
+   *  （不写键 = 保持原值的「首填不写字段」语义原样保留，只对回显后清空放行清除） */
   const buildPatches = (): FeelConfirmPatch[] => {
     const trimmed = note.trim().slice(0, 500);
+    const echoNote = closingNoteOf(target);
     const patches: FeelConfirmPatch[] = [];
     target.groups.forEach(g => {
       g.sets.forEach((s, i) => {
         const p: FeelConfirmPatch = { exId: g.exId, setId: s.setId, feel: values[s.setId] ?? FEEL_DEFAULT };
-        if (g === target.groups[0] && i === g.sets.length - 1 && trimmed) {
-          p.feel_note = trimmed;
-        }
+        const isClosing = g === target.groups[0] && i === g.sets.length - 1;
+        if (isClosing && trimmed) p.feel_note = trimmed;
+        else if (isClosing && !trimmed && echoNote) p.feel_note = '';
         patches.push(p);
       });
     });
@@ -293,20 +337,24 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
         className="absolute inset-0 bg-black/45"
       />
 
-      {/* 底部 sheet：rounded-t-[40px] + glassEffect .regular 语义材质（中性白磨砂 + specular rim） */}
+      {/* 底部 sheet：rounded-t-[40px] + glassEffect .regular 语义材质（中性白磨砂 + specular rim）。
+          iOS 原生端底缘抬到原生 Tab Bar 之上（#119 缺陷1：bottom-0 下半部被悬浮 WebView
+          之上的原生 bar 盖住，note 输入与后段滑块不可见不可点）；web 回落端维持贴底 */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
         exit={{ y: '100%' }}
         transition={{ duration: 0.42, ease: SHEET_EASE }}
         data-testid="feel-modal"
-        className="absolute inset-x-0 bottom-0 mx-auto w-full max-w-md rounded-t-[40px] border-t border-white"
+        className="absolute inset-x-0 mx-auto w-full max-w-md rounded-t-[40px] border-t border-white"
         style={{
+          bottom: isNativeTabBar ? TABBAR_CLEARANCE : 0,
           background: 'rgba(255,255,255,0.95)',
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           boxShadow: '0 -25px 50px -12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.95)',
-          paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
+          // 抬升端已让出安全区（底缘 = safe-area + 72px），只留内容呼吸余量
+          paddingBottom: isNativeTabBar ? '24px' : 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
         }}
       >
         {/* 抓手条 */}
@@ -409,6 +457,17 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
               </motion.button>
             )}
           </div>
+
+          {/* 语音失败提示（#119 缺陷2 硬验收）：note 胶囊下一行可见反馈，定时自动消退 */}
+          {micError && (
+            <p
+              data-testid="feel-mic-error"
+              role="alert"
+              className="mt-2 px-1 text-[12px] font-semibold leading-snug text-rose-500"
+            >
+              {micError}
+            </p>
+          )}
         </div>
       </motion.div>
     </div>

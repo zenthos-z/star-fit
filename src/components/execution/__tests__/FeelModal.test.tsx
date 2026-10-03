@@ -59,6 +59,37 @@ const multiTarget: FeelModalTarget = {
   ],
 };
 
+/**
+ * 重开回显目标（#119 缺陷3）：确认写回后再开的形态——部分组已填 feel、
+ * 收尾组带动作级 feel_note（buildPatches 的写入落点，回显读同一落点）
+ */
+const echoTarget: FeelModalTarget = {
+  groups: [{
+    exId: 'ex-1',
+    exName: '杠铃卧推',
+    sets: [
+      { setId: 'set-1', setNo: 1, weight: 60, reps: 8, feel: 73 },
+      { setId: 'set-2', setNo: 2, weight: 60, reps: 8, feel: 35 },
+      { setId: 'set-3', setNo: 3, weight: 60, reps: 8, feel: 58, feel_note: '上次记的：左肩有点紧' },
+    ],
+  }],
+};
+
+/** 多动作回显目标：每组各自的已填值都要回显，note 取首个动作收尾组 */
+const multiEchoTarget: FeelModalTarget = {
+  groups: [
+    {
+      exId: 'ex-1',
+      exName: '杠铃卧推',
+      sets: [
+        { setId: 'set-1', setNo: 1, weight: 60, reps: 8, feel: 80 },
+        { setId: 'set-2', setNo: 2, weight: 60, reps: 8, feel_note: '卧推收尾很稳' },
+      ],
+    },
+    { exId: 'ex-2', exName: '杠铃划船', sets: [{ setId: 'set-b1', setNo: 1, weight: 40, reps: 10, feel: 62 }] },
+  ],
+};
+
 const renderModal = (target: FeelModalTarget, onConfirm = vi.fn(), onSkip = vi.fn()) => {
   const utils = render(<FeelModal target={target} onConfirm={onConfirm} onSkip={onSkip} />);
   return { onConfirm, onSkip, ...utils };
@@ -270,7 +301,7 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       expect(utils.queryByRole('button', { name: '语音输入' })).toBeNull();
     });
 
-    it('权限被拒 → 不启动识别、不进聆听态', async () => {
+    it('权限被拒 → 不启动识别、不进聆听态，提示可见（#119 缺陷2：禁静默）', async () => {
       speechMocks.requestSpeechPermissions.mockResolvedValue({ speech: 'denied', mic: 'denied' });
       const utils = renderModal(actionTarget);
       await act(async () => {
@@ -278,6 +309,24 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       });
       expect(speechMocks.startSpeechInput).not.toHaveBeenCalled();
       expect(getNote(utils).placeholder).not.toBe('正在聆听…');
+      expect(utils.getByTestId('feel-mic-error').textContent).toContain('权限');
+    });
+
+    it('启动失败（startSpeechInput 返回 false）→ 提示出现、不进聆听态、定时消退', async () => {
+      speechMocks.startSpeechInput.mockResolvedValue(false);
+      const utils = renderModal(actionTarget);
+      await act(async () => {
+        fireEvent.click(getMic(utils));
+      });
+      // #119 缺陷2 硬验收：授权后点击无反应的病灶 = 这里原本静默 return
+      expect(utils.getByTestId('feel-mic-error').textContent).toBe('语音启动失败，请稍后重试');
+      expect(getNote(utils).placeholder).not.toBe('正在聆听…');
+      expect(speechMocks.startSpeechInput).toHaveBeenCalledWith('zh-CN');
+      // 3.5s 自动消退（不打断表单语境）
+      await act(async () => {
+        vi.advanceTimersByTime(3600);
+      });
+      expect(utils.queryByTestId('feel-mic-error')).toBeNull();
     });
 
     it('聆听中卸载 → 兜底 cancel 录音会话', async () => {
@@ -289,6 +338,40 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
         utils.unmount();
       });
       expect(speechMocks.cancelSpeechInput).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('重开回显（#119 缺陷3：确认写回后再开，已填内容不丢）', () => {
+    it('带已填 feel/feel_note 的组打开 → 滑块初值 + note 初值原样回显', () => {
+      const utils = renderModal(echoTarget);
+      const sliders = getSliders(utils);
+      expect(sliders.map(s => s.value)).toEqual(['73', '35', '58']);
+      expect((utils.getByLabelText('感受补充说明') as HTMLTextAreaElement).value).toBe('上次记的：左肩有点紧');
+    });
+
+    it('回显后直接确认 → feel 原值 + feel_note 原文再写回收尾组（不改不丢）', () => {
+      const utils = renderModal(echoTarget);
+      const patches = confirmAction(utils);
+      expect(patches.map(p => p.feel)).toEqual([73, 35, 58]);
+      expect(patches[2].feel_note).toBe('上次记的：左肩有点紧');
+      patches.forEach(expectContractValid);
+    });
+
+    it('回显后清空 note 确认 → 收尾组写空串显式清除（下轮重开不再复活）', () => {
+      const utils = renderModal(echoTarget);
+      act(() => {
+        fireEvent.change(utils.getByLabelText('感受补充说明'), { target: { value: '' } });
+      });
+      const patches = confirmAction(utils);
+      expect(patches[2].feel_note).toBe('');
+      patches.forEach(expectContractValid); // 空串过契约（≤500，无 min 约束）
+    });
+
+    it('多动作聚合：每组各自已填值回显，note 取首个动作收尾组', () => {
+      const utils = renderModal(multiEchoTarget);
+      const sliders = getSliders(utils);
+      expect(sliders.map(s => s.value)).toEqual(['80', '50', '62']);
+      expect((utils.getByLabelText('感受补充说明') as HTMLTextAreaElement).value).toBe('卧推收尾很稳');
     });
   });
 });
