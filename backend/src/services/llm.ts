@@ -173,12 +173,16 @@ export async function loadModel(
     }
     // GLM is OpenAI-compatible. No thinking kwargs by default — GLM-5.3-flash
     // streams reasoning_content into additional_kwargs on its own and tool
-    // calls work without extra request-body fields. maxTokens 16384 keeps long
-    // tool-call argument JSON clear of the OpenAI-SDK default cap (mid-args
-    // truncation otherwise breaks the deepagents AgentNode AIMessage
-    // validation). Fast-lane scenarios (B5b) explicitly disable thinking via
-    // modelKwargs (merged into the request body) — GLM supports the
-    // `thinking` parameter on the OpenAI-compatible endpoint.
+    // calls work without extra request-body fields. maxTokens 65536（#116，
+    // 2026-10-03 由 16384 扩容，对齐下方 glm-anthropic 分支）：coding 端点
+    // thinking 计入 completion 配额（探针 P1），16384 下计划轮终步思考
+    // 42,250 字符 + weekly_plan 卡 JSON 一并超限 → finish_reason=length 写卡
+    // 中途截断 → EMPTY_ANSWER 空轮；65536 端点实弹验证直接接受（探针 P4），
+    // 且仍远高于 OpenAI-SDK 默认上限，继续规避长 tool-call 参数 JSON 的
+    // mid-args 截断（deepagents AgentNode AIMessage 校验）。Fast-lane
+    // scenarios (B5b) explicitly disable thinking via modelKwargs (merged
+    // into the request body) — GLM supports the `thinking` parameter on the
+    // OpenAI-compatible endpoint.
     const disableThinking = THINKING_DISABLED_SCENARIOS.has(scenario);
     // #113: RoleHealingChatOpenAI — GLM 无 role 流根治（转换层补 role 语义，
     // refs #110 #112）。重型请求下 GLM 整轮流式 delta 高发全程无 role，
@@ -190,7 +194,7 @@ export async function loadModel(
       apiKey,
       configuration: { baseURL: resolved.baseURL },
       temperature: 1.0,
-      maxTokens: 16384,
+      maxTokens: 65536,
       ...(disableThinking
         ? { modelKwargs: { thinking: { type: "disabled" } } }
         : {}),

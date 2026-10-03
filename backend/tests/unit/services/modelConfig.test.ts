@@ -246,7 +246,11 @@ describe("M8 DeepSeek model config", () => {
       expect(model.lc_kwargs?.configuration?.baseURL).toBe(
         "https://open.bigmodel.cn/api/coding/paas/v4",
       );
-      expect(model.lc_kwargs?.maxTokens).toBe(16384);
+      // 65536（#116，2026-10-03 由 16384 扩容）：coding 端点 thinking 计入
+      // completion 配额，16384 下计划轮终步思考+卡 JSON 超限 → finish_reason
+      // =length 写卡中途截断 → EMPTY_ANSWER；65536 端点实测接受，与 anthropic
+      // 分支对齐（仍高于 OpenAI-SDK 默认上限，继续规避 tool-args 截断）。
+      expect(model.lc_kwargs?.maxTokens).toBe(65536);
     });
 
     it("AI_PROVIDER=glm-anthropic builds ChatAnthropic against the anthropic endpoint", async () => {
@@ -261,7 +265,8 @@ describe("M8 DeepSeek model config", () => {
       expect(model.apiUrl).toBe("https://open.bigmodel.cn/api/anthropic");
       // 65536（吞卡修复 II 期间修正）：Anthropic Messages 协议 thinking 块
       // 计入 max_tokens（bigmodel 端点实测执行），16384 会在长思考轮截断卡
-      // 片生成；OpenAI 分支的 16384 只护 tool-args 截断，两者语义不同。
+      // 片生成。OpenAI 分支 2026-10-03（#116）起同为 65536（其 coding 端点
+      // thinking 同样计入 completion 配额）。
       expect(model.maxTokens).toBe(65536);
     });
 

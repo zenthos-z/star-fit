@@ -98,7 +98,10 @@
  */
 
 import { DynamicStructuredTool } from "@langchain/core/tools";
+import { ToolMessage } from "@langchain/core/messages";
 import { getConfig } from "@langchain/langgraph";
+import { createMiddleware } from "langchain";
+import { randomUUID } from "node:crypto";
 import { z } from "zod";
 
 // B1: data access is via the Repository layer only. These imports reach the
@@ -1728,6 +1731,169 @@ export function buildMcpToolsWith(
 export function buildMcpTools(): DynamicStructuredTool[] {
   return buildMcpToolsWith(getPostgresClient(), undefined);
 }
+
+// ---------------------------------------------------------------------------
+// 同轮幂等工具结果缓存（#116 / #68，2026-10-03）
+// ---------------------------------------------------------------------------
+
+/**
+ * 参与同轮缓存的工具白名单——仅幂等只读工具（任务书 #116 指定四件）。
+ * 白名单外一律直通：写类工具（write_session / write_memory / update_profile /
+ * create_exercise / write_file / edit_file / execute）绝不缓存，其余读类
+ * 工具（get_current_plan / get_exercise_detail / HR 双件 / ls / glob / grep）
+ * 保守起见也不缓存（只是拿不到加速，语义无影响）。
+ *
+ * 背景：2026-10-03 深研报告实锤——首计划轮 load_history 同轮被调 9 次（纯
+ * 重复），每次重复 = 一整步 LLM 思考重读 + 8-56s 往返；缓存命中直接砍掉
+ * 重复步 ≈ 省 2-4 分钟/轮（refs #68）。
+ */
+export const TURN_CACHEABLE_TOOLS: ReadonlySet<string> = new Set([
+  "load_history",
+  "find_exercises",
+  "list_exercises",
+  "read_file",
+]);
+
+/**
+ * 会改变缓存可见数据的工具——执行前清空该线程的本轮缓存（轮内写后读
+ * 新鲜度：write_session 后再 load_history 必须拿到写入后的数据，而不是
+ * 命中写前的缓存）。写类工具本身从不进缓存（不在 TURN_CACHEABLE_TOOLS）。
+ */
+const TURN_CACHE_INVALIDATING_TOOLS: ReadonlySet<string> = new Set([
+  "write_session",
+  "write_memory",
+  "update_profile",
+  "create_exercise",
+  "write_file",
+  "edit_file",
+  "execute",
+]);
+
+/** 一个线程当轮的缓存体：turnId 标识轮次，entries 为「工具名+参数指纹→结果」。 */
+interface ThreadTurnCache {
+  turnId: string;
+  entries: Map<string, { content: ToolMessage["content"]; name?: string }>;
+}
+
+/**
+ * 线程级轮缓存存储。按 thread_id 隔离（跨用户/跨会话绝不共享——缓存键不含
+ * userId，共享即数据串台）；值在每次 beforeAgent 钩子（= 每个 chat() 轮开始）被
+ * 整体替换，旧轮条目随之不可达 → 轮结束即弃，禁止跨轮缓存（数据新鲜度）。
+ */
+const turnToolCaches = new Map<string, ThreadTurnCache>();
+
+/**
+ * 稳定序列化（深比较语义）：对象键递归排序后序列化，`{a:1,b:2}` 与
+ * `{b:2,a:1}` 同键；数组保序（顺序有语义）。undefined 用独立记号，与
+ * null/缺键区分，杜绝碰撞。
+ */
+export function stableStringifyToolArgs(value: unknown): string {
+  if (value === undefined) return "«undefined»";
+  if (value === null || typeof value !== "object") {
+    return JSON.stringify(value) ?? "«unserializable»";
+  }
+  if (Array.isArray(value)) {
+    return `[${value.map(stableStringifyToolArgs).join(",")}]`;
+  }
+  const record = value as Record<string, unknown>;
+  const keys = Object.keys(record).sort();
+  return `{${keys
+    .map((k) => `${JSON.stringify(k)}:${stableStringifyToolArgs(record[k])}`)
+    .join(",")}}`;
+}
+
+/** 打点用参数指纹（截断，避免 exclude_ids 长数组刷屏）。 */
+function argsFingerprint(args: unknown): string {
+  const s = stableStringifyToolArgs(args);
+  return s.length > 120 ? `${s.slice(0, 120)}…` : s;
+}
+
+/** 从 middleware runtime 读 thread_id（缺席返回 null——无法安全定界则不缓存）。 */
+function threadIdFromRuntime(runtime: unknown): string | null {
+  const tid = (
+    runtime as { configurable?: { thread_id?: unknown } } | undefined
+  )?.configurable?.thread_id;
+  return typeof tid === "string" && tid.length > 0 ? tid : null;
+}
+
+/** 仅供测试隔离使用：清空全部轮缓存。 */
+export function __resetTurnToolCacheForTests(): void {
+  turnToolCaches.clear();
+}
+
+/**
+ * 同轮幂等工具缓存中间件（#116 落点，DeepAgentService.assembleAgent 组装）。
+ *
+ * - `beforeAgent`：每个 agent 调用（= chat() 一轮）开始时为该线程开启全新
+ *   缓存体——上一轮条目整体作废，即「轮结束即弃、禁止跨轮缓存」。
+ * - `wrapToolCall`：单一收口，同时覆盖本文件 mcpTools 与 deepagents 内置
+ *   filesystem 工具（read_file）。白名单内同轮「同工具名+同参数（深比较）」
+ *   的重复调用直接复用首轮结果（重建 ToolMessage、换当前 tool_call_id），
+ *   命中打点 console.info（工具名+参数指纹）供验收统计；白名单外直通。
+ * - 隔离：存储按 thread_id 分仓。同线程轮次天然串行（LangGraph checkpoint
+ *   语义），跨线程并发互不影响；thread_id 缺席时整体降级为不缓存。
+ * - 新鲜度：写类工具（TURN_CACHE_INVALIDATING_TOOLS）执行前清空本轮缓存，
+ *   轮内「写后读」拿到写入后数据；错误结果（ToolMessage status=error 或
+ *   抛异常）不进缓存，瞬时故障不粘轮。
+ */
+export const turnToolCacheMiddleware = createMiddleware({
+  name: "turnScopedIdempotentToolCache",
+  // 注意：langchain AgentMiddleware 钩子键为 camelCase（beforeAgent /
+  // wrapToolCall）；snake_case 键会被 createMiddleware 静默丢弃（2026-10-03
+  // 单测实锤：before_agent 写法钩子不挂、缓存整体失效）。
+  beforeAgent: (_state, runtime) => {
+    const threadId = threadIdFromRuntime(runtime);
+    if (threadId === null) return;
+    turnToolCaches.set(threadId, { turnId: randomUUID(), entries: new Map() });
+  },
+  wrapToolCall: async (request, handler) => {
+    const toolCall = request.toolCall as
+      { name?: string; args?: unknown; id?: string } | undefined;
+    const toolName = toolCall?.name;
+    const threadId = threadIdFromRuntime(request.runtime);
+    if (!toolName || !toolCall?.id || threadId === null) {
+      return handler(request);
+    }
+    const turn = turnToolCaches.get(threadId);
+
+    // 写类工具：执行前清空本轮缓存（轮内写后读新鲜度），自身绝不缓存。
+    if (TURN_CACHE_INVALIDATING_TOOLS.has(toolName)) {
+      if (turn && turn.entries.size > 0) {
+        turn.entries.clear();
+        console.info(
+          `[turn-tool-cache] 已因写类工具 ${toolName} 清空本轮缓存（threadId=${threadId}，refs #116）`,
+        );
+      }
+      return handler(request);
+    }
+
+    if (!TURN_CACHEABLE_TOOLS.has(toolName) || !turn) {
+      return handler(request);
+    }
+
+    const cacheKey = `${toolName} ${stableStringifyToolArgs(toolCall.args)}`;
+    const hit = turn.entries.get(cacheKey);
+    if (hit) {
+      console.info(
+        `[turn-tool-cache] HIT ${toolName} args=${argsFingerprint(toolCall.args)}（同轮重复同参调用，直接复用，refs #116）`,
+      );
+      return new ToolMessage({
+        content: hit.content,
+        tool_call_id: toolCall.id,
+        ...(hit.name ? { name: hit.name } : {}),
+      });
+    }
+
+    const result = await handler(request);
+    if (result instanceof ToolMessage && result.status !== "error") {
+      turn.entries.set(cacheKey, {
+        content: result.content,
+        name: result.name,
+      });
+    }
+    return result;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
