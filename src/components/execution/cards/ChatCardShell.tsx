@@ -29,11 +29,14 @@ export const ChatPrimaryButton: React.FC<{
   onClick?: () => void;
   disabled?: boolean;
   className?: string;
-}> = ({ children, onClick, disabled, className = '' }) => (
+  /** 供 UI 测试定位（可选） */
+  testId?: string;
+}> = ({ children, onClick, disabled, className = '', testId }) => (
   <button
     type="button"
     onClick={onClick}
     disabled={disabled}
+    data-testid={testId}
     className={`h-11 rounded-full bg-star-accent text-white text-[15px] font-semibold transition-all active:scale-95 disabled:opacity-50 disabled:scale-100 ${className}`}
   >
     {children}

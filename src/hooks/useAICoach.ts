@@ -14,9 +14,10 @@ import {
   resolveUserHasHistory,
   PLAN_GUIDE_TEXT,
   NEWBIE_SURVEY_TEXT,
-  NEWBIE_SURVEY_QUESTIONS,
   type ScheduleStatus,
 } from '../utils/startOnboarding';
+import { PROFILE_INTAKE_QUESTIONS } from 'shared/contracts';
+import { buildProfileIntakeStaticPatch } from '../utils/surveyProfileWrite';
 import { storageGet, storageSet } from '@/storage';
 import { Keys } from '@/storage/schemas';
 import { todayDateKey } from '../utils/weeklyPlanView';
@@ -500,67 +501,18 @@ export const useAICoach = (
         // 静态字段（目标/经验/器械/周频次）在 Agent 工具侧无写入通道——纯靠 Agent 转述必然丢。
         // 契约红线：数据写入走 Service，不依赖 AI。前端把可识别字段直接写 profile_static，
         // 失败静默（Agent 消息里仍带原文，可由 write_memory 兜底记忆）。
+        // [#114 B5b 写库收口（spec §4 修法 3）]：映射收敛进 src/utils/surveyProfileWrite.ts
+        // ——题库 value 即机器值，按 id 直取直写；pick() 模糊 key + 中文映射表 +
+        // includes 子串兜底整段删除（缺口 3d 根治）；频次只传单值进
+        // preferences.weekly_frequency_days（顶层 weekly_frequency_days 被控制器
+        // 嵌套分支静默丢弃——缺口 3b 根治）；顶层 raw_injuries 死代码删除（缺口 3c，
+        // 伤病/notes 原文随问卷交 Agent 登记）。旧 Agent 措辞卡提交不 crash
+        // （未知键忽略，枚举外值 warn+skip）。
         if (!hasWorkoutData) {
           try {
             const responses = (uploadData?.responses ?? uploadData) as Record<string, unknown>;
-            const pick = (...keys: string[]) => {
-              for (const k of keys) {
-                const v = responses[k];
-                if (v !== undefined && v !== null && String(v).trim() !== "") return String(v).trim();
-              }
-              return undefined;
-            };
-            // ★按 shared/contracts 嵌套格式写（PUT /profile/static 的平铺白名单只认
-            // age/weight/height/neuro_type 等，goal/experience/equipment 会被静默丢弃——实锤踩过）
-            const staticPatch: Record<string, unknown> = { preferences: {}, basic_info: {} };
-            const prefs = staticPatch.preferences as Record<string, unknown>;
-            const basic = staticPatch.basic_info as Record<string, unknown>;
-
-            const goal = pick("goal", "training_goal", "目标");
-            if (goal) {
-              const map: Record<string, string> = {
-                增肌: "muscle_gain", 肌肥大: "muscle_gain",
-                减脂: "fat_loss", 减肥: "fat_loss", 燃脂: "fat_loss",
-                力量: "strength", 增力: "strength",
-                健康: "health", 一般健康: "health",
-                综合体能: "general_fitness", 体能: "general_fitness"
-              };
-              // 精确命中 → 子串兜底（Agent 生成的 label 是自由文本，如「增肌塑形」
-              // 「提升力量」；2026-09-17 实测「增肌塑形」漏映射 fallback 成 general_fitness）
-              const mapped =
-                map[goal] ??
-                (goal.includes("增肌") || goal.includes("肌肥大") || goal.includes("塑形") ? "muscle_gain"
-                : goal.includes("减脂") || goal.includes("减肥") || goal.includes("燃脂") ? "fat_loss"
-                : goal.includes("力量") ? "strength"
-                : goal.includes("体能") || goal.includes("健康") ? "general_fitness"
-                : undefined);
-              prefs.goal = mapped ?? "general_fitness";
-            }
-            const equip = pick("equipment", "available_equipment", "器械", "器械条件");
-            if (equip) prefs.equipment = equip.split(/[、,，/ ]+/).filter(Boolean);
-            const exp = pick("experience", "training_experience", "经验", "训练经验");
-            if (exp) {
-              // 文本经验映射为训练年龄（月）：新手=3 / 中级=12 / 高级=36，数字直接用
-              const n = parseFloat(exp);
-              basic.training_age = isNaN(n)
-                ? (/高级/.test(exp) ? 36 : /中|一年|1年/.test(exp) ? 12 : 3)
-                : n;
-            }
-            const weekly = pick("weekly_frequency", "frequency", "days_per_week", "周频次", "每周次数");
-            if (weekly) {
-              const n = parseInt(weekly);
-              if (!isNaN(n)) (staticPatch as Record<string, unknown>).weekly_frequency_days = n;
-            }
-            const injuries = pick("injuries", "injury", "limitations", "伤病");
-            if (injuries && injuries !== "无" && injuries !== "没有" && injuries !== "无伤病") {
-              (staticPatch as Record<string, unknown>).raw_injuries = injuries; // 原文留给 Agent 读
-            }
-            for (const k of Object.keys(staticPatch)) {
-              if (!staticPatch[k] || (typeof staticPatch[k] === "object" && Object.keys(staticPatch[k] as object).length === 0)) {
-                delete staticPatch[k];
-              }
-            }
-            if (Object.keys(staticPatch).length > 0) {
+            const staticPatch = buildProfileIntakeStaticPatch(responses ?? {});
+            if (staticPatch) {
               // fire-and-forget：不阻塞 Agent 对话流；401/网络失败由 catch 吞掉
               fetch(`${API_BASE}/admin/users/${encodeURIComponent(getUserId())}/profile/static`, {
                 method: "PUT",
@@ -1181,7 +1133,10 @@ ${JSON.stringify(uploadData, null, 2)}`;
             type: 'survey_card',
             data: {
               title: '训练画像调研',
-              questions: NEWBIE_SURVEY_QUESTIONS,
+              // #114 B5b：题源切换共享题库（契约批 B5a 定稿），前端不再抄题；
+              // purpose 标记首用画像调研（渲染层按它分流提交按钮文案）
+              purpose: 'profile_intake',
+              questions: PROFILE_INTAKE_QUESTIONS,
             },
           },
         } as ChatMessage]);
