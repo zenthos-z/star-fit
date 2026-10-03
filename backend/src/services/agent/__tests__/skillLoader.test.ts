@@ -60,6 +60,10 @@ import {
 //   2026-09-30  exercise-type-guide/knowledge-index.md 重生成（W2/#88 分册1
 //               类型体系统一：单一真源 shared/contracts/card-types.ts，
 //               scripts/gen-exercise-type-index.mjs 生成）——SHA 按磁盘实值重算
+//   2026-10-03  plan-generation knowledge 5.5.0 (#114 B5c)：§11.1 前置门槛
+//               收敛共享题库（purpose=profile_intake/plan_gap + 题库 id 映射
+//               表）；novice-starting §3.2.0 门禁表加题库 id 列——SHA 按
+//               磁盘实值重算
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
@@ -85,11 +89,11 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "afd9c8b6490b09b85dfd288cdf39b23b4fc3a107c05301ece5abcd474abc03ed",
+    "00f2e0920dd3f9ef2916f3da777316566b462b46dd85ec1c1252060adfac4e15",
   "plan-generation/knowledge/injury-adjustment.md":
     "d556d96744b2cea9404dd88a085454729ec6ce4e3060712b662692f8ff269e0a",
   "plan-generation/knowledge/novice-starting.md":
-    "23855002deee2c0b3a6a93e7534277efe6a43349babd386d599b670ef70fe3a1",
+    "847a375799c8375da695ff1ce24636c3519846c73d16358fc88f28129508b642",
   "plan-generation/knowledge/volume-progression.md":
     "10d70dc7b3a974860aab5ec02c2dbeed649a3c02662a2dcce4703d546cf0b5bb",
   "strength-training-designer/knowledge/non-big-three-guide.md":

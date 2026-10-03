@@ -387,3 +387,141 @@ describe("validateUiHint — B3 HC-4 HITL blacklist", () => {
     }
   });
 });
+
+// ---------------------------------------------------------------------------
+// #114 B5c — survey_card 新字段（purpose/children/textarea）过校验回路，
+// 旧卡（无 purpose、inputType 旧三枚举）照常通过（契约 optional 增量）。
+// ---------------------------------------------------------------------------
+
+describe("validateUiHint — #114 survey_card new optional fields", () => {
+  it("accepts purpose + children two-level options + textarea/select inputType", () => {
+    const card = {
+      type: "survey_card",
+      data: {
+        purpose: "profile_intake",
+        title: "首用调研",
+        questions: [
+          {
+            id: "equipment_venue",
+            section: "必答",
+            question: "主要训练场地",
+            required: true,
+            inputType: "select",
+            childKey: "equipment_items",
+            options: [
+              {
+                label: "健身房",
+                value: "gym",
+                children: [
+                  { label: "杠铃", value: "barbell" },
+                  { label: "深蹲架", value: "rack" },
+                ],
+              },
+              { label: "家里", value: "home" },
+            ],
+          },
+          {
+            id: "weight_kg",
+            question: "体重（kg）",
+            required: true,
+            inputType: "number",
+            unit: "kg",
+            min: 30,
+            max: 250,
+            hint: "用于推算你的起步重量",
+          },
+          {
+            id: "age",
+            question: "年龄",
+            inputType: "number",
+            condition: {
+              questionId: "goal",
+              equals: ["fat_loss", "general_fitness"],
+            },
+          },
+          {
+            id: "notes",
+            question: "还有什么想让教练知道的？",
+            inputType: "textarea",
+            maxLength: 500,
+            placeholder: "夜班倒班、产后恢复……",
+          },
+        ],
+      },
+    };
+    const result = validateUiHint(card);
+    assert.equal(
+      result.ok,
+      true,
+      JSON.stringify(result.ok ? [] : result.errors),
+    );
+    if (result.ok) {
+      const data = result.card.data as {
+        purpose?: string;
+        questions: Array<{
+          id: string;
+          options?: Array<{ children?: unknown[] }>;
+        }>;
+      };
+      assert.equal(data.purpose, "profile_intake");
+      assert.equal(data.questions[0].options?.[0]?.children?.length, 2);
+    }
+  });
+
+  it("accepts every purpose enum value; rejects an unknown purpose", () => {
+    for (const purpose of ["profile_intake", "workout_feedback", "plan_gap"]) {
+      const result = validateUiHint({
+        type: "survey_card",
+        data: { purpose, questions: [{ id: "q", question: "?" }] },
+      });
+      assert.equal(result.ok, true, `purpose=${purpose} must parse`);
+    }
+    const bad = validateUiHint({
+      type: "survey_card",
+      data: { purpose: "random_quiz", questions: [{ id: "q", question: "?" }] },
+    });
+    assert.equal(bad.ok, false, "unknown purpose must be rejected by the enum");
+  });
+
+  it("legacy cards (no purpose / old 3-enum inputType) still pass unchanged", () => {
+    // 旧练后反馈卡：无 purpose、checkbox 多选、纯 label/value 选项。
+    const legacy = {
+      type: "survey_card",
+      data: {
+        title: "训练反馈",
+        questions: [
+          {
+            id: "fatigue_level",
+            question: "今天的训练感觉有多累？（1-10分）",
+            required: false,
+            inputType: "number",
+            placeholder: "请输入 1-10 的分数",
+          },
+          {
+            id: "sleep_quality",
+            question: "昨晚睡眠质量如何？",
+            options: [
+              { label: "很好", value: "excellent" },
+              { label: "一般", value: "average" },
+              { label: "较差", value: "poor" },
+            ],
+          },
+        ],
+      },
+    };
+    const result = validateUiHint(legacy);
+    assert.equal(
+      result.ok,
+      true,
+      JSON.stringify(result.ok ? [] : result.errors),
+    );
+    if (result.ok) {
+      const data = result.card.data as { purpose?: unknown };
+      assert.equal(
+        data.purpose,
+        undefined,
+        "no purpose synthesized for old cards",
+      );
+    }
+  });
+});
