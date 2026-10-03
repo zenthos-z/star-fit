@@ -652,6 +652,13 @@ export async function* classifyAgentStream(
 ): AsyncIterable<AgentEvent> {
   let leakedThinking = ""; // reasoning stripped from terminal messages
 
+  // ★空终步守卫（refs #110 §5.4 / #112）：记录本轮是否放过任何答案载荷。
+  // uiHint 卡只能随 token 文本下发（extractUiHintEvents 在本层下游剥卡），
+  // 故「零 token」⟺「零 token 且零 uiHint」。整轮零载荷时在 done 前发
+  // error 兜底事件——前端走既有 error 渲染路径，「正在解析数据…」死占位
+  // 由后端保证不再出现（thinking 不算答案：纯思考轮对用户同样是空轮）。
+  let sawAnswerPayload = false;
+
   // ★吞卡修复（refs #73）：本轮（含 before_agent 重放的历史）全部工具返回的
   // 扁平文本（去空白）。卡片段若逐字出现在任一工具返回里 → 是复述不是交付
   // （典型：read_file plan-generation knowledge.md §9 的示例卡围栏被复述），
@@ -720,6 +727,7 @@ export async function* classifyAgentStream(
               : gated.echoes;
           }
           if (gated.tokens) {
+            sawAnswerPayload = true;
             for (const chunk of chunkAnswerText(gated.tokens)) {
               yield { type: "token", text: chunk };
             }
@@ -794,6 +802,7 @@ export async function* classifyAgentStream(
           yield { type: "thinking", text: rest.trim() };
         }
         for (const card of cards) {
+          sawAnswerPayload = true;
           yield { type: "token", text: card };
         }
       }
@@ -842,6 +851,7 @@ export async function* classifyAgentStream(
             : mid.echo;
         }
         if (mid.rest) {
+          sawAnswerPayload = true;
           for (const chunk of chunkAnswerText(mid.rest)) {
             yield { type: "token", text: chunk };
           }
@@ -874,6 +884,7 @@ export async function* classifyAgentStream(
       : gateTail.echoes;
   }
   if (gateTail.tokens) {
+    sawAnswerPayload = true;
     for (const chunk of chunkAnswerText(gateTail.tokens)) {
       yield { type: "token", text: chunk };
     }
@@ -890,6 +901,23 @@ export async function* classifyAgentStream(
 
   // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。
   //   最终答案同样已在循环内逐段/逐 token 实时转发，流尾不再补发。）
+
+  // ★空终步守卫（refs #110 §5.4 / #112）：整轮零 token 零 uiHint 零 error
+  // 而流正常收尾 → 发兜底 error 事件（消息内嵌 EMPTY_ANSWER 标识，code 用
+  // 契约既有 MODEL_ERROR——AgentErrorCode 为封闭枚举且本任务冻结
+  // shared/contracts，见 PR 说明），随后 done 照常收流。中间件重滚（见
+  // frameworkTrimMiddleware）已挡住 #110 的主签名，这里是同链路纵深：任何
+  // 残余形态的空轮（真空回、纯思考轮等）都不再以「正在解析数据…」死占位
+  // 呈现给用户。
+  if (!sawAnswerPayload) {
+    yield {
+      type: "error",
+      error: {
+        code: "MODEL_ERROR",
+        message: "本轮回复为空（EMPTY_ANSWER）——模型未产生任何内容，请重试。",
+      },
+    };
+  }
   yield { type: "done" };
 }
 
@@ -1163,8 +1191,21 @@ export async function buildUserContent(
   return blocks;
 }
 
-/** Normalise a thrown value into an `AgentEvent` error element. */
-function toErrorEvent(err: unknown): AgentEvent {
+/**
+ * Normalise a thrown value into an `AgentEvent` error element.
+ *
+ * ★#112：EmptyAgentTurnError（空终步重滚穷尽，见 frameworkTrimMiddleware）
+ * 映射为 MODEL_ERROR——模型侧故障的契约枚举值；用户可读消息由错误自带
+ * （含 EMPTY_ANSWER 标识），走既有 SSE error 渲染路径，前端零改动。
+ * 导出仅供测试断言映射；运行时仅模块内部调用。
+ */
+export function toErrorEvent(err: unknown): AgentEvent {
+  if (err instanceof EmptyAgentTurnError) {
+    return {
+      type: "error",
+      error: { code: "MODEL_ERROR", message: err.message },
+    };
+  }
   const message =
     err instanceof Error
       ? err.message
@@ -1270,6 +1311,7 @@ export const frameworkTrimMiddleware = createMiddleware({
               : null),
           }
         : request;
+    const startedAt = Date.now();
     const res = await handler(req2);
     // GLM 的 OpenAI 兼容流偶发尾包（空 content / 无 role 的末 chunk）会把聚合
     // 结果映射成 ChatMessageChunk —— 它不是 AIMessage 子类，AgentNode 的
@@ -1278,17 +1320,146 @@ export const frameworkTrimMiddleware = createMiddleware({
     // maxTokens 规避的 args 截断是同族 provider 互操作问题）。本中间件位于
     // wrapModelCall 链最内层、最先见到模型返回——在此把字段同构的
     // ChatMessageChunk 重水化回 AIMessageChunk，语义零改动，只补类型。
-    if (
-      res != null &&
-      typeof res === "object" &&
-      (res as { constructor?: { name?: string } }).constructor?.name ===
-        "ChatMessageChunk"
-    ) {
-      return new AIMessageChunk({ ...(res as object) });
+    //
+    // ★空终步检测 + 模型重滚自动接续（refs #110 #111，2026-10-03 #112）：
+    // @langchain/openai 对「全程无 role」的 GLM 异常流走 else 分支构造
+    // ChatMessageChunk（不接收 additional_kwargs）→ tool_calls 增量在 chunk
+    // 转换层被静默丢弃 → 聚合体 content=''、零 tool_calls → LangGraph 视为
+    // 合法终步 → 整轮空输出。重水化救不回从未进入实例属性的字段（#111
+    // T1.1 三重实锤，1.5.13/1.6.2 双版 BUG、上游无修复）。在此就地重滚一次
+    // 模型调用（同 messages、同参数、同 signal——handler 内部经
+    // AgentNode raceWithSignal(config.signal) 携带），让模型把该输的内容补
+    // 上，用户全程无感知；第二次仍空 → 抛 EmptyAgentTurnError 走既有 SSE
+    // error 事件通道（防 provider 持续故障时死循环）。
+    //
+    // 检测谓词与任务书三条件的对应（finish_reason 等价路径说明）：SSE 终包
+    // 的 finish_reason 只落在 ChatGenerationChunk.generationInfo，invoke 桥接
+    // 路径（AgentNode 生产路径）返回的消息 response_metadata 不携带它
+    // （2026-10-03 探针 backend/scripts/probe-finish-reason.mjs 实证，正常
+    // 对照组同样不带）——本层可见的等价信号是「聚合体为 ChatMessageChunk」
+    // 本身：它是「整轮流 delta 全程无 role」的必然后果（assistant/user/
+    // system/… 任一 role 命中都会产出对应消息子类），即 provider 异常流的
+    // 充分签名。故三条件落地为：roleless 聚合（ChatMessageChunk）∧ 零
+    // tool_calls（tool_calls / tool_call_chunks / additional_kwargs.tool_calls
+    // 三处全空）∧ content 为空。
+    const firstRoleless = isChatMessageChunk(res);
+    const first = firstRoleless
+      ? new AIMessageChunk({ ...(res as object) })
+      : res;
+    if (isEmptyToolCallsAggregate(firstRoleless, first)) {
+      const threadId = readThreadId(request);
+      const elapsedMs = Date.now() - startedAt;
+      console.warn(
+        `[agent-empty-turn] 空终步命中（threadId=${threadId}，首次耗时 ${elapsedMs}ms，` +
+          `usage=${JSON.stringify(usageSnapshot(first))}）——就地重滚一次模型调用（refs #110 #111）`,
+      );
+      // 用户已中止则不再重滚：本轮随 abort 语义终止，不额外计费。
+      if (request.runtime?.signal?.aborted) {
+        return first;
+      }
+      const retriedAt = Date.now();
+      const retry = await handler(req2);
+      const retryRoleless = isChatMessageChunk(retry);
+      const second = retryRoleless
+        ? new AIMessageChunk({ ...(retry as object) })
+        : retry;
+      if (isEmptyToolCallsAggregate(retryRoleless, second)) {
+        console.warn(
+          `[agent-empty-turn] 重滚后仍为空终步（threadId=${threadId}，重滚耗时 ` +
+            `${Date.now() - retriedAt}ms，usage=${JSON.stringify(usageSnapshot(second))}）——抛 EmptyAgentTurnError`,
+        );
+        throw new EmptyAgentTurnError(
+          "模型连续两次返回空终步（EMPTY_ANSWER，refs #110 tool_calls 增量丢失），本轮无法产出回复。",
+        );
+      }
+      console.warn(
+        `[agent-empty-turn] 重滚接续成功（threadId=${threadId}，重滚耗时 ` +
+          `${Date.now() - retriedAt}ms，usage=${JSON.stringify(usageSnapshot(second))}）`,
+      );
+      return second;
     }
-    return res;
+    return first;
   },
 });
+
+// ---------------------------------------------------------------------------
+// 空终步检测 + 重滚（refs #110 #111，#112）— 纯谓词与错误类型
+// ---------------------------------------------------------------------------
+
+/**
+ * 空终步重滚穷尽后抛出的带标识错误（任务书 #112：重滚限一次，第二次仍空
+ * 即抛）。经 chat() 的 toErrorEvent 映射为 MODEL_ERROR error 事件走既有
+ * SSE 通道；导出供测试与上层识别。
+ */
+export class EmptyAgentTurnError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "EmptyAgentTurnError";
+  }
+}
+
+/** 聚合结果是否为 ChatMessageChunk（= 整轮流 delta 全程无 role 的签名）。 */
+function isChatMessageChunk(x: unknown): boolean {
+  return (
+    x != null &&
+    typeof x === "object" &&
+    (x as { constructor?: { name?: string } }).constructor?.name ===
+      "ChatMessageChunk"
+  );
+}
+
+/** 聚合结果三处 tool_calls 载体是否全空。 */
+function hasAnyToolCalls(msg: unknown): boolean {
+  const m = msg as {
+    tool_calls?: unknown[];
+    tool_call_chunks?: unknown[];
+    additional_kwargs?: { tool_calls?: unknown[] };
+  };
+  return (
+    (Array.isArray(m?.tool_calls) && m.tool_calls.length > 0) ||
+    (Array.isArray(m?.tool_call_chunks) && m.tool_call_chunks.length > 0) ||
+    (Array.isArray(m?.additional_kwargs?.tool_calls) &&
+      m.additional_kwargs!.tool_calls!.length > 0)
+  );
+}
+
+/** content 是否为空（'' / 空块数组 / undefined / null）。 */
+function isEmptyContent(content: unknown): boolean {
+  if (typeof content === "string") return content.length === 0;
+  if (Array.isArray(content)) return content.length === 0;
+  return content == null;
+}
+
+/**
+ * 空终步谓词（三条件同时成立）：roleless 聚合（ChatMessageChunk，provider
+ * 异常流签名，见 middleware 内注释）∧ 零 tool_calls ∧ content 空。
+ * 正常终步（AIMessageChunk 空 content）不命中——那是模型真空回，交给
+ * classifyAgentStream 流尾的 EMPTY_ANSWER 兜底，不在本层重滚。
+ */
+function isEmptyToolCallsAggregate(roleless: boolean, msg: unknown): boolean {
+  if (!roleless) return false;
+  return (
+    !hasAnyToolCalls(msg) &&
+    isEmptyContent((msg as { content?: unknown }).content)
+  );
+}
+
+/** 从 middleware request 的 runtime 读 threadId（缺席时给 "-"）。 */
+function readThreadId(request: {
+  runtime?: { configurable?: { thread_id?: unknown } };
+}): string {
+  const tid = request.runtime?.configurable?.thread_id;
+  return typeof tid === "string" && tid.length > 0 ? tid : "-";
+}
+
+/** 重滚打点用的 usage 快照（usage_metadata 优先，缺席回退 response_metadata.usage）。 */
+function usageSnapshot(msg: unknown): unknown {
+  const m = msg as {
+    usage_metadata?: unknown;
+    response_metadata?: { usage?: unknown };
+  };
+  return m?.usage_metadata ?? m?.response_metadata?.usage ?? null;
+}
 
 // ---------------------------------------------------------------------------
 // Default export: a shared singleton instance (consumers inject this as needed).
