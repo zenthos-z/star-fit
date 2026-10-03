@@ -226,6 +226,17 @@ function normalizeSet(
 }
 
 /**
+ * 引用字段可用性：首个「非空字符串」候选才算可用引用，否则继续回退
+ * （`??` 只挡 null/undefined，空串/非串引用必须跳过，禁把空串喂进库校验）。
+ */
+function firstUsableRef(...candidates: unknown[]): string | undefined {
+  for (const candidate of candidates) {
+    if (typeof candidate === 'string' && candidate.length > 0) return candidate;
+  }
+  return undefined;
+}
+
+/**
  * 归一会话：sessions.raw_json 存量形态 → Agent 交付契约形态。
  * - 组 index 按数组位次补齐（0 起）；status 归一小写枚举
  * - 无完成时刻的组按推算规则填充 timestamp（见模块头）
@@ -271,10 +282,23 @@ export function normalizeSessionForAgentDelivery(raw: unknown): AgentDeliverySes
         );
       }
       const ex = rawEx as Record<string, unknown>;
-      const exerciseId = ex.id ?? ex.libraryId ?? ex.exerciseId;
-      if (typeof exerciseId !== 'string' || exerciseId.length === 0) {
+      // #124 动作引用字段优先级：显式库引用字段优先（libraryId → metadata.libraryId
+      // → exerciseId），实例 id 仅兜底。现网主流写路径（App.tsx buildExercisesFromPlan
+      // / handleReuseSession）的 ex.id 是每次训练现生成的实例 UUID，库引用（exercises
+      // 表主键 NanoID）活在 libraryId / metadata.libraryId——若 id 优先，实例 UUID 对
+      // 库主键全集校验必然落空，所有含动作 session 100% 被 reference 拒付。
+      // 兜底 ex.id 兼容「意图形态」存量行（pickerAdapter 约定 id=库 id，无 libraryId
+      // 时 id 即引用）。
+      const metadata = ex.metadata as { libraryId?: unknown } | undefined;
+      const exerciseId = firstUsableRef(
+        ex.libraryId,
+        metadata?.libraryId,
+        ex.exerciseId,
+        ex.id,
+      );
+      if (exerciseId === undefined) {
         throw new AgentDeliveryError(
-          `exercises[${exIdx}] 缺少动作库引用 (id/libraryId/exerciseId)`,
+          `exercises[${exIdx}] 缺少动作库引用 (libraryId/metadata.libraryId/exerciseId/id)`,
           'unnormalizable',
           sessionId,
         );
