@@ -109,7 +109,8 @@ export const UI_HINT_DATA_KEYS: Readonly<Record<string, readonly string[]>> = {
   ],
   weekly_plan: Object.keys(WeeklyPlanCardDataSchema.shape),
   summary_card: ['title', 'summary', 'highlights', 'metrics'],
-  survey_card: ['sessionId', 'title', 'subtitle', 'message', 'questions'],
+  // #114 契约批 B5a：+purpose（卡级用途标记，optional——旧卡不含此键照常渲染）
+  survey_card: ['sessionId', 'title', 'subtitle', 'message', 'purpose', 'questions'],
   deviation_card: ['reason', 'suggestion'],
   audit_complete: [
     'title',

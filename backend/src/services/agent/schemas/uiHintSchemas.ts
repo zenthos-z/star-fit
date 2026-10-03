@@ -18,6 +18,9 @@ import {
   WeeklyPlanCardDataSchema,
   ProfilePendingIntentSchema,
   ExerciseTypeEnum,
+  // #114：survey 三 schema 真源已迁 shared/contracts/survey.ts；本地仅
+  // SurveyCardDataSchema 参与 UIHintSchema 判别联合（下方再导出完整 API）
+  SurveyCardDataSchema,
 } from "shared/contracts";
 export {
   WeeklyPlanSetSchema,
@@ -60,52 +63,25 @@ export type JsonPatchOp = z.infer<typeof JsonPatchOpSchema>;
 // ============================================================================
 // SURVEY_CARD Schemas
 // ============================================================================
-
-/**
- * Survey Question Option Schema
- * Used for multiple-choice questions
- */
-export const SurveyQuestionOptionSchema = z.object({
-  label: z.string().min(1, "Option label cannot be empty"),
-  value: z.string().min(1, "Option value cannot be empty"),
-});
-
-export type SurveyQuestionOption = z.infer<typeof SurveyQuestionOptionSchema>;
-
-/**
- * Survey Question Schema
- *
- * IMPORTANT: questions must be an array of objects, NOT strings!
- * This is a common error where LLM returns strings instead of objects.
- */
-export const SurveyQuestionSchema = z.object({
-  id: z.string().min(1, "Question ID cannot be empty"),
-  question: z.string().min(1, "Question text cannot be empty"),
-  required: z.boolean().default(false),
-  placeholder: z.string().optional(),
-  options: z.array(SurveyQuestionOptionSchema).optional(),
-  // 2026-09-17: "checkbox" = 多选题（前端 SurveyCard 按此渲染多选交互，
-  // 提交值为 string[]）。此前 enum 只有 text/number，checkbox 会被校验
-  // 回路打回 → Agent 被迫降级单选 → 多选功能实际不可用。
-  inputType: z.enum(["text", "number", "checkbox"]).optional(),
-});
-
-export type SurveyQuestion = z.infer<typeof SurveyQuestionSchema>;
-
-/**
- * Survey Card Data Schema
- */
-export const SurveyCardDataSchema = z.object({
-  sessionId: z.string().optional(),
-  title: z.string().optional(),
-  subtitle: z.string().optional(),
-  message: z.string().optional(),
-  questions: z
-    .array(SurveyQuestionSchema)
-    .min(1, "At least one question is required"),
-});
-
-export type SurveyCardData = z.infer<typeof SurveyCardDataSchema>;
+// #114 契约批 B5a：单一真源已迁 shared/contracts/survey.ts（children 二级
+// 菜单 / inputType 扩枚举 select+textarea / section / hint / unit / min /
+// max / maxLength / condition / childKey / purpose，全部 optional 增量，
+// 旧卡零影响）。此处再导出保持本模块既有公共 API，后端 import 路径不变。
+// 2026-09-17 先例注释：checkbox = 多选题（前端 SurveyCard 按此渲染多选
+// 交互，提交值为 string[]）。
+export {
+  SurveyQuestionOptionSchema,
+  SurveyQuestionSchema,
+  SurveyCardDataSchema,
+  PURPOSE_ENUM,
+  PROFILE_INTAKE_QUESTIONS,
+  PROFILE_INTAKE_QUESTION_IDS,
+  type SurveyQuestionOption,
+  type SurveyQuestion,
+  type SurveyCardData,
+  type SurveyPurpose,
+  type ProfileIntakeQuestionId,
+} from "shared/contracts";
 
 // ============================================================================
 // PLAN_CARD Schemas

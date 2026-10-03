@@ -1053,13 +1053,27 @@ const updateProfileSchema = z
             severity: z.number().min(1).max(10).describe("1-10 severity."),
             expire_at: z.string().describe("ISO 8601 UTC auto-heal timestamp."),
             logged_at: z.string().describe("ISO 8601 UTC when logged."),
-            auto_heal: z.boolean().optional(),
+            auto_heal: z
+              .boolean()
+              .optional()
+              .describe(
+                "false = long-term/chronic injury that must NOT auto-expire " +
+                  "(survey-reported old injuries); omit/true = self-healing window.",
+              ),
+            note: z
+              .string()
+              .optional()
+              .describe(
+                "Injury free-text as reported by the user (e.g. survey 原文、旧伤细节). " +
+                  "Carries the original wording; severity alone cannot hold it.",
+              ),
           })
           .passthrough(),
       )
       .optional()
       .describe(
-        "Replacement active_limitations array. To ADD a limitation, load_history first, append it, then pass the full array here.",
+        "Replacement active_limitations array. To ADD a limitation, load_history first, append it, then pass the full array here. " +
+          "Long-term/chronic injuries: auto_heal:false + note with the user's original wording.",
       ),
     recovery_state: z
       .object({

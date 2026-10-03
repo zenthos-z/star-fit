@@ -123,3 +123,75 @@ describe("shared/contracts BasicInfoSchema（契约层清洗：归一 + 枚举�
     expect(() => PreferencesSchema.parse({ goal: "become_a_bear" })).toThrow();
   });
 });
+
+describe("#114 契约批 B5a — weekly_frequency_days 落库 + 伤病 note 通道", () => {
+  it("weekly_frequency_days 过 preferences 白名单清洗并保留（落库链路通）", () => {
+    const validated = UserProfileService.validateProfile({
+      userId: UUID,
+      modifiedBy: "user",
+      preferences: {
+        goal: "body_recomp",
+        equipment: ["barbell"],
+        weekly_frequency_days: 3,
+      },
+    } as never);
+    expect(validated.preferences).toMatchObject({
+      goal: "body_recomp",
+      weekly_frequency_days: 3,
+    });
+  });
+
+  it("weekly_frequency_days 表单字符串 coerce、区间字符串/越界抛错（不静默取下界）", () => {
+    expect(
+      UserProfileService.validateProfile({
+        userId: UUID,
+        modifiedBy: "user",
+        preferences: { weekly_frequency_days: "4" },
+      } as never).preferences,
+    ).toMatchObject({ weekly_frequency_days: 4 });
+
+    for (const bad of ["3-4", 0, 8]) {
+      expect(() =>
+        UserProfileService.validateProfile({
+          userId: UUID,
+          modifiedBy: "user",
+          preferences: { weekly_frequency_days: bad },
+        } as never),
+      ).toThrow("preferences validation failed");
+    }
+  });
+
+  it("伤病原文经 active_limitations[].note 过白名单（auto_heal:false 长期旧伤）", () => {
+    const validated = UserProfileService.validateProfile({
+      userId: UUID,
+      modifiedBy: "mas",
+      active_limitations: [
+        {
+          part: "left_knee",
+          severity: 4,
+          expire_at: "2999-12-31T00:00:00.000Z",
+          logged_at: "2026-10-03T00:00:00.000Z",
+          auto_heal: false,
+          note: "半月板旧伤，下蹲深处有弹响",
+        },
+      ],
+    } as never);
+    expect(validated.active_limitations?.[0]).toMatchObject({
+      auto_heal: false,
+      note: "半月板旧伤，下蹲深处有弹响",
+    });
+  });
+
+  it("旧 payload 无新字段仍通过（兼容断言：v1 画像零影响）", () => {
+    const validated = UserProfileService.validateProfile({
+      userId: UUID,
+      modifiedBy: "user",
+      basic_info: { age: 30, weight: 76 },
+      preferences: { goal: "health", equipment: ["machine"] },
+    } as never);
+    expect(validated.preferences).toEqual({
+      goal: "health",
+      equipment: ["machine"],
+    });
+  });
+});
