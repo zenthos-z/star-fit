@@ -9,6 +9,7 @@ import {
   getSpeechPartial,
 } from '../../lib/speechInput';
 import { haptic } from '../../lib/nativeHaptics';
+import { setTabBarHidden } from '../../lib/nativeTabBar';
 import type {
   FeelModalGroup,
   FeelModalRow,
@@ -32,6 +33,11 @@ import type {
  * 滑块水滴拇指（径向高光渐变）+ 拖动中当前值浮动回显（松手淡出）；触感按阈值
  * 触发（跨越 25/50/75 轻点、≥90 单次重击），确认 success、跳过不震；全程无声。
  * 仅浅色模式硬编码色值（材质不随暗色主题翻色）。
+ *
+ * #119 返工④：①拖动值气泡上探被行区滚动容器顶缘裁切 → pt-2 让位；
+ * ②KeyboardResize.None 下键盘盖住贴底表单 → AICoachOverlay 同款键盘避让
+ * （keyboardWillShow/Hide 驱动整层 translateY + pin 拦 WKWebView 自动滚动）；
+ * ③语音改续写语义——开始时的 note 为基底，轮询/最终回填 = 基底 + 识别段。
  */
 
 export type { FeelModalTarget, FeelConfirmPatch, FeelPatch } from './feelGate';
@@ -44,6 +50,16 @@ const SHEET_EASE: [number, number, number, number] = [0.32, 0.72, 0, 1];
 
 /** 越界输入夹回契约闭区间（防御层：原生 range 已钳制，这里保 payload 契约红线） */
 const clampFeel = (raw: number): number => Math.max(0, Math.min(100, Math.round(raw)));
+
+/** 语音启动失败提示的自动消退时长（ms）——失败可见但不打断表单语境 */
+const MIC_ERROR_TTL_MS = 3500;
+
+/** 动作级语义补充的回显落点：首个动作的收尾组（与 buildPatches 写入落点对称，§1） */
+const closingNoteOf = (t: FeelModalTarget): string => {
+  const g0 = t.groups[0];
+  const closing = g0?.sets[g0.sets.length - 1];
+  return closing?.feel_note ?? '';
+};
 
 /** 行参数摘要（等宽数字）：60kg × 8；自重动作 weight=0 → 自重 × 8 */
 const paramLabel = (s: FeelModalRow): string => {
@@ -154,20 +170,58 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
   const [values, setValues] = useState<Record<string, number>>(() =>
     Object.fromEntries(target.groups.flatMap(g => g.sets.map(s => [s.setId, s.feel ?? FEEL_DEFAULT]))),
   );
-  const [note, setNote] = useState('');
+  // note 初值回显（#119 缺陷3）：打开时刻带出已填的动作级 feel_note（收尾组），
+  // 之前初值恒 ''——确认后再开 note 必空，用户以为记录丢失
+  const [note, setNote] = useState(() => closingNoteOf(target));
   const [isListening, setIsListening] = useState(false);
+  // 语音启动失败提示（#119 缺陷2 硬验收：禁静默 return，失败必须可见）
+  const [micError, setMicError] = useState<string | null>(null);
   const [draggingSetId, setDraggingSetId] = useState<string | null>(null);
+  // 键盘避让高度（#119 返工④②）：KeyboardResize.None 下键盘悬于 webview 之上，
+  // 贴底 sheet 必被盖——keyboardWillShow 报告的键盘高度驱动整层上移
+  const [kbHeight, setKbHeight] = useState(0);
   const speechPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  // 语音识别中用户手动编辑（删除/修改 partial 文本）→ 打开写保护，轮询停止回填
-  // （@ 对话框 2026-09-17 bug 1 同源：删一个字 350ms 后被识别结果填回来）
+  const micErrorTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // note 自动增高（#119 返工③：单行锁死被否决）：内容撑高至 ~4 行封顶后内部滚动；
+  // 语音回填置底标志——轮询写回的长文本滚到底部见最新文字，用户手动编辑不强制滚
+  const noteRef = useRef<HTMLTextAreaElement>(null);
+  const pinBottomRef = useRef(false);
+  // 语音续写基底（#119 返工④③：覆盖式被否决）：开始识别时的 note 快照——
+  // 轮询与最终回填一律 = 基底 + 识别段（final 权威替换 partial 段、基底保留）
+  const speechBaseRef = useRef('');
+  // 语音识别中用户手动编辑（删除/修改 partial 文本）→ 打开写保护，轮询与 final
+  // 都不再回填（@ 对话框 2026-09-17 bug 1 同源：删一个字 350ms 后被识别结果填回来）
   const userEditedRef = useRef(false);
   // 阈值触感游标：一次拖动手势内记忆上次值——跨越 25/50/75 轻点，≥90 重击一次
   const tickRef = useRef<{ setId: string; last: number; heavyFired: boolean } | null>(null);
 
-  // target 换目标（复用挂载）→ 行值重开（已填回显，未填默认）
+  /** 语音失败提示：立即出现、定时自动消退（新失败刷新计时） */
+  const showMicError = (msg: string) => {
+    setMicError(msg);
+    if (micErrorTimerRef.current !== null) clearTimeout(micErrorTimerRef.current);
+    micErrorTimerRef.current = setTimeout(() => setMicError(null), MIC_ERROR_TTL_MS);
+  };
+
+  // target 换目标（复用挂载）→ 行值与 note 重开（已填回显：滑块值 + 动作级 feel_note）
   useEffect(() => {
     setValues(Object.fromEntries(target.groups.flatMap(g => g.sets.map(s => [s.setId, s.feel ?? FEEL_DEFAULT]))));
+    setNote(closingNoteOf(target));
   }, [target]);
+
+  // note 自动增高（#119 返工③）：height 随 scrollHeight 撑开——内容少时 min-h 保持
+  // 胶囊单行视觉，换行后自然撑高，max-h 对齐整 4 行（4 × 1.375em 行高 + py-2×2 =
+  // calc(5.5em+1rem) ≈ 98.5px，em 基准随字号走、行界无半行细条）封顶后内部滚动；
+  // 语音回填时滚到底部见最新文字
+  useEffect(() => {
+    const el = noteRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${el.scrollHeight}px`;
+    if (pinBottomRef.current) {
+      el.scrollTop = el.scrollHeight;
+      pinBottomRef.current = false;
+    }
+  }, [note]);
 
   const stopSpeechPolling = () => {
     if (speechPollRef.current !== null) {
@@ -176,10 +230,62 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     }
   };
 
-  // 卸载时兜底清理录音轮询与原生会话（确认/跳过/父层条件卸载都走这里）
+  // Tab Bar 隐藏（#119 缺陷1 返工②：抬高避让被否决——留空白带）：原生 bar 悬浮在
+  // WebView 之上（Liquid Glass），z-index 无法穿透也不可被 sheet 覆盖——改为挂载期间
+  // 隐藏、卸载恢复，表单贴底完整展示。setTabBarHidden 引用计数层叠安全（与结算闸门
+  // FeelGateAlert 叠开时，谁后开谁先关都归最后一个隐藏者恢复），生命周期同款模式 =
+  // FeelGateAlert / DeviationWarningModal；web 回落端 no-op（CSS tab bar z-105 在
+  // 本表单 z-[150] 之下，按项目「sheet 盖 tab」规范本就盖住）
+  useEffect(() => {
+    setTabBarHidden(true);
+    return () => setTabBarHidden(false);
+  }, []);
+
+  // 键盘视口避让（#119 返工④②，AICoachOverlay 同款双防线）：全仓 KeyboardResize.None
+  // ——键盘不缩放 webview，聚焦 note 输入框时键盘直接盖住贴底表单。① 原生
+  // keyboardWillShow/Hide 事件驱动避让层 translateY(-kbHeight)（见 JSX）；
+  // ② pin() 把 window/document 滚动强制归零，拦下 WKWebView 聚焦时 scrollView
+  // 的自动滚动（防 fixed 层被顶进灵动岛）。非 Capacitor 环境动态导入失败静默降级
+  useEffect(() => {
+    const pin = () => {
+      if (window.scrollY !== 0) window.scrollTo(0, 0);
+      if (document.scrollingElement && document.scrollingElement.scrollTop !== 0) {
+        document.scrollingElement.scrollTop = 0;
+      }
+    };
+    let cancelled = false;
+    const nativeHandles: import('@capacitor/core').PluginListenerHandle[] = [];
+    (async () => {
+      try {
+        const { Keyboard } = await import('@capacitor/keyboard');
+        if (cancelled) return;
+        nativeHandles.push(
+          await Keyboard.addListener('keyboardWillShow', (info: { keyboardHeight?: number }) => {
+            pin();
+            setKbHeight(info?.keyboardHeight ?? 0);
+          }),
+          await Keyboard.addListener('keyboardWillHide', () => setKbHeight(0)),
+          await Keyboard.addListener('keyboardDidShow', pin),
+        );
+      } catch {
+        // 纯浏览器调试（无原生键盘事件）：pin 聚焦归零仍生效
+      }
+    })();
+    window.addEventListener('focusin', pin, true);
+    window.addEventListener('scroll', pin, true); // capture: 接住 webview 的自动滚动
+    return () => {
+      cancelled = true;
+      window.removeEventListener('focusin', pin, true);
+      window.removeEventListener('scroll', pin, true);
+      nativeHandles.forEach(h => h.remove());
+    };
+  }, []);
+
+  // 卸载时兜底清理录音轮询、失败提示计时与原生会话（确认/跳过/父层条件卸载都走这里）
   useEffect(() => {
     return () => {
       stopSpeechPolling();
+      if (micErrorTimerRef.current !== null) clearTimeout(micErrorTimerRef.current);
       void cancelSpeechInput();
     };
   }, []);
@@ -194,28 +300,46 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
   const handleMicTap = async () => {
     if (!isSpeechInputSupported) return;
     if (isListening) {
-      // 停止：取最终文本回填，交用户确认提交（不自动提交）
+      // 停止：取最终文本回填，交用户确认提交（不自动提交）。
+      // 续写语义（#119 返工④③）：final 段权威替换 partial 段、基底保留；
+      // 识别中手动编辑过则尊重用户文本不回填（先取标志——下面要复位）
+      const wasEdited = userEditedRef.current;
       stopSpeechPolling();
       setIsListening(false);
       userEditedRef.current = false;
       const finalText = await stopSpeechInput();
-      if (finalText && !note.trim()) setNote(finalText);
+      if (finalText && !wasEdited) {
+        pinBottomRef.current = true; // 语音最终文本同样置底（与轮询回填一致）
+        setNote(speechBaseRef.current + finalText);
+      }
       haptic('success');
       return;
     }
-    // 开始：先要权限（首次弹系统授权），再启动流式识别
+    // 开始：先要权限（首次弹系统授权），再启动流式识别。
+    // 失败必须有可见反馈（#119 缺陷2 硬验收：禁静默 return——真机实锤授权后点麦克风
+    // 零反应，用户无从判断卡在哪一环）；话术口径对齐 AICoachOverlay 同源分支
     const perms = await requestSpeechPermissions();
-    if (!perms || perms.speech !== 'granted' || perms.mic !== 'granted') return;
+    if (!perms || perms.speech !== 'granted' || perms.mic !== 'granted') {
+      showMicError('语音需要麦克风与语音识别权限，请在系统设置中开启');
+      return;
+    }
     const ok = await startSpeechInput('zh-CN');
-    if (!ok) return;
+    if (!ok) {
+      showMicError('语音启动失败，请稍后重试');
+      return;
+    }
     haptic('light');
+    speechBaseRef.current = note; // 续写基底（#119 返工④③）：已有 note 不被覆盖
     userEditedRef.current = false;
     setIsListening(true);
-    // 轮询中间结果回填；用户一旦手动编辑即停写保护（识别继续跑，结果弃用）
+    // 轮询中间结果回填（基底 + 识别段）；用户一旦手动编辑即停写保护（识别继续跑，结果弃用）
     speechPollRef.current = setInterval(async () => {
       if (userEditedRef.current) return;
       const { text, error } = await getSpeechPartial();
-      if (text) setNote(text);
+      if (text) {
+        pinBottomRef.current = true; // 长文本回填滚到底部，最新文字保持可视（#119 返工③）
+        setNote(speechBaseRef.current + text); // 追加而非覆盖（#119 返工④③）
+      }
       if (error) console.warn('[FeelModal] recognizer error:', error);
     }, 350);
   };
@@ -250,16 +374,19 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
     tickRef.current = null; // 新手势重新计阈值
   };
 
-  /** 全部行打包：动作级语义补充写入首个动作的收尾组（组级字段的动作级落点，§1） */
+  /** 全部行打包：动作级语义补充写入首个动作的收尾组（组级字段的动作级落点，§1）。
+   *  #119 缺陷3 补语义：打开时回显过旧 note 而用户清空 → 显式写空串清除存量
+   *  （不写键 = 保持原值的「首填不写字段」语义原样保留，只对回显后清空放行清除） */
   const buildPatches = (): FeelConfirmPatch[] => {
     const trimmed = note.trim().slice(0, 500);
+    const echoNote = closingNoteOf(target);
     const patches: FeelConfirmPatch[] = [];
     target.groups.forEach(g => {
       g.sets.forEach((s, i) => {
         const p: FeelConfirmPatch = { exId: g.exId, setId: s.setId, feel: values[s.setId] ?? FEEL_DEFAULT };
-        if (g === target.groups[0] && i === g.sets.length - 1 && trimmed) {
-          p.feel_note = trimmed;
-        }
+        const isClosing = g === target.groups[0] && i === g.sets.length - 1;
+        if (isClosing && trimmed) p.feel_note = trimmed;
+        else if (isClosing && !trimmed && echoNote) p.feel_note = '';
         patches.push(p);
       });
     });
@@ -293,7 +420,20 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
         className="absolute inset-0 bg-black/45"
       />
 
-      {/* 底部 sheet：rounded-t-[40px] + glassEffect .regular 语义材质（中性白磨砂 + specular rim） */}
+      {/* 键盘避让层（#119 返工④②）：整层 translateY(-kbHeight) 抬到键盘上方，
+          AICoachOverlay 同源 250ms ease-out 曲线；键盘收起归零。暗场不随动
+          （视觉语境不变），sheet 及其材质背景随层整体上移 */}
+      <div
+        data-testid="feel-kb-lift"
+        className="absolute inset-x-0 bottom-0"
+        style={{
+          transition: 'transform 250ms ease-out',
+          transform: kbHeight > 0 ? `translateY(-${kbHeight}px)` : 'translateY(0)',
+        }}
+      >
+      {/* 底部 sheet：rounded-t-[40px] + glassEffect .regular 语义材质（中性白磨砂 + specular rim）。
+          贴底零空白带（#119 缺陷1 返工②）：Tab Bar 已在挂载时隐藏（见上方 effect），
+          底缘直落屏幕底，paddingBottom 让出 home indicator 安全区 + 内容呼吸余量 */}
       <motion.div
         initial={{ y: '100%' }}
         animate={{ y: 0 }}
@@ -306,6 +446,7 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
           backdropFilter: 'blur(24px)',
           WebkitBackdropFilter: 'blur(24px)',
           boxShadow: '0 -25px 50px -12px rgba(0,0,0,0.25), inset 0 1px 0 rgba(255,255,255,0.95)',
+          // home indicator 安全区 + 内容呼吸余量（表单贴底但内容不被指示条压住）
           paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 24px)',
         }}
       >
@@ -340,8 +481,11 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
         </div>
 
         <div className="px-7 pt-5">
-          {/* 行区：多动作（闸门[去补记]携多组）按动作分段；单动作平铺。超高滚动（组多不顶出屏） */}
-          <div className="max-h-[38vh] space-y-4 overflow-y-auto overscroll-contain pb-1">
+          {/* 行区：多动作（闸门[去补记]携多组）按动作分段；单动作平铺。超高滚动（组多不顶出屏）。
+              pt-2（#119 返工④①）：滚动容器顶缘让出拖动值气泡上探空间——气泡 -top-7(28px)
+              相对滑轨，参数行(13px×1.5≈19.5px)+mt-1(4px) 抵消后净探出 ≈4.5px，8px 顶垫
+              保首行拖动全程数字完整可见（overflow 裁切边界即容器 padding-box 顶缘） */}
+          <div data-testid="feel-rows" className="max-h-[38vh] space-y-4 overflow-y-auto overscroll-contain pb-1 pt-2">
             {target.groups.map(g =>
               g.sets.map((s, rowIdx) => (
                 <FeelSliderRow
@@ -359,11 +503,13 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
             )}
           </div>
 
-          {/* 语义补充：动作级一句话（支持语音）；胶囊输入（rounded-full，多行时自然撑成
-              stadium）；底色/描边比 sheet 材质深一档（gray-100/gray-200，返工③-③对比度）；
-              确认走右上角对勾，底部无按钮 */}
+          {/* 语义补充：动作级一句话（支持语音）；胶囊输入（rounded-full），note 自动增高
+              （#119 返工③：内容换行自然撑开、~4 行封顶内部滚动、语音长文本回填滚底见最新，
+              min-h 保持单行胶囊视觉、多行时容器自然撑成 stadium）；底色/描边比 sheet 材质
+              深一档；确认走右上角对勾，底部无按钮 */}
           <div className="mt-5 flex items-center gap-2 rounded-full border border-gray-200 bg-gray-100 px-4 py-2">
             <textarea
+              ref={noteRef}
               rows={1}
               maxLength={500}
               value={note}
@@ -371,8 +517,8 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
               data-testid="feel-note"
               aria-label="感受补充说明"
               placeholder={isListening ? '正在聆听…' : '记录细节（支持语音）'}
-              className="max-h-24 min-h-[36px] w-full resize-none bg-transparent py-2 text-[15px] leading-snug
-                text-gray-900 placeholder:text-gray-400 focus:outline-none"
+              className="max-h-[calc(5.5em+1rem)] min-h-[36px] w-full resize-none overflow-y-auto bg-transparent
+                py-2 text-[15px] leading-snug text-gray-900 placeholder:text-gray-400 focus:outline-none"
             />
             {isSpeechInputSupported && (
               <motion.button
@@ -409,8 +555,20 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
               </motion.button>
             )}
           </div>
+
+          {/* 语音失败提示（#119 缺陷2 硬验收）：note 胶囊下一行可见反馈，定时自动消退 */}
+          {micError && (
+            <p
+              data-testid="feel-mic-error"
+              role="alert"
+              className="mt-2 px-1 text-[12px] font-semibold leading-snug text-rose-500"
+            >
+              {micError}
+            </p>
+          )}
         </div>
       </motion.div>
+      </div>
     </div>
   );
 };

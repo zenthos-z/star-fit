@@ -103,7 +103,7 @@
 		C0DE00000000000000000A02 /* StarfitWidgetBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = StarfitWidgetBundle.swift; sourceTree = "<group>"; };
 		C0DE00000000000000000A03 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		C0DE00000000000000000C04 /* StarfitWidget.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = StarfitWidget.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		EA0000000000000000000002 /* StarfitWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = StarfitWatch.app; path = "$(BUILD_DIR)/$(CONFIGURATION)-watchos/StarfitWatch.app"; sourceTree = "<group>"; };
+		EA0000000000000000000002 /* StarfitWatch.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; name = StarfitWatch.app; path = "$(WATCH_PRODUCT_PATH)"; sourceTree = "<group>"; };
 		EA0000000000000000000003 /* StarfitWatch.xcodeproj */ = {isa = PBXFileReference; lastKnownFileType = "wrapper.pb-project"; name = StarfitWatch.xcodeproj; path = ../WatchApp/StarfitWatch.xcodeproj; sourceTree = SOURCE_ROOT; };
 		A4B4C4D4E5F6071800000000 /* MuscleMapPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MuscleMapPlugin.swift; sourceTree = "<group>"; };
 		B4D4C4D4E5F6071800000010 /* NativeNetworkPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = NativeNetworkPlugin.swift; sourceTree = "<group>"; };
@@ -507,6 +507,10 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				/* #119 编译门：watch 嵌入产物按 App 平台条件选目录——模拟器构建时
+				   watch 实际产物在 -watchsimulator，设备端维持 -watchos（a66114d 原语义） */
+				WATCH_PRODUCT_PATH = "$(BUILD_DIR)/$(CONFIGURATION)-watchos/StarfitWatch.app";
+				"WATCH_PRODUCT_PATH[sdk=iphonesimulator*]" = "$(BUILD_DIR)/$(CONFIGURATION)-watchsimulator/StarfitWatch.app";
 			};
 			name = Debug;
 		};
@@ -529,6 +533,10 @@
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "";
 				SWIFT_VERSION = 5.0;
 				TARGETED_DEVICE_FAMILY = "1,2";
+				/* #119 编译门：watch 嵌入产物按 App 平台条件选目录——模拟器构建时
+				   watch 实际产物在 -watchsimulator，设备端维持 -watchos（a66114d 原语义） */
+				WATCH_PRODUCT_PATH = "$(BUILD_DIR)/$(CONFIGURATION)-watchos/StarfitWatch.app";
+				"WATCH_PRODUCT_PATH[sdk=iphonesimulator*]" = "$(BUILD_DIR)/$(CONFIGURATION)-watchsimulator/StarfitWatch.app";
 			};
 			name = Release;
 		};
