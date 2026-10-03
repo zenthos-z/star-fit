@@ -19,6 +19,7 @@ import {
   type FeelModalGroup,
   type FeelModalTarget,
 } from './components/execution/feelGate';
+import { resolveTimerAction, activateSessionTimer, resumeSessionTimer } from './components/execution/timerActivation';
 import { ExerciseCardV2 } from './components/execution/ExerciseCardV2';
 import ReorderMode from './components/execution/ReorderMode';
 import SettlementV2 from './components/settlement/SettlementV2';
@@ -920,14 +921,8 @@ const App: React.FC = () => {
     // 空状态点击「开始」不再直接开动作库：TimerCapsule 会弹分裂菜单（挑选动作/AI 教练/载入计划·今日休息）
 
     if (session.status === 'idle' || session.status === 'finished') {
-      setSession(prev => ({
-        ...prev,
-        id: uuidv4(),
-        startTime: Date.now(),
-        pausedDuration: 0, // Reset pause duration on start
-        status: 'active',
-        exercises: prev.exercises
-      }));
+      // #123：跃迁收口到 activateSessionTimer——手动开始与卡片完成自动激活共用同一套计时启动代码
+      setSession(prev => activateSessionTimer(prev, Date.now()));
       haptic('medium'); // 开始训练：主操作触感
     }
   };
@@ -942,31 +937,9 @@ const App: React.FC = () => {
 
   const handleResumeSession = () => {
     if (session.status === 'paused') {
-        const now = Date.now();
-        // 计算本次暂停的持续时间并累加到 pausedDuration
-        const pauseDuration = session.pauseStartTime ? now - session.pauseStartTime : 0;
-        
-        // 调整所有正在休息的组的 restEndTime，使其在恢复后继续计时
-        const updatedExercises = session.exercises.map(ex => ({
-            ...ex,
-            sets: ex.sets.map((s: ExerciseSet) => {
-                if (s.restEndTime && s.restEndTime > (session.pauseStartTime || now)) {
-                    return {
-                        ...s,
-                        restEndTime: s.restEndTime + pauseDuration
-                    };
-                }
-                return s;
-            })
-        }));
-
-        setSession(prev => ({
-            ...prev,
-            status: 'active',
-            pausedDuration: prev.pausedDuration + pauseDuration,
-            pauseStartTime: undefined, // 清除暂停开始时间
-            exercises: updatedExercises
-        }));
+        // #123 返工：暂停结算跃迁收口到 resumeSessionTimer——手动「继续」与
+        // paused 态完成组自动恢复共用同一套暂停结算代码
+        setSession(prev => resumeSessionTimer(prev, Date.now()));
     }
   };
 
@@ -1065,6 +1038,19 @@ const App: React.FC = () => {
     // 触发点收口在 handleUpdateSet——锁屏大按钮 / 训练卡片 / 手表遥控三条完成路径
     // 全经过这里，手表端完成组手机同样弹窗。有氧/户外无休息语境不弹（feelGate 注释）。
     if (updates.completed === true) {
+      // #123（含返工）：完成动作是明确训练信号——idle 激活全局计时、paused 恢复计时
+      //（复用手动「开始训练」/「继续」的同一跃迁，锁屏大按钮 / 训练卡片 / 手表遥控
+      // 三条完成路径全经过 handleUpdateSet，此处一处收口全覆盖）；active 不干扰、
+      // finished 不重启。激活/恢复后 status 变 active，下方感受表单的 active/paused
+      // 渲染闸门随之放行（#98 语义：计时激活后完成应弹表单）。
+      const timerAction = resolveTimerAction(session.status, updates.completed);
+      if (timerAction === 'activate') {
+        setSession(prev => activateSessionTimer(prev, Date.now()));
+      } else if (timerAction === 'resume') {
+        // 顺序约束：恢复跃迁先于下方组更新执行——组完成新塞的 60s 休息以恢复后的
+        // now 为基点，不得再被暂停段顺延累加
+        setSession(prev => resumeSessionTimer(prev, Date.now()));
+      }
       const ex = session.exercises.find(e => e.id === exId);
       const oldSet = ex?.sets.find(s => s.id === setId);
       if (ex && oldSet) {
