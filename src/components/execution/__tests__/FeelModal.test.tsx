@@ -14,6 +14,9 @@ import { ExerciseSetEntrySchema } from 'shared/contracts';
  * - 语音按钮：触发转写链路（权限→启动→partial 轮询回填→停止取最终文本），
  *   mock 的是 @ 对话框同源 speechInput 模块；web（不支持）时入口隐藏
  * - 卸载兜底清理录音会话
+ * - #142 三缺陷回归：确认钮首点即勾选（居中位移走 framer 组合，whileTap scale
+ *   不再覆盖类位移吞点击）/ 滑块手势隔离（touch-none + 止泡）/ 滑柄两端可见
+ *   （行区 px-3 内衬；真机几何由浏览器脚本 docs/design/screenshots-t142 断言）
  * 纯函数层（触发判定/闸门扫描/批量写回）另见 feelGate.test.ts；
  * 结算闸门窄卡（FeelGateAlert，只分流不写值）另见 FeelGateAlert.test.tsx。
  */
@@ -289,6 +292,57 @@ describe('FeelModal（组后感受聚合表单 #98 v2）', () => {
       });
       expect(utils.onSkip).toHaveBeenCalledTimes(1);
       expect(utils.onConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('#142 三缺陷回归（确认钮首点 / 滑块手势隔离 / 滑柄两端可见）', () => {
+    it('缺陷1：确认钮单次点击即触发 onConfirm（首点即勾选，无需第二次）', () => {
+      const utils = renderModal(actionTarget);
+      act(() => {
+        fireEvent.click(utils.getByTestId('feel-confirm'));
+      });
+      expect(utils.onConfirm).toHaveBeenCalledTimes(1);
+      expect(utils.onSkip).not.toHaveBeenCalled();
+    });
+
+    it('缺陷1：居中位移由 framer 组合进 inline transform——whileTap scale 写 transform 不再覆盖位移', () => {
+      const utils = renderModal(actionTarget);
+      const btn = utils.getByTestId('feel-confirm') as HTMLElement;
+      // 缺陷根源 = 类位移 -translate-y-1/2 与 whileTap scale 并存：scale 写 inline
+      // transform 整体覆盖类位移 → 按钮首点下坠半高、指点落点出钮吞掉 click。
+      // 修复后位移在 framer 的 y 运动值里，与 scale 同一 transform 组合恒在
+      expect(btn.style.transform).toContain('translateY(-50%)');
+      expect(btn.className).not.toContain('-translate-y-1/2');
+    });
+
+    it('缺陷2a：滑块 input 声明 touch-action:none——触点源头禁掉浏览器平移接管', () => {
+      const utils = renderModal(actionTarget);
+      expect(getSliders(utils)[0].className).toContain('touch-none');
+    });
+
+    it('缺陷2a：pointerdown/touchstart 止泡——手势起点不传给祖先滚动容器/页面（portal 直挂 body）', () => {
+      const docSpy = vi.fn();
+      document.addEventListener('pointerdown', docSpy);
+      document.addEventListener('touchstart', docSpy);
+      try {
+        const utils = renderModal(actionTarget);
+        const slider = getSliders(utils)[0];
+        act(() => {
+          fireEvent.pointerDown(slider);
+          fireEvent.touchStart(slider);
+        });
+        expect(docSpy).not.toHaveBeenCalled();
+      } finally {
+        document.removeEventListener('pointerdown', docSpy);
+        document.removeEventListener('touchstart', docSpy);
+      }
+    });
+
+    it('缺陷2b：行区左右各留半滑柄宽内衬 px-3——thumb 至 0/100% 不被滚动容器裁切', () => {
+      const utils = renderModal(actionTarget);
+      const rows = utils.getByTestId('feel-rows');
+      expect(rows.className).toContain('px-3'); // 12px = thumb 24px 之半，两端尽头完整可见
+      expect(utils.getByTestId('feel-thumb-set-1')).toBeTruthy();
     });
   });
 

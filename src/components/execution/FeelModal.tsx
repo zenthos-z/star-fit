@@ -39,6 +39,14 @@ import type {
  * ②KeyboardResize.None 下键盘盖住贴底表单 → AICoachOverlay 同款键盘避让
  * （keyboardWillShow/Hide 驱动整层 translateY + pin 拦 WKWebView 自动滚动）；
  * ③语音改续写语义——开始时的 note 为基底，轮询/最终回填 = 基底 + 识别段。
+ *
+ * #142 三缺陷返工（2026-10-07）：①确认钮垂直居中位移改由 framer 组合
+ * （style y='-50%'）——类位移 -translate-y-1/2 会被 whileTap scale 写入的
+ * inline transform 整体覆盖，首点按钮下坠半高、指点落点出钮吞掉 click
+ * （第二点才勾选）；②滑块手势隔离——input touch-none + pointerdown/touchstart
+ * stopPropagation（portal 直挂 body 后拖滑块的平移手势会横滚整个页面）；
+ * ③行区横向内衬 px-3（= 半滑柄宽）——overflow-y-auto 按 padding-box 裁切，
+ * thumb 至 0/100% 外半不再被滚动容器裁掉。
  */
 
 export type { FeelModalTarget, FeelConfirmPatch, FeelPatch } from './feelGate';
@@ -120,9 +128,11 @@ const FeelSliderRow: React.FC<{
         className="pointer-events-none absolute top-1/2 h-1.5 -translate-y-1/2 rounded-full bg-[#1B2436]"
         style={{ width: `${value}%` }}
       />
-      {/* 水滴拇指：径向高光渐变 + 内外双层投影（Liquid Glass 同族材质） */}
+      {/* 水滴拇指：径向高光渐变 + 内外双层投影（Liquid Glass 同族材质）；
+          #142 ③：可见性由行区横向内衬保证（见 feel-rows px-3），testid 供几何断言 */}
       <div
         aria-hidden="true"
+        data-testid={`feel-thumb-${row.setId}`}
         className="pointer-events-none absolute top-1/2 h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full"
         style={{
           left: `${value}%`,
@@ -132,7 +142,10 @@ const FeelSliderRow: React.FC<{
             '0 2px 10px rgba(15,23,42,0.28), inset 0 1px 1px rgba(255,255,255,0.9), inset 0 -1px 2px rgba(15,23,42,0.08)',
         }}
       />
-      {/* 原生 range 透明覆盖整行（键盘/读屏/测试可达；拇指放大接管命中区） */}
+      {/* 原生 range 透明覆盖整行（键盘/读屏/测试可达；拇指放大接管命中区）。
+          #142 ②手势隔离：touch-none 在触点源头禁掉浏览器平移接管（拖到尽头继续
+          拖时手势不再漏给页面横滚）；pointerdown/touchstart 止泡——本表单经
+          portal 直挂 body（#137 ③），手势起点不再传给祖先滚动容器/页面 */}
       <input
         type="range"
         min={0}
@@ -142,13 +155,17 @@ const FeelSliderRow: React.FC<{
         aria-label={`第 ${row.setNo} 组感受强度`}
         data-testid={`feel-slider-${row.setId}`}
         onChange={(e) => onChange(row.setId, Number(e.target.value))}
-        onPointerDown={() => onDragStart(row.setId)}
+        onPointerDown={(e) => {
+          e.stopPropagation();
+          onDragStart(row.setId);
+        }}
+        onTouchStart={(e) => e.stopPropagation()}
         onPointerUp={onDragEnd}
         onPointerCancel={onDragEnd}
         onBlur={onDragEnd}
         onKeyDown={() => onDragStart(row.setId)}
         onKeyUp={onDragEnd}
-        className="absolute inset-0 h-full w-full cursor-pointer appearance-none bg-transparent focus:outline-none
+        className="absolute inset-0 h-full w-full cursor-pointer touch-none appearance-none bg-transparent focus:outline-none
           [&::-webkit-slider-thumb]:h-9 [&::-webkit-slider-thumb]:w-9 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:opacity-0
           [&::-moz-range-thumb]:h-9 [&::-moz-range-thumb]:w-9 [&::-moz-range-thumb]:appearance-none [&::-moz-range-thumb]:opacity-0
           [&::-moz-range-track]:bg-transparent"
@@ -470,13 +487,18 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
                 : `${actionGroup.exName} · 共 ${actionGroup.sets.length} 组`}
             </p>
           </div>
+          {/* #142 ①：垂直居中位移走 framer 组合（style y）而非 CSS 类——
+              whileTap scale 每帧写 inline transform，会整体覆盖类位移致按钮
+              首点下坠半高、指点落点出钮吞掉 click；framer 自管 y 后 scale
+              每帧都组合成 translateY(-50%) scale(...)，居中恒在、首点即触发 */}
           <motion.button
             type="button"
             data-testid="feel-confirm"
             aria-label="确认记录全部组感受"
             whileTap={{ scale: 0.9 }}
             onClick={handleConfirm}
-            className="absolute right-7 top-1/2 flex h-9 w-9 -translate-y-1/2 items-center justify-center
+            style={{ y: '-50%' }}
+            className="absolute right-7 top-1/2 flex h-9 w-9 items-center justify-center
               rounded-full bg-[#1B2436] text-white shadow-lg shadow-[#1B2436]/30 focus:outline-none"
           >
             <svg className="h-5 w-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="3">
@@ -489,8 +511,14 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
           {/* 行区：多动作（闸门[去补记]携多组）按动作分段；单动作平铺。超高滚动（组多不顶出屏）。
               pt-2（#119 返工④①）：滚动容器顶缘让出拖动值气泡上探空间——气泡 -top-7(28px)
               相对滑轨，参数行(13px×1.5≈19.5px)+mt-1(4px) 抵消后净探出 ≈4.5px，8px 顶垫
-              保首行拖动全程数字完整可见（overflow 裁切边界即容器 padding-box 顶缘） */}
-          <div data-testid="feel-rows" className="max-h-[38vh] space-y-4 overflow-y-auto overscroll-contain pb-1 pt-2">
+              保首行拖动全程数字完整可见（overflow 裁切边界即容器 padding-box 顶缘）；
+              px-3（#142 ③）：滚动容器水平方向按 padding-box 裁切且水平 padding 原为 0，
+              thumb(24px) 至 0/100% 时外半 12px 探出内容盒被裁——左右各留 12px=半滑柄宽，
+              thumb 中心行程收进 [pad, width-pad]，两端尽头完整可见 */}
+          <div
+            data-testid="feel-rows"
+            className="max-h-[38vh] space-y-4 overflow-y-auto overscroll-contain px-3 pb-1 pt-2"
+          >
             {target.groups.map(g =>
               g.sets.map((s, rowIdx) => (
                 <FeelSliderRow
