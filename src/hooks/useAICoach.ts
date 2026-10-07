@@ -74,6 +74,67 @@ export interface ProgressItem {
   timestamp: number;
 }
 
+// ============================================================================
+// [B3 #143] 结算卡本地直填 —— 纯函数装配层（零算术，见 CLAUDE.md AI 边界红线）
+// ============================================================================
+
+/** 本地总结卡数据形态：与 SummaryCard 组件实际渲染面对齐（stats + 原始 exercises） */
+export interface LocalSummaryCardData {
+  stats: {
+    totalVolume: number;
+    setsCount: number;
+    durationMinutes: number;
+    avgHr?: number;
+  };
+  exercises: unknown[];
+}
+
+/**
+ * 从 workout_complete 附件（App.finalizeSession 组装的 localSummaryData）同步
+ * 构造 summary_card uiHint——训练结束瞬间聊天流里即有完整训练记录卡。
+ *
+ * - 零算术：stats/exercises 原样透传（App 侧已由 settlementSummary 纯函数聚合），
+ *   本函数只做形态装配与缺省防御，AI 不参与任何计算
+ * - 无动作（退化载荷）返回 undefined：走原纯文字概览，不弹空卡
+ */
+export function buildLocalSummaryCard(data: {
+  stats?: { totalVolume?: number; setsCount?: number; durationMinutes?: number; avgHr?: number };
+  exercises?: unknown[];
+} | undefined | null): { type: 'summary_card'; data: LocalSummaryCardData } | undefined {
+  if (!data) return undefined;
+  const exercises = Array.isArray(data.exercises) ? data.exercises : [];
+  if (exercises.length === 0) return undefined;
+  return {
+    type: 'summary_card',
+    data: {
+      stats: {
+        totalVolume: data.stats?.totalVolume ?? 0,
+        setsCount: data.stats?.setsCount ?? 0,
+        durationMinutes: data.stats?.durationMinutes ?? 0,
+        avgHr: data.stats?.avgHr,
+      },
+      exercises,
+    },
+  };
+}
+
+/**
+ * Agent summary 卡增量并入本地卡：主体（stats/exercises 等本地键）不重建，
+ * Agent 带来的增量字段（趋势对比 summary/highlights/metrics 等）补进 data；
+ * 同键冲突本地赢——本地是记录真值，Agent 只做解读。
+ */
+export function mergeAgentSummaryIntoLocalCard(
+  localHint: { type: string; data?: Record<string, unknown> },
+  agentHint: { type: string; data?: Record<string, unknown> },
+): { type: string; data?: Record<string, unknown> } {
+  const localData = localHint.data ?? {};
+  const increment: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(agentHint.data ?? {})) {
+    if (!(key in localData)) increment[key] = value;
+  }
+  return { ...localHint, data: { ...increment, ...localData } };
+}
+
 const MAX_THREADS = 10;
 
 /**
@@ -1183,8 +1244,17 @@ ${JSON.stringify(uploadData, null, 2)}`;
         // Store workout data for later use in questionnaire upload
         workoutDataRef.current = attachment.data;
 
-        // Show "persisting" indicator
-        const persistingMessage = `## 训练完成！正在保存数据...
+        // [B3 #143] 本地直填：训练结束瞬间用 localSummaryData 同步构造训练记录卡
+        // （stats+原始 exercises，SummaryCard 渲染面形态；数值全部来自
+        // App.finalizeSession 的纯函数聚合，此处零算术零 AI）。卡片不再挂等
+        // Agent 回复时序，Agent 分析降级为异步解读。
+        const localSummaryCard = buildLocalSummaryCard(attachment.data);
+
+        // 卡片已承载全部数据 → 正文只留一句收尾语（不再复读四行数字概览）；
+        // 退化载荷（无动作）无卡时保留原数字概览兜底
+        const persistingMessage = localSummaryCard
+          ? '训练完成！训练记录已生成，教练解读稍后送达。'
+          : `## 训练完成！正在保存数据...
 
 **本次训练概览**
 - 完成 ${attachment.data?.exercises?.length || 0} 个动作
@@ -1193,24 +1263,28 @@ ${JSON.stringify(uploadData, null, 2)}`;
 - 完成 ${attachment.data?.stats?.setsCount || 0} 组`;
 
         // Set overlay open first, then update chat history
+        // [#143 改同步插入] 原 setTimeout(0) 让消息插入晚于微任务链——Agent
+        // 快速失败/完成时 analyzeWorkout 的收尾更新会先于消息落库跑空（本地卡
+        // 永久卡在 _isAnalyzing、排序翻到 Agent 气泡之后）。React 18+ 自动
+        // 批处理下两个 setState 同 commit 生效，overlay 先开+卡片同步直填。
         setIsAiOverlayOpen(true);
         setIsLoading(false);
 
-        setTimeout(() => {
-          setChatHistory(prev => {
-            const newMessage: ChatMessage = {
-              role: 'ai',
-              text: persistingMessage,
-              uiHint: undefined,
-              _isAnalyzing: true,
-              _sessionId: attachment.sessionId
-            };
-            const newHistory = [...prev, newMessage];
-            console.log('[useAICoach] New chat history:', newHistory);
-            isOpeningOverlayRef.current = false;
-            return newHistory;
-          });
-        }, 0);
+        setChatHistory(prev => {
+          const newMessage: ChatMessage = {
+            role: 'ai',
+            text: persistingMessage,
+            uiHint: localSummaryCard,
+            // #143：标志仅承担输入框 busy 语义（Agent 分析期间禁发），
+            // 不再承担卡片占位语义（本地卡即完整终态）
+            _isAnalyzing: true,
+            _sessionId: attachment.sessionId
+          };
+          const newHistory = [...prev, newMessage];
+          console.log('[useAICoach] New chat history:', newHistory);
+          isOpeningOverlayRef.current = false;
+          return newHistory;
+        });
 
         // Phase 1: Persist session to DB first (pre-formatted payload)
         try {
@@ -1255,10 +1329,14 @@ ${JSON.stringify(uploadData, null, 2)}`;
           analysisTriggeredRef.current = true;
           analyzeWorkout(attachment).catch(err => {
             console.error('[useAICoach] Analysis failed:', err);
+            // [B3 #143] 失败兜底：本地卡已是完整终态——只清标志+收尾文案，
+            // ...m 展开保住 uiHint（旧实现整条重建消息会把本地卡一起抹掉）
             setChatHistory(prev => prev.map(m =>
               m._isAnalyzing ? {
-                role: 'ai',
-                text: "训练数据处理完成。您可以稍后从历史记录查看详情。",
+                ...m,
+                text: m.uiHint
+                  ? '训练记录已生成，教练解读暂时不可用（可稍后追问）。'
+                  : "训练数据处理完成。您可以稍后从历史记录查看详情。",
                 _isAnalyzing: false,
                 _analysisComplete: true
               } : m
@@ -1349,42 +1427,50 @@ ${JSON.stringify(uploadData, null, 2)}`;
 
       console.log('[analyzeWorkout] response card:', result.card);
 
-      // Remove analyzing indicator, show Agent's summary + card
+      // [B3 #143] 本地总结卡是展示主体：Agent 回复不再整卡替换——
+      //   1) 分析消息只收尾（清 _isAnalyzing 解忙输入框），本地卡原样保留；
+      //      Agent 若回 summary 型卡，其增量字段（趋势对比等）并入本地卡 data
+      //      （同键本地赢，主体不重建）
+      //   2) Agent 文字解读 + 非总结卡（workout_complete 常规回 survey_card
+      //      练后问卷）以独立气泡追加，与本地记录卡共存
       // [issue #56 泄漏卡兜底] 与主路径同源（流层漏剥的卡型 JSON 终态复原）
       const recovered = recoverLeakedCard(result.text, result.card);
+      const agentHint = synthesizeUiHint(result.card ?? recovered.card);
+      const agentText = (recovered.text || '').trim();
+
       setChatHistory(prev => {
-        // Remove _isAnalyzing flag from all messages
         const updated: ChatMessage[] = prev.map(m => {
-          if (m._isAnalyzing) {
-            return {
-              ...m,
-              text: recovered.text || m.text || '训练分析完成。',
-              uiHint: synthesizeUiHint(result.card ?? recovered.card),
-              _isAnalyzing: false,
-              _analysisComplete: true
-            };
-          }
-          return m;
+          if (!m._isAnalyzing) return m;
+          return {
+            ...m,
+            uiHint:
+              m.uiHint?.type === 'summary_card' && agentHint?.type === 'summary_card'
+                ? mergeAgentSummaryIntoLocalCard(m.uiHint, agentHint)
+                : m.uiHint,
+            _isAnalyzing: false,
+            _analysisComplete: true
+          };
         });
 
-        // If Agent returned a survey_card as a separate message, append it
-        // (Agent should have included it in the thinking message above via uiHintExtractor)
-        // If Agent's card is NOT survey_card, it was already merged into the first message
-        const synthesized = synthesizeUiHint(result.card);
-        if (synthesized?.type === 'survey_card') {
-          // survey_card was already extracted from Agent's text by uiHintExtractor
-          // and merged into the thinking message above — no need for a separate message
-          console.log('[analyzeWorkout] survey_card merged into first message');
+        const appendices: ChatMessage[] = [];
+        if (agentText) {
+          appendices.push({ role: 'ai', text: agentText });
+        }
+        if (agentHint && agentHint.type !== 'summary_card') {
+          appendices.push({ role: 'ai', text: '', uiHint: agentHint });
         }
 
-        return updated;
+        return appendices.length > 0 ? [...updated, ...appendices] : updated;
       });
     } catch (err) {
       console.error('[analyzeWorkout] Analysis failed:', err);
+      // [B3 #143] 失败兜底：本地卡保留（...m 展开不丢 uiHint），仅收尾文案+标志
       setChatHistory(prev => prev.map(m =>
         m._isAnalyzing ? {
-          role: 'ai',
-          text: '训练分析暂时不可用，数据已保存。',
+          ...m,
+          text: m.uiHint
+            ? '训练记录已生成，教练解读暂时不可用（可稍后追问）。'
+            : '训练分析暂时不可用，数据已保存。',
           _isAnalyzing: false,
           _analysisComplete: true
         } : m
