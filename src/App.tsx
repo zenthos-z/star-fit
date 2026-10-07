@@ -136,6 +136,74 @@ function convertActionSetsToExerciseSets(actionSets: any[] | undefined, existing
   }));
 }
 
+/**
+ * #144 休息态互斥：单组更新器（handleUpdateSet 的 setSession 纯函数形态，具名导出供测试驱动）。
+ * 训练任一时刻只允许一个休息计时在走——当次更新为「完成/勾选」(completed === true) 时，
+ * 除当前组自身外的所有其他组（同动作其他组 / 其他动作全部组）凡 restEndTime 未到期
+ * （> now）的立即清除倒计时：「立即结束」语义 = 只清 restEndTime（UI 休息徽章消失），
+ * 不写 completed、不动 completedAt。当前组自己新塞的 60s 默认休息不受影响
+ * （锁屏大按钮 / 训练卡片 / 手表遥控三条完成路径全经 handleUpdateSet，一处收口全覆盖）。
+ */
+export const applySetUpdate = (
+  prev: Session,
+  exId: string,
+  setId: string,
+  updates: Partial<ExerciseSet>,
+  now: number
+): Session => {
+  const updatedExercises = prev.exercises.map(ex => {
+    if (ex.id === exId) {
+      const updatedSets = ex.sets.map(s => {
+        if (s.id === setId) {
+          const newSet = { ...s, ...updates };
+
+          // 当完成一个组时，设置该组的休息结束时间
+          // ★休息两类场景：
+          //   ① 组间休息——力量类非最后一组，完成后塞默认 60s
+          //   ② 动作间休息——力量类最后一组完成后也塞休息（切换到下一个动作前
+          //      给换动作/换器械的喘息窗口；2026-09-16 用户反馈：砍掉后动作间
+          //      零休息直切下一个动作界面）
+          //   有氧/户外是持续运动，完成后不存在休息（户外跑假休息 bug 的根修保持）
+          if (updates.completed === true && !s.completed) {
+            const isStrength = STRENGTH_SET_TYPES.includes(ex.type) || ex.type === null || ex.type === undefined;
+            if (isStrength) {
+              const DEFAULT_REST_TIME = 60; // 默认60秒
+              const restSecs = DEFAULT_REST_TIME;
+              newSet.restEndTime = now + restSecs * 1000;
+              newSet.completedAt = now; // 组完成时刻：休息时长 = 下一组completedAt − 本组completedAt（capped by restEndTime）
+            }
+          }
+          // 当取消完成时，清除休息时间
+          else if (updates.completed === false) {
+            newSet.restEndTime = undefined;
+            newSet.completedAt = undefined;
+          }
+
+          return newSet;
+        }
+        // #144 休息互斥：同动作内其他组挂着的休息，随本次完成立即终结
+        if (updates.completed === true && s.restEndTime != null && s.restEndTime > now) {
+          return { ...s, restEndTime: undefined };
+        }
+        return s;
+      });
+      return { ...ex, sets: updatedSets };
+    }
+    // #144 休息互斥：跨动作——其他动作里休息中的组全部立即结束（只引用等价替换，无休
+    // 息动作原引用返回，避免无谓重渲染）
+    if (updates.completed === true && ex.sets.some(s => s.restEndTime != null && s.restEndTime > now)) {
+      return {
+        ...ex,
+        sets: ex.sets.map(s =>
+          s.restEndTime != null && s.restEndTime > now ? { ...s, restEndTime: undefined } : s
+        ),
+      };
+    }
+    return ex;
+  });
+  return { ...prev, exercises: updatedExercises };
+};
+
 const App: React.FC = () => {
   // State
   const [session, setSession] = useState<Session>({
@@ -1059,46 +1127,9 @@ const App: React.FC = () => {
       }
     }
 
-    setSession(prev => {
-      const updatedExercises = prev.exercises.map(ex => {
-        if (ex.id === exId) {
-          const updatedSets = ex.sets.map(s => {
-            if (s.id === setId) {
-              const newSet = { ...s, ...updates };
-
-              // 当完成一个组时，设置该组的休息结束时间
-              // ★休息两类场景：
-              //   ① 组间休息——力量类非最后一组，完成后塞默认 60s
-              //   ② 动作间休息——力量类最后一组完成后也塞休息（切换到下一个动作前
-              //      给换动作/换器械的喘息窗口；2026-09-16 用户反馈：砍掉后动作间
-              //      零休息直切下一个动作界面）
-              //   有氧/户外是持续运动，完成后不存在休息（户外跑假休息 bug 的根修保持）
-              if (updates.completed === true && !s.completed) {
-                const isStrength = STRENGTH_SET_TYPES.includes(ex.type) || ex.type === null || ex.type === undefined;
-                if (isStrength) {
-                  const now = Date.now();
-                  const DEFAULT_REST_TIME = 60; // 默认60秒
-                  const restSecs = DEFAULT_REST_TIME;
-                  newSet.restEndTime = now + restSecs * 1000;
-                  newSet.completedAt = now; // 组完成时刻：休息时长 = 下一组completedAt − 本组completedAt（capped by restEndTime）
-                }
-              }
-              // 当取消完成时，清除休息时间
-              else if (updates.completed === false) {
-                newSet.restEndTime = undefined;
-                newSet.completedAt = undefined;
-              }
-
-              return newSet;
-            }
-            return s;
-          });
-          return { ...ex, sets: updatedSets };
-        }
-        return ex;
-      });
-      return { ...prev, exercises: updatedExercises };
-    });
+    // #144 休息互斥：更新器抽为 applySetUpdate 纯函数（本函数上方），完成/勾选时
+    // 清掉其他挂着的休息；now 单点取值，同一次更新内互斥判定与 60s 塞入同基点
+    setSession(prev => applySetUpdate(prev, exId, setId, updates, Date.now()));
   };
 
   // --- 锁定训练屏回调（2026-09-15）：大按钮语义与卡内逻辑共用 handleUpdateSet 通道 ---
