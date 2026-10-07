@@ -1,0 +1,22 @@
+{
+  "A": {
+    "capsuleTimeBefore": "00:02",
+    "barTimeFrozen": true,
+    "barTime": "00:03",
+    "controlsExpanded": true,
+    "barIsTopLayer": true,
+    "topElementAtBar": "SPAN.font-mono text-[30px] font-medium tracki"
+  },
+  "B": {
+    "lockScreenStillMounted": true,
+    "sheetMounted": true,
+    "sheetCoversLock": true,
+    "topAtSheet": "DIV.text-[17px] font-semibold text-gray-900 "
+  },
+  "C": {
+    "lockScreenBack": true,
+    "timerStillTicking": true,
+    "t3": "00:08",
+    "t4": "00:09"
+  }
+}

@@ -16,7 +16,7 @@
  * 布局参数本身——恒高带（height:172）+ 底对齐（justify-end）+ 主钮排布次序。
  */
 import React from 'react';
-import { render, screen, within, fireEvent } from '@testing-library/react';
+import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import LockScreen, { resolveExerciseThumb } from '../execution/LockScreen';
 import type { Exercise } from '../../types/legacy';
@@ -50,6 +50,9 @@ const mkExercise = (over: Partial<Exercise> = {}): Exercise => ({
   ],
   ...over,
 });
+
+/** 定长等待（触控长按阈值/退场动画这类定长窗口用；可变等待用 waitFor 轮询） */
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const getBand = () =>
   document.body.querySelector('[data-testid="lock-button-band"]') as HTMLElement | null;
@@ -235,5 +238,139 @@ describe('LockScreen #127→#137 ④ · 动作预览图（三分支 + 分栏）'
       } as Exercise)
     ).toBe('');
     expect(resolveExerciseThumb(undefined)).toBe('');
+  });
+});
+
+
+describe('LockScreen #140 ① · 胶囊长按暂停（pointer 流，回归锁）', () => {
+  // baseProps 的 mock fn 模块级共享，本组用 fresh props 防跨用例计数串扰
+  const freshProps = () => ({
+    ...baseProps,
+    onExit: vi.fn(),
+    onPause: vi.fn(),
+    onResume: vi.fn(),
+    onEnd: vi.fn(),
+  });
+  const hold = async (el: Element, ms: number) => {
+    fireEvent.pointerDown(el, { pointerId: 1, clientY: 300 });
+    await new Promise((r) => setTimeout(r, ms));
+    fireEvent.pointerUp(el, { pointerId: 1 });
+  };
+
+  it('长按胶囊 ≥700ms → onPause 触发一次 + 控制条展开（左结束/右继续）', async () => {
+    const props = freshProps();
+    render(<LockScreen {...props} exercises={[mkExercise()]} />);
+    const capsule = document.body.querySelector('button[aria-label="上滑解锁"]') as HTMLElement;
+    expect(capsule).not.toBeNull();
+    await hold(capsule, 850); // > HOLD_MS(700) + rAF 余量
+    expect(props.onPause).toHaveBeenCalledTimes(1);
+    expect(document.body.querySelector('[aria-label="暂停控制"]')).not.toBeNull();
+    // 两钮无文字子节点，语义在 aria-label（HoldCircle 环形进度长按钮）
+    expect(document.body.querySelector('[aria-label="结束运动"]')).not.toBeNull();
+    expect(document.body.querySelector('[aria-label="继续训练"]')).not.toBeNull();
+  });
+
+  it('控制条展开态：轻点胶囊（<700ms）收起控制条，不再触发 onPause（保持暂停）', async () => {
+    const props = freshProps();
+    render(<LockScreen {...props} exercises={[mkExercise()]} />);
+    const capsule = document.body.querySelector('button[aria-label="上滑解锁"]') as HTMLElement;
+    await hold(capsule, 850); // 开控制条
+    const bar = document.body.querySelector('[aria-label="暂停控制"]') as HTMLElement;
+    expect(bar).not.toBeNull();
+    // 轻点控制条（气泡到 wrapper）：短触 → 收起（暂停态保持）
+    fireEvent.pointerDown(bar, { pointerId: 2, clientY: 300 });
+    await wait(120);
+    fireEvent.pointerUp(bar, { pointerId: 2 });
+    // 收起分支在 pointerUp 即已触发；控制条退出弹簧（LOCK_MOTION.spring，≈0.5s）
+    // 摘除后才离开 DOM —— waitFor 轮询防固定 sleep 不够长
+    await waitFor(
+      () => expect(document.body.querySelector('[aria-label="暂停控制"]')).toBeNull(),
+      { timeout: 2000 }
+    );
+    expect(props.onPause).toHaveBeenCalledTimes(1); // 收起 ≠ 再暂停
+  });
+
+  it('控制条「继续训练」环钮长按确认 → onResume 触发 + 控制条收起', async () => {
+    const props = freshProps();
+    render(<LockScreen {...props} exercises={[mkExercise()]} />);
+    const capsule = document.body.querySelector('button[aria-label="上滑解锁"]') as HTMLElement;
+    await hold(capsule, 850); // 开控制条
+    const resumeCircle = document.body.querySelector(
+      '[aria-label="继续训练"][data-hold-circle]'
+    ) as HTMLElement;
+    expect(resumeCircle).not.toBeNull();
+    await hold(resumeCircle, 850);
+    expect(props.onResume).toHaveBeenCalledTimes(1);
+    expect(props.onPause).toHaveBeenCalledTimes(1); // wrapper 不与圆钮抢指针流
+    await waitFor(
+      () => expect(document.body.querySelector('[aria-label="暂停控制"]')).toBeNull(),
+      { timeout: 2000 }
+    );
+  });
+
+  it('暂停态：显示时间冻结（status=paused 不随心跳走动）', async () => {
+    const props = freshProps();
+    render(<LockScreen {...props} status="paused" exercises={[mkExercise()]} />);
+    const capsule = document.body.querySelector('button[aria-label="上滑解锁"]') as HTMLElement;
+    const t0 = capsule.textContent!.trim();
+    await wait(1200); // 跨 ≥2 拍 500ms 心跳
+    // App 结算模型 pauseStartTime（resume 才折进 pausedDuration）→ 本地锚点冻结显示
+    expect(capsule.textContent!.trim()).toBe(t0);
+  });
+
+  it('拖拽上滑（位移超 TAP_SLOP）不作长按：不触发 onPause；过阈值仍解锁', async () => {
+    const props = freshProps();
+    render(<LockScreen {...props} exercises={[mkExercise()]} />);
+    const capsule = document.body.querySelector('button[aria-label="上滑解锁"]') as HTMLElement;
+    fireEvent.pointerDown(capsule, { pointerId: 3, clientY: 300 });
+    fireEvent.pointerMove(capsule, { pointerId: 3, clientY: 100 }); // dy=-200 → 拖拽
+    await wait(850); // 若长按未作废，rAF 到点会误触发
+    fireEvent.pointerUp(capsule, { pointerId: 3 });
+    expect(props.onPause).not.toHaveBeenCalled(); // 位移作废长按（上滑解锁优先）
+    expect(props.onExit).toHaveBeenCalledTimes(1); // -200 < -72 解锁阈值 → 解锁放行
+  });
+});
+
+describe('LockScreen #140 ② · 动作预览图长按进详情 + 禁系统变形', () => {
+  const freshProps = () => ({ ...baseProps, onExit: vi.fn(), onPause: vi.fn() });
+  const libExercise = () => mkExercise({ id: LIB_ID, libraryId: LIB_ID, name: '悬垂举腿抬髋' });
+
+  it('img 元素级禁系统长按：draggable=false + user-select 禁用', () => {
+    render(<LockScreen {...freshProps()} exercises={[libExercise()]} />);
+    const img = document.body.querySelector('img[data-testid="action-thumb"]') as HTMLImageElement;
+    expect(img).not.toBeNull();
+    expect(img.getAttribute('draggable')).toBe('false');
+    expect(img.style.userSelect).toBe('none');
+    // WebkitTouchCallout 为设备侧系统行为，jsdom cssstyle 不保留 webkit 前缀声明，
+    // 无法在此断言；元素 style 已内联该属性（真机生效），模拟器走查验收
+  });
+
+  it('长按大图 ≥500ms → 动作教学 sheet 打开（盖锁屏之上，锁屏不卸载）；点关闭回锁屏', async () => {
+    render(<LockScreen {...freshProps()} exercises={[libExercise()]} />);
+    const img = document.body.querySelector('img[data-testid="action-thumb"]') as HTMLElement;
+    fireEvent.pointerDown(img, { pointerId: 4, clientY: 200 });
+    await wait(650); // > THUMB_HOLD_MS(500) + rAF 余量
+    fireEvent.pointerUp(img, { pointerId: 4 });
+    // 教学 sheet 头部关闭钮出现（模态挂载成功），锁屏胶囊仍在（纯叠层，session 不动）
+    expect(await within(document.body).findByRole('button', { name: '关闭' })).toBeInTheDocument();
+    expect(document.body.querySelector('button[aria-label="上滑解锁"]')).not.toBeNull();
+    // 关闭 → sheet 退场动画（250ms）走完后卸载，锁屏继续
+    fireEvent.click(within(document.body).getByRole('button', { name: '关闭' }));
+    // sheet 退场动画（springGentle 滑出）完成才卸载 → waitFor 轮询
+    await waitFor(
+      () => expect(within(document.body).queryByRole('button', { name: '关闭' })).toBeNull(),
+      { timeout: 2000 }
+    );
+    expect(document.body.querySelector('button[aria-label="上滑解锁"]')).not.toBeNull();
+  });
+
+  it('轻点图片（<500ms）不开详情', async () => {
+    render(<LockScreen {...freshProps()} exercises={[libExercise()]} />);
+    const img = document.body.querySelector('img[data-testid="action-thumb"]') as HTMLElement;
+    fireEvent.pointerDown(img, { pointerId: 5, clientY: 200 });
+    await wait(150);
+    fireEvent.pointerUp(img, { pointerId: 5 });
+    await wait(550); // 越过 500ms 阈值确认未触发
+    expect(within(document.body).queryByRole('button', { name: '关闭' })).toBeNull();
   });
 });

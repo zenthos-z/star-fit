@@ -5,6 +5,7 @@ import { haptic } from '../../lib/nativeHaptics';
 import { setTabBarHidden } from '../../lib/nativeTabBar';
 import { HoldToConfirm, HOLD_MS } from './HoldToConfirm';
 import { LOCK_MOTION } from './lockMotion';
+import { ExerciseTutorialModal } from './ExerciseTutorialModal';
 import { isWatchBridge, onWatchEvent, type WatchEvent } from '../../services/watchConnectivity';
 import { useLoadAnchors } from '../../hooks/useLoadAnchors';
 import { getUserId } from '@/services';
@@ -87,6 +88,7 @@ const HoldCircle: React.FC<{
   return (
     <motion.div
       ref={trackRef}
+      data-hold-circle
       onPointerDown={handleDown}
       onPointerUp={handleUp}
       onPointerCancel={handleUp}
@@ -144,10 +146,18 @@ const HoldCircle: React.FC<{
  *   「结束并记录」跨状态底边几何恒定；双钮态副按钮向上生长
  * - ★动作预览图（v7 最小实现）：运动态名行内当前动作小图、休息态「接下来」行内下一动作
  *   小图（库3 R2 封面，无图/加载失败回退首字占位）
- * - ★时间胶囊交互（v6，不变）：
- *   a) 单击不暂停（锁屏防误触）；长按 700ms → 暂停 + 胶囊原地展开成控制条
+ * - ★时间胶囊交互（v6 设计 / #140 ① 换轨 pointer 事件）：
+ *   a) 单击不暂停（锁屏防误触）；长按 700ms（过半轻震）→ 暂停 + 胶囊原地展开成控制条。
+ *      #140：onTouch* 在 WKWebView 真机长按无效（组件测试全绿但实测无反应），手势流
+ *      换轨 HoldToConfirm 同款 pointer + setPointerCapture（真机实锤可用）；700ms 内
+ *      抬指静默取消，pointercancel（系统接管）弹回不触发
  *   b) 控制条：左「结束」红钮 / 中时间 / 右「继续」蓝钮，两钮均为环形进度长按激活
  *   c) 上滑解锁手势不受影响（位移>10px 自动作废长按）；控制条展开时轻点胶囊可收起
+ * - ★动作预览图 #140 ②（2026-10-07）：长按大图 500ms → 打开动作教学 sheet
+ *   （复用 ExerciseTutorialModal，挂在锁屏 portal 子树内——z-[140] 层叠上下文内
+ *   sheet z-70/80 恒在其上，关闭回锁屏继续；计时/session 不动）；img 元素级
+ *   draggable=false + callout/userSelect 禁用 + contextmenu preventDefault
+ *   （iOS 对 img 有独立系统长按行为，根容器设置不继承——「长按变形」即拖拽预览）
  * - 信息视窗：所有状态（运动/休息/倒计时/全部完成）共用同一固定窗，内容窗内居中、
  *   超出裁剪；休息态徽章绿点「休息中」+ 刚完成组参数 + 「接下来」前瞻
  * - 按钮防误触：长按 700ms + 环形进度 + 三段震动（HoldToConfirm）
@@ -235,17 +245,87 @@ export const resolveExerciseThumb = (ex?: Exercise | null): string => {
  * 动作预览图：行内小图（36px，#127）与信息窗大图（104px，#137 ④ 左 1/3 分栏）两档。
  * 有图渲染缩略、加载失败回退首字占位，无图直接占位——与
  * ExercisePickerModal.CoverThumb 同语义（onError 降级，禁空白塌陷）。
+ *
+ * #140 ②（2026-10-07）长按进详情 + 禁系统变形：
+ * - 长按（500ms）= 进入该动作详情（onLongPress 由调用方给，仅大图接线）；机制同
+ *   HoldToConfirm——pointer + setPointerCapture，touch 流在 WKWebView 真机会被
+ *   系统手势吞掉（胶囊长按失效实锤同源）
+ * - 元素级禁 iOS 系统长按行为（保存图片/拷贝/拖拽预览）：根容器的
+ *   WebkitTouchCallout 不会忠实地继承到 img 的系统层判定，img 须自带
+ *   callout/select 禁用 + draggable=false + contextmenu preventDefault——
+ *   实测「长按图片变形」即 iOS 拖拽预览所致
  */
-const ActionThumb: React.FC<{ name: string; src?: string; large?: boolean }> = ({ name, src, large }) => {
+const THUMB_HOLD_MS = 500;
+
+const ActionThumb: React.FC<{
+  name: string;
+  src?: string;
+  large?: boolean;
+  onLongPress?: () => void;
+}> = ({ name, src, large, onLongPress }) => {
   const [failed, setFailed] = useState(false);
   const show = !!src && !failed;
   const boxCls = large
     ? 'w-[104px] h-[104px] rounded-[24px] text-[40px]'
     : 'w-9 h-9 rounded-[12px] text-[15px]';
+
+  const holdRafRef = useRef<number | null>(null);
+  const holdStartRef = useRef(0);
+  const holdFiredRef = useRef(false);
+  const anchorYRef = useRef(0);
+
+  const endThumbHold = () => {
+    if (holdRafRef.current !== null) {
+      cancelAnimationFrame(holdRafRef.current);
+      holdRafRef.current = null;
+    }
+  };
+  useEffect(() => endThumbHold, []);
+
+  const handleThumbPointerDown = (e: React.PointerEvent) => {
+    if (!onLongPress) return;
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    holdFiredRef.current = false;
+    holdStartRef.current = Date.now();
+    anchorYRef.current = e.clientY;
+    endThumbHold();
+    const tick = () => {
+      if (Date.now() - holdStartRef.current >= THUMB_HOLD_MS && !holdFiredRef.current) {
+        holdFiredRef.current = true;
+        endThumbHold();
+        haptic('light');
+        onLongPress();
+        return;
+      }
+      holdRafRef.current = requestAnimationFrame(tick);
+    };
+    holdRafRef.current = requestAnimationFrame(tick);
+  };
+  const handleThumbPointerMove = (e: React.PointerEvent) => {
+    if (holdFiredRef.current) return;
+    if (Math.abs(e.clientY - anchorYRef.current) > 10) endThumbHold(); // 滑指 = 取消
+  };
+
+  // 元素级系统长按禁用（inherited 属性，img/占位各自携带）
+  const noSysPressStyle = {
+    WebkitTouchCallout: 'none',
+    WebkitUserSelect: 'none',
+    userSelect: 'none'
+  } as const;
+  const pressHandlers = {
+    onPointerDown: handleThumbPointerDown,
+    onPointerMove: handleThumbPointerMove,
+    onPointerUp: endThumbHold,
+    onPointerCancel: endThumbHold,
+    onContextMenu: (e: React.MouseEvent) => e.preventDefault()
+  };
+
   if (!show) {
     return (
       <span
         data-testid="action-thumb-placeholder"
+        {...pressHandlers}
+        style={noSysPressStyle}
         className={`${boxCls} bg-white/10 border border-white/10 flex items-center justify-center shrink-0 text-white/50 font-bold`}
       >
         {name.slice(0, 1)}
@@ -258,7 +338,10 @@ const ActionThumb: React.FC<{ name: string; src?: string; large?: boolean }> = (
       src={src}
       alt=""
       loading="lazy"
+      draggable={false}
       onError={() => setFailed(true)}
+      {...pressHandlers}
+      style={noSysPressStyle}
       className={`${boxCls} object-cover object-center bg-white/10 border border-white/10 shrink-0`}
     />
   );
@@ -303,16 +386,22 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     return () => setTabBarHidden(false);
   }, []);
 
-  // Android/系统返回键：退出锁定而非退出 App（上滑解锁之外的逃生通道）
+  // Android/系统返回键：详情层开着先关详情（#140 ②），否则退出锁定
+  // 而非退出 App（上滑解锁之外的逃生通道）
+  const [detailEx, setDetailEx] = useState<Exercise | null>(null);
   useEffect(() => {
     const onBack = (e: Event) => {
       e.preventDefault();
       haptic('light');
+      if (detailEx) {
+        setDetailEx(null);
+        return;
+      }
       onExit();
     };
     window.addEventListener('starfit-back-button', onBack);
     return () => window.removeEventListener('starfit-back-button', onBack);
-  }, [onExit]);
+  }, [onExit, detailEx]);
 
   // 焦点计算：休息 > 待执行组 > 全部完成
   const focus: Focus = useMemo(() => {
@@ -379,11 +468,21 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     }
   }, [counting, countRemaining, onFinishCountdown]);
 
-  // 总训练时长（与 TimerCapsule 同公式）
-  const totalSec = Math.max(0, Math.floor((now - startTime - pausedDuration) / 1000));
+  const isPaused = status === 'paused';
+  // 总训练时长（与 TimerCapsule 同公式）——#140 ①：暂停时冻结显示。
+  // App 的暂停结算模型是 pauseStartTime（resume 时才折进 pausedDuration），
+  // status 翻转为 paused 的首次渲染本地捕获冻结锚点（≤心跳 500ms 误差），
+  // 恢复后由 App 结算好的 pausedDuration 接管——否则控制条里时钟继续走，
+  // 「暂停」名存实亡。
+  const pausedAtRef = useRef<number | null>(null);
+  if (isPaused && pausedAtRef.current === null) pausedAtRef.current = Date.now();
+  if (!isPaused && pausedAtRef.current !== null) pausedAtRef.current = null;
+  const totalSec = Math.max(
+    0,
+    Math.floor(((isPaused ? pausedAtRef.current! : now) - startTime - pausedDuration) / 1000)
+  );
   const mm = Math.floor(totalSec / 60).toString().padStart(2, '0');
   const ss = (totalSec % 60).toString().padStart(2, '0');
-  const isPaused = status === 'paused';
 
   const restRemaining = focus.kind === 'rest'
     ? Math.max(0, Math.ceil((focus.end - now) / 1000))
@@ -405,6 +504,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
   const holdRafRef = useRef<number | null>(null);
   const holdStartRef = useRef(0);
   const holdFiredRef = useRef(false);
+  const holdMidRef = useRef(false);
 
   const stopHold = () => {
     if (holdRafRef.current !== null) {
@@ -416,10 +516,16 @@ export const LockScreen: React.FC<LockScreenProps> = ({
 
   const startHold = () => {
     holdFiredRef.current = false;
+    holdMidRef.current = false;
     holdStartRef.current = Date.now();
     stopHold();
     const tick = () => {
       const elapsed = Date.now() - holdStartRef.current;
+      // 过半轻震（HoldToConfirm 同款）：长按已被登记的实感，撑过 700ms
+      if (!holdMidRef.current && elapsed >= HOLD_MS / 2) {
+        holdMidRef.current = true;
+        haptic('light');
+      }
       if (elapsed >= HOLD_MS && !holdFiredRef.current) {
         holdFiredRef.current = true;
         stopHold();
@@ -437,24 +543,31 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     holdRafRef.current = requestAnimationFrame(tick);
   };
 
-  const handleUnlockTouchStart = (e: React.TouchEvent) => {
-    dragStartY.current = e.touches[0]?.clientY ?? null;
+  // #140 ①（2026-10-07）手势流换轨：onTouch* → onPointer*。
+  // 旧实现组件测试/鼠标仿真全绿但真机长按无效——落点换成 HoldToConfirm/
+  // HoldCircle 在真机上实锤可用的 pointer + setPointerCapture 机制：捕获后整段
+  // 指针流钉在本元素上，系统手势/胶囊 scale 弹簧都劫不走；pointercancel
+  // （来电/通知中心等系统接管）显式弹回，状态不会卡在按压态。
+  const handleCapsulePointerDown = (e: React.PointerEvent) => {
+    // 控制条两个 HoldCircle 自带长按确认：wrapper 若接管会捕获走指针流，
+    // 它们 700ms 内抬指本应取消的取消不了 → 误触终点。压在圆钮上不接管。
+    if ((e.target as Element).closest('[data-hold-circle]')) return;
+    (e.currentTarget as Element).setPointerCapture?.(e.pointerId);
+    dragStartY.current = e.clientY;
     dragAccum.current = 0;
     setCapsulePressed(true);
     startHold(); // 长按计时开始；移动超 TAP_SLOP 或抬指早于 HOLD_MS 自动作废
   };
-  const handleUnlockTouchMove = (e: React.TouchEvent) => {
+  const handleCapsulePointerMove = (e: React.PointerEvent) => {
     if (dragStartY.current === null) return;
-    const y = e.touches[0]?.clientY;
-    if (typeof y !== 'number') return;
-    dragAccum.current = y - dragStartY.current;
+    dragAccum.current = e.clientY - dragStartY.current;
     if (Math.abs(dragAccum.current) > TAP_SLOP && !holdFiredRef.current) {
       stopHold(); // 转为拖拽手势：作废长按（上滑解锁优先）
     }
     // 只跟随向上拖（dy<0），向下拖不位移
     setDragY(Math.max(-56, Math.min(0, dragAccum.current * 0.7)));
   };
-  const handleUnlockTouchEnd = () => {
+  const handleCapsulePointerUp = () => {
     const dy = dragAccum.current;
     const holdElapsed = Date.now() - holdStartRef.current;
     const wasHold = holdFiredRef.current;
@@ -473,6 +586,14 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       haptic('medium');
       onExit();
     }
+  };
+  const handleCapsulePointerCancel = () => {
+    // 系统接管（来电/控制中心/手势冲突）：一律弹回，不作上滑也不触发长按
+    stopHold();
+    dragStartY.current = null;
+    dragAccum.current = 0;
+    setDragY(0);
+    setCapsulePressed(false);
   };
 
   // ---- 信息区数据：当前动作 / 进度 / 户外附加数据 ----
@@ -691,8 +812,13 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       <div className="flex h-full w-full flex-col justify-center gap-2.5 px-5">
         {/* 图左 1/3 + 文字右 2/3（#137 ④） */}
         <div data-testid="lock-info-columns" className="flex w-full min-w-0 items-center gap-4">
-          {/* 左 1/3：动作预览大图（104px，onError 回退首字占位） */}
-          <ActionThumb name={figureEx?.name ?? focus.exName} src={figureThumb} large />
+          {/* 左 1/3：动作预览大图（104px，onError 回退首字占位；#140 ② 长按进详情） */}
+          <ActionThumb
+            name={figureEx?.name ?? focus.exName}
+            src={figureThumb}
+            large
+            onLongPress={figureEx ? () => setDetailEx(figureEx) : undefined}
+          />
 
           {/* 右 2/3：文字信息列 */}
           <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
@@ -876,9 +1002,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         <motion.div
           animate={{ y: dragY, scale: capsulePressed && dragY === 0 ? LOCK_MOTION.pressScale : 1 }}
           transition={LOCK_MOTION.spring}
-          onTouchStart={handleUnlockTouchStart}
-          onTouchMove={handleUnlockTouchMove}
-          onTouchEnd={handleUnlockTouchEnd}
+          onPointerDown={handleCapsulePointerDown}
+          onPointerMove={handleCapsulePointerMove}
+          onPointerUp={handleCapsulePointerUp}
+          onPointerCancel={handleCapsulePointerCancel}
+          style={{ touchAction: 'none' }}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             {pauseMenuOpen ? (
@@ -1010,6 +1138,19 @@ export const LockScreen: React.FC<LockScreenProps> = ({
           </AnimatePresence>
         </motion.div>
       </div>
+
+      {/* 动作详情层（#140 ②）：复用 ExerciseTutorialModal，挂在本锁屏 portal 子树内——
+          锁屏根 z-[140] 形成层叠上下文，sheet 的 z-[70]/[80] 在其内部恒在其上，
+          详情层盖锁屏之上、关闭后回锁屏继续；纯叠层——session/计时不动（500ms
+          心跳照走，长按暂停链路不受影响）。onAskAi 锁屏场景暂不接 AI 教练
+          （App 级接线属下一批），点按仅轻震反馈 */}
+      {detailEx && (
+        <ExerciseTutorialModal
+          exercise={detailEx as any}
+          onClose={() => setDetailEx(null)}
+          onAskAi={() => haptic('light')}
+        />
+      )}
     </motion.div>,
     document.body
   );
