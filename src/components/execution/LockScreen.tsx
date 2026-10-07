@@ -232,17 +232,21 @@ export const resolveExerciseThumb = (ex?: Exercise | null): string => {
 };
 
 /**
- * 动作小图（36px 圆角）：有图渲染缩略、加载失败回退首字占位，
- * 无图直接占位——与 ExercisePickerModal.CoverThumb 同语义（onError 降级，禁空白塌陷）。
+ * 动作预览图：行内小图（36px，#127）与信息窗大图（104px，#137 ④ 左 1/3 分栏）两档。
+ * 有图渲染缩略、加载失败回退首字占位，无图直接占位——与
+ * ExercisePickerModal.CoverThumb 同语义（onError 降级，禁空白塌陷）。
  */
-const ActionThumb: React.FC<{ name: string; src?: string }> = ({ name, src }) => {
+const ActionThumb: React.FC<{ name: string; src?: string; large?: boolean }> = ({ name, src, large }) => {
   const [failed, setFailed] = useState(false);
   const show = !!src && !failed;
+  const boxCls = large
+    ? 'w-[104px] h-[104px] rounded-[24px] text-[40px]'
+    : 'w-9 h-9 rounded-[12px] text-[15px]';
   if (!show) {
     return (
       <span
         data-testid="action-thumb-placeholder"
-        className="w-9 h-9 rounded-[12px] bg-white/10 border border-white/10 flex items-center justify-center shrink-0 text-white/50 text-[15px] font-bold"
+        className={`${boxCls} bg-white/10 border border-white/10 flex items-center justify-center shrink-0 text-white/50 font-bold`}
       >
         {name.slice(0, 1)}
       </span>
@@ -255,7 +259,7 @@ const ActionThumb: React.FC<{ name: string; src?: string }> = ({ name, src }) =>
       alt=""
       loading="lazy"
       onError={() => setFailed(true)}
-      className="w-9 h-9 rounded-[12px] object-cover object-center bg-white/10 border border-white/10 shrink-0"
+      className={`${boxCls} object-cover object-center bg-white/10 border border-white/10 shrink-0`}
     />
   );
 };
@@ -580,37 +584,30 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     }
 
     if (focus.kind === 'rest') {
-      // #127（2026-10-03 真机反馈）：主按钮「结束休息」必须与训练态主按钮「完成第 N 组」
-      // 同位——副按钮「+10 秒」回到上方、主钮压底（与倒计时态同构）。旧排法（主钮在上、
-      // 副钮垫底）让休息态白色大按钮整体上浮 80px 与信息窗交错；旧「+10 秒在上顶信息栏」
-      // 的顾虑由区带分离根治（信息窗在 flex 带内居中，几何上不再可能压进按钮带）。
-      // 恒高 172 + 底对齐容器保证：主钮底边在所有状态几何恒定（单钮=唯一子节点，
-      // 双钮=副钮向上生长），拇指肌肉记忆不失效。
+      // #137 ②（2026-10-07 用户实测推翻 #127 排法）：双钮态改「主钮在上、副钮在下」——
+      // 休息态「结束休息」(主) 在上、「+10 秒」(副) 垫底；倒计时态同构（结束并记录
+      // 在上、放弃本次垫底）。#127 的「主钮恒压底」同位约束随本条作废：
+      // 用户优先级是主操作视觉在上位，而非跨态底边恒定。
       return (
         <div className="flex flex-col gap-4" data-testid="lock-button-stack">
-          <HoldToConfirm
-            variant="secondary"
-            label="+10 秒"
-            onConfirm={() => onExtendRest(focus.exId, focus.setId, 10)}
-          />
           <HoldToConfirm
             variant="primary"
             label="结束休息"
             onConfirm={() => onEndRest(focus.exId, focus.setId)}
+          />
+          <HoldToConfirm
+            variant="secondary"
+            label="+10 秒"
+            onConfirm={() => onExtendRest(focus.exId, focus.setId, 10)}
           />
         </div>
       );
     }
 
     if (focus.kind === 'countdown' && counting) {
-      // 同休息态：副按钮（放弃）在上、主按钮（结束并记录）压底，主钮位置恒定
+      // 同休息态（#137 ②）：主按钮（结束并记录）在上、副按钮（放弃本次）垫底
       return (
         <div className="flex flex-col gap-4" data-testid="lock-button-stack">
-          <HoldToConfirm
-            variant="secondary"
-            label="放弃本次"
-            onConfirm={() => setCounting(null)}
-          />
           <HoldToConfirm
             variant="primary"
             label="结束并记录"
@@ -620,6 +617,11 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               onFinishCountdown(counting.exId, counting.setId, elapsed);
               setCounting(null);
             }}
+          />
+          <HoldToConfirm
+            variant="secondary"
+            label="放弃本次"
+            onConfirm={() => setCounting(null)}
           />
         </div>
       );
@@ -649,10 +651,12 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     );
   };
 
-  // ---- 信息视窗（中间固定窗 340×300，2026-09-17 用户拍板）----
-  // 统一字号阶梯（窗内）：状态徽章 13px / 主数值 60px / 动作名 24px / 参数 16px / 说明 14px
-  // 休息态信息层级：休息倒计时为主数值 → 刚完成组的参数 → 「接下来」前瞻 → 组进度
-  // 运动态信息层级：倒计时或动作名为主数值 → 当前组参数 → 组进度
+  // ---- 信息视窗（中间固定窗 340×272，2026-09-17 用户拍板）----
+  // #137 ④（2026-10-07 重排版，推翻 #127 纵向堆叠）：左右分栏——图左 1/3、文字右 2/3。
+  // 左栏 = 动作预览大图 104px（休息态预览归下一动作，无下一动作回退当前动作，
+  // 有图渲染 R2 封面、无图/加载失败回退首字占位——禁空白塌陷）；
+  // 右栏 = 状态徽章 / 主数值或动作名 / 组参数 / 进度（左对齐文字列）。
+  // 休息态「接下来」预告行与户外附加数据横跨分栏下方；全部沿用 white/xx 透明层级。
   const renderInfo = () => {
     if (focus.kind === 'done') {
       return (
@@ -676,104 +680,112 @@ export const LockScreen: React.FC<LockScreenProps> = ({
     const isRest = focus.kind === 'rest';
     const isCounting = focus.kind === 'countdown' && counting && countRemaining !== null;
     const heroValue = isRest ? fmt(restRemaining) : isCounting ? fmt(countRemaining!) : null;
-    // 运动态无 hero 数字时，动作名升为主视觉（与倒计时同级大字）
+    // 运动态无 hero 数字时，动作名升为主视觉
     const heroIsName = !isRest && !isCounting;
-    // #127 动作预览小图：运动态 = 当前动作（名行内）；休息态 = 下一动作（「接下来」行内）
-    const currentThumb = resolveExerciseThumb(currentEx);
-    const nextThumb = resolveExerciseThumb(nextExercise);
+    // 左栏大图主体：休息态 = 下一动作（预览归前瞻），无下一动作回退当前动作；
+    // 运动态 = 当前动作
+    const figureEx = isRest ? (nextExercise ?? currentEx) : currentEx;
+    const figureThumb = resolveExerciseThumb(figureEx);
 
     return (
-      <div className="flex flex-col items-center gap-2 px-3 w-full">
-        {/* ① 状态徽章（休息态绿点「休息中」/ 运动态类型点）——有氧/户外附加模式标签 */}
-        <div className="flex items-center gap-1.5">
-          <div className="flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/8 border border-white/10">
-            <span className="w-1.5 h-1.5 rounded-full" style={{ background: isRest ? '#34D399' : typeDot }} />
-            <span className="text-[12px] font-medium tracking-wide text-white/70">
-              {isRest ? '休息中' : typeLabel}
-            </span>
-          </div>
-          {!isRest && cardioModeLabel && (
-            <div className="flex items-center px-3 py-1 rounded-full bg-white/8 border border-white/10">
-              <span className="text-[12px] font-medium tracking-wide text-white/70">{cardioModeLabel}</span>
+      <div className="flex h-full w-full flex-col justify-center gap-2.5 px-5">
+        {/* 图左 1/3 + 文字右 2/3（#137 ④） */}
+        <div data-testid="lock-info-columns" className="flex w-full min-w-0 items-center gap-4">
+          {/* 左 1/3：动作预览大图（104px，onError 回退首字占位） */}
+          <ActionThumb name={figureEx?.name ?? focus.exName} src={figureThumb} large />
+
+          {/* 右 2/3：文字信息列 */}
+          <div className="flex min-w-0 flex-1 flex-col items-start gap-1.5">
+            {/* 状态徽章（休息态绿点「休息中」/ 运动态类型点）——有氧/户外附加模式标签 */}
+            <div className="flex max-w-full min-w-0 items-center gap-1.5">
+              <div className="flex shrink-0 items-center gap-1.5 rounded-full bg-white/8 px-2.5 py-0.5 border border-white/10">
+                <span className="h-1.5 w-1.5 rounded-full" style={{ background: isRest ? '#34D399' : typeDot }} />
+                <span className="text-[12px] font-medium tracking-wide text-white/70">
+                  {isRest ? '休息中' : typeLabel}
+                </span>
+              </div>
+              {!isRest && cardioModeLabel && (
+                <div className="flex min-w-0 items-center rounded-full bg-white/8 px-2.5 py-0.5 border border-white/10">
+                  <span className="truncate text-[12px] font-medium tracking-wide text-white/70">{cardioModeLabel}</span>
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {/* ② 主数值：休息倒计时 / 组倒计时（窗内 60px） */}
-        {heroValue && (
-          <span style={{ fontFeatureSettings: "'tnum'" }} className="font-mono text-[60px] font-light tracking-tight leading-none text-white">
-            {heroValue}
-          </span>
-        )}
-
-        {/* ③ 动作名 + 动作小图：休息态作次级说明（无图，预览归「接下来」行）；
-            运动态（力量）作主视觉并带当前动作预览小图（#127） */}
-        <div className="flex items-center justify-center gap-2 max-w-[92%] min-w-0">
-          {!isRest && <ActionThumb name={focus.exName} src={currentThumb} />}
-          <span className={`font-bold text-white leading-tight text-center truncate ${heroIsName ? 'text-[30px]' : 'text-[20px] text-white/85'}`}>
-            {focus.exName}
-          </span>
-        </div>
-
-        {/* ④ 当前组参数行：休息态 = 刚完成组；运动态 = 当前组（窗内紧凑字号） */}
-        {setParams && (
-          <div className="flex items-center gap-1.5">
-            {setParams.map((p, i) => (
-              <span key={i} className="flex items-baseline gap-1 px-2.5 py-0.5 rounded-full bg-white/8 border border-white/10">
-                <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[15px] font-bold text-white leading-none">{p.value}</span>
-                <span className="text-[11px] font-medium text-white/60">{p.unit}</span>
+            {/* 主数值：休息倒计时 / 组倒计时（右栏 60px，列宽容得 4 位等宽数字） */}
+            {heroValue && (
+              <span style={{ fontFeatureSettings: "'tnum'" }} className="font-mono text-[60px] font-light tracking-tight leading-none text-white">
+                {heroValue}
               </span>
-            ))}
-          </div>
-        )}
+            )}
 
-        {/* ④b 动作间休息前瞻（仅 rest 态且有下一动作时）：窗内预告下一个动作 + 预览小图（#127，
-            有图渲染 R2 封面、无图/加载失败回退首字占位——禁空白塌陷） */}
-        {isRest && nextExercise && (
-          <div
-            data-testid="lock-next-preview"
-            className="flex items-center justify-center gap-2 max-w-full min-w-0"
-          >
-            <ActionThumb name={nextExercise.name} src={nextThumb} />
-            <span className="truncate text-[14px] font-medium text-white/55">
-              接下来 · <span className="text-white/85 font-semibold">{nextExercise.name}</span>
+            {/* 动作名：运动态无 hero 数字时作主视觉（26px）；其余作次级说明（16px） */}
+            <span
+              className={`max-w-full min-w-0 truncate font-bold leading-tight text-white ${
+                heroIsName ? 'text-[26px]' : 'text-[16px] text-white/85'
+              }`}
+            >
+              {focus.exName}
             </span>
-          </div>
-        )}
 
-        {/* ⑤ 组进度：单组动作不显示 */}
-        {focus.total > 1 && (
-          <div className="flex flex-col items-center gap-1.5">
-            <span className="text-[14px] font-medium text-white/65">
-              第 <span className="text-white text-[16px] font-bold">{focus.setNo}</span> / {focus.total} 组
-              <span className="text-white/45">{isRest ? ' · 已完成' : ''}</span>
-            </span>
-            {focus.total <= 10 && (
-              <div className="flex items-center gap-1.5">
-                {Array.from({ length: focus.total }).map((_, i) => (
-                  <motion.span
-                    key={i}
-                    animate={{
-                      backgroundColor:
-                        i < completedCount ? '#34d399' : i === focus.setNo - 1 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.25)',
-                      width: i === focus.setNo - 1 ? 18 : 6
-                    }}
-                    transition={LOCK_MOTION.spring}
-                    className="rounded-full"
-                    style={{ height: 6 }}
-                  />
+            {/* 当前组参数行：休息态 = 刚完成组；运动态 = 当前组 */}
+            {setParams && (
+              <div className="flex max-w-full min-w-0 items-center gap-1.5">
+                {setParams.map((p, i) => (
+                  <span key={i} className="flex shrink-0 items-baseline gap-1 rounded-full bg-white/8 px-2.5 py-0.5 border border-white/10">
+                    <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[14px] font-bold leading-none text-white">{p.value}</span>
+                    <span className="text-[11px] font-medium text-white/60">{p.unit}</span>
+                  </span>
                 ))}
               </div>
             )}
+
+            {/* 组进度：单组动作不显示 */}
+            {focus.total > 1 && (
+              <div className="flex max-w-full min-w-0 flex-col items-start gap-1.5">
+                <span className="text-[13px] font-medium text-white/65">
+                  第 <span className="text-[15px] font-bold text-white">{focus.setNo}</span> / {focus.total} 组
+                  <span className="text-white/45">{isRest ? ' · 已完成' : ''}</span>
+                </span>
+                {focus.total <= 10 && (
+                  <div className="flex items-center gap-1.5">
+                    {Array.from({ length: focus.total }).map((_, i) => (
+                      <motion.span
+                        key={i}
+                        animate={{
+                          backgroundColor:
+                            i < completedCount ? '#34d399' : i === focus.setNo - 1 ? 'rgba(255,255,255,0.8)' : 'rgba(255,255,255,0.25)',
+                          width: i === focus.setNo - 1 ? 18 : 6
+                        }}
+                        transition={LOCK_MOTION.spring}
+                        className="rounded-full"
+                        style={{ height: 6 }}
+                      />
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 休息态「接下来」预告行（横跨分栏下方；大图已归左栏，此行纯文字防同图重复） */}
+        {isRest && nextExercise && (
+          <div
+            data-testid="lock-next-preview"
+            className="flex w-full min-w-0 items-center justify-center gap-2"
+          >
+            <span className="truncate text-[14px] font-medium text-white/55">
+              接下来 · <span className="font-semibold text-white/85">{nextExercise.name}</span>
+            </span>
           </div>
         )}
 
-        {/* ⑥ 户外/有氧附加数据：只显示真实记录，最多两项（窗内紧凑） */}
+        {/* 户外/有氧附加数据：只显示真实记录，最多两项（横跨分栏下方） */}
         {outdoorStats && (
-          <div className="flex items-center gap-2 max-h-[52px] overflow-hidden">
+          <div className="flex max-h-[52px] items-center justify-center gap-2 overflow-hidden">
             {typeof outdoorStats.lastHr === 'number' && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/8 border border-white/10">
-                <svg className="w-3.5 h-3.5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
+              <div className="flex items-center gap-1.5 rounded-full bg-white/8 px-2.5 py-1 border border-white/10">
+                <svg className="h-3.5 w-3.5 text-red-400" fill="currentColor" viewBox="0 0 24 24">
                   <path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z" />
                 </svg>
                 <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[13px] font-semibold text-white">{outdoorStats.lastHr}</span>
@@ -781,8 +793,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
               </div>
             )}
             {outdoorStats.distance > 0 && (
-              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/8 border border-white/10">
-                <svg className="w-3.5 h-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
+              <div className="flex items-center gap-1.5 rounded-full bg-white/8 px-2.5 py-1 border border-white/10">
+                <svg className="h-3.5 w-3.5 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M13 10V3L4 14h7v7l9-11h-7z" />
                 </svg>
                 <span style={{ fontFeatureSettings: "'tnum'" }} className="text-[13px] font-semibold text-white">
@@ -940,8 +952,10 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       </div>
 
       {/* 【中间·信息带】信息视窗（stage 1）：★固定圆角玻璃窗（340×272，2026-09-17 用户拍板）。
-          #127 区带化：窗在 flex-1 信息带内居中（不再锚 43% 屏高），与胶囊带/按钮带各留天然间隙；
-          小屏带高不足 272 时 maxHeight 收窗（内容居中裁剪，设计的降级形态），永不溢出压带——
+          #127 区带化：窗在 flex-1 信息带内居中（不再锚 43% 屏高），小屏带高不足 272 时
+          maxHeight 收窗（内容居中裁剪，设计的降级形态），永不溢出压带。
+          #137 ①：窗加 marginTop 16 向下偏置——844 屏带上 344px，偏置后窗顶距胶囊带
+          ≈44px（用户要求肉眼可见间隔 ≥40px 量级），余量落在窗底与按钮带之间。
           所有状态（运动/休息/倒计时/全部完成）共用同一视窗排版，内容在窗内居中、
           超出裁剪（overflow hidden），状态切换 = 交叉溶解（AnimatePresence popLayout） */}
       <motion.div
@@ -951,7 +965,7 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         <div
           data-testid="lock-info-window"
           className="rounded-[28px] border border-white/10 bg-white/[0.06] overflow-hidden"
-          style={{ width: 340, height: 272, maxHeight: '100%', backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
+          style={{ width: 340, height: 272, maxHeight: 'calc(100% - 16px)', marginTop: 16, backdropFilter: 'blur(20px)', WebkitBackdropFilter: 'blur(20px)' }}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.div
@@ -965,21 +979,22 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         </div>
       </motion.div>
 
-      {/* 【下方·按钮带】交互按钮区：★固定区带——恒高 172px（副64+间距16+主92），内容底对齐，
-          底锚 safe-bottom+170 不变。#127 主钮语义收口：主按钮（白色大钮）恒压底——
-          训练态「完成第 N 组」、休息态「结束休息」、倒计时态「结束并记录」底边几何恒定，
-          两态切换不跳位；双钮时只有副按钮向上生长 */}
+      {/* 【下方·按钮带】交互按钮区：★固定区带——恒高 172px（主92+间距16+副64），内容底对齐，
+          底锚 safe-bottom+100（#137 ①：底锚 reserve 170→100，让出的 70px 归信息带——
+          顶部 17% 留白锚着胶囊 morph 起点（TimerCapsule 同值不可动）、按钮带恒高 172
+          与窗体 340×272 都是拍板定值，唯一可让的空间在底部 reserve，信息窗与胶囊带
+          的可见间隔从这里来）。#127 的「主钮恒压底」随 #137 ② 作废（见 renderButtons） */}
       <div
         data-testid="lock-button-band"
         className="flex-none flex justify-center items-end"
         style={{
           height: 172,
-          marginBottom: 'calc(var(--safe-bottom, 0px) + 170px)'
+          marginBottom: 'calc(var(--safe-bottom, 0px) + 100px)'
         }}
       >
-        {/* ★恒定高度 172 + 内容底对齐：主按钮底边在所有状态（rest 双钮 / confirm 单钮 /
-            countdown 单钮）几何恒定——双钮时副按钮向上生长，单钮时上方留白，
-            主按钮位置/尺寸纹丝不动（2026-09-16 用户反馈状态间按钮不对应） */}
+        {/* ★恒定高度 172 + 内容底对齐：双钮态（#137 ② 起 主上副下）恰好填满带高，
+            单钮态（confirm/countdown 待启动）主钮压带底——状态切换主钮行程收敛，
+            带外几何（底边锚点）不变 */}
         <motion.div
           className="w-[260px] flex flex-col justify-end"
           style={{ height: 172 }}
