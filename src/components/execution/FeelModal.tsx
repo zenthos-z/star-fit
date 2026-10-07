@@ -1,4 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import {
   isSpeechInputSupported,
@@ -407,7 +408,11 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
 
   const actionGroup = target.groups[0];
 
-  return (
+  // #137 ③：createPortal(document.body)——锁屏（z-[140]）以 portal 直挂 body 尾部，
+  // 本表单若留在 #root 内，在真机 WebView 的合成器里与 body 级 portal 层的叠放关系
+  // 不受控（用户实测锁屏开着时末组完成表单被压不显）。改挂 body 后 DOM 顺序恒在
+  // 锁屏 portal 之后，叠加显式 z-[150] > z-[140]，双保险保证表单恒在锁屏之上。
+  return createPortal(
     <div className="fixed inset-0 z-[150]">
       {/* 暗场：点外部区域 = 跳过（§4 删除二次确认与「跳过」文字链） */}
       <motion.div
@@ -569,7 +574,8 @@ export const FeelModal: React.FC<FeelModalProps> = ({ target, onConfirm, onSkip 
         </div>
       </motion.div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
