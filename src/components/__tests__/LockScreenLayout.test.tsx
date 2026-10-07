@@ -12,8 +12,12 @@
  * - ④ 信息窗左右分栏：图左 1/3（大图 104px）、文字右 2/3；休息态大图预览归
  *   下一动作（无下一动作回退当前动作），「接下来」行改纯文字防同图重复。
  *
+ * issue #140 三轮（2026-10-07 晚 实测第三条）：主钮跨态零位移——带内对齐改顶锚
+ * （主钮恒为栈首恒锚带顶、「+10 秒」副钮向下排、单钮态下方留白），推翻 #137 ②
+ * 的内容底对齐（该排法令单钮态主钮沉底、双钮态整栈上推 → 主钮跨态跳 80px）。
+ *
  * 断言口径「布局参数级」：jsdom 无排版引擎（offsetTop 恒 0），故锁定产生几何的
- * 布局参数本身——恒高带（height:172）+ 底对齐（justify-end）+ 主钮排布次序。
+ * 布局参数本身——恒高带（height:172）+ 带内顶锚（justify-start）+ 主钮排布次序。
  */
 import React from 'react';
 import { render, screen, within, fireEvent, waitFor } from '@testing-library/react';
@@ -75,7 +79,7 @@ const expectBandContract = () => {
 };
 
 describe('LockScreen #127→#137 ② · 主钮排布（布局参数级）', () => {
-  it('训练态（confirm）：恒高底对齐带 + 单主钮占底槽', () => {
+  it('训练态（confirm）：恒高顶锚带 + 单主钮锚带顶（#140 三轮）', () => {
     render(<LockScreen {...baseProps} exercises={[mkExercise()]} />);
 
     expectBandContract();
@@ -83,12 +87,54 @@ describe('LockScreen #127→#137 ② · 主钮排布（布局参数级）', () =
 
     const stack = getStack()!;
     expect(stack.children.length).toBe(1);
-    // 主钮 = 白色大钮容器（h-92），是栈内唯一节点 → 底对齐带内压底
+    // 主钮 = 白色大钮容器（h-92），是栈内唯一节点 → 顶锚带内压带顶
     expect(stack.firstElementChild!.className).toContain('h-[92px]');
-    // 内容底对齐：栈的父级（172 恒高层）justify-end
+    // 内容顶对齐：栈的父级（172 恒高层）justify-start（#140 三轮起，原底对齐作废）
     const aligner = stack.parentElement as HTMLElement;
     expect(aligner.style.height).toBe('172px');
-    expect(aligner.style.justifyContent).toBe('flex-end');
+    expect(aligner.style.justifyContent).toBe('flex-start');
+  });
+
+  it('#140 三轮 · 主钮跨态零位移：单钮态与双钮态同锚（顶锚列 + 主钮恒栈首）', () => {
+    // jsdom 无排版（offsetTop 恒 0），零位移锁在「产生几何的布局参数」上：
+    // 主钮跨态屏幕坐标恒定 ⇔ (a) 带内列顶锚恒定 (b) 主钮恒为栈首。两态同锚即零位移，
+    // 「+10 秒」出现只向带底方向生长、不推主钮（列 justify-start，恒高 172 兜底）。
+    const anchorOf = () => {
+      const stack = getStack()!;
+      const aligner = stack.parentElement as HTMLElement;
+      return {
+        justify: aligner.style.justifyContent,
+        alignerH: aligner.style.height,
+        firstChildClass: stack.firstElementChild!.className,
+      };
+    };
+
+    // 单钮态（confirm：完成第 1 组）
+    const a = render(<LockScreen {...baseProps} exercises={[mkExercise()]} />);
+    const single = anchorOf();
+    expect(single.justify).toBe('flex-start');
+    expect(single.alignerH).toBe('172px');
+    expect(single.firstChildClass).toContain('h-[92px]');
+    a.unmount();
+
+    // 双钮态（rest：结束休息 + +10 秒）
+    const restEx = mkExercise({
+      id: 'ex-rest2',
+      libraryId: 'ex-rest2',
+      sets: [
+        { id: 's1', completed: true, status: 'COMPLETED', restEndTime: Date.now() + 60_000 },
+      ],
+    });
+    const b = render(<LockScreen {...baseProps} exercises={[restEx]} />);
+    const dual = anchorOf();
+    expect(dual.justify).toBe('flex-start');
+    expect(dual.alignerH).toBe('172px');
+    expect(dual.firstChildClass).toContain('h-[92px]');
+    b.unmount();
+
+    // 两态锚参数逐字一致 → 主钮顶边恒 = 带顶 → 跨态屏幕坐标零变化
+    expect(dual.justify).toBe(single.justify);
+    expect(dual.firstChildClass).toBe(single.firstChildClass);
   });
 
   it('休息态（#137 ②）：主钮「结束休息」在上、副钮「+10 秒」垫底', () => {
@@ -134,7 +180,7 @@ describe('LockScreen #127→#137 ② · 主钮排布（布局参数级）', () =
     expect(within(stack.children[1] as HTMLElement).getByText('放弃本次')).toBeInTheDocument();
   });
 
-  it('倒计时待启动态：单主钮占底槽（同训练态形态）', () => {
+  it('倒计时待启动态：单主钮锚带顶（同训练态形态）', () => {
     const cdEx = mkExercise({
       type: 'isometric',
       sets: [{ id: 's1', targetDuration: 30, completed: false, status: 'PLANNED' }],

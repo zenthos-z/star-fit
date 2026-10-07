@@ -142,8 +142,9 @@ const HoldCircle: React.FC<{
  * - 布局三区带（v7 flex 列化）：顶部留白 17% → 胶囊带（flex-none）→ 信息带（flex-1，
  *   340×272 玻璃窗带内居中、小屏 maxHeight 收窗）→ 按钮带（flex-none 恒高 172，
  *   底锚 safe-bottom+170）。三带互斥，信息再增多也不挤压/重叠按钮（#127 ①）
- * - ★主钮同位（v7）：主按钮（白色大钮）恒压按钮带底——「完成第 N 组」「结束休息」
- *   「结束并记录」跨状态底边几何恒定；双钮态副按钮向上生长
+ * - ★主钮同位（#140 三轮，2026-10-07 实测推翻 #137 ② 底对齐带）：主按钮（白色大钮）
+ *   恒锚按钮带顶——「完成第 N 组」「结束休息」「结束并记录」跨状态屏幕坐标零变化；
+ *   「+10 秒」副按钮排在主钮下方，出现/消失不推挤主钮（单钮态下方留白）
  * - ★动作预览图（v7 最小实现）：运动态名行内当前动作小图、休息态「接下来」行内下一动作
  *   小图（库3 R2 封面，无图/加载失败回退首字占位）
  * - ★时间胶囊交互（v6 设计 / #140 ① 换轨 pointer 事件）：
@@ -708,7 +709,8 @@ export const LockScreen: React.FC<LockScreenProps> = ({
       // #137 ②（2026-10-07 用户实测推翻 #127 排法）：双钮态改「主钮在上、副钮在下」——
       // 休息态「结束休息」(主) 在上、「+10 秒」(副) 垫底；倒计时态同构（结束并记录
       // 在上、放弃本次垫底）。#127 的「主钮恒压底」同位约束随本条作废：
-      // 用户优先级是主操作视觉在上位，而非跨态底边恒定。
+      // 用户优先级是主操作视觉在上位；#140 三轮起跨态恒定回归——带内改顶锚实现
+      // （主钮恒为栈首 + 恒锚带顶，跨态屏幕坐标零变化），几何锁在按钮带注释处。
       return (
         <div className="flex flex-col gap-4" data-testid="lock-button-stack">
           <HoldToConfirm
@@ -1107,30 +1109,31 @@ export const LockScreen: React.FC<LockScreenProps> = ({
         </div>
       </motion.div>
 
-      {/* 【下方·按钮带】交互按钮区：★固定区带——恒高 172px（主92+间距16+副64），内容底对齐，
+      {/* 【下方·按钮带】交互按钮区：★固定区带——恒高 172px（主92+间距16+副64），内容顶对齐，
           底锚 safe-bottom+100（#137 ①：底锚 reserve 170→100，让出的 70px 归信息带——
           顶部 17% 留白锚着胶囊 morph 起点（TimerCapsule 同值不可动）、按钮带恒高 172
           与窗体 340×272 都是拍板定值，唯一可让的空间在底部 reserve，信息窗与胶囊带
-          的可见间隔从这里来）。#127 的「主钮恒压底」随 #137 ② 作废（见 renderButtons） */}
+          的可见间隔从这里来）。带内对齐随 #140 三轮改「主钮恒锚带顶」：原 #137 ② 底对齐
+          令单钮态主钮沉底、双钮态整栈上推——主钮跨态跳 80px（用户实测第三条反馈） */}
       <div
         data-testid="lock-button-band"
-        className="flex-none flex justify-center items-end"
+        className="flex-none flex justify-center items-start"
         style={{
           height: 172,
           marginBottom: 'calc(var(--safe-bottom, 0px) + 100px)'
         }}
       >
-        {/* ★恒定高度 172 + 内容底对齐：双钮态（#137 ② 起 主上副下）恰好填满带高，
-            单钮态（confirm/countdown 待启动）主钮压带底——状态切换主钮行程收敛，
-            带外几何（底边锚点）不变 */}
+        {/* ★恒定高度 172 + 内容顶对齐（#140 三轮）：主钮恒为栈首、恒锚带顶——跨态
+            屏幕坐标零变化；双钮态（#137 ② 主上副下）副钮向下排、单钮态下方留白；
+            带外几何（底边锚点）照旧不动 */}
         <motion.div
-          className="w-[260px] flex flex-col justify-end"
+          className="w-[260px] flex flex-col justify-start"
           style={{ height: 172 }}
         >
           <AnimatePresence mode="popLayout" initial={false}>
             <motion.div
               key={infoKey}
-              style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', height: 172 }}
+              style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-start', height: 172 }}
               {...LOCK_MOTION.swap}
             >
               {renderButtons()}

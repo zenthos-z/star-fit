@@ -1,0 +1,42 @@
+{
+  "states": {
+    "single": {
+      "primaryTop": 572,
+      "primaryBottom": 664,
+      "primaryLabel": "完成第 1 组",
+      "childCount": 1,
+      "secondaryTop": null,
+      "secondaryLabel": null,
+      "bandTop": 572,
+      "bandBottom": 744,
+      "bandHeight": 172
+    },
+    "dual": {
+      "primaryTop": 572,
+      "primaryBottom": 664,
+      "primaryLabel": "结束休息",
+      "childCount": 2,
+      "secondaryTop": 680,
+      "secondaryLabel": "+10 秒长按",
+      "bandTop": 572,
+      "bandBottom": 744,
+      "bandHeight": 172
+    },
+    "singleAgain": {
+      "primaryTop": 572,
+      "primaryBottom": 664,
+      "primaryLabel": "完成第 2 组",
+      "childCount": 1,
+      "secondaryTop": null,
+      "secondaryLabel": null,
+      "bandTop": 572,
+      "bandBottom": 744,
+      "bandHeight": 172
+    }
+  },
+  "mainButtonTopDeltaAB": 0,
+  "mainButtonTopDeltaAC": 0,
+  "mainButtonZeroDrift": true,
+  "bandGeometryStable": true,
+  "secondaryBelowMain": true
+}
