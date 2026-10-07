@@ -1,0 +1,16 @@
+{
+  "A": {
+    "scenario": "A-lock",
+    "feelModalAppeared": true,
+    "feelModalInDom": true,
+    "lockScreenInDom": true,
+    "feelModalRect": {
+      "x": 0,
+      "y": 411,
+      "w": 390,
+      "h": 433
+    },
+    "topElementAt195x700": "DIV.",
+    "feelModalIsTop": true
+  }
+}
