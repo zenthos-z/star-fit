@@ -149,8 +149,9 @@ export function channelSignature(channels: CardChannels): string {
  * 让 @langchain/core 的入参前置校验（@cfworker/json-schema）对多余键硬失败，
  * 而围栏管道的 zod 校验对未知键是 strip——剥掉后两侧语义一致（宽松绑定，
  * 深校验在 func 内的 zod 回路）。$schema 声明头对 provider 无信息量，同剥。
+ * （S3 起导出复用：周计划模板 schema.json 派生走同一宽松化语义。）
  */
-function loosenJsonSchemaForBinding(node: unknown): unknown {
+export function loosenJsonSchemaForBinding(node: unknown): unknown {
   if (Array.isArray(node)) {
     return node.map(loosenJsonSchemaForBinding);
   }
