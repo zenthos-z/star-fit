@@ -22,6 +22,9 @@ import {
   EXERCISE_TYPE_VALUES,
   PROFILE_INTAKE_QUESTIONS,
 } from "shared/contracts";
+// #151 S2 双轨：卡型级通道开关（tool=submit_xxx 工具 / fence=正文围栏）。
+// 类型-only 导入——本模块仍是纯字符串生产者，无运行时耦合。
+import type { CardChannels } from "./cardSubmit.js";
 
 /**
  * The card types the agent is allowed to emit. Kept as a runtime
@@ -62,18 +65,43 @@ const PROFILE_BANK_ID_LIST: string = PROFILE_INTAKE_QUESTIONS.map(
  *   - the per-type `data` schema the validator enforces,
  *   - the HC-4 hard constraint against HITL types.
  *
- * Pure function — same input (none) always yields the same string.
+ * #151 S2 双轨：`channels` 标注各卡型交付通道（tool=submit_xxx 工具提交 /
+ * fence=正文围栏，默认缺省 = 全 fence）。tool 卡型的文案改为「调用 submit_xxx
+ * 提交」（含各自参数形态），fence 卡型保留围栏指令原文；两套指令同卡型互斥，
+ * 数据 schema 文档两通道共用（shape 是卡契约，与怎么到前端无关）。
+ *
+ * Pure function — same input always yields the same string；
+ * `loadUiHintFormatSkill()`（无参）输出与双轨改造前逐字节一致。
  */
-export function loadUiHintFormatSkill(): string {
+export function loadUiHintFormatSkill(channels: CardChannels = {}): string {
+  const toolChannel = (t: string): boolean => channels[t] === "tool";
+  const toolTypes = ALLOWED_UIHINT_TYPES.filter(toolChannel);
+  const fenceTypes = ALLOWED_UIHINT_TYPES.filter((t) => !toolChannel(t));
   return [
     "## uiHint Card Format (HC-1)",
     "",
     "When a structured card is the right response, emit ONE JSON object with a",
     "`type` field. The card is validated programmatically upstream; an invalid",
     "card is rejected and you will be asked to re-emit it.",
-    "",
+    ...(toolTypes.length > 0
+      ? [
+          "",
+          `Card delivery channels per type — fence (${fenceTypes.join(", ")}):`,
+          "the card JSON goes in a ```json fenced block in the reply;",
+          `tool (${toolTypes.join(", ")}): call the \`submit_<type>\` tool with`,
+          "the card data as tool parameters — the card JSON NEVER appears in",
+          "the reply prose for tool-channel types.",
+        ]
+      : []),
     "### Allowed `type` values (enum — use exactly one)",
     "- `plan_card` — a training plan. `data` MUST be an ARRAY of exercises.",
+    ...(toolChannel("plan_card")
+      ? [
+          "  **Delivery: call `submit_plan_card` with `{ data: [...] }` — the",
+          "  tool is the ONLY delivery channel; never write the card JSON in",
+          "  prose or a fence.**",
+        ]
+      : []),
     "  Each exercise REQUIRES:",
     "  - `exerciseId` (string)",
     "  - `name` (string)",
@@ -104,8 +132,17 @@ export function loadUiHintFormatSkill(): string {
     "  1. Call `list_exercises` to get the exercise library (includes `exercise_type`)",
     "  2. For each exercise, match its `exercise_type` to the requirements above",
     "  3. If unsure, read `exercise-type-guide/knowledge-index.md`",
-    "- `weekly_plan` — a WHOLE-WEEK plan card (proposal-confirm: emit it",
-    "  DIRECTLY in the reply with `data.apply` — there is NO save tool). `data` is an",
+    ...(toolChannel("weekly_plan")
+      ? [
+          "- `weekly_plan` — a WHOLE-WEEK plan card (proposal-confirm: submit it",
+          "  via the `submit_weekly_plan` tool with the FULL card data INCLUDING",
+          "  `data.apply` — the tool is the ONLY delivery channel; never write",
+          "  the card JSON in prose or a fence). `data` is an",
+        ]
+      : [
+          "- `weekly_plan` — a WHOLE-WEEK plan card (proposal-confirm: emit it",
+          "  DIRECTLY in the reply with `data.apply` — there is NO save tool). `data` is an",
+        ]),
     "  OBJECT (not an array): `week_label` (non-empty string, e.g. 第 2 周),",
     "  optional `phase_label` (e.g. 力量块), `split_summary` (non-empty one-line",
     "  summary, e.g. 推拉腿 · 每周 3 练 · 主项渐进 +1 档), `days` (array, 1+ items;",
@@ -136,6 +173,15 @@ export function loadUiHintFormatSkill(): string {
     "  string|number).",
     "- `survey_card` — interactive questionnaire, tagged with `data.purpose`",
     "  (one of `profile_intake` / `plan_gap` / `workout_feedback`):",
+    ...(toolChannel("survey_card")
+      ? [
+          "  **Delivery: call `submit_survey` (intent-only params): `purpose` +",
+          "  `question_ids` (bank ids; `profile_intake` may omit = full bank) +",
+          "  your own `title`/`message` prose. For `workout_feedback` pass",
+          "  `questions` directly (≤3 free-form). NEVER write survey JSON in",
+          "  prose or a fence.**",
+        ]
+      : []),
     "  * `profile_intake` — FIRST-USE profile survey for a brand-new user whose",
     "    goal/experience/equipment/frequency/injuries/weight are mostly unknown.",
     "    Emit it BEFORE any plan; a plain-text question list in prose is a FAILED",
@@ -215,8 +261,19 @@ export function loadUiHintFormatSkill(): string {
     "  (`profile_intake` full bank / `plan_gap` missing-id subset) are NOT",
     "  capped at 3; the 3-question cap applies to `workout_feedback` only.",
     "- For `profile_update_confirm`, `proposals` MUST be an array (1+ items).",
-    "- ALWAYS wrap the card in a ```json fenced block (the fence is the primary",
-    "  extraction path — an unfenced card with any JSON typo leaks as prose).",
+    ...(toolTypes.length > 0
+      ? [
+          `- Fence-channel cards (${fenceTypes.join(", ")}) ONLY: ALWAYS wrap the`,
+          "  card in a ```json fenced block (the fence is the primary extraction",
+          "  path — an unfenced card with any JSON typo leaks as prose).",
+          `- Tool-channel cards (${toolTypes.join(", ")}) are submitted via`,
+          "  their `submit_<type>` tool instead — never in prose or a fence",
+          "  (a tool-channel card written as prose is a FAILED delivery).",
+        ]
+      : [
+          "- ALWAYS wrap the card in a ```json fenced block (the fence is the primary",
+          "  extraction path — an unfenced card with any JSON typo leaks as prose).",
+        ]),
     "- Double-check bracket balance before emitting: every `[` opened inside",
     "  `data` must be closed, and `confirmLabel`/`cancelLabel` sit INSIDE `data`",
     "  (sibling of `proposals`), never as stray objects after the array.",

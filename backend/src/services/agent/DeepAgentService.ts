@@ -57,6 +57,15 @@ import { loadUiHintFormatSkill } from "./uiHintFormat.js";
 // turnToolCacheMiddleware（#116）：同轮幂等只读工具结果缓存，实现见 mcpTools
 // （Agent 工具执行层单一收口，覆盖 mcpTools 读工具 + deepagents read_file）。
 import { buildMcpTools, turnToolCacheMiddleware } from "./mcpTools.js";
+// #151 S2 卡片工具通道：通道解析（DB > env > 默认）+ 卡汇排水/清理
+// （submit_xxx 工具成功路径推卡，classifyAgentStream 发射）。
+import {
+  channelSignature,
+  clearThreadCards,
+  drainCardsFromSink,
+  resolveCardChannels,
+  type CardChannels,
+} from "./cardSubmit.js";
 // R5: mount every GOLD knowledge skill + operational skill via native
 // deepagents Skills + Filesystem (read on demand).
 import { mountAllSkills } from "./skillLoader.js";
@@ -358,7 +367,10 @@ const PLAN_SCENARIO_QUICKREF = [
  * 规则全文只在 plan-generation 技能单一真源）。
  * 导出仅供单测断言各场景 systemPrompt 组装；运行时仅模块内部调用。
  */
-export function buildSystemPrompt(scenario?: string): string {
+export function buildSystemPrompt(
+  scenario?: string,
+  cardChannels?: CardChannels,
+): string {
   const parts = [BASE_SYSTEM_PROMPT];
   const guide = scenario ? SCENARIO_DATA_GUIDES[scenario] : undefined;
   if (guide) {
@@ -367,7 +379,9 @@ export function buildSystemPrompt(scenario?: string): string {
   if (scenario === "plan") {
     parts.push(PLAN_SCENARIO_QUICKREF);
   }
-  parts.push(loadUiHintFormatSkill());
+  // #151 S2 双轨：tool 通道卡型的文案切「调用 submit_xxx 提交」；缺省
+  // （不传 channels）= 全 fence，输出与改造前逐字节一致。
+  parts.push(loadUiHintFormatSkill(cardChannels));
   return parts.join("\n\n");
 }
 
@@ -412,6 +426,13 @@ export class DeepAgentService implements AgentService {
   private cached: Map<string, Promise<CompiledStatefulAgent>> = new Map();
 
   /**
+   * #151 S2 双轨：每个缓存键（scenario::img/txt）组装时的通道签章。
+   * `chat()` 每轮解析通道对拍——DB/env flag 翻转 → resetAgentCache，
+   * 下一轮按新通道重建（prompt 文案 + submit_xxx 工具面一起换）。
+   */
+  private channelSignatures: Map<string, string> = new Map();
+
+  /**
    * Return the cached single agent, constructing it on first call.
    *
    * Generic (修订①): the SAME agent serves every intent — there is no
@@ -419,6 +440,10 @@ export class DeepAgentService implements AgentService {
    *
    * `hasImage`：带图轮次用多模态视觉模型（doubao-seed-2.1-turbo）构建 agent，
    * 与无图（deepseek 文本）实例分开缓存，互不污染。
+   *
+   * #151 S2：卡型通道在缓存 promise **之前**解析（签章先行——chat() 的
+   * flag 对拍不会撞上「promise 已缓存但签章未写」的窗口），同一份 channels
+   * 传给 assembleAgent（prompt + 工具面一致）。
    */
   async buildAgent(
     scenario?: string,
@@ -429,12 +454,17 @@ export class DeepAgentService implements AgentService {
     if (existing) {
       return existing;
     }
+    const cardChannels = await resolveCardChannels();
+    this.channelSignatures.set(key, channelSignature(cardChannels));
     // Cache the PROMISE so concurrent callers join the same construction.
-    const building = this.assembleAgent(scenario, hasImage).catch((err) => {
-      // Drop the failed construction so the next call can retry.
-      this.cached.delete(key);
-      throw err;
-    });
+    const building = this.assembleAgent(scenario, hasImage, cardChannels).catch(
+      (err) => {
+        // Drop the failed construction so the next call can retry.
+        this.cached.delete(key);
+        this.channelSignatures.delete(key);
+        throw err;
+      },
+    );
     this.cached.set(key, building);
     return building;
   }
@@ -450,6 +480,7 @@ export class DeepAgentService implements AgentService {
   private async assembleAgent(
     scenario?: string,
     hasImage = false,
+    cardChannels: CardChannels = {},
   ): Promise<CompiledStatefulAgent> {
     // P006: model loaded via loadModel (no provider hardcoded). scenario now
     // flows through (was hardcoded 'default'): task-scoped model config keys
@@ -481,11 +512,15 @@ export class DeepAgentService implements AgentService {
     await ensureRuntimeReady();
     const checkpointer = getAgentRuntimeCheckpointer();
 
-    const systemPrompt = buildSystemPrompt(scenario);
+    // #151 S2 双轨：通道由 buildAgent 在缓存 promise 前解析并传入（同一份
+    // channels 同时决定 systemPrompt 文案与 submit_xxx 工具暴露面）；
+    // chat() 每轮对拍签章，flag 翻转 → resetAgentCache 重建
+    // （回滚 = 切 flag，无代码回退）。
+    const systemPrompt = buildSystemPrompt(scenario, cardChannels);
 
     // R3: the Agent-only data adapter (read user/exercise data, write sessions/
     // profile). Parameterless — userId is resolved per-request via configurable.
-    const tools = buildMcpTools();
+    const tools = buildMcpTools(cardChannels);
 
     // R5: every skill under mas/skills/ mounted via native Skills + Filesystem.
     const skillMount = mountAllSkills();
@@ -544,6 +579,18 @@ export class DeepAgentService implements AgentService {
 
     let agent: CompiledStatefulAgent;
     try {
+      // #151 S2 双轨 flag 对拍：DB/env 通道与本缓存键组装时的签章不一致
+      // → 弃缓存重建（prompt 文案 + submit_xxx 工具面一起切换）。
+      // 每轮 2-3 次 app_configs 点读（safeGetConfig，读失败回落 env）。
+      const key = `${req.scenario ?? "default"}::${imageAttachments.length > 0 ? "img" : "txt"}`;
+      const liveChannels = await resolveCardChannels();
+      if (
+        this.cached.has(key) &&
+        this.channelSignatures.get(key) !== channelSignature(liveChannels)
+      ) {
+        this.cached.delete(key);
+        this.channelSignatures.delete(key);
+      }
       agent = await this.buildAgent(req.scenario, imageAttachments.length > 0);
     } catch (err) {
       yield toErrorEvent(err);
@@ -582,6 +629,9 @@ export class DeepAgentService implements AgentService {
           thread_id: threadId,
           // P006/P012: per-request userId for the MCP write tools.
           userId: req.userId,
+          // #151 S2: submit_xxx 卡片工具按场景闸 Q1 质检（workout_complete
+          // 才开，与 uiHintValidationLoop 同口径）。
+          scenario: req.scenario,
         },
       };
 
@@ -613,7 +663,9 @@ export class DeepAgentService implements AgentService {
       // 修复后的判定锚唯一：`updates.model_request` 快照的 tool_calls 标志
       // （实现见模块级 classifyAgentStream()，2026-09-23 抽出以便单测注入
       // 合成流）。messages 流只做缓冲，终步快照确认后才 flush+直通。
-      yield* classifyAgentStream(stream);
+      // #151 S2：同传 threadId——submit_xxx 工具成功路径推入卡汇，
+      // classifyAgentStream 在 updates 快照处排水发射 {type:"uiHint", card}。
+      yield* classifyAgentStream(stream, { threadId });
     } catch (err) {
       yield toErrorEvent(err);
     }
@@ -656,6 +708,7 @@ export class DeepAgentService implements AgentService {
  */
 export async function* classifyAgentStream(
   stream: AsyncIterable<unknown>,
+  options: { threadId?: string } = {},
 ): AsyncIterable<AgentEvent> {
   let leakedThinking = ""; // reasoning stripped from terminal messages
 
@@ -665,6 +718,21 @@ export async function* classifyAgentStream(
   // error 兜底事件——前端走既有 error 渲染路径，「正在解析数据…」死占位
   // 由后端保证不再出现（thinking 不算答案：纯思考轮对用户同样是空轮）。
   let sawAnswerPayload = false;
+
+  // #151 S2 工具通道卡汇排水：submit_xxx 工具成功路径推卡进卡汇
+  // （cardSubmit.ts，同 thread 同卡型 last-write-wins），本层在 updates
+  // 快照处取走并以 uiHint 事件发射——工具卡与终步散文 token 同一下游
+  // （extractUiHintEvents verbatim 转发 → 校验回路幂等复验 → SSE）。
+  // 排水即清空：before_agent 历史重放不含新推卡（工具不重执行），
+  // 排过水的卡不会二次发射（幂等）；卡也是答案载荷（见空终步守卫）。
+  const threadId = options.threadId;
+  const drainSinkCards = function* (): Generator<AgentEvent> {
+    if (!threadId) return;
+    for (const card of drainCardsFromSink(threadId)) {
+      sawAnswerPayload = true;
+      yield { type: "uiHint", card: card as AgentEvent["card"] };
+    }
+  };
 
   // ★吞卡修复（refs #73）：本轮（含 before_agent 重放的历史）全部工具返回的
   // 扁平文本（去空白）。卡片段若逐字出现在任一工具返回里 → 是复述不是交付
@@ -689,243 +757,259 @@ export async function* classifyAgentStream(
     liveGate.reset();
   };
 
-  for await (const raw of stream) {
-    // Unwrap the [mode, data] tuple (defensive: also accept untagged).
-    let mode: string | undefined;
-    let data: unknown = raw;
-    if (
-      Array.isArray(raw) &&
-      typeof raw[0] === "string" &&
-      (raw[0] === "messages" || raw[0] === "updates")
-    ) {
-      mode = raw[0];
-      data = raw[1];
-    }
+  // #151 S2：全程 try/finally——流异常（LLM 中断）或下游早断（SSE 掐断）时
+  // 清空该线程卡汇，未发射的卡不滞留到下一轮（陈旧卡绝不跨轮泄漏）。
+  // finally 只清理不 yield（消费者 break 路径安全）。
+  try {
+    for await (const raw of stream) {
+      // Unwrap the [mode, data] tuple (defensive: also accept untagged).
+      let mode: string | undefined;
+      let data: unknown = raw;
+      if (
+        Array.isArray(raw) &&
+        typeof raw[0] === "string" &&
+        (raw[0] === "messages" || raw[0] === "updates")
+      ) {
+        mode = raw[0];
+        data = raw[1];
+      }
 
-    const isMessages =
-      mode === "messages" || (mode === undefined && Array.isArray(data));
-    if (isMessages) {
-      // [AIMessageChunk, metadata] — per-token delta of the running step.
-      // 零提前判定：delta 只进缓冲，终步/中间步由 updates 快照裁决。
-      // 终步确认后（answerLive）才逐 delta 直通放行为 token。
-      const delta = extractText(data);
-      if (delta) {
-        if (answerLive) {
-          // Snapshot already confirmed this step is the terminal answer —
-          // stream every remaining delta live (真流式收益保留在终步). 不再
-          // 回写 stepRaw：终步快照后缓冲已 flush，若继续累积，流尾
-          // `if (stepRaw.trim())` 会把刚直通的答案二次转进 thinking 面板。
-          //
-          // ★返工 v5（2026-09-23）：v4 剥离链（stripToolEchoPrefix +
-          // stripToolEchoBlocks）只在快照那一刻对缓冲 stepRaw 跑一次；这里
-          // 的直通分支在 v4 里完全绕过剥离检查——DeepSeek「先出快照再补
-          // 输出」时，模型在直通段复述 read_file 返回（编号行 frontmatter）
-          // 全部裸奔进正文（协调者实测 5 轮 3 泄漏 / 全新用户 4 轮 3 泄漏，
-          // 且泄漏从正文开头就在 = flush/直通一次性吐出）。v5 在直通分支挂
-          // LiveEchoGate：delta 先入闸门缓冲，完整块/阈值到达时按
-          // stripToolEchoBlocks 同款判定链判定——命中复述特征 → 转 thinking
-          // （绝不 yield token）；未命中 → 放行 token。普通正文增量（非复述
-          // 可疑）立即放行，流式首字收益保留；仅复述可疑形态或复述链内才
-          // 缓冲等待判定（块尾部延迟 ≤ 1 个块大小，秒级流式）。
-          const gated = liveGate.feed(delta);
-          if (gated.echoes) {
-            leakedThinking = leakedThinking
-              ? `${leakedThinking}\n\n${gated.echoes}`
-              : gated.echoes;
+      const isMessages =
+        mode === "messages" || (mode === undefined && Array.isArray(data));
+      if (isMessages) {
+        // [AIMessageChunk, metadata] — per-token delta of the running step.
+        // 零提前判定：delta 只进缓冲，终步/中间步由 updates 快照裁决。
+        // 终步确认后（answerLive）才逐 delta 直通放行为 token。
+        const delta = extractText(data);
+        if (delta) {
+          if (answerLive) {
+            // Snapshot already confirmed this step is the terminal answer —
+            // stream every remaining delta live (真流式收益保留在终步). 不再
+            // 回写 stepRaw：终步快照后缓冲已 flush，若继续累积，流尾
+            // `if (stepRaw.trim())` 会把刚直通的答案二次转进 thinking 面板。
+            //
+            // ★返工 v5（2026-09-23）：v4 剥离链（stripToolEchoPrefix +
+            // stripToolEchoBlocks）只在快照那一刻对缓冲 stepRaw 跑一次；这里
+            // 的直通分支在 v4 里完全绕过剥离检查——DeepSeek「先出快照再补
+            // 输出」时，模型在直通段复述 read_file 返回（编号行 frontmatter）
+            // 全部裸奔进正文（协调者实测 5 轮 3 泄漏 / 全新用户 4 轮 3 泄漏，
+            // 且泄漏从正文开头就在 = flush/直通一次性吐出）。v5 在直通分支挂
+            // LiveEchoGate：delta 先入闸门缓冲，完整块/阈值到达时按
+            // stripToolEchoBlocks 同款判定链判定——命中复述特征 → 转 thinking
+            // （绝不 yield token）；未命中 → 放行 token。普通正文增量（非复述
+            // 可疑）立即放行，流式首字收益保留；仅复述可疑形态或复述链内才
+            // 缓冲等待判定（块尾部延迟 ≤ 1 个块大小，秒级流式）。
+            const gated = liveGate.feed(delta);
+            if (gated.echoes) {
+              leakedThinking = leakedThinking
+                ? `${leakedThinking}\n\n${gated.echoes}`
+                : gated.echoes;
+            }
+            if (gated.tokens) {
+              sawAnswerPayload = true;
+              for (const chunk of chunkAnswerText(gated.tokens)) {
+                yield { type: "token", text: chunk };
+              }
+            }
+          } else {
+            stepRaw += delta;
           }
-          if (gated.tokens) {
+        }
+        // ★字段级思考链（2026-09-16）：thinking 开启时 DeepSeek 把推理放在
+        // reasoning_content（ChatDeepSeek 透传到 additional_kwargs），协议级
+        // 与正文分离——每个 delta 到达即 yield 为 thinking 事件（实时流式，
+        // 前端折叠区逐字渲染）。这取代了靠文本启发式猜测的旧思路；
+        // splitLeakedReasoning 退为「thinking 关闭时的兜底」。
+        // （2026-09-17 修订：原实现聚合到流结束一次性 yield，思考链不流式——
+        //  改为逐 delta 直通，并删除流尾的聚合下发避免重复。）
+        const rc = extractReasoningContent(data);
+        if (rc) {
+          yield { type: "thinking", text: rc };
+        }
+        continue;
+      }
+
+      // updates: { nodeName: { messages: [...] } } — a graph step completed.
+      // Only the `model_request` node carries the model's own output. Other
+      // nodes (SkillsMiddleware.before_agent re-emits checkpoint history;
+      // *Middleware.after_model carry no messages) must NOT be classified:
+      // Object.values order is graph-internal, and before_agent snapshots
+      // would mislabel persisted history as the final answer while trailing
+      // after_model snapshots would clobber a captured finalText with
+      // undefined.
+      const update = data as Record<string, { messages?: unknown[] }>;
+      // ★吞卡修复（refs #73）：先收集本快照（任意节点）里的工具返回文本作
+      // 复述判别锚——必须在 model_request 分类前执行：卡所在步的快照只含 AI
+      // 消息，工具返回在相邻的 tools 节点快照 / before_agent 历史重放里。
+      collectToolResults(update, toolResultFlats);
+      // #151 S2：tools 节点快照落地时（submit_xxx 已执行完毕）排水发射。
+      // 放在快照分类之前：任意节点快照都可能携带新工具结果，先发卡再分类。
+      yield* drainSinkCards();
+      const state = update?.["model_request"];
+      const msgs = state?.messages;
+      if (!Array.isArray(msgs) || msgs.length === 0) continue;
+      const last = msgs[msgs.length - 1] as {
+        _getType?: () => string;
+        role?: string;
+        tool_calls?: unknown[];
+        additional_kwargs?: { tool_calls?: unknown[] };
+        content?: unknown;
+      } | null;
+      if (!last) continue;
+      const isAi =
+        typeof last._getType === "function"
+          ? last._getType() === "ai"
+          : last.role === "assistant";
+      if (!isAi) continue; // tool / system step — narration stays buffered
+      const hasTools =
+        (Array.isArray(last.tool_calls) && last.tool_calls.length > 0) ||
+        (Array.isArray(last.additional_kwargs?.tool_calls) &&
+          last.additional_kwargs!.tool_calls!.length > 0);
+      if (hasTools) {
+        // Intermediate model step: the buffered text is narration around a tool
+        // call — surface it as thinking, never as prose token.
+        // 这正是 2026-09-23 泄漏回归的封堵点：上一版在快照前就靠
+        // isAnswerStartBlock 放行，工具调用轮复述的技能全文/动作库 JSON
+        // 直接进了正文；现在缓冲在快照前绝不出门。
+        // ★吞卡修复（2026-09-30，refs #73）：唯一例外——GLM「边调工具边出卡」
+        // 形态下，卡片正文就写在携带 tool_calls 的消息里，整段归 thinking 会
+        // 把 12k 字符的 weekly_plan 吞进思考链、用户永远收不到（T9 验收回放二
+        // 实锤：92,277 thinking 字符中 42,851 是被吞的卡）。卡片段（围栏卡 /
+        // inline 卡，经工具返回复述判别豁免）以 token 放行，交给下游
+        // uiHintExtractor 提取 + 校验回路——与终步卡片同一条路径；其余正文
+        // （叙述 / 复述 / 非卡围栏）照旧全量转 thinking，零散文 token。
+        if (stepRaw.trim()) {
+          const { cards, rest } = splitCardSegments(stepRaw, isToolResultEcho);
+          if (rest.trim()) {
+            yield { type: "thinking", text: rest.trim() };
+          }
+          for (const card of cards) {
             sawAnswerPayload = true;
-            for (const chunk of chunkAnswerText(gated.tokens)) {
+            yield { type: "token", text: card };
+          }
+        }
+        resetStep();
+      } else {
+        // Terminal answer step (first snapshot of the turn with a tool-free
+        // AI message). Flush the buffered step text through the batch
+        // splitter — deliberation → leakedThinking, answer → chunked token
+        // events (exact parity with the pre-streaming `.invoke` path) —
+        // then flip `answerLive` so subsequent deltas of THIS step stream
+        // live as tokens (首字延迟 = 该步 prefill + 生成中已缓冲的首段，
+        // 秒级而非整轮)。
+        //
+        // ★终步工具复述剥离（2026-09-23 返工 v3 + v4）：v2 在 flush 前对「整个
+        // stepRaw」跑 looksLikeToolReturnEcho，命中就把复述+正常回答+围栏卡片
+        // 整体吞进 thinking（回放 3 轮正文 0 字符 + 卡片 0 张）。v3 只精确剥
+        // 离「开头的裸工具返回复述段」（stripToolEchoPrefix：动作库/历史 JSON
+        // 粘接串、read_file 编号行、技能文件头签名块）进 thinking，其余
+        // （正常回答 + 围栏卡片）继续走 splitLeakedReasoning：answer 进 token、
+        // 围栏卡片经 uiHint 提取正常落地。拦截只能摘「裸复述」，不能误伤以
+        // ``` 开头的围栏卡片。
+        // ★v4（返工）：v3 只覆盖「前缀」复述，真实模型会在任意位置复述工具
+        // 返回——先写引导语（如"好的我来看看计划生成指南"）再整段 echo
+        // read_file 返回（编号行 frontmatter），复述落在中间/后置时 v3 的
+        // 前导判定全部失效，整段被 splitLeakedReasoning 误判成 answer 放行成
+        // token（协调者实测 6115 / 2480 字符泄漏）。v4 在 splitLeakedReasoning
+        // 之后对 answer 部分再做「全段扫描剥离」（stripToolEchoBlocks）：逐块
+        // 命中复述特征 → 摘进 thinking；未命中 → 保留为 token。双保险：前缀
+        // 剥离（pass 1）+ 任意位置剥离（pass 2）。
+        const { echo, rest } = stripToolEchoPrefix(stepRaw);
+        if (echo) {
+          leakedThinking = leakedThinking
+            ? `${leakedThinking}\n\n${echo}`
+            : echo;
+        }
+        const split = splitLeakedReasoning(rest);
+        if (split.reasoning) {
+          leakedThinking = leakedThinking
+            ? `${leakedThinking}\n\n${split.reasoning}`
+            : split.reasoning;
+        }
+        if (split.answer) {
+          // pass 2（v4）：对 answer 部分逐块扫描，摘任意位置的工具复述块。
+          const mid = stripToolEchoBlocks(split.answer);
+          if (mid.echo) {
+            leakedThinking = leakedThinking
+              ? `${leakedThinking}\n\n${mid.echo}`
+              : mid.echo;
+          }
+          if (mid.rest) {
+            sawAnswerPayload = true;
+            for (const chunk of chunkAnswerText(mid.rest)) {
               yield { type: "token", text: chunk };
             }
           }
-        } else {
-          stepRaw += delta;
         }
+        // 终步 flush 后清空缓冲：已 flush 的 stepRaw 不得在流尾被二次转
+        // thinking（v1 遗漏——流尾 `if (stepRaw.trim())` 会把刚放行的整段答案
+        // 重复进 thinking 面板）。
+        stepRaw = "";
+        // 复述段剥离后不翻 answerLive 的旧保守行为会再次吞掉「快照之后到达」
+        // 的正常回答 delta——v3 目标是保留正常回答：剥离完复述，剩余/后续 delta
+        // 一律按 token 直通。
+        answerLive = true;
       }
-      // ★字段级思考链（2026-09-16）：thinking 开启时 DeepSeek 把推理放在
-      // reasoning_content（ChatDeepSeek 透传到 additional_kwargs），协议级
-      // 与正文分离——每个 delta 到达即 yield 为 thinking 事件（实时流式，
-      // 前端折叠区逐字渲染）。这取代了靠文本启发式猜测的旧思路；
-      // splitLeakedReasoning 退为「thinking 关闭时的兜底」。
-      // （2026-09-17 修订：原实现聚合到流结束一次性 yield，思考链不流式——
-      //  改为逐 delta 直通，并删除流尾的聚合下发避免重复。）
-      const rc = extractReasoningContent(data);
-      if (rc) {
-        yield { type: "thinking", text: rc };
-      }
-      continue;
     }
 
-    // updates: { nodeName: { messages: [...] } } — a graph step completed.
-    // Only the `model_request` node carries the model's own output. Other
-    // nodes (SkillsMiddleware.before_agent re-emits checkpoint history;
-    // *Middleware.after_model carry no messages) must NOT be classified:
-    // Object.values order is graph-internal, and before_agent snapshots
-    // would mislabel persisted history as the final answer while trailing
-    // after_model snapshots would clobber a captured finalText with
-    // undefined.
-    const update = data as Record<string, { messages?: unknown[] }>;
-    // ★吞卡修复（refs #73）：先收集本快照（任意节点）里的工具返回文本作
-    // 复述判别锚——必须在 model_request 分类前执行：卡所在步的快照只含 AI
-    // 消息，工具返回在相邻的 tools 节点快照 / before_agent 历史重放里。
-    collectToolResults(update, toolResultFlats);
-    const state = update?.["model_request"];
-    const msgs = state?.messages;
-    if (!Array.isArray(msgs) || msgs.length === 0) continue;
-    const last = msgs[msgs.length - 1] as {
-      _getType?: () => string;
-      role?: string;
-      tool_calls?: unknown[];
-      additional_kwargs?: { tool_calls?: unknown[] };
-      content?: unknown;
-    } | null;
-    if (!last) continue;
-    const isAi =
-      typeof last._getType === "function"
-        ? last._getType() === "ai"
-        : last.role === "assistant";
-    if (!isAi) continue; // tool / system step — narration stays buffered
-    const hasTools =
-      (Array.isArray(last.tool_calls) && last.tool_calls.length > 0) ||
-      (Array.isArray(last.additional_kwargs?.tool_calls) &&
-        last.additional_kwargs!.tool_calls!.length > 0);
-    if (hasTools) {
-      // Intermediate model step: the buffered text is narration around a tool
-      // call — surface it as thinking, never as prose token.
-      // 这正是 2026-09-23 泄漏回归的封堵点：上一版在快照前就靠
-      // isAnswerStartBlock 放行，工具调用轮复述的技能全文/动作库 JSON
-      // 直接进了正文；现在缓冲在快照前绝不出门。
-      // ★吞卡修复（2026-09-30，refs #73）：唯一例外——GLM「边调工具边出卡」
-      // 形态下，卡片正文就写在携带 tool_calls 的消息里，整段归 thinking 会
-      // 把 12k 字符的 weekly_plan 吞进思考链、用户永远收不到（T9 验收回放二
-      // 实锤：92,277 thinking 字符中 42,851 是被吞的卡）。卡片段（围栏卡 /
-      // inline 卡，经工具返回复述判别豁免）以 token 放行，交给下游
-      // uiHintExtractor 提取 + 校验回路——与终步卡片同一条路径；其余正文
-      // （叙述 / 复述 / 非卡围栏）照旧全量转 thinking，零散文 token。
-      if (stepRaw.trim()) {
-        const { cards, rest } = splitCardSegments(stepRaw, isToolResultEcho);
-        if (rest.trim()) {
-          yield { type: "thinking", text: rest.trim() };
-        }
-        for (const card of cards) {
-          sawAnswerPayload = true;
-          yield { type: "token", text: card };
-        }
-      }
-      resetStep();
-    } else {
-      // Terminal answer step (first snapshot of the turn with a tool-free
-      // AI message). Flush the buffered step text through the batch
-      // splitter — deliberation → leakedThinking, answer → chunked token
-      // events (exact parity with the pre-streaming `.invoke` path) —
-      // then flip `answerLive` so subsequent deltas of THIS step stream
-      // live as tokens (首字延迟 = 该步 prefill + 生成中已缓冲的首段，
-      // 秒级而非整轮)。
-      //
-      // ★终步工具复述剥离（2026-09-23 返工 v3 + v4）：v2 在 flush 前对「整个
-      // stepRaw」跑 looksLikeToolReturnEcho，命中就把复述+正常回答+围栏卡片
-      // 整体吞进 thinking（回放 3 轮正文 0 字符 + 卡片 0 张）。v3 只精确剥
-      // 离「开头的裸工具返回复述段」（stripToolEchoPrefix：动作库/历史 JSON
-      // 粘接串、read_file 编号行、技能文件头签名块）进 thinking，其余
-      // （正常回答 + 围栏卡片）继续走 splitLeakedReasoning：answer 进 token、
-      // 围栏卡片经 uiHint 提取正常落地。拦截只能摘「裸复述」，不能误伤以
-      // ``` 开头的围栏卡片。
-      // ★v4（返工）：v3 只覆盖「前缀」复述，真实模型会在任意位置复述工具
-      // 返回——先写引导语（如"好的我来看看计划生成指南"）再整段 echo
-      // read_file 返回（编号行 frontmatter），复述落在中间/后置时 v3 的
-      // 前导判定全部失效，整段被 splitLeakedReasoning 误判成 answer 放行成
-      // token（协调者实测 6115 / 2480 字符泄漏）。v4 在 splitLeakedReasoning
-      // 之后对 answer 部分再做「全段扫描剥离」（stripToolEchoBlocks）：逐块
-      // 命中复述特征 → 摘进 thinking；未命中 → 保留为 token。双保险：前缀
-      // 剥离（pass 1）+ 任意位置剥离（pass 2）。
-      const { echo, rest } = stripToolEchoPrefix(stepRaw);
-      if (echo) {
-        leakedThinking = leakedThinking ? `${leakedThinking}\n\n${echo}` : echo;
-      }
-      const split = splitLeakedReasoning(rest);
-      if (split.reasoning) {
-        leakedThinking = leakedThinking
-          ? `${leakedThinking}\n\n${split.reasoning}`
-          : split.reasoning;
-      }
-      if (split.answer) {
-        // pass 2（v4）：对 answer 部分逐块扫描，摘任意位置的工具复述块。
-        const mid = stripToolEchoBlocks(split.answer);
-        if (mid.echo) {
-          leakedThinking = leakedThinking
-            ? `${leakedThinking}\n\n${mid.echo}`
-            : mid.echo;
-        }
-        if (mid.rest) {
-          sawAnswerPayload = true;
-          for (const chunk of chunkAnswerText(mid.rest)) {
-            yield { type: "token", text: chunk };
-          }
-        }
-      }
-      // 终步 flush 后清空缓冲：已 flush 的 stepRaw 不得在流尾被二次转
-      // thinking（v1 遗漏——流尾 `if (stepRaw.trim())` 会把刚放行的整段答案
-      // 重复进 thinking 面板）。
-      stepRaw = "";
-      // 复述段剥离后不翻 answerLive 的旧保守行为会再次吞掉「快照之后到达」
-      // 的正常回答 delta——v3 目标是保留正常回答：剥离完复述，剩余/后续 delta
-      // 一律按 token 直通。
-      answerLive = true;
+    // Stream ended mid-step (no closing updates): the undecided buffered
+    // tail is narration by definition — the final answer path always
+    // arrives via an `updates` snapshot, and once it does `answerLive`
+    // streams deltas directly (nothing buffered left). Surface the
+    // residual as thinking so nothing is silently lost — NEVER as token:
+    // an un-snapshotted step has no proof it isn't tool-call narration
+    // (the exact regression this anchor fixes).
+    // ★返工 v5：直通段闸门残余 flush——answerLive 后未完成块的最终判定
+    // （复述 → thinking，正常 → token），避免流尾把待判定内容吞掉。
+    const gateTail = liveGate.flush();
+    if (gateTail.echoes) {
+      leakedThinking = leakedThinking
+        ? `${leakedThinking}\n\n${gateTail.echoes}`
+        : gateTail.echoes;
     }
-  }
-
-  // Stream ended mid-step (no closing updates): the undecided buffered
-  // tail is narration by definition — the final answer path always
-  // arrives via an `updates` snapshot, and once it does `answerLive`
-  // streams deltas directly (nothing buffered left). Surface the
-  // residual as thinking so nothing is silently lost — NEVER as token:
-  // an un-snapshotted step has no proof it isn't tool-call narration
-  // (the exact regression this anchor fixes).
-  // ★返工 v5：直通段闸门残余 flush——answerLive 后未完成块的最终判定
-  // （复述 → thinking，正常 → token），避免流尾把待判定内容吞掉。
-  const gateTail = liveGate.flush();
-  if (gateTail.echoes) {
-    leakedThinking = leakedThinking
-      ? `${leakedThinking}\n\n${gateTail.echoes}`
-      : gateTail.echoes;
-  }
-  if (gateTail.tokens) {
-    sawAnswerPayload = true;
-    for (const chunk of chunkAnswerText(gateTail.tokens)) {
-      yield { type: "token", text: chunk };
+    if (gateTail.tokens) {
+      sawAnswerPayload = true;
+      for (const chunk of chunkAnswerText(gateTail.tokens)) {
+        yield { type: "token", text: chunk };
+      }
     }
-  }
-  if (stepRaw.trim()) {
-    yield { type: "thinking", text: stepRaw.trim() };
-  }
+    if (stepRaw.trim()) {
+      yield { type: "thinking", text: stepRaw.trim() };
+    }
 
-  // Reasoning that leaked into terminal messages goes to the collapsible
-  // thinking panel, never the answer prose.
-  if (leakedThinking) {
-    yield { type: "thinking", text: leakedThinking };
-  }
+    // Reasoning that leaked into terminal messages goes to the collapsible
+    // thinking panel, never the answer prose.
+    if (leakedThinking) {
+      yield { type: "thinking", text: leakedThinking };
+    }
 
-  // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。
-  //   最终答案同样已在循环内逐段/逐 token 实时转发，流尾不再补发。）
+    // （字段级思考链已在循环内逐 delta 实时 yield，此处不再聚合下发。
+    //   最终答案同样已在循环内逐段/逐 token 实时转发，流尾不再补发。）
 
-  // ★空终步守卫（refs #110 §5.4 / #112）：整轮零 token 零 uiHint 零 error
-  // 而流正常收尾 → 发兜底 error 事件（消息内嵌 EMPTY_ANSWER 标识，code 用
-  // 契约既有 MODEL_ERROR——AgentErrorCode 为封闭枚举且本任务冻结
-  // shared/contracts，见 PR 说明），随后 done 照常收流。中间件重滚（见
-  // frameworkTrimMiddleware）已挡住 #110 的主签名，这里是同链路纵深：任何
-  // 残余形态的空轮（真空回、纯思考轮等）都不再以「正在解析数据…」死占位
-  // 呈现给用户。
-  if (!sawAnswerPayload) {
-    yield {
-      type: "error",
-      error: {
-        code: "MODEL_ERROR",
-        message: "本轮回复为空（EMPTY_ANSWER）——模型未产生任何内容，请重试。",
-      },
-    };
+    // #151 S2 流尾兜底排水：最后一个 updates 快照之后执行的 submit（理论
+    // 上不存在——终步 model 快照后不再跑工具）也不丢卡。
+    yield* drainSinkCards();
+
+    // ★空终步守卫（refs #110 §5.4 / #112）：整轮零 token 零 uiHint 零 error
+    // 而流正常收尾 → 发兜底 error 事件（消息内嵌 EMPTY_ANSWER 标识，code 用
+    // 契约既有 MODEL_ERROR——AgentErrorCode 为封闭枚举且本任务冻结
+    // shared/contracts，见 PR 说明），随后 done 照常收流。中间件重滚（见
+    // frameworkTrimMiddleware）已挡住 #110 的主签名，这里是同链路纵深：任何
+    // 残余形态的空轮（真空回、纯思考轮等）都不再以「正在解析数据…」死占位
+    // 呈现给用户。
+    if (!sawAnswerPayload) {
+      yield {
+        type: "error",
+        error: {
+          code: "MODEL_ERROR",
+          message: "本轮回复为空（EMPTY_ANSWER）——模型未产生任何内容，请重试。",
+        },
+      };
+    }
+    yield { type: "done" };
+  } finally {
+    if (threadId) clearThreadCards(threadId);
   }
-  yield { type: "done" };
 }
 
 /**
