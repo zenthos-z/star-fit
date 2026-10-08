@@ -113,6 +113,8 @@ import {
   createHeartRateRepository,
 } from "../../db/postgresql/repository/index.js";
 import { getPostgresClient } from "../../db/postgresql/index.js";
+// #151 S2：卡片 submit 工具内核（通道开关解析在 DeepAgentService；此处只组装）。
+import { buildCardSubmitTools, type CardChannels } from "./cardSubmit.js";
 import { mergeHistorySources } from "./historyMerger.js";
 import { generateExerciseNanoId } from "../../utils/nanoid.js";
 import { createWeeklyPlanRepository } from "../../db/postgresql/repository/weeklyPlan.repository.js";
@@ -1249,10 +1251,19 @@ async function readProfileDynamicMemories(
  * Assemble the agent's domain tools on top of an explicit DB client. The
  * optional `injectedUserId` is a TEST fallback used only when the LangGraph ALS
  * context is absent; production passes `undefined` and resolves per-request.
+ *
+ * #151 S2 双轨：`opts.cardChannels` 提供且某卡型为 tool 通道时，追加对应
+ * submit_xxx 薄工具（内核见 cardSubmit.ts）。不传（旧调用/旧测试）则不追加
+ * ——工具清单与双轨改造前完全一致。
  */
 export function buildMcpToolsWith(
   client: DbClient,
   injectedUserId?: string,
+  opts?: {
+    cardChannels?: CardChannels;
+    injectedThreadId?: string;
+    injectedScenario?: string;
+  },
 ): DynamicStructuredTool[] {
   const loadHistory = new DynamicStructuredTool({
     name: "load_history",
@@ -1727,6 +1738,21 @@ export function buildMcpToolsWith(
   // [B5b issue#38] save_weekly_plan 工具随提案-确认架构移除（见上方工具表
   // 注释）——周计划写入只经确认端点，Agent 不再直接落库。
 
+  // #151 S2 卡片工具通道：channel=tool 的卡型追加 submit_xxx 薄工具
+  // （ExerciseQuery 全集经闭包注入 cardSubmit 内核，防循环依赖）。不传
+  // cardChannels（旧测试）时为空数组，工具清单与改造前一致。
+  const cardSubmitTools = opts?.cardChannels
+    ? buildCardSubmitTools(
+        {
+          listExerciseIds: () => new ExerciseQuery(client).listAllIds(),
+          injectedUserId,
+          injectedThreadId: opts.injectedThreadId,
+          injectedScenario: opts.injectedScenario,
+        },
+        opts.cardChannels,
+      )
+    : [];
+
   return [
     loadHistory,
     listExercises,
@@ -1739,15 +1765,24 @@ export function buildMcpToolsWith(
     writeMemory,
     updateProfile,
     getCurrentPlan,
+    ...cardSubmitTools,
   ];
 }
 
 /**
  * Production entry point (P006: userId resolved per-request via LangGraph ALS;
- * client = singleton). Returns the eleven domain tools.
+ * client = singleton). Returns the eleven domain tools（+ 按 `channels` 追加的
+ * submit_xxx 卡片工具；不传 = 全 fence，不追加——与既有调用兼容）。
+ * 通道解析（DB > env > 默认）在 DeepAgentService.assembleAgent 完成后传入。
  */
-export function buildMcpTools(): DynamicStructuredTool[] {
-  return buildMcpToolsWith(getPostgresClient(), undefined);
+export function buildMcpTools(
+  channels?: CardChannels,
+): DynamicStructuredTool[] {
+  return buildMcpToolsWith(
+    getPostgresClient(),
+    undefined,
+    channels ? { cardChannels: channels } : undefined,
+  );
 }
 
 // ---------------------------------------------------------------------------
