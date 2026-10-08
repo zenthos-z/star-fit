@@ -31,6 +31,10 @@ RUN npm pkg delete scripts.prepare --workspace starfit-agent-backend \
 FROM node:20-alpine AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
+# npm 刷锁（#129/#135）后部分依赖落进 workspace 本地 node_modules（如
+# backend/node_modules/@langchain/anthropic，根层已无此包），只拷根层会 TS2307——
+# workspace 层一并拷贝（shared/ 无本地 node_modules，无需处理）
+COPY --from=deps /app/backend/node_modules ./backend/node_modules
 COPY package.json ./
 COPY shared ./shared
 COPY backend ./backend
@@ -45,6 +49,8 @@ WORKDIR /app
 ENV NODE_ENV=production
 # 运行时只需要生产依赖 + 两个包的编译产物
 COPY --from=prod-deps /app/node_modules ./node_modules
+# 同 builder：生产依赖也有部分落 workspace 本地（backend/node_modules/@langchain/anthropic 等）
+COPY --from=prod-deps /app/backend/node_modules ./backend/node_modules
 COPY package.json ./
 COPY --from=builder /app/backend/dist ./backend/dist
 COPY backend/package.json ./backend/package.json
