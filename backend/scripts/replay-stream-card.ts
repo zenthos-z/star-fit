@@ -44,6 +44,20 @@
  * 用法：
  *   GLM_API_KEY=… DATABASE_URL=… npx tsx scripts/replay-stream-card.ts          # 实况
  *   npx tsx scripts/replay-stream-card.ts --fixtures                            # 离线
+ *
+ * #151 S2 卡片工具通道回放（2026-10-08）：
+ *   npx tsx scripts/replay-stream-card.ts --tool-channel   # survey+weekly 走
+ *     submit_xxx 工具通道（默认通道即 tool/tool/fence，无需 env）；同一剧本
+ *     两轮：turn1 新用户缺画像 → submit_survey 出问卷卡；turn2 补齐信息 →
+ *     submit_weekly_plan 出周计划卡。工具卡经卡汇排水以 uiHint 事件直达
+ *     （不经 token 提取），验收判据（同一剧本双向）：
+ *      - 下限：survey_card 与 weekly_plan 各 ≥1 轮经 uiHint 真实送达；
+ *      - 合规（新增硬失败面）：正文 token 不得再出现卡围栏（```json + 白名单
+ *        卡 body）——工具通道卡写成散文=失败交付，且与工具卡双发=重复渲染；
+ *      - 上限：吞卡判别 0 命中 + 泄漏 <1500 字符（与围栏回放同标准）。
+ *   npx tsx scripts/replay-stream-card.ts --fence          # 围栏回归：进程内
+ *     强制 CARD_CHANNEL_*=fence（DB 无 card_channel_* 键时 env 生效），预期
+ *     走原围栏管道出卡（卡从 token 提取），围栏路径不因双轨改造回归。
  */
 import Fastify from "fastify";
 import type { AgentEvent, ChatRequest } from "shared/contracts";
@@ -60,6 +74,11 @@ const MAX_ROUNDS = Number(process.env.MAX_ROUNDS ?? 6);
 const MAX_TOKEN_CHARS = 1500; // 泄漏上限（散文 token；卡经 uiHint 事件走，不计入）
 const MIN_TOKEN_CHARS = 40; // 正文非空下限（方差豁免记账）
 const EVENTS_DIR = process.env.EVENTS_DIR ?? "/tmp";
+/** #151 S2 模式开关。 */
+const TOOL_CHANNEL_MODE =
+  process.argv.includes("--tool-channel") || process.env.TOOL_CHANNEL === "1";
+const FENCE_MODE =
+  process.argv.includes("--fence") || process.env.FENCE === "1";
 
 const CARD_TYPES = [
   "weekly_plan",
@@ -93,8 +112,29 @@ interface TurnMetrics {
   /** uiHint 首次落地的事件索引与之后仍在流的 thinking 事件数（救援形态签名） */
   firstUiHintIndex: number;
   thinkingAfterUiHint: number;
+  /** #151 S2：正文 token 里出现的卡围栏类型（工具通道合规判据；围栏模式=正常路径） */
+  cardFenceInProse: string[];
   totalEvents: number;
   ms: number;
+}
+
+/**
+ * #151 S2：扫正文 token 全文里的卡围栏（```json + 白名单卡 body）。
+ * 工具通道下出现 = 模型把工具卡写成了散文（失败交付 + 与工具卡双发）。
+ */
+function scanCardFencesInProse(prose: string): string[] {
+  const hits: string[] = [];
+  const re = /```[A-Za-z]*\s*\{([\s\S]*?)```/g;
+  for (const m of prose.matchAll(re)) {
+    try {
+      const parsed = JSON.parse(m[1].trim()) as unknown;
+      const t = (parsed as { type?: unknown })?.type;
+      if (typeof t === "string" && CARD_TYPES.includes(t)) hits.push(t);
+    } catch {
+      /* 非法 JSON 围栏：泄漏治理另有 tokenChars 上限兜底 */
+    }
+  }
+  return hits;
 }
 
 /**
@@ -203,10 +243,12 @@ async function consumeEvents(
     cardSignatureInThinking: [],
     firstUiHintIndex: -1,
     thinkingAfterUiHint: 0,
+    cardFenceInProse: [],
     totalEvents: 0,
     ms: 0,
   };
   const sigs: string[] = [];
+  let proseAll = ""; // #151 S2：正文全文（围栏合规扫描用）
   const startedAt = Date.now();
   const { appendFileSync } = await import("node:fs");
   const logEvent = (obj: Record<string, unknown>): void => {
@@ -251,6 +293,7 @@ async function consumeEvents(
       } else if (ev.type === "token" && ev.text) {
         m.tokenEvents += 1;
         m.tokenChars += ev.text.length;
+        proseAll += ev.text;
         logEvent({
           i,
           type: "token",
@@ -276,6 +319,7 @@ async function consumeEvents(
     m.error = err instanceof Error ? err.message : String(err);
     logEvent({ type: "crash", message: m.error });
   }
+  m.cardFenceInProse = scanCardFencesInProse(proseAll);
   m.ms = Date.now() - startedAt;
   return m;
 }
@@ -338,6 +382,9 @@ async function runRound(base: string, round: number): Promise<RoundResult> {
         `token(事件=${t.tokenEvents}, 字符=${t.tokenChars}) ` +
         `done=${t.done} err=${t.error ? t.error.slice(0, 40) : "N"} ` +
         `${t.ms}ms 卡形态=${rescueShape}` +
+        (t.cardFenceInProse.length > 0
+          ? ` 正文围栏=[${t.cardFenceInProse.join(",")}]`
+          : "") +
         (t.swallowedFenceThinking.length > 0 ? " 【吞卡证据】" : ""),
     );
     for (const sw of t.swallowedFenceThinking) {
@@ -365,6 +412,155 @@ async function runRound(base: string, round: number): Promise<RoundResult> {
     envNotes.push(`全剧本无周计划卡(实际 ${cards.join(",") || "无"})`);
   }
   return { round, turns, verdict, reasons, envNotes, exemptBelowMin };
+}
+
+// ---------------------------------------------------------------------------
+// #151 S2 工具通道回放（--tool-channel）与围栏回归（--fence）
+// ---------------------------------------------------------------------------
+
+/**
+ * 工具通道一轮：同款两轮剧本（新用户 turn1 缺画像 → submit_survey；
+ * turn2 补齐 → submit_weekly_plan）。工具卡经卡汇排水直达 uiHint，
+ * 正文不应再出现卡围栏（合规硬失败面，见文件头注释）。
+ */
+async function runToolChannelRound(
+  base: string,
+  round: number,
+): Promise<RoundResult> {
+  const userId = await createFreshUser(base);
+  const threadId = `replay-s2-r${round}-${Date.now()}`;
+  const eventsFile = `${EVENTS_DIR}/replay-s2-tool-events-r${round}.jsonl`;
+  console.log(
+    `\n=== TOOL-CHANNEL ROUND ${round} (user=${userId} thread=${threadId}) ===`,
+  );
+  const reasons: string[] = [];
+  const envNotes: string[] = [];
+  let exemptBelowMin = 0;
+
+  const t1 = await runTurn(userId, threadId, 1, SCRIPT_TURN1, eventsFile);
+  const turns = [t1];
+  // turn1 已直接出周计划（画像齐的意外路径）则无需 turn2；否则 turn2 补齐。
+  if (!t1.cards.some((c) => c === "weekly_plan")) {
+    const t2 = await runTurn(userId, threadId, 2, SCRIPT_TURN2, eventsFile);
+    turns.push(t2);
+  }
+
+  for (const t of turns) {
+    if (t.swallowedFenceThinking.length > 0) {
+      reasons.push(
+        `turn${t.turn} 吞卡(${t.swallowedFenceThinking.length} 个 thinking 事件含白名单围栏卡)`,
+      );
+    }
+    if (t.tokenChars >= MAX_TOKEN_CHARS) {
+      reasons.push(`turn${t.turn} 泄漏(${t.tokenChars} 字符)`);
+    }
+    if (t.cardFenceInProse.length > 0) {
+      reasons.push(
+        `turn${t.turn} 工具通道合规(正文出现卡围栏 [${t.cardFenceInProse.join(",")}]——工具卡写成散文=失败交付)`,
+      );
+    }
+    if (t.tokenChars <= MIN_TOKEN_CHARS) exemptBelowMin++;
+    if (t.error) {
+      envNotes.push(`turn${t.turn} 流中断(${t.error.slice(0, 60)})`);
+    } else if (t.done && t.tokenChars === 0 && t.cards.length === 0) {
+      envNotes.push(`turn${t.turn} 空终步(GLM 尾包空 content)`);
+    }
+    console.log(
+      `  turn ${t.turn}: cards=[${t.cards.join(",") || "无"}] ` +
+        `thinking(块=${t.thinkingEvents}, 字符=${t.thinkingChars}) ` +
+        `token(事件=${t.tokenEvents}, 字符=${t.tokenChars}) ` +
+        `done=${t.done} err=${t.error ? t.error.slice(0, 40) : "N"} ` +
+        `${t.ms}ms 正文围栏=[${t.cardFenceInProse.join(",") || "无"}]` +
+        (t.swallowedFenceThinking.length > 0 ? " 【吞卡证据】" : ""),
+    );
+  }
+
+  const cards = turns.flatMap((t) => t.cards);
+  const deliveredSurvey = cards.includes("survey_card");
+  const deliveredWeekly = cards.includes("weekly_plan");
+  let verdict: RoundResult["verdict"];
+  if (reasons.length > 0) {
+    verdict = "hardfail";
+  } else if (deliveredSurvey || deliveredWeekly) {
+    // 每轮至少一张工具卡送达即 pass；跨轮聚合（survey 与 weekly 各 ≥1）
+    // 在 toolChannelMain 汇总判定。
+    verdict = "pass";
+  } else {
+    verdict = "env";
+    envNotes.push(`全剧本无卡(实际 ${cards.join(",") || "无"})`);
+  }
+  console.log(
+    `  轮内卡型: survey=${deliveredSurvey ? "✓" : "✗"} weekly=${deliveredWeekly ? "✓" : "✗"}`,
+  );
+  return { round, turns, verdict, reasons, envNotes, exemptBelowMin };
+}
+
+/** 工具通道模式主流程：survey 与 weekly_plan 各 ≥1 轮绿 + 零硬失败。 */
+async function toolChannelMain(): Promise<number> {
+  const app = Fastify({ logger: false });
+  app.post("/api/admin/login-or-create", loginOrCreate);
+  await app.listen({ port: 0, host: "127.0.0.1" });
+  const base = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
+
+  const verdicts: Array<{
+    round: number;
+    verdict: string;
+    survey: boolean;
+    weekly: boolean;
+    reasons?: string[];
+    envNotes?: string[];
+  }> = [];
+  let hardFail = false;
+  for (let r = 1; r <= MAX_ROUNDS && !hardFail; r++) {
+    const res = await runToolChannelRound(base, r);
+    const survey = res.turns.some((t) => t.cards.includes("survey_card"));
+    const weekly = res.turns.some((t) => t.cards.includes("weekly_plan"));
+    if (res.verdict === "hardfail") {
+      hardFail = true;
+      verdicts.push({
+        round: r,
+        verdict: "hardfail",
+        survey,
+        weekly,
+        reasons: res.reasons,
+      });
+      console.log(`ROUND ${r}: HARD FAIL — ${res.reasons.join(" | ")}`);
+      break;
+    }
+    verdicts.push({
+      round: r,
+      verdict: res.verdict,
+      survey,
+      weekly,
+      envNotes: res.envNotes,
+    });
+    console.log(
+      res.verdict === "pass"
+        ? `ROUND ${r}: PASS (survey=${survey ? "✓" : "✗"} weekly=${weekly ? "✓" : "✗"})`
+        : `ROUND ${r}: ENV(不计入) — ${res.envNotes.join(" | ")}`,
+    );
+    const surveyRounds = verdicts.filter(
+      (v) => v.verdict === "pass" && v.survey,
+    ).length;
+    const weeklyRounds = verdicts.filter(
+      (v) => v.verdict === "pass" && v.weekly,
+    ).length;
+    if (surveyRounds >= 1 && weeklyRounds >= 1) break;
+  }
+  await app.close();
+
+  const passRounds = verdicts.filter((v) => v.verdict === "pass");
+  const surveyRounds = passRounds.filter((v) => v.survey).length;
+  const weeklyRounds = passRounds.filter((v) => v.weekly).length;
+  const envCount = verdicts.filter((v) => v.verdict === "env").length;
+  console.log(
+    `\n=== S2 工具通道汇总: PASS 轮=${passRounds.length} ` +
+      `(survey 卡=${surveyRounds} 轮 / weekly 卡=${weeklyRounds} 轮) ` +
+      `环境类=${envCount} 硬失败=${hardFail ? 1 : 0} ===`,
+  );
+  const ok = !hardFail && surveyRounds >= 1 && weeklyRounds >= 1;
+  console.log(ok ? "\nTOOL_REPLAY_PASS" : "\nTOOL_REPLAY_FAIL");
+  return ok ? 0 : 1;
 }
 
 // ---------------------------------------------------------------------------
@@ -622,6 +818,19 @@ async function fixtureMain(): Promise<number> {
 async function main(): Promise<number> {
   if (process.argv.includes("--fixtures") || process.env.FIXTURES === "1") {
     return fixtureMain();
+  }
+  if (TOOL_CHANNEL_MODE) {
+    return toolChannelMain();
+  }
+  if (FENCE_MODE) {
+    // 围栏回归：进程内强制全 fence（DB 无 card_channel_* 键时 env 生效，
+    // 通道解析 DB > env > 默认）。出卡路径应回到原围栏管道（token 提取）。
+    process.env.CARD_CHANNEL_SURVEY_CARD = "fence";
+    process.env.CARD_CHANNEL_WEEKLY_PLAN = "fence";
+    process.env.CARD_CHANNEL_PLAN_CARD = "fence";
+    console.log(
+      "=== #151 S2 围栏回归模式：CARD_CHANNEL_*=fence（预期卡从 token 围栏提取）===",
+    );
   }
   const app = Fastify({ logger: false });
   app.post("/api/admin/login-or-create", loginOrCreate);
