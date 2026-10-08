@@ -115,6 +115,10 @@ import {
 import { getPostgresClient } from "../../db/postgresql/index.js";
 // #151 S2：卡片 submit 工具内核（通道开关解析在 DeepAgentService；此处只组装）。
 import { buildCardSubmitTools, type CardChannels } from "./cardSubmit.js";
+import {
+  buildTemplateTools,
+  createTemplateIdAuditOnce,
+} from "./templateTools.js";
 import { mergeHistorySources } from "./historyMerger.js";
 import { generateExerciseNanoId } from "../../utils/nanoid.js";
 import { createWeeklyPlanRepository } from "../../db/postgresql/repository/weeklyPlan.repository.js";
@@ -1753,6 +1757,17 @@ export function buildMcpToolsWith(
       )
     : [];
 
+  // #151 S3 模板工具：pick_template（目录）+ instantiate_weekly_plan（内核展开）。
+  // 无条件装配（非卡交付通道工具——模板展开在 tool/fence 两种通道下都成立；
+  // fence 回滚位下展开结果仍显著优于自由生成：日期/剂量算术已下放程序层）。
+  // resolveUserId/listExerciseIds 经依赖注入（templateTools 不反向 import 本
+  // 模块——cardSubmit 同款单向防循环）。
+  const templateTools = buildTemplateTools({
+    client,
+    injectedUserId,
+    resolveUserId: getUserIdFromContext,
+  });
+
   return [
     loadHistory,
     listExercises,
@@ -1766,12 +1781,27 @@ export function buildMcpToolsWith(
     updateProfile,
     getCurrentPlan,
     ...cardSubmitTools,
+    ...templateTools,
   ];
 }
 
+// ---------------------------------------------------------------------------
+// #136 L1 模板 id 启动对拍（进程内 once；DeepAgentService.assembleAgent 调用）
+// ---------------------------------------------------------------------------
+
+/**
+ * Agent 首次组装时对拍全部周计划模板 exercise_id ↔ 动作库全集（fire-and-
+ * forget，不阻断组装）。miss 显式报损不摘除模板——L2 submit 闸门兜底，
+ * Agent 对报损模板有自由生成回退路径（spec R6 回滚语义）。
+ */
+export const ensureWeeklyPlanTemplateIdAudit = createTemplateIdAuditOnce(() =>
+  new ExerciseQuery(getPostgresClient()).listAllIds(),
+);
+
 /**
  * Production entry point (P006: userId resolved per-request via LangGraph ALS;
- * client = singleton). Returns the eleven domain tools（+ 按 `channels` 追加的
+ * client = singleton). Returns the eleven domain tools + 模板双件（#151 S3：
+ * pick_template / instantiate_weekly_plan）（+ 按 `channels` 追加的
  * submit_xxx 卡片工具；不传 = 全 fence，不追加——与既有调用兼容）。
  * 通道解析（DB > env > 默认）在 DeepAgentService.assembleAgent 完成后传入。
  */
@@ -1799,12 +1829,17 @@ export function buildMcpTools(
  * 背景：2026-10-03 深研报告实锤——首计划轮 load_history 同轮被调 9 次（纯
  * 重复），每次重复 = 一整步 LLM 思考重读 + 8-56s 往返；缓存命中直接砍掉
  * 重复步 ≈ 省 2-4 分钟/轮（refs #68）。
+ *
+ * #151 S3：+pick_template（目录幂等只读——选型-实例化两步流中目录可能被
+ * 反复查；instantiate_weekly_plan 虽纯函数但按保守惯例不进白名单，语义无
+ * 影响）。
  */
 export const TURN_CACHEABLE_TOOLS: ReadonlySet<string> = new Set([
   "load_history",
   "find_exercises",
   "list_exercises",
   "read_file",
+  "pick_template",
 ]);
 
 /**

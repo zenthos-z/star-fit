@@ -56,7 +56,11 @@ import { loadUiHintFormatSkill } from "./uiHintFormat.js";
 // MCP domain tools (R3): the Agent-only data adapter over the Repository layer.
 // turnToolCacheMiddleware（#116）：同轮幂等只读工具结果缓存，实现见 mcpTools
 // （Agent 工具执行层单一收口，覆盖 mcpTools 读工具 + deepagents read_file）。
-import { buildMcpTools, turnToolCacheMiddleware } from "./mcpTools.js";
+import {
+  buildMcpTools,
+  ensureWeeklyPlanTemplateIdAudit,
+  turnToolCacheMiddleware,
+} from "./mcpTools.js";
 // #151 S2 卡片工具通道：通道解析（DB > env > 默认）+ 卡汇排水/清理
 // （submit_xxx 工具成功路径推卡，classifyAgentStream 发射）。
 import {
@@ -521,6 +525,11 @@ export class DeepAgentService implements AgentService {
     // R3: the Agent-only data adapter (read user/exercise data, write sessions/
     // profile). Parameterless — userId is resolved per-request via configurable.
     const tools = buildMcpTools(cardChannels);
+
+    // #151 S3 L1（#136 第一层）：Agent 首次组装时对拍模板 exercise_id ↔ 动作库
+    // 全集，miss 显式报损不阻断组装（报损模板回退自由生成路径，L2 submit 闸门
+    // 兜底——spec R6 回滚语义）；进程内只跑一次（once 工厂，flag 翻转重建不重查）。
+    void ensureWeeklyPlanTemplateIdAudit();
 
     // R5: every skill under mas/skills/ mounted via native Skills + Filesystem.
     const skillMount = mountAllSkills();

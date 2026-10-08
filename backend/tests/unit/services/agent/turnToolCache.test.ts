@@ -91,11 +91,12 @@ afterEach(() => {
 });
 
 describe("turnToolCacheMiddleware（#116 同轮幂等工具缓存）", () => {
-  it("白名单 = 任务书指定的四个幂等只读工具", () => {
+  it("白名单 = 任务书指定的四个幂等只读工具（#151 S3 +pick_template 目录）", () => {
     expect([...TURN_CACHEABLE_TOOLS].sort()).toEqual([
       "find_exercises",
       "list_exercises",
       "load_history",
+      "pick_template",
       "read_file",
     ]);
   });
