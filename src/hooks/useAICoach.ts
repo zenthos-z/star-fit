@@ -569,23 +569,25 @@ export const useAICoach = (
         // 嵌套分支静默丢弃——缺口 3b 根治）；顶层 raw_injuries 死代码删除（缺口 3c，
         // 伤病/notes 原文随问卷交 Agent 登记）。旧 Agent 措辞卡提交不 crash
         // （未知键忽略，枚举外值 warn+skip）。
-        if (!hasWorkoutData) {
-          try {
-            const responses = (uploadData?.responses ?? uploadData) as Record<string, unknown>;
-            const staticPatch = buildProfileIntakeStaticPatch(responses ?? {});
-            if (staticPatch) {
-              // fire-and-forget：不阻塞 Agent 对话流；401/网络失败由 catch 吞掉
-              fetch(`${API_BASE}/admin/users/${encodeURIComponent(getUserId())}/profile/static`, {
-                method: "PUT",
-                headers: getHeaders(),
-                body: JSON.stringify(staticPatch)
-              }).then(r => {
-                console.log('[useAICoach] Survey static profile sync:', r.ok ? "ok" : `HTTP ${r.status}`);
-              }).catch(() => {});
-            }
-          } catch (e) {
-            console.warn('[useAICoach] static profile patch build failed:', e);
+        // [#157 解除场景限制] 原仅 plan 场景（!hasWorkoutData）执行——workout_complete
+        // 训练后问卷填的 weight_kg/age/height_cm 两头都不写（Agent 动态通道
+        // update_profile 无静态字段写入路径）。写入本就幂等（同值重写无害），
+        // 放开为所有问卷上传场景；fire-and-forget 语义保留（不阻塞对话流）。
+        try {
+          const responses = (uploadData?.responses ?? uploadData) as Record<string, unknown>;
+          const staticPatch = buildProfileIntakeStaticPatch(responses ?? {});
+          if (staticPatch) {
+            // fire-and-forget：不阻塞 Agent 对话流；401/网络失败由 catch 吞掉
+            fetch(`${API_BASE}/admin/users/${encodeURIComponent(getUserId())}/profile/static`, {
+              method: "PUT",
+              headers: getHeaders(),
+              body: JSON.stringify(staticPatch)
+            }).then(r => {
+              console.log('[useAICoach] Survey static profile sync:', r.ok ? "ok" : `HTTP ${r.status}`);
+            }).catch(() => {});
           }
+        } catch (e) {
+          console.warn('[useAICoach] static profile patch build failed:', e);
         }
 
 

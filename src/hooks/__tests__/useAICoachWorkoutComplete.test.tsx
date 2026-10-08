@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { render, renderHook, waitFor, act } from '@testing-library/react';
-import { vi, describe, it, expect, beforeEach } from 'vitest';
+import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest';
 
 const { agentChatMock } = vi.hoisted(() => ({ agentChatMock: vi.fn() }));
 
@@ -233,6 +233,93 @@ describe('B3 #143 结算卡本地直填（workout_complete 分支）', () => {
       expect(m).toBeDefined();
       expect(m?.uiHint).toBeUndefined();
       expect(m?.text).toContain('本次训练概览');
+    });
+  });
+});
+
+/**
+ * [#157] 问卷静态画像写入——所有问卷上传场景都触发 PUT profile/static。
+ * 根因：原实现包在 `if (!hasWorkoutData)` 里，workout_complete 训练后问卷
+ * 填的 weight_kg 两头都不写（update_profile 动态通道无静态字段路径）。
+ */
+describe('#157 问卷上传 → 静态画像确定性写入（解除 hasWorkoutData 条件）', () => {
+  // URL 路由 fetch 桩：被测/依赖端点放行 ok，其余沿用 setup 的离线快败语义
+  const makeFetchMock = () =>
+    vi.fn((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/profile/static') || url.includes('/api/sessions')) {
+        return Promise.resolve({ ok: true, status: 200, json: async () => ({}) });
+      }
+      return Promise.reject(new TypeError('offline (test env)'));
+    });
+
+  const doneStream = () =>
+    (async function* () {
+      yield { type: 'done' };
+    })();
+
+  /** Agent 流必须走完（analysisInProgressRef 清除）才能交问卷，否则 guard 拦截 */
+  const staticPutCalls = (fetchMock: ReturnType<typeof makeFetchMock>) =>
+    fetchMock.mock.calls.filter(([u]) => String(u).includes('/profile/static'));
+
+  afterEach(() => {
+    // 恢复 setup.ts 的离线快败桩语义（vi.stubGlobal 会遮蔽它）
+    vi.stubGlobal('fetch', vi.fn(() => Promise.reject(new TypeError('offline (test env)'))));
+  });
+
+  it('workout_complete 场景问卷上传 → PUT profile/static 被调用且 body 含 basic_info.weight', async () => {
+    const fetchMock = makeFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+    agentChatMock.mockImplementation(doneStream);
+    const { result } = await mountHook();
+
+    // 训练结束 → workoutDataRef 挂上（workout_complete 场景成立）
+    await act(async () => {
+      await result.current.openAiCoach(makeAttachment());
+    });
+    await waitFor(() => {
+      const local = result.current.chatHistory.find(x => x._sessionId === 'sess-b3-1');
+      expect(local?._analysisComplete).toBe(true);
+    });
+
+    // SurveyCard onConfirm 同构载荷（responses 嵌套）
+    await act(async () => {
+      await result.current.handleChatSubmit(
+        undefined,
+        `[UPLOAD_SURVEY_DATA]:${JSON.stringify({ responses: { weight_kg: 70, age: 30 } })}`,
+      );
+    });
+
+    await waitFor(() => {
+      const calls = staticPutCalls(fetchMock);
+      expect(calls).toHaveLength(1);
+      const [url, init] = calls[0] as unknown as [string, RequestInit];
+      expect(String(url)).toContain('/admin/users/b3-local-card-user/profile/static');
+      expect(init.method).toBe('PUT');
+      const body = JSON.parse(String(init.body));
+      expect(body.basic_info.weight).toBe(70);
+      expect(body.basic_info.age).toBe(30);
+    });
+  });
+
+  it('plan 场景问卷上传 → 静态写入保持（解除条件后不回归）', async () => {
+    const fetchMock = makeFetchMock();
+    vi.stubGlobal('fetch', fetchMock);
+    agentChatMock.mockImplementation(doneStream);
+    const { result } = await mountHook();
+
+    await act(async () => {
+      await result.current.handleChatSubmit(
+        undefined,
+        `[UPLOAD_SURVEY_DATA]:${JSON.stringify({ responses: { weight_kg: 62 } })}`,
+      );
+    });
+
+    await waitFor(() => {
+      const calls = staticPutCalls(fetchMock);
+      expect(calls).toHaveLength(1);
+      const body = JSON.parse(String((calls[0] as unknown as [string, RequestInit])[1].body));
+      expect(body.basic_info.weight).toBe(62);
     });
   });
 });
