@@ -338,11 +338,12 @@ const SCENARIO_DATA_GUIDES: Record<string, string> = {
 };
 
 /**
- * plan 场景速查表（2026-09-28 收敛）— 仅保留提示性 reminder（幻影工具禁令 /
- * 出卡自检 / 校验重试语义）。周/日粒度规则、新手起步重量、apply 载荷契约已
- * 收敛到 plan-generation 技能单一真源（SKILL.md 判定表 + knowledge.md §3.2.0），
- * 本表只留指针，不再复述规则全文（42a/issue #42，消除多份近似规则的
- * 思考对齐负担）。长度约束：注入后 buildSystemPrompt 总长不得超出现状 +70 行。
+ * plan 场景速查表（2026-09-28 收敛；#151 S3 更新）— 仅保留提示性 reminder
+ * （周计划模板路径 / 幻影工具禁令 / 出卡自检 / 校验重试语义）。周/日粒度规则、
+ * 新手起步重量、apply 载荷契约已收敛到 plan-generation 技能单一真源
+ * （SKILL.md 判定表 + knowledge.md §11.1、§3.2.0），本表只留指针，不再复述
+ * 规则全文（42a/issue #42，消除多份近似规则的思考对齐负担）。长度约束：注入后
+ * buildSystemPrompt 总长不得超出现状 +70 行。
  */
 const PLAN_SCENARIO_QUICKREF = [
   "## Plan scenario quick reference (condensed reminders only)",
@@ -351,9 +352,17 @@ const PLAN_SCENARIO_QUICKREF = [
   "apply payload contract are NOT restated here — the plan-generation skill",
   "(SKILL.md + knowledge.md §11.1 granularity table, §3.2.0) is the single",
   "source; read it for any plan request.",
+  "Weekly-plan flow (#151 S3): load_history → pick_template →",
+  "instantiate_weekly_plan (template key + overrides; dates, dosages and",
+  "progression are ALL computed server-side — never do that arithmetic",
+  "yourself) → relay the returned card VERBATIM via submit_weekly_plan.",
+  "Modify rounds (fewer days / different equipment) re-instantiate with the",
+  "new overrides; never hand-edit dosages, dates or ids.",
   "Card reminders (full format: uiHint card-format skill): no",
-  "submit_plan/calculate_capacity tools exist — emit the card directly as a",
-  "```json fenced block; id MUST come from list_exercises real entries;",
+  "submit_plan/calculate_capacity tools exist — single-day plan_card is emit",
+  "directly as a ```json fenced block; weekly_plan goes via submit_weekly_plan",
+  "(a card written as prose-only is a failed delivery). id MUST come from",
+  "list_exercises/find_exercises/instantiate_weekly_plan real entries;",
   "explanation non-empty; respect equipment + active limitations (hard).",
   "SELF-CHECK before emitting the card: real ids / type matches library /",
   "integer sets+reps / no weight=0 on resistance / target marker if tomorrow.",

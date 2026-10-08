@@ -37,7 +37,8 @@
 
 选动作一律 `find_exercises` 组合筛选（肌群×模式×器械×难度一次收窄，返回精排
 短列表，主肌群命中优先），**≤3 次调用收敛**：候选不够按 `relax_hint` 放宽单一
-维度补查；**禁止 `list_exercises` 翻页遍历**。流程真源 = SKILL.md 三段式。
+维度补查；**禁止 `list_exercises` 翻页遍历**。周计划首选模板路径（§9.3），
+本节工具链用于模板外补充 / 单日 / 自由生成回退（流程真源 = SKILL.md）。
 
 ---
 
@@ -155,32 +156,17 @@
 
 ## 九、输出格式规范
 
-### 9.1 plan 卡输出方式（无提交工具）
+### 9.1 plan 卡输出方式（单日/会话级）
 
-**不存在 submit_plan 工具**——计划不通过工具提交。生成完整计划后，直接在
-回复正文中输出一个 ```json 围栏包裹的 plan 卡（格式见 uiHint 格式技能），
-正文其余部分保持简短说明。
-
-```json
-{
-  "type": "plan_card",
-  "title": "今日训练",
-  "data": [
-    {
-      "exerciseId": "V1StGXR8_Z5jdHi6",
-      "name": "杠铃深蹲",
-      "exercise_type": "resistance",
-      "sets": 4,
-      "reps": 8,
-      "weight": 60
-    }
-  ]
-}
-```
+plan_card 承载单日 / 明日**会话级**计划（周计划见 §9.3 模板路径）。生成
+完整计划后，直接在回复正文中输出一个 ```json 围栏包裹的 plan 卡（字段
+规格与必填清单见 uiHint 格式技能 + §6 自检清单），正文其余部分保持简短
+说明。**此处不维护示例卡 JSON**——示例卡是模型复述泄漏（#73）与伪造 id
+（#136）的源头，字段契约以 uiHint 格式技能为单一真源。
 
 **常见错误**：
 
-- ❌ 调用不存在的 submit_plan / create_exercise / calculate_capacity 工具
+- ❌ 调用不存在的 submit_plan / calculate_capacity 工具
 - ❌ 将 data 写成嵌套的 JSON 字符串而非数组
 - ❌ reps 使用字符串 "8-12" 而非数字 8
 - ✅ data 直接传递数组对象
@@ -199,114 +185,59 @@ plan 卡由 uiHint 校验回路（M5c）程序化校验：schema 不通过 → �
 | data  | ExercisePlan[]（≥1 个动作）                       |
 | title | 非空字符串                                        |
 
-### 9.3 weekly_plan 卡（周计划提案卡，5.0 / B5b 起；5.4 结构化字段）
+### 9.3 weekly_plan 卡（周计划提案卡；6.0 起首选模板实例化路径）
 
-**周计划请求一律输出 weekly_plan 卡**（5.0 起为提案卡：携带 `data.apply`
-载荷，用户确认后才落库——Agent 没有写计划工具）；单日 / 明日**会话级**
-计划继续用 plan_card，兼容期 plan_card 仍被校验器接受。weekly_plan 卡展示
-**整周**。5.4（T9/#66）起每个训练日必带结构化四件套：`day_focus` /
-`rationale`（展示层 `days[].focus` / `days[].rationale`）+ `category`
-三段分类 + `sets` 逐组处方——**随配参数段一次成型**，不为此增加任何
-探索轮次或工具调用（防膨胀红线）：
+**周计划请求首选模板路径（#151 S3）**——Agent 只做选型与参数化，不逐动作
+展开（日期对齐/器械替换/剂量查表/伤病过滤/周次递进全部由程序层算好，
+AI 绝不介入算术）：
 
-```json
-{
-  "type": "weekly_plan",
-  "data": {
-    "week_label": "第 2 周",
-    "phase_label": "力量块",
-    "split_summary": "推拉腿 · 每周 3 练 · 主项渐进 +1 档",
-    "days": [
-      {
-        "entry_date": "2026-09-21",
-        "split_label": "推",
-        "focus": "胸肩三头",
-        "rationale": "首个推日以复合动作为主建立基础力量，末端肩部轻量收尾",
-        "rest": false,
-        "exercises": [
-          {
-            "exercise_id": "V1StGXR8_Z5jdHi6",
-            "name": "杠铃卧推",
-            "category": "main",
-            "sets": [
-              { "set": 1, "weight": 60, "reps": 8 },
-              { "set": 2, "weight": 65, "reps": 6 }
-            ]
-          },
-          {
-            "exercise_id": "V1StGXR8_Z5jdHi7",
-            "name": "弹力带肩外旋",
-            "category": "warmup",
-            "sets": [{ "set": 1, "reps": 15 }]
-          }
-        ]
-      },
-      { "entry_date": "2026-09-22", "rest": true, "exercises": [] }
-    ],
-    "apply": {
-      "week_id": "2026-W39",
-      "scope": "week",
-      "split": "push_pull_legs",
-      "dates": [],
-      "entries": [
-        {
-          "entry_date": "2026-09-21",
-          "exercise_id": "V1StGXR8_Z5jdHi7",
-          "target_sets": 1,
-          "target_load": { "type": "rpe", "min": 4, "max": 5 },
-          "sort_order": 0,
-          "day_focus": "胸肩三头",
-          "rationale": "首个推日以复合动作为主建立基础力量，末端肩部轻量收尾",
-          "category": "warmup",
-          "sets": [{ "set_no": 1, "reps": 15, "rpe": 4 }]
-        },
-        {
-          "entry_date": "2026-09-21",
-          "exercise_id": "V1StGXR8_Z5jdHi6",
-          "target_sets": 2,
-          "target_load": { "type": "percent_1rm", "min": 70, "max": 80 },
-          "sort_order": 1,
-          "day_focus": "胸肩三头",
-          "rationale": "首个推日以复合动作为主建立基础力量，末端肩部轻量收尾",
-          "category": "main",
-          "sets": [
-            { "set_no": 1, "weight_kg": 60, "reps": 8, "rpe": 7 },
-            { "set_no": 2, "weight_kg": 65, "reps": 6, "rpe": 8 }
-          ]
-        }
-      ]
-    }
-  }
-}
+```
+load_history → pick_template（目录：键/人群/分化/器械面/天数档）
+  → instantiate_weekly_plan（模板键 + 覆盖参数：tier / days_per_week /
+    week_offset / equipment / sex / training_age_months / active_limitations）
+  → 返回的 card 原样经 submit_weekly_plan 提交（数据一比一转述，
+    禁改剂量/日期/动作 id）
 ```
 
-要点：
+- 选型依据：分化与器械面贴合 load_history 读到的用户画像；用户实际器械
+  覆盖不了模板器械面时，换更贴近的模板或传 `equipment` 覆盖参数
+- 未显式覆盖的字段自动从用户 profile 回填（器械面/性别/训练龄/周频率/
+  已登记伤病）；**伤病恒并集**——对话中新提及的部位传 `active_limitations`
+  追加，已登记伤病不可能被 `[]` 豁免。回填清单见工具返回的
+  `profile_defaults_applied`
+- 修改轮（「这周只能练 2 天 / 换自重」）：带新覆盖参数**重调**
+  instantiate_weekly_plan 再提交新卡，不要手改旧卡
+- `ok:false` 结构化错误（UNKNOWN_TEMPLATE / INVALID_PARAMS）按 errors/hint
+  修正参数后重调，**不要降级为散文交付**
+- 通道为 fence（回滚位）时按 uiHint 格式技能走正文围栏，数据面不变
+
+**自由生成回退（模板覆盖不了时）**：无匹配分化 / 模板器械面空洞过多 →
+按 SKILL.md 三段式（策略→选动作→配参数）自行构造 weekly_plan 卡数据
+（结构化四件套与 apply 载荷契约不变，字段表见
+`/data-schema/knowledge/plan.md`）提交。**此处不维护示例卡 JSON**——示例卡
+是模型复述泄漏（#73）与伪造 id（#136）的源头，字段契约以
+`/data-schema/knowledge/plan.md` 为单一真源。
+
+要点（两路径通用）：
 
 - `data` 是**对象**不是数组（与 plan_card 相反）；`days` 覆盖周一至周日整周
-- 每组参数可不同（第 1 组 60kg×8 / 第 2 组 65kg×6）——按组展开正是此卡的
-  意义；`exercise_id` 仍必须来自 find_exercises / list_exercises，禁止编造
-- **结构化四件套（5.4 必带，新提案）**：`day_focus`（日聚焦短标签：腿/胸/
-  背/肩/全身…，与展示层 `days[].focus` 同值）+ `rationale`（当日说明：
-  安排原因/目标/注意要点，一两句，与 `days[].rationale` 同值）同日各条目
-  重复同值；`category` 段位 `warmup|main|cooldown`——同日按**热身→正式→
-  收尾拉伸**三段排 sort_order（展示层 `days[].exercises[].category` 同值）；
-  `sets` 逐组处方 `[{set_no, weight_kg?, reps, rpe}]`（组数=target_sets、
-  set_no 从 1 连续、rpe 逐组可不同；`weight_kg` 自重/弹力带类可省）。
-  展示层 per-set（`set/weight/reps`）与落库处方（`set_no/weight_kg/rpe`）
-  **同源生成**——展示第 1 组 60kg×8，处方第 1 组即 weight_kg 60 / reps 8
-- **思考不预写出卡内容（5.4 防膨胀）**：思考只定动作清单与日结构；重量/
-  RPE 照 §3.2.0 起步表或 load_anchors **直取**并直接写入处方（同一动作
-  各组只递进一个变量：重量或次数），禁止在思考阶段逐组换算或预写整张卡。
-  **出卡消息不得携带 tool_calls**——配参数段开始后不再 read_file/调工具，
-  需要的知识先读完再进本段（工具轮消息的正文会被流层归为思考，卡片无法
-  送达用户）。热身有氧/拉伸条目在**选动作段**一并检索（各 ≤1 次、禁翻
-  页），不拖到配参数段
-- **`apply` 载荷（5.0 必带，新提案）**：确认落库的唯一数据面。scope=week
-  整周（split 必带，严格五枚举）；scope=days 单日覆盖（dates 列出被替换日，
+- `exercise_id` 必须来自 instantiate_weekly_plan 返回 / find_exercises /
+  list_exercises，禁止编造
+- **结构化四件套（5.4 起）**：`day_focus` + `rationale`（同日各条目同值，
+  与展示层 `days[].focus` / `days[].rationale` 同值）+ `category` 段位
+  `warmup|main|cooldown`（同日按**热身→正式→收尾拉伸**三段排 sort_order）
+  - `sets` 逐组处方 `[{set_no, weight_kg?, reps, rpe}]`（组数=target_sets、
+    set_no 从 1 连续、rpe 逐组可不同）。模板路径由内核保证展示层 per-set
+    与落库处方同源；自由生成路径按同一契约构造
+- **算术红线**：模板路径天然满足（剂量/日期/递进程序层产出）；自由生成
+  时重量/RPE 照 §3.2.0 起步表或 load_anchors **直取**，禁止在思考阶段
+  逐组换算。**围栏通道下出卡消息不得携带 tool_calls**——需要的知识先
+  读完再进出卡段（工具轮消息的正文会被流层归为思考，卡无法送达）
+- **`apply` 载荷（5.0 必带）**：确认落库的唯一数据面。scope=week 整周
+  （split 必带，严格五枚举）；scope=days 单日覆盖（dates 列出被替换日，
   entries 只含该日条目）。展示层 `days[].exercises[].name` 用 **name_zh**
-  （list_exercises 直出，禁自翻译）；`sets.length` 必须与对应
-  `apply.entries[].target_sets` 一致（展示与落库同源）。字段级契约真源：
-  `shared/contracts/weekly-plan.ts`，速查表见 `/data-schema/knowledge/plan.md`
+  （禁自翻译）；`sets.length` 必须与对应 `apply.entries[].target_sets`
+  一致（展示与落库同源）
 - **纯净新生成**：卡上没有进度/状态/执行率字段——那是执行层的职责
 - 休息日：`rest: true`、exercises 留空，前端弱化为灰行
 - 确认前数据库无此计划；说明文案点一句「点下方确认后生效」
@@ -480,6 +411,6 @@ name_zh、禁止自行翻译或音译；存储/引用层（exercise_id）与展�
 
 ---
 
-_最后更新时间: 2026-09-30_
-_版本: 5.4.1 - T9/#66：§9.3 结构化四件套一次成型模板 + 思考不预写/出卡轮零工具/热身拉伸检索归选动作段（防膨胀）；§11.1 粒度判定表自 SKILL.md 迁入（单一真源随迁）_
-_历史: 5.3.0 - T2/#54：§1.4 选动作工具链（find_exercises 组合筛选 ≤3 次收敛）；id 真源表述同步；5.2.0 - 42c 场景化拆分：容量/新手/伤病知识拆至 knowledge/ 子目录，§11.2 迁移 data-schema 技能；5.0.0 - 提案-确认模式 + 粒度规则 + 中文名（B5b/issue #38）；4.0.0 - 周计划生成模式（E3/issue #2）；3.1.0 - 移除幻影工具文档，plan 卡直出链路_
+_最后更新时间: 2026-10-08_
+_版本: 6.0.0 - #151 S3：§9.3 周计划首选模板实例化路径（pick_template → instantiate_weekly_plan → submit_weekly_plan，Agent 只选型与参数化）；§9.1/§9.3 示例卡 JSON 删除（#73 复述源 + #136 伪造 id 示例源治理，字段契约单一真源迁 data-schema）；三段式降为自由生成回退_
+_历史: 5.4.1 - T9/#66：§9.3 结构化四件套一次成型模板 + 思考不预写/出卡轮零工具/热身拉伸检索归选动作段（防膨胀）；§11.1 粒度判定表自 SKILL.md 迁入（单一真源随迁）；5.3.0 - T2/#54：§1.4 选动作工具链（find_exercises 组合筛选 ≤3 次收敛）；id 真源表述同步；5.2.0 - 42c 场景化拆分：容量/新手/伤病知识拆至 knowledge/ 子目录，§11.2 迁移 data-schema 技能；5.0.0 - 提案-确认模式 + 粒度规则 + 中文名（B5b/issue #38）；4.0.0 - 周计划生成模式（E3/issue #2）；3.1.0 - 移除幻影工具文档，plan 卡直出链路_
