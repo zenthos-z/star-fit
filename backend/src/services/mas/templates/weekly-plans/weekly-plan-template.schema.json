@@ -1,0 +1,658 @@
+{
+  "type": "object",
+  "properties": {
+    "schema_version": {
+      "type": "number",
+      "const": 1
+    },
+    "key": {
+      "type": "string",
+      "pattern": "^t\\d-[a-z0-9-]+$"
+    },
+    "name_zh": {
+      "type": "string",
+      "minLength": 1
+    },
+    "audience_zh": {
+      "type": "string",
+      "minLength": 1
+    },
+    "description_zh": {
+      "type": "string"
+    },
+    "split": {
+      "type": "string",
+      "enum": ["full_body", "upper_lower", "push_pull_legs", "hybrid", "custom"]
+    },
+    "tier_default": {
+      "type": "string",
+      "enum": ["novice", "intermediate"]
+    },
+    "days_per_week": {
+      "type": "object",
+      "properties": {
+        "min": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "max": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        },
+        "default": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 7
+        }
+      },
+      "required": ["min", "max", "default"]
+    },
+    "default_equipment": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "bodyweight",
+          "barbell",
+          "dumbbell",
+          "kettlebell",
+          "cable",
+          "machine",
+          "band",
+          "bench",
+          "rack",
+          "pull_up_bar",
+          "stability_ball",
+          "medicine_ball",
+          "foam_roller",
+          "weighted",
+          "other"
+        ]
+      }
+    },
+    "days": {
+      "minItems": 1,
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "rank": {
+            "type": "integer",
+            "exclusiveMinimum": 0,
+            "maximum": 9007199254740991
+          },
+          "offset": {
+            "type": "integer",
+            "minimum": 0,
+            "maximum": 6
+          },
+          "label": {
+            "type": "string",
+            "minLength": 1
+          },
+          "focus": {
+            "type": "string"
+          },
+          "rationale": {
+            "type": "string"
+          },
+          "warmup": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "exercise_id": {
+                  "type": "string",
+                  "minLength": 12,
+                  "maxLength": 24
+                },
+                "name_zh": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "equipment": {
+                  "type": "string",
+                  "enum": [
+                    "bodyweight",
+                    "barbell",
+                    "dumbbell",
+                    "kettlebell",
+                    "cable",
+                    "machine",
+                    "band",
+                    "bench",
+                    "rack",
+                    "pull_up_bar",
+                    "stability_ball",
+                    "medicine_ball",
+                    "foam_roller",
+                    "weighted",
+                    "other"
+                  ]
+                },
+                "limb_zone": {
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["upper", "lower"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "metric": {
+                  "default": "reps",
+                  "type": "string",
+                  "enum": ["reps", "duration"]
+                },
+                "note": {
+                  "type": "string"
+                },
+                "contraindicated_parts": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "knee",
+                      "lower_back",
+                      "shoulder",
+                      "wrist",
+                      "elbow",
+                      "ankle"
+                    ]
+                  }
+                },
+                "injury_substitute": {
+                  "type": "object",
+                  "properties": {
+                    "exercise_id": {
+                      "type": "string",
+                      "minLength": 12,
+                      "maxLength": 24
+                    },
+                    "name_zh": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "equipment": {
+                      "type": "string",
+                      "enum": [
+                        "bodyweight",
+                        "barbell",
+                        "dumbbell",
+                        "kettlebell",
+                        "cable",
+                        "machine",
+                        "band",
+                        "bench",
+                        "rack",
+                        "pull_up_bar",
+                        "stability_ball",
+                        "medicine_ball",
+                        "foam_roller",
+                        "weighted",
+                        "other"
+                      ]
+                    },
+                    "start_weight_kg": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["exercise_id", "name_zh", "equipment"]
+                },
+                "variants": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "exercise_id": {
+                        "type": "string",
+                        "minLength": 12,
+                        "maxLength": 24
+                      },
+                      "name_zh": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "equipment": {
+                        "type": "string",
+                        "enum": [
+                          "bodyweight",
+                          "barbell",
+                          "dumbbell",
+                          "kettlebell",
+                          "cable",
+                          "machine",
+                          "band",
+                          "bench",
+                          "rack",
+                          "pull_up_bar",
+                          "stability_ball",
+                          "medicine_ball",
+                          "foam_roller",
+                          "weighted",
+                          "other"
+                        ]
+                      },
+                      "start_weight_kg": {
+                        "default": null,
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["exercise_id", "name_zh", "equipment"]
+                  }
+                },
+                "dosage": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "enum": ["novice", "intermediate"]
+                  },
+                  "required": ["novice", "intermediate"]
+                }
+              },
+              "required": ["exercise_id", "name_zh", "equipment", "dosage"]
+            }
+          },
+          "main": {
+            "minItems": 1,
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "exercise_id": {
+                  "type": "string",
+                  "minLength": 12,
+                  "maxLength": 24
+                },
+                "name_zh": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "equipment": {
+                  "type": "string",
+                  "enum": [
+                    "bodyweight",
+                    "barbell",
+                    "dumbbell",
+                    "kettlebell",
+                    "cable",
+                    "machine",
+                    "band",
+                    "bench",
+                    "rack",
+                    "pull_up_bar",
+                    "stability_ball",
+                    "medicine_ball",
+                    "foam_roller",
+                    "weighted",
+                    "other"
+                  ]
+                },
+                "limb_zone": {
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["upper", "lower"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "metric": {
+                  "default": "reps",
+                  "type": "string",
+                  "enum": ["reps", "duration"]
+                },
+                "note": {
+                  "type": "string"
+                },
+                "contraindicated_parts": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "knee",
+                      "lower_back",
+                      "shoulder",
+                      "wrist",
+                      "elbow",
+                      "ankle"
+                    ]
+                  }
+                },
+                "injury_substitute": {
+                  "type": "object",
+                  "properties": {
+                    "exercise_id": {
+                      "type": "string",
+                      "minLength": 12,
+                      "maxLength": 24
+                    },
+                    "name_zh": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "equipment": {
+                      "type": "string",
+                      "enum": [
+                        "bodyweight",
+                        "barbell",
+                        "dumbbell",
+                        "kettlebell",
+                        "cable",
+                        "machine",
+                        "band",
+                        "bench",
+                        "rack",
+                        "pull_up_bar",
+                        "stability_ball",
+                        "medicine_ball",
+                        "foam_roller",
+                        "weighted",
+                        "other"
+                      ]
+                    },
+                    "start_weight_kg": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["exercise_id", "name_zh", "equipment"]
+                },
+                "variants": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "exercise_id": {
+                        "type": "string",
+                        "minLength": 12,
+                        "maxLength": 24
+                      },
+                      "name_zh": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "equipment": {
+                        "type": "string",
+                        "enum": [
+                          "bodyweight",
+                          "barbell",
+                          "dumbbell",
+                          "kettlebell",
+                          "cable",
+                          "machine",
+                          "band",
+                          "bench",
+                          "rack",
+                          "pull_up_bar",
+                          "stability_ball",
+                          "medicine_ball",
+                          "foam_roller",
+                          "weighted",
+                          "other"
+                        ]
+                      },
+                      "start_weight_kg": {
+                        "default": null,
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["exercise_id", "name_zh", "equipment"]
+                  }
+                },
+                "dosage": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "enum": ["novice", "intermediate"]
+                  },
+                  "required": ["novice", "intermediate"]
+                }
+              },
+              "required": ["exercise_id", "name_zh", "equipment", "dosage"]
+            }
+          },
+          "cooldown": {
+            "default": [],
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "exercise_id": {
+                  "type": "string",
+                  "minLength": 12,
+                  "maxLength": 24
+                },
+                "name_zh": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "equipment": {
+                  "type": "string",
+                  "enum": [
+                    "bodyweight",
+                    "barbell",
+                    "dumbbell",
+                    "kettlebell",
+                    "cable",
+                    "machine",
+                    "band",
+                    "bench",
+                    "rack",
+                    "pull_up_bar",
+                    "stability_ball",
+                    "medicine_ball",
+                    "foam_roller",
+                    "weighted",
+                    "other"
+                  ]
+                },
+                "limb_zone": {
+                  "default": null,
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "enum": ["upper", "lower"]
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "metric": {
+                  "default": "reps",
+                  "type": "string",
+                  "enum": ["reps", "duration"]
+                },
+                "note": {
+                  "type": "string"
+                },
+                "contraindicated_parts": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "string",
+                    "enum": [
+                      "knee",
+                      "lower_back",
+                      "shoulder",
+                      "wrist",
+                      "elbow",
+                      "ankle"
+                    ]
+                  }
+                },
+                "injury_substitute": {
+                  "type": "object",
+                  "properties": {
+                    "exercise_id": {
+                      "type": "string",
+                      "minLength": 12,
+                      "maxLength": 24
+                    },
+                    "name_zh": {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    "equipment": {
+                      "type": "string",
+                      "enum": [
+                        "bodyweight",
+                        "barbell",
+                        "dumbbell",
+                        "kettlebell",
+                        "cable",
+                        "machine",
+                        "band",
+                        "bench",
+                        "rack",
+                        "pull_up_bar",
+                        "stability_ball",
+                        "medicine_ball",
+                        "foam_roller",
+                        "weighted",
+                        "other"
+                      ]
+                    },
+                    "start_weight_kg": {
+                      "default": null,
+                      "anyOf": [
+                        {
+                          "type": "number",
+                          "exclusiveMinimum": 0
+                        },
+                        {
+                          "type": "null"
+                        }
+                      ]
+                    }
+                  },
+                  "required": ["exercise_id", "name_zh", "equipment"]
+                },
+                "variants": {
+                  "default": [],
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "exercise_id": {
+                        "type": "string",
+                        "minLength": 12,
+                        "maxLength": 24
+                      },
+                      "name_zh": {
+                        "type": "string",
+                        "minLength": 1
+                      },
+                      "equipment": {
+                        "type": "string",
+                        "enum": [
+                          "bodyweight",
+                          "barbell",
+                          "dumbbell",
+                          "kettlebell",
+                          "cable",
+                          "machine",
+                          "band",
+                          "bench",
+                          "rack",
+                          "pull_up_bar",
+                          "stability_ball",
+                          "medicine_ball",
+                          "foam_roller",
+                          "weighted",
+                          "other"
+                        ]
+                      },
+                      "start_weight_kg": {
+                        "default": null,
+                        "anyOf": [
+                          {
+                            "type": "number",
+                            "exclusiveMinimum": 0
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      }
+                    },
+                    "required": ["exercise_id", "name_zh", "equipment"]
+                  }
+                },
+                "dosage": {
+                  "type": "object",
+                  "propertyNames": {
+                    "type": "string",
+                    "enum": ["novice", "intermediate"]
+                  },
+                  "required": ["novice", "intermediate"]
+                }
+              },
+              "required": ["exercise_id", "name_zh", "equipment", "dosage"]
+            }
+          }
+        },
+        "required": ["rank", "offset", "label", "main"]
+      }
+    }
+  },
+  "required": [
+    "schema_version",
+    "key",
+    "name_zh",
+    "audience_zh",
+    "split",
+    "tier_default",
+    "days_per_week",
+    "default_equipment",
+    "days"
+  ]
+}

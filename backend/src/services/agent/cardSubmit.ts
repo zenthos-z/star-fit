@@ -149,8 +149,9 @@ export function channelSignature(channels: CardChannels): string {
  * 让 @langchain/core 的入参前置校验（@cfworker/json-schema）对多余键硬失败，
  * 而围栏管道的 zod 校验对未知键是 strip——剥掉后两侧语义一致（宽松绑定，
  * 深校验在 func 内的 zod 回路）。$schema 声明头对 provider 无信息量，同剥。
+ * （S3 起导出复用：周计划模板 schema.json 派生走同一宽松化语义。）
  */
-function loosenJsonSchemaForBinding(node: unknown): unknown {
+export function loosenJsonSchemaForBinding(node: unknown): unknown {
   if (Array.isArray(node)) {
     return node.map(loosenJsonSchemaForBinding);
   }
@@ -494,7 +495,7 @@ async function runSubmitGateChain(
           ok: false,
           code: "UNKNOWN_EXERCISE_ID",
           ids: misses,
-          hint: "exercise_id 不在动作库（exercises 表）里。只能使用 list_exercises/find_exercises 返回的 id，禁止编造。",
+          hint: "exercise_id 不在动作库（exercises 表）里。只能使用 list_exercises/find_exercises（或 instantiate_weekly_plan 返回卡）里的 id，禁止编造；周计划可改走 pick_template → instantiate_weekly_plan 模板路径。",
         });
       }
     }
@@ -670,7 +671,10 @@ function buildToolDescription(cardType: SubmittableCardType): string {
     return (
       head +
       ` 参数即完整卡数据（week_label/split_summary/days + apply 落库载荷）；` +
-      `exercise_id 必须来自 list_exercises/find_exercises 返回的 id。`
+      `周计划首选 pick_template → instantiate_weekly_plan，把返回的 card 原样` +
+      `作为参数提交（禁改剂量/日期/id，修改轮带新覆盖参数重调实例化）；` +
+      `exercise_id 必须来自 instantiate 返回或 list_exercises/find_exercises ` +
+      `返回的 id。`
     );
   }
   return (

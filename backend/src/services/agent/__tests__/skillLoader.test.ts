@@ -64,6 +64,11 @@ import {
 //               收敛共享题库（purpose=profile_intake/plan_gap + 题库 id 映射
 //               表）；novice-starting §3.2.0 门禁表加题库 id 列——SHA 按
 //               磁盘实值重算
+//   2026-10-08  plan-generation knowledge 6.0.0 (#151 S3 技能瘦身)：§9.3
+//               周计划首选模板实例化路径（pick_template →
+//               instantiate_weekly_plan → submit_weekly_plan）；§9.1/§9.3
+//               示例卡 JSON 删除（#73 复述源 + #136 伪造 id 示例源治理，
+//               字段契约单一真源 = data-schema 技能）——SHA 按磁盘实值重算
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
@@ -89,7 +94,7 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "00f2e0920dd3f9ef2916f3da777316566b462b46dd85ec1c1252060adfac4e15",
+    "f5edc6598bf5fa94c3524064e36bc2743779af8dbb79892434e5ee4903574559",
   "plan-generation/knowledge/injury-adjustment.md":
     "d556d96744b2cea9404dd88a085454729ec6ce4e3060712b662692f8ff269e0a",
   "plan-generation/knowledge/novice-starting.md":

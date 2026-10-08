@@ -81,11 +81,11 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
     "00000000-0000-0000-0000-0000000000aa",
   );
 
-  it("builds exactly the eleven named tools", () => {
+  it("builds exactly the thirteen named tools", () => {
     // B5b (230e9c9) removed save_weekly_plan under the proposal-confirm flow;
-    // T2 (#54) added find_exercises (combined-criteria ranked search) — the
-    // list below is the eleven that remain. list_exercises kept for backward
-    // compatibility (keyword browse / paginated detail).
+    // T2 (#54) added find_exercises (combined-criteria ranked search) — eleven
+    // remained. #151 S3 added pick_template + instantiate_weekly_plan
+    // (template catalog + programmatic kernel expansion) → thirteen.
     const names = tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
       "create_exercise",
@@ -94,8 +94,10 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
       "get_exercise_detail",
       "get_hr_trend",
       "get_session_hr_curve",
+      "instantiate_weekly_plan",
       "list_exercises",
       "load_history",
+      "pick_template",
       "update_profile",
       "write_memory",
       "write_session",

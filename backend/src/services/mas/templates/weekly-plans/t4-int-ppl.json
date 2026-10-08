@@ -1,0 +1,1440 @@
+{
+  "schema_version": 1,
+  "key": "t4-int-ppl",
+  "name_zh": "中级 · 推拉腿",
+  "audience_zh": "18 个月以上训练经验、健身房训练，每周 5-6 练",
+  "description_zh": "推拉腿分化：推/拉/腿各两练（力量日 + 容量日），5 练时自动去掉第二个腿日（rank 6）。",
+  "split": "push_pull_legs",
+  "tier_default": "intermediate",
+  "days_per_week": { "min": 5, "max": 6, "default": 6 },
+  "default_equipment": [
+    "machine",
+    "cable",
+    "barbell",
+    "dumbbell",
+    "bench",
+    "rack",
+    "pull_up_bar",
+    "band",
+    "bodyweight"
+  ],
+  "days": [
+    {
+      "rank": 1,
+      "offset": 0,
+      "label": "推 · 力量",
+      "focus": "卧推 + 肩推 + 三头",
+      "rationale": "推力量日：卧推与史密斯肩推双主项，侧束与三头收尾。",
+      "warmup": [
+        {
+          "exercise_id": "a3vYihaqhieaTbpBT0OuB",
+          "name_zh": "动态胸肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v9FufM37NWSHRyEotxI",
+          "name_zh": "弹力带肩部热身拉伸",
+          "equipment": "band",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ],
+      "main": [
+        {
+          "exercise_id": "a3vIsD2kYt413KqYM9eor",
+          "name_zh": "平板杠铃卧推",
+          "equipment": "barbell",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["shoulder"],
+          "variants": [
+            {
+              "exercise_id": "a3vXgGySOrTmcyTzag8fJ",
+              "name_zh": "器械卧推",
+              "equipment": "machine",
+              "start_weight_kg": 20
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": 30
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": 50
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v-HsLIz9feTKiM_yxWv",
+          "name_zh": "史密斯机坐姿肩推举",
+          "equipment": "machine",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["shoulder"],
+          "variants": [
+            {
+              "exercise_id": "a3vj70q0EROZmkzQjDbA6",
+              "name_zh": "军事推举",
+              "equipment": "barbell",
+              "start_weight_kg": 20
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": 15
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": 25
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v_ie84nhmqp2ovs4XdF",
+          "name_zh": "哑铃侧平举",
+          "equipment": "dumbbell",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["shoulder"],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 4
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 7
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vB_OF6DkMX4-YHbAJKv",
+          "name_zh": "绳索三头下压",
+          "equipment": "cable",
+          "limb_zone": "upper",
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 15
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 25
+            }
+          }
+        }
+      ],
+      "cooldown": [
+        {
+          "exercise_id": "a3v0TtDQDDr5tRucHW_VT",
+          "name_zh": "过顶胸肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3veCsuj8NBPw-v6TJ6iY",
+          "name_zh": "跪姿肱三头肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rank": 2,
+      "offset": 1,
+      "label": "拉 · 力量",
+      "focus": "引体 + 俯身划船 + 弯举",
+      "rationale": "拉力量日：自重引体与杠铃划船双主项，EZ 弯举收尾。",
+      "warmup": [
+        {
+          "exercise_id": "a3v4DidkYdIys23kAUJjM",
+          "name_zh": "站姿提膝拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vYihaqhieaTbpBT0OuB",
+          "name_zh": "动态胸肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ],
+      "main": [
+        {
+          "exercise_id": "a3vh8ew0YZgD2zGbBmpXz",
+          "name_zh": "引体向上（正手/反手）",
+          "equipment": "bodyweight",
+          "limb_zone": "upper",
+          "contraindicated_parts": [],
+          "variants": [
+            {
+              "exercise_id": "a3vZhzCgOO6rPmlIM8pBp",
+              "name_zh": "绳索高位下拉",
+              "equipment": "cable",
+              "start_weight_kg": 25
+            }
+          ],
+          "note": "自重动作；无法完成规定次数时减量或用弹力带辅助",
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 4,
+              "reps_max": 8,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v2-4YMcJnrgQChT6B25",
+          "name_zh": "杠铃反握俯身划船",
+          "equipment": "barbell",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["lower_back"],
+          "injury_substitute": {
+            "exercise_id": "a3vY7aqLWVNg-92S37kMv",
+            "name_zh": "坐姿绳索划船（V柄）",
+            "equipment": "cable",
+            "start_weight_kg": 25
+          },
+          "variants": [
+            {
+              "exercise_id": "a3vk3Jf1h2-uXqsxoFTId",
+              "name_zh": "器械高位划船",
+              "equipment": "machine",
+              "start_weight_kg": 20
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": 30
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": 50
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vXHQtbMFKSel_ImEt5T",
+          "name_zh": "EZ杠弯举",
+          "equipment": "barbell",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["wrist"],
+          "variants": [
+            {
+              "exercise_id": "a3vLSZ0fP8LVczT8e0KNK",
+              "name_zh": "哑铃弯举",
+              "equipment": "dumbbell",
+              "start_weight_kg": 6
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 15
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 25
+            }
+          }
+        }
+      ],
+      "cooldown": [
+        {
+          "exercise_id": "a3vrg-EL69n7WyH_oiIVV",
+          "name_zh": "跪姿背阔肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vJbkfBlG78Hs_1guaIU",
+          "name_zh": "中背拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rank": 3,
+      "offset": 2,
+      "label": "腿 · 力量",
+      "focus": "深蹲 + 直腿硬拉 + 提踵",
+      "rationale": "腿力量日：深蹲与 RDL 双主项，站姿提踵收尾。",
+      "warmup": [
+        {
+          "exercise_id": "a3v4DidkYdIys23kAUJjM",
+          "name_zh": "站姿提膝拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v7r7ieNN6LnPJmofFjE",
+          "name_zh": "髋部环绕活动",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v3hnI19EpIkgGesxMfP",
+          "name_zh": "足踝环绕活动",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ],
+      "main": [
+        {
+          "exercise_id": "a3v-whbiAgXeeVDON9ybv",
+          "name_zh": "杠铃后深蹲",
+          "equipment": "barbell",
+          "limb_zone": "lower",
+          "contraindicated_parts": ["knee"],
+          "injury_substitute": {
+            "exercise_id": "a3vf4Tfqw3CHAGc-ND0bv",
+            "name_zh": "臀桥",
+            "equipment": "bodyweight",
+            "start_weight_kg": null
+          },
+          "variants": [
+            {
+              "exercise_id": "a3vyPg6rJRC7Ko3xJ1nO1",
+              "name_zh": "器械水平腿举",
+              "equipment": "machine",
+              "start_weight_kg": 50
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": 40
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": 60
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vUYP6WrjvP3zKBUIpbs",
+          "name_zh": "杠铃直腿硬拉",
+          "equipment": "barbell",
+          "limb_zone": "lower",
+          "contraindicated_parts": ["lower_back"],
+          "injury_substitute": {
+            "exercise_id": "a3vcC5Kvp3bElYO5BU_t5",
+            "name_zh": "器械坐姿腿弯举",
+            "equipment": "machine",
+            "start_weight_kg": 20
+          },
+          "variants": [
+            {
+              "exercise_id": "a3vYKGp3dkPqyL1TCMfyA",
+              "name_zh": "哑铃直腿硬拉",
+              "equipment": "dumbbell",
+              "start_weight_kg": 16
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": 40
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": 70
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vFg3pXaGkvaMfyhnPdL",
+          "name_zh": "器械站姿提踵",
+          "equipment": "machine",
+          "limb_zone": "lower",
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 30
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 50
+            }
+          }
+        }
+      ],
+      "cooldown": [
+        {
+          "exercise_id": "a3v_3R_HIiS9ax0Y-EvxM",
+          "name_zh": "站姿股四头肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v7541Qkf--r0wX_C_3j",
+          "name_zh": "站姿腘绳肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vBkLKO0CbLxZB4Kc-AB",
+          "name_zh": "台阶小腿拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rank": 4,
+      "offset": 4,
+      "label": "推 · 容量",
+      "focus": "上斜推 + 飞鸟 + 侧束 + 肱三头",
+      "rationale": "推容量日：上斜杠铃主项 + 哑铃飞鸟与孤立动作做代谢压力。",
+      "warmup": [
+        {
+          "exercise_id": "a3vYihaqhieaTbpBT0OuB",
+          "name_zh": "动态胸肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v9FufM37NWSHRyEotxI",
+          "name_zh": "弹力带肩部热身拉伸",
+          "equipment": "band",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ],
+      "main": [
+        {
+          "exercise_id": "a3vaw7JEDU40_2UUsiqrj",
+          "name_zh": "杠铃上斜卧推",
+          "equipment": "barbell",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["shoulder"],
+          "variants": [
+            {
+              "exercise_id": "a3vzv-soPdd4GtRA1CEA7",
+              "name_zh": "哑铃上斜卧推",
+              "equipment": "dumbbell",
+              "start_weight_kg": 12
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": 25
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": 40
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v5xohBVOUpnIwNF47I6",
+          "name_zh": "哑铃飞鸟",
+          "equipment": "dumbbell",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["shoulder"],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 6
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 10
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vnMftQOoBRfO7DkdvXV",
+          "name_zh": "器械侧平举",
+          "equipment": "machine",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["shoulder"],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 10
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 15
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vmUrPzdEU8PclcANqme",
+          "name_zh": "哑铃仰卧臂屈伸",
+          "equipment": "dumbbell",
+          "limb_zone": "upper",
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 8
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 12
+            }
+          }
+        }
+      ],
+      "cooldown": [
+        {
+          "exercise_id": "a3v0TtDQDDr5tRucHW_VT",
+          "name_zh": "过顶胸肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3veCsuj8NBPw-v6TJ6iY",
+          "name_zh": "跪姿肱三头肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rank": 5,
+      "offset": 5,
+      "label": "拉 · 容量",
+      "focus": "绳索划船 + 直臂下压 + 牧师弯举",
+      "rationale": "拉容量日：绳索划船与直臂下压做背容量，牧师凳孤立二头。",
+      "warmup": [
+        {
+          "exercise_id": "a3v4DidkYdIys23kAUJjM",
+          "name_zh": "站姿提膝拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vYihaqhieaTbpBT0OuB",
+          "name_zh": "动态胸肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ],
+      "main": [
+        {
+          "exercise_id": "a3vY7aqLWVNg-92S37kMv",
+          "name_zh": "坐姿绳索划船（V柄）",
+          "equipment": "cable",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["lower_back"],
+          "variants": [
+            {
+              "exercise_id": "a3vk3Jf1h2-uXqsxoFTId",
+              "name_zh": "器械高位划船",
+              "equipment": "machine",
+              "start_weight_kg": 20
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 25
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 45
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vbOw8O6ecRzXLZQHdZ4",
+          "name_zh": "绳索直臂下压",
+          "equipment": "cable",
+          "limb_zone": "upper",
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 10
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 18
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vC2p25zuzo-a2QN2PMp",
+          "name_zh": "器械牧师凳弯举",
+          "equipment": "machine",
+          "limb_zone": "upper",
+          "contraindicated_parts": ["wrist"],
+          "variants": [
+            {
+              "exercise_id": "a3vLSZ0fP8LVczT8e0KNK",
+              "name_zh": "哑铃弯举",
+              "equipment": "dumbbell",
+              "start_weight_kg": 6
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 12
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 20
+            }
+          }
+        }
+      ],
+      "cooldown": [
+        {
+          "exercise_id": "a3vrg-EL69n7WyH_oiIVV",
+          "name_zh": "跪姿背阔肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vJbkfBlG78Hs_1guaIU",
+          "name_zh": "中背拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ]
+    },
+    {
+      "rank": 6,
+      "offset": 6,
+      "label": "腿 · 容量",
+      "focus": "前蹲 + 腿弯举 + 山羊挺身",
+      "rationale": "腿容量日（5 练时本日自动省略）：前蹲与孤立动作补下肢容量。",
+      "warmup": [
+        {
+          "exercise_id": "a3v4DidkYdIys23kAUJjM",
+          "name_zh": "站姿提膝拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v7r7ieNN6LnPJmofFjE",
+          "name_zh": "髋部环绕活动",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 10,
+              "reps_max": 10,
+              "rpe_min": 3,
+              "rpe_max": 4,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ],
+      "main": [
+        {
+          "exercise_id": "a3v5ZeI-IVp-xTUlFX-Tp",
+          "name_zh": "杠铃前深蹲",
+          "equipment": "barbell",
+          "limb_zone": "lower",
+          "contraindicated_parts": ["knee"],
+          "variants": [
+            {
+              "exercise_id": "a3vRrJ9qIk1gQvR8xrmDg",
+              "name_zh": "哑铃高脚杯深蹲",
+              "equipment": "dumbbell",
+              "start_weight_kg": 10
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 6,
+              "rpe_max": 7.5,
+              "start_weight_kg": 30
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 6,
+              "reps_max": 10,
+              "rpe_min": 7,
+              "rpe_max": 8.5,
+              "start_weight_kg": 50
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vZ6x6T7VOKrOLeknEGg",
+          "name_zh": "哑铃俯卧腿弯举",
+          "equipment": "dumbbell",
+          "limb_zone": "lower",
+          "contraindicated_parts": [],
+          "variants": [
+            {
+              "exercise_id": "a3vcC5Kvp3bElYO5BU_t5",
+              "name_zh": "器械坐姿腿弯举",
+              "equipment": "machine",
+              "start_weight_kg": 20
+            }
+          ],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 10
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 16
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vWl91zL2u8buZ0NNUy6",
+          "name_zh": "45°山羊挺身",
+          "equipment": "machine",
+          "limb_zone": "lower",
+          "contraindicated_parts": ["lower_back"],
+          "variants": [],
+          "note": "自重完成，控制离心",
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 3,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3v2ML7jL4EEABAMpgP8X",
+          "name_zh": "器械坐姿提踵",
+          "equipment": "machine",
+          "limb_zone": "lower",
+          "contraindicated_parts": [],
+          "variants": [],
+          "dosage": {
+            "novice": {
+              "sets": 3,
+              "reps_min": 10,
+              "reps_max": 15,
+              "rpe_min": 6,
+              "rpe_max": 7,
+              "start_weight_kg": 25
+            },
+            "intermediate": {
+              "sets": 4,
+              "reps_min": 8,
+              "reps_max": 12,
+              "rpe_min": 7,
+              "rpe_max": 8,
+              "start_weight_kg": 40
+            }
+          }
+        }
+      ],
+      "cooldown": [
+        {
+          "exercise_id": "a3v09zr-JJLyPaJTya5_P",
+          "name_zh": "交叉跪姿髋屈肌拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        },
+        {
+          "exercise_id": "a3vBkLKO0CbLxZB4Kc-AB",
+          "name_zh": "台阶小腿拉伸",
+          "equipment": "bodyweight",
+          "limb_zone": null,
+          "contraindicated_parts": [],
+          "variants": [],
+          "note": "每次保持 20-30 秒",
+          "dosage": {
+            "novice": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            },
+            "intermediate": {
+              "sets": 2,
+              "reps_min": 8,
+              "reps_max": 8,
+              "rpe_min": 1,
+              "rpe_max": 2,
+              "start_weight_kg": null
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

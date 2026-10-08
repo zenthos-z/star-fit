@@ -58,6 +58,18 @@
  *   npx tsx scripts/replay-stream-card.ts --fence          # 围栏回归：进程内
  *     强制 CARD_CHANNEL_*=fence（DB 无 card_channel_* 键时 env 生效），预期
  *     走原围栏管道出卡（卡从 token 提取），围栏路径不因双轨改造回归。
+ *
+ * #151 S3 模板路径回放（--template，2026-10-08）：默认通道（tool/tool/fence）
+ * 下验证「pick_template → instantiate_weekly_plan → submit_weekly_plan」全链。
+ * 剧本两轮同线程：turn1 居家新手全要素（预期 T1 模板实例化出周计划卡）；
+ * turn2 修改轮——换器械面（哑铃→自重）+ 缩天数（spec §6 验收门「改一天/换器械」），
+ * 预期重实例化再出周计划卡。模板指纹 = 卡数据 phase_label/split_summary 携带
+ * 模板名与「· 每周 N 练 · 新手档/进阶档」形态（内核独有措辞，自由生成不可复现）。
+ * 判定：
+ *  - 硬失败：吞卡 / 泄漏 / 正文卡围栏（与 --tool-channel 同标准）；
+ *  - PASS：turn1 与 turn2 均送达 weekly_plan 卡，且 turn1 命中模板指纹；
+ *  - 环境类：出卡但未命中指纹（模型走了自由生成回退——技能指引问题，非流层
+ *    回归）/ 空终步 / 流中断 / 全剧本无卡。
  */
 import Fastify from "fastify";
 import type { AgentEvent, ChatRequest } from "shared/contracts";
@@ -68,6 +80,7 @@ import {
   deepAgentService,
 } from "../src/services/agent/DeepAgentService.js";
 import { extractUiHintEvents } from "../src/services/agent/uiHintExtractor.js";
+import { loadWeeklyPlanTemplates } from "../src/services/agent/planTemplates.js";
 
 const VERDICT_ROUNDS = Number(process.env.VERDICT_ROUNDS ?? 3);
 const MAX_ROUNDS = Number(process.env.MAX_ROUNDS ?? 6);
@@ -79,6 +92,9 @@ const TOOL_CHANNEL_MODE =
   process.argv.includes("--tool-channel") || process.env.TOOL_CHANNEL === "1";
 const FENCE_MODE =
   process.argv.includes("--fence") || process.env.FENCE === "1";
+/** #151 S3 模式开关：模板路径回放（pick_template → instantiate → submit 全链）。 */
+const TEMPLATE_MODE =
+  process.argv.includes("--template") || process.env.TEMPLATE === "1";
 
 const CARD_TYPES = [
   "weekly_plan",
@@ -114,6 +130,8 @@ interface TurnMetrics {
   thinkingAfterUiHint: number;
   /** #151 S2：正文 token 里出现的卡围栏类型（工具通道合规判据；围栏模式=正常路径） */
   cardFenceInProse: string[];
+  /** #151 S3：送达卡的指纹快照（模板路径判定；见 templateFingerprintHit） */
+  cardMeta: Array<Record<string, unknown>>;
   totalEvents: number;
   ms: number;
 }
@@ -205,6 +223,54 @@ function cardSignatures(card: Record<string, unknown>): string[] {
   return sigs;
 }
 
+/**
+ * #151 S3 模板指纹：内核实例化卡的 phase_label 携带模板名（如「新手 · 居家
+ * 全身」），split_summary 携带「{模板名} · 每周 N 练 · 新手档/进阶档」——
+ * instantiateWeeklyPlan 的独有措辞，Agent 自由生成不可逐字复现。命中即证
+ * 周计划经模板路径产出（Agent 原样转述内核 card）。
+ */
+function templateFingerprintHit(card: Record<string, unknown>): string | null {
+  const data = card["data"];
+  if (!data || typeof data !== "object" || Array.isArray(data)) return null;
+  const d = data as Record<string, unknown>;
+  const phase = typeof d.phase_label === "string" ? d.phase_label : "";
+  const summary = typeof d.split_summary === "string" ? d.split_summary : "";
+  const names = loadWeeklyPlanTemplates().map((t) => t.name_zh);
+  const byPhase = names.find((n) => phase.includes(n) || n.includes(phase));
+  if (byPhase) return byPhase;
+  const m = /^(.+?) · 每周 \d 练 · (新手档|进阶档)$/.exec(summary);
+  if (m) {
+    const bySummary = names.find(
+      (n) => summary.includes(n) || m[1].includes(n) || n.includes(m[1]),
+    );
+    if (bySummary) return bySummary;
+  }
+  return null;
+}
+
+/** 卡指纹快照（uiHint 事件计量用；phase/summary/week_id 供模板路径判定）。 */
+function cardMetaSnapshot(
+  card: Record<string, unknown>,
+): Record<string, unknown> {
+  const data = card["data"];
+  const d =
+    data && typeof data === "object" && !Array.isArray(data)
+      ? (data as Record<string, unknown>)
+      : {};
+  const apply =
+    d.apply && typeof d.apply === "object" && !Array.isArray(d.apply)
+      ? (d.apply as Record<string, unknown>)
+      : {};
+  const days = Array.isArray(d.days) ? d.days.length : undefined;
+  return {
+    type: card["type"],
+    phase_label: d.phase_label,
+    split_summary: d.split_summary,
+    week_id: apply.week_id,
+    days,
+  };
+}
+
 /** 跑一轮（一个 turn），消费完整 AgentEvent 流并计量；事件时间线落 JSONL。 */
 async function runTurn(
   userId: string,
@@ -244,6 +310,7 @@ async function consumeEvents(
     firstUiHintIndex: -1,
     thinkingAfterUiHint: 0,
     cardFenceInProse: [],
+    cardMeta: [],
     totalEvents: 0,
     ms: 0,
   };
@@ -307,6 +374,7 @@ async function consumeEvents(
         m.cards.push(cardType);
         if (m.firstUiHintIndex === -1) m.firstUiHintIndex = i;
         sigs.push(...cardSignatures(ev.card as Record<string, unknown>));
+        m.cardMeta.push(cardMetaSnapshot(ev.card as Record<string, unknown>));
         logEvent({ i, type: "uiHint", cardType });
       } else if (ev.type === "done") {
         m.done = true;
@@ -560,6 +628,176 @@ async function toolChannelMain(): Promise<number> {
   );
   const ok = !hardFail && surveyRounds >= 1 && weeklyRounds >= 1;
   console.log(ok ? "\nTOOL_REPLAY_PASS" : "\nTOOL_REPLAY_FAIL");
+  return ok ? 0 : 1;
+}
+
+// ---------------------------------------------------------------------------
+// #151 S3 模板路径回放（--template）
+// ---------------------------------------------------------------------------
+
+/** 剧本：turn1 居家新手全要素（预期 T1 实例化）；turn2 修改轮（换器械+缩天数）。 */
+const SCRIPT_TPL_TURN1 =
+  "我是健身新手，刚练一个多月，在家里训练，家里有一副可调哑铃和哑铃凳。" +
+  "每周想练 3 次，目标是增肌，没有伤病。帮我安排这周的训练计划。";
+const SCRIPT_TPL_TURN2 =
+  "哑铃借给朋友了，这周只能用自重练；而且临时有事只能练 2 天。" +
+  "帮我把这周的计划改成自重 2 天的版本。";
+
+/**
+ * 模板路径一轮：turn1 全要素选模板出卡；turn2 修改轮（换器械面 + 缩天数）
+ * 预期重实例化再出卡。判定见文件头 --template 注释。
+ */
+async function runTemplateRound(
+  base: string,
+  round: number,
+): Promise<RoundResult & { templateHit: boolean; weeklyTurn2: boolean }> {
+  const userId = await createFreshUser(base);
+  const threadId = `replay-s3-r${round}-${Date.now()}`;
+  const eventsFile = `${EVENTS_DIR}/replay-s3-template-events-r${round}.jsonl`;
+  console.log(
+    `\n=== TEMPLATE ROUND ${round} (user=${userId} thread=${threadId}) ===`,
+  );
+  const reasons: string[] = [];
+  const envNotes: string[] = [];
+  let exemptBelowMin = 0;
+
+  const t1 = await runTurn(userId, threadId, 1, SCRIPT_TPL_TURN1, eventsFile);
+  const t2 = await runTurn(userId, threadId, 2, SCRIPT_TPL_TURN2, eventsFile);
+  const turns = [t1, t2];
+
+  for (const t of turns) {
+    if (t.swallowedFenceThinking.length > 0) {
+      reasons.push(
+        `turn${t.turn} 吞卡(${t.swallowedFenceThinking.length} 个 thinking 事件含白名单围栏卡)`,
+      );
+    }
+    if (t.tokenChars >= MAX_TOKEN_CHARS) {
+      reasons.push(`turn${t.turn} 泄漏(${t.tokenChars} 字符)`);
+    }
+    if (t.cardFenceInProse.length > 0) {
+      reasons.push(
+        `turn${t.turn} 工具通道合规(正文出现卡围栏 [${t.cardFenceInProse.join(",")}])`,
+      );
+    }
+    if (t.tokenChars <= MIN_TOKEN_CHARS) exemptBelowMin++;
+    if (t.error) {
+      envNotes.push(`turn${t.turn} 流中断(${t.error.slice(0, 60)})`);
+    } else if (t.done && t.tokenChars === 0 && t.cards.length === 0) {
+      envNotes.push(`turn${t.turn} 空终步(GLM 尾包空 content)`);
+    }
+    const weeklyMeta = t.cardMeta.filter((c) => c.type === "weekly_plan");
+    const fp = weeklyMeta
+      .map((c) => (c.phase_label ?? "") + " | " + (c.split_summary ?? ""))
+      .join(" ;; ");
+    console.log(
+      `  turn ${t.turn}: cards=[${t.cards.join(",") || "无"}] ` +
+        `thinking(块=${t.thinkingEvents}, 字符=${t.thinkingChars}) ` +
+        `token(事件=${t.tokenEvents}, 字符=${t.tokenChars}) ` +
+        `done=${t.done} err=${t.error ? t.error.slice(0, 40) : "N"} ${t.ms}ms` +
+        (fp ? ` 周卡指纹=[${fp.slice(0, 120)}]` : "") +
+        (t.cardFenceInProse.length > 0
+          ? ` 正文围栏=[${t.cardFenceInProse.join(",")}]`
+          : "") +
+        (t.swallowedFenceThinking.length > 0 ? " 【吞卡证据】" : ""),
+    );
+  }
+
+  const weeklyTurn1 = t1.cards.includes("weekly_plan");
+  const weeklyTurn2 = t2.cards.includes("weekly_plan");
+  // 模板指纹：turn1 送达的周卡 phase_label/split_summary 命中模板名
+  const templateHit = t1.cardMeta
+    .filter((c) => c.type === "weekly_plan")
+    .some((c) => {
+      const card = { type: "weekly_plan", data: c } as Record<string, unknown>;
+      return templateFingerprintHit(card) !== null;
+    });
+
+  let verdict: RoundResult["verdict"];
+  if (reasons.length > 0) {
+    verdict = "hardfail";
+  } else if (weeklyTurn1 && weeklyTurn2 && templateHit) {
+    verdict = "pass";
+  } else {
+    verdict = "env";
+    if (weeklyTurn1 && !templateHit) {
+      envNotes.push(
+        "turn1 周卡未命中模板指纹(模型走了自由生成回退——技能指引问题，非流层回归)",
+      );
+    } else if (!weeklyTurn1) {
+      envNotes.push(`turn1 无周计划卡(实际 ${t1.cards.join(",") || "无"})`);
+    }
+    if (!weeklyTurn2) {
+      envNotes.push(
+        `turn2 修改轮无周计划卡(实际 ${t2.cards.join(",") || "无"})`,
+      );
+    }
+  }
+  console.log(
+    `  轮内判定: turn1周卡=${weeklyTurn1 ? "✓" : "✗"} turn2修改轮周卡=${weeklyTurn2 ? "✓" : "✗"} 模板指纹=${templateHit ? "✓" : "✗"}`,
+  );
+  return {
+    round,
+    turns,
+    verdict,
+    reasons,
+    envNotes,
+    exemptBelowMin,
+    templateHit,
+    weeklyTurn2,
+  };
+}
+
+/** 模板模式主流程：≥1 轮全绿（双轮出卡 + 指纹命中）+ 零硬失败。 */
+async function templateMain(): Promise<number> {
+  const app = Fastify({ logger: false });
+  app.post("/api/admin/login-or-create", loginOrCreate);
+  await app.listen({ port: 0, host: "127.0.0.1" });
+  const base = `http://127.0.0.1:${(app.server.address() as { port: number }).port}`;
+
+  const verdicts: Array<{
+    round: number;
+    verdict: string;
+    templateHit?: boolean;
+    weeklyTurn2?: boolean;
+    reasons?: string[];
+    envNotes?: string[];
+  }> = [];
+  let hardFail = false;
+  for (let r = 1; r <= MAX_ROUNDS && !hardFail; r++) {
+    const res = await runTemplateRound(base, r);
+    if (res.verdict === "hardfail") {
+      hardFail = true;
+      verdicts.push({
+        round: r,
+        verdict: "hardfail",
+        reasons: res.reasons,
+      });
+      console.log(`ROUND ${r}: HARD FAIL — ${res.reasons.join(" | ")}`);
+      break;
+    }
+    verdicts.push({
+      round: r,
+      verdict: res.verdict,
+      templateHit: res.templateHit,
+      weeklyTurn2: res.weeklyTurn2,
+      envNotes: res.envNotes,
+    });
+    console.log(
+      res.verdict === "pass"
+        ? `ROUND ${r}: PASS (模板指纹 ✓ 修改轮周卡 ✓)`
+        : `ROUND ${r}: ENV(不计入) — ${res.envNotes.join(" | ")}`,
+    );
+    if (verdicts.some((v) => v.verdict === "pass")) break;
+  }
+  await app.close();
+
+  const passCount = verdicts.filter((v) => v.verdict === "pass").length;
+  const envCount = verdicts.filter((v) => v.verdict === "env").length;
+  console.log(
+    `\n=== S3 模板路径汇总: PASS 轮=${passCount}/${1} 环境类=${envCount} 硬失败=${hardFail ? 1 : 0} ===`,
+  );
+  const ok = !hardFail && passCount >= 1;
+  console.log(ok ? "\nTEMPLATE_REPLAY_PASS" : "\nTEMPLATE_REPLAY_FAIL");
   return ok ? 0 : 1;
 }
 
@@ -818,6 +1056,9 @@ async function fixtureMain(): Promise<number> {
 async function main(): Promise<number> {
   if (process.argv.includes("--fixtures") || process.env.FIXTURES === "1") {
     return fixtureMain();
+  }
+  if (TEMPLATE_MODE) {
+    return templateMain();
   }
   if (TOOL_CHANNEL_MODE) {
     return toolChannelMain();
