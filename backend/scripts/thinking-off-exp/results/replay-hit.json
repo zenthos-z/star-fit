@@ -1,0 +1,196 @@
+{
+  "schema": "thinking-off-replay/1",
+  "ranAt": "2026-10-09T15:56:16.194Z",
+  "group": "hit",
+  "thinkingSwitch": "THINKING_DISABLED_CHAT=true (env, source verified by self-check)",
+  "scenario": "chat（#160 实锤的真实路径：isPlanMode 死路）",
+  "turnsAttempted": 4,
+  "runs": [
+    {
+      "run": 1,
+      "userId": "1b2cf43e-0ca7-49ab-ae1b-47cb872c7ebb",
+      "threadId": "think-off-hit-r1-mv158we4",
+      "cpThreadId": "1b2cf43e-0ca7-49ab-ae1b-47cb872c7ebb:think-off-hit-r1-mv158we4",
+      "turns": [
+        {
+          "turn": 1,
+          "label": "survey_round",
+          "thinkingEvents": 32,
+          "thinkingChars": 4630,
+          "tokenEvents": 2,
+          "tokenChars": 25,
+          "cards": [
+            "survey_card"
+          ],
+          "cardMeta": [
+            {
+              "type": "survey_card"
+            }
+          ],
+          "templateFingerprint": null,
+          "done": true,
+          "error": null,
+          "ms": 14237,
+          "timeline": {
+            "firstEventAt": 4451,
+            "firstThinkingAt": 4451,
+            "lastThinkingAt": 14237,
+            "firstTokenAt": 14237,
+            "firstCardAt": 11830,
+            "doneAt": 14237
+          },
+          "thinkingSpanMs": 9786,
+          "validationRetries": 0,
+          "leakSuspects": 0
+        },
+        {
+          "turn": 2,
+          "label": "plan_round",
+          "thinkingEvents": 144,
+          "thinkingChars": 17733,
+          "tokenEvents": 2,
+          "tokenChars": 101,
+          "cards": [
+            "weekly_plan"
+          ],
+          "cardMeta": [
+            {
+              "type": "weekly_plan",
+              "split_summary": "新手 · 居家全身 · 每周 3 练 · 新手档"
+            }
+          ],
+          "templateFingerprint": "新手 · 居家全身",
+          "done": true,
+          "error": null,
+          "ms": 105913,
+          "timeline": {
+            "firstEventAt": 4087,
+            "firstThinkingAt": 4087,
+            "lastThinkingAt": 105913,
+            "firstTokenAt": 105912,
+            "firstCardAt": 99045,
+            "doneAt": 105913
+          },
+          "thinkingSpanMs": 101826,
+          "validationRetries": 0,
+          "leakSuspects": 1
+        }
+      ],
+      "toolRounds": [
+        {
+          "turn": 1,
+          "modelRounds": 3,
+          "toolCalls": [
+            "read_file",
+            "load_history",
+            "get_current_plan",
+            "submit_survey"
+          ]
+        },
+        {
+          "turn": 2,
+          "modelRounds": 5,
+          "toolCalls": [
+            "pick_template",
+            "instantiate_weekly_plan",
+            "submit_weekly_plan",
+            "submit_weekly_plan"
+          ]
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "userId": "2ca1c683-bb18-4511-96fc-77f22d55c855",
+      "threadId": "think-off-hit-r2-mv15bh4n",
+      "cpThreadId": "2ca1c683-bb18-4511-96fc-77f22d55c855:think-off-hit-r2-mv15bh4n",
+      "turns": [
+        {
+          "turn": 1,
+          "label": "survey_round",
+          "thinkingEvents": 27,
+          "thinkingChars": 4614,
+          "tokenEvents": 2,
+          "tokenChars": 47,
+          "cards": [
+            "survey_card"
+          ],
+          "cardMeta": [
+            {
+              "type": "survey_card"
+            }
+          ],
+          "templateFingerprint": null,
+          "done": true,
+          "error": null,
+          "ms": 13641,
+          "timeline": {
+            "firstEventAt": 1435,
+            "firstThinkingAt": 1435,
+            "lastThinkingAt": 13641,
+            "firstTokenAt": 13640,
+            "firstCardAt": 8715,
+            "doneAt": 13641
+          },
+          "thinkingSpanMs": 12206,
+          "validationRetries": 0,
+          "leakSuspects": 0
+        },
+        {
+          "turn": 2,
+          "label": "plan_round",
+          "thinkingEvents": 108,
+          "thinkingChars": 16002,
+          "tokenEvents": 2,
+          "tokenChars": 196,
+          "cards": [
+            "weekly_plan"
+          ],
+          "cardMeta": [
+            {
+              "type": "weekly_plan",
+              "phase_label": "新手 · 居家全身",
+              "split_summary": "新手 · 居家全身 · 每周 3 练 · 新手档"
+            }
+          ],
+          "templateFingerprint": "新手 · 居家全身",
+          "done": true,
+          "error": null,
+          "ms": 100335,
+          "timeline": {
+            "firstEventAt": 1203,
+            "firstThinkingAt": 1203,
+            "lastThinkingAt": 100335,
+            "firstTokenAt": 100334,
+            "firstCardAt": 92089,
+            "doneAt": 100335
+          },
+          "thinkingSpanMs": 99132,
+          "validationRetries": 0,
+          "leakSuspects": 1
+        }
+      ],
+      "toolRounds": [
+        {
+          "turn": 1,
+          "modelRounds": 3,
+          "toolCalls": [
+            "read_file",
+            "load_history",
+            "get_current_plan",
+            "submit_survey"
+          ]
+        },
+        {
+          "turn": 2,
+          "modelRounds": 4,
+          "toolCalls": [
+            "pick_template",
+            "instantiate_weekly_plan",
+            "submit_weekly_plan"
+          ]
+        }
+      ]
+    }
+  ]
+}
