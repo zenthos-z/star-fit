@@ -1,0 +1,76 @@
+{
+  "schema": "jev-nodes-replay-baseline/1",
+  "ranAt": "2026-10-09T13:52:35.146Z",
+  "scenario": "chat（#160 实锤的真实路径：isPlanMode 死路）",
+  "turnsAttempted": 2,
+  "runs": [
+    {
+      "run": 1,
+      "userId": "6f516c63-334d-4051-add4-5d77c43baa77",
+      "threadId": "jev-nodes-r1-mv10uhrg",
+      "turns": [
+        {
+          "turn": 1,
+          "label": "survey_round",
+          "thinkingEvents": 487,
+          "thinkingChars": 6475,
+          "tokenEvents": 2,
+          "tokenChars": 32,
+          "cards": [
+            "survey_card"
+          ],
+          "cardMeta": [
+            {
+              "type": "survey_card"
+            }
+          ],
+          "templateFingerprint": null,
+          "done": true,
+          "error": null,
+          "ms": 25897,
+          "timeline": {
+            "firstEventAt": 4278,
+            "firstThinkingAt": 4278,
+            "lastThinkingAt": 25897,
+            "firstTokenAt": 25896,
+            "firstCardAt": 20636,
+            "doneAt": 25897
+          },
+          "thinkingSpanMs": 21619
+        },
+        {
+          "turn": 2,
+          "label": "plan_round",
+          "thinkingEvents": 2917,
+          "thinkingChars": 28071,
+          "tokenEvents": 2,
+          "tokenChars": 232,
+          "cards": [
+            "weekly_plan"
+          ],
+          "cardMeta": [
+            {
+              "type": "weekly_plan",
+              "phase_label": "新手 · 居家全身",
+              "split_summary": "新手 · 居家全身 · 每周 3 练 · 新手档"
+            }
+          ],
+          "templateFingerprint": "新手 · 居家全身",
+          "done": true,
+          "error": null,
+          "ms": 167780,
+          "timeline": {
+            "firstEventAt": 3885,
+            "firstThinkingAt": 3885,
+            "lastThinkingAt": 167780,
+            "firstTokenAt": 167780,
+            "firstCardAt": 154513,
+            "doneAt": 167780
+          },
+          "thinkingSpanMs": 163895
+        }
+      ],
+      "toolRounds": []
+    }
+  ]
+}

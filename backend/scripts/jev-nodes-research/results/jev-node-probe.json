@@ -1,0 +1,562 @@
+{
+  "summary": {
+    "schema": "jev-nodes-probe/1",
+    "ranAt": "2026-10-09T13:31:45.677Z",
+    "endpoint": "https://www.dmxapi.cn/typesafe/v1/systemone",
+    "model": "jev-1.13.0",
+    "calls": 22,
+    "failures": 0,
+    "n1_missingSet": {
+      "hit": 11,
+      "total": 12
+    },
+    "n2_path": {
+      "hit": 7,
+      "total": 12
+    },
+    "n3_tier": {
+      "hit": 10,
+      "total": 10
+    },
+    "latency": {
+      "p50": 748,
+      "min": 625,
+      "max": 2127
+    },
+    "usage": {
+      "inputTokens": 20943,
+      "outputTokens": 3342,
+      "costUsd": 0.00088
+    }
+  },
+  "results": [
+    {
+      "node": "N1+N2",
+      "sample": "v01-全空-要计划",
+      "ok": true,
+      "ms": 947,
+      "missingGot": [
+        "goal",
+        "experience",
+        "weight_kg",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingExpected": [
+        "goal",
+        "experience",
+        "weight_kg",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "full_intake",
+      "pathExpected": "full_intake",
+      "pathHit": true,
+      "pathConfidence": 1,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 1
+      },
+      "usage": {
+        "input_tokens": 1272,
+        "output_tokens": 238
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v02-全空-意图不明",
+      "ok": true,
+      "ms": 2127,
+      "missingGot": [
+        "goal",
+        "experience",
+        "weight_kg",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingExpected": [
+        "goal",
+        "experience",
+        "weight_kg",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "full_intake",
+      "pathExpected": "clarify",
+      "pathHit": false,
+      "pathConfidence": 0.52,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 1
+      },
+      "usage": {
+        "input_tokens": 1265,
+        "output_tokens": 238
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v03-消息自带体重",
+      "ok": true,
+      "ms": 775,
+      "missingGot": [
+        "experience",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingExpected": [
+        "experience",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "full_intake",
+      "pathExpected": "gap_fill",
+      "pathHit": false,
+      "pathConfidence": 0.88,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 1
+      },
+      "usage": {
+        "input_tokens": 1265,
+        "output_tokens": 238
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v04-档案半满",
+      "ok": true,
+      "ms": 925,
+      "missingGot": [
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingExpected": [
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "gap_fill",
+      "pathExpected": "gap_fill",
+      "pathHit": true,
+      "pathConfidence": 0.87,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 0.98,
+        "weekly_frequency": 1,
+        "injuries": 0.96
+      },
+      "usage": {
+        "input_tokens": 1263,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v05-档案半满-消息补频率",
+      "ok": true,
+      "ms": 732,
+      "missingGot": [
+        "experience",
+        "injuries"
+      ],
+      "missingExpected": [
+        "experience",
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "gap_fill",
+      "pathExpected": "gap_fill",
+      "pathHit": true,
+      "pathConfidence": 0.75,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 0.98
+      },
+      "usage": {
+        "input_tokens": 1271,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v06-只缺伤病",
+      "ok": true,
+      "ms": 853,
+      "missingGot": [
+        "injuries"
+      ],
+      "missingExpected": [
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "direct_plan",
+      "pathExpected": "gap_fill",
+      "pathHit": false,
+      "pathConfidence": 0.31,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 0.92
+      },
+      "usage": {
+        "input_tokens": 1267,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v07-全齐-直接出",
+      "ok": true,
+      "ms": 937,
+      "missingGot": [],
+      "missingExpected": [],
+      "missingHit": true,
+      "pathGot": "direct_plan",
+      "pathExpected": "direct_plan",
+      "pathHit": true,
+      "pathConfidence": 0.45,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 1
+      },
+      "usage": {
+        "input_tokens": 1285,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v08-全齐但消息要改目标",
+      "ok": true,
+      "ms": 744,
+      "missingGot": [],
+      "missingExpected": [],
+      "missingHit": true,
+      "pathGot": "gap_fill",
+      "pathExpected": "direct_plan",
+      "pathHit": false,
+      "pathConfidence": 0.75,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 0.88
+      },
+      "usage": {
+        "input_tokens": 1274,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v09-消息提伤病",
+      "ok": true,
+      "ms": 658,
+      "missingGot": [],
+      "missingExpected": [
+        "injuries"
+      ],
+      "missingHit": false,
+      "pathGot": "gap_fill",
+      "pathExpected": "gap_fill",
+      "pathHit": true,
+      "pathConfidence": 0.71,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 0.92
+      },
+      "usage": {
+        "input_tokens": 1280,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v10-口语化经验",
+      "ok": true,
+      "ms": 748,
+      "missingGot": [
+        "goal",
+        "weight_kg"
+      ],
+      "missingExpected": [
+        "goal",
+        "weight_kg"
+      ],
+      "missingHit": true,
+      "pathGot": "gap_fill",
+      "pathExpected": "gap_fill",
+      "pathHit": true,
+      "pathConfidence": 0.52,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 0.98
+      },
+      "usage": {
+        "input_tokens": 1282,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v11-自由聊天不打扰",
+      "ok": true,
+      "ms": 749,
+      "missingGot": [
+        "weight_kg",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingExpected": [
+        "weight_kg",
+        "equipment",
+        "weekly_frequency",
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "clarify",
+      "pathExpected": "clarify",
+      "pathHit": true,
+      "pathConfidence": 0.29,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 1
+      },
+      "usage": {
+        "input_tokens": 1264,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N1+N2",
+      "sample": "v12-半满且要单日",
+      "ok": true,
+      "ms": 798,
+      "missingGot": [
+        "injuries"
+      ],
+      "missingExpected": [
+        "injuries"
+      ],
+      "missingHit": true,
+      "pathGot": "direct_plan",
+      "pathExpected": "gap_fill",
+      "pathHit": false,
+      "pathConfidence": 0.24,
+      "confidences": {
+        "goal": 1,
+        "experience": 1,
+        "weight_kg": 1,
+        "equipment": 1,
+        "weekly_frequency": 1,
+        "injuries": 0.9
+      },
+      "usage": {
+        "input_tokens": 1267,
+        "output_tokens": 237
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t01-纯新手",
+      "ok": true,
+      "ms": 716,
+      "tierGot": "novice",
+      "tierExpected": "novice",
+      "tierHit": true,
+      "tierConfidence": 1,
+      "readiness": 1.11,
+      "usage": {
+        "input_tokens": 581,
+        "output_tokens": 49
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t02-3个月",
+      "ok": true,
+      "ms": 705,
+      "tierGot": "novice",
+      "tierExpected": "novice",
+      "tierHit": true,
+      "tierConfidence": 0.76,
+      "readiness": 1.68,
+      "usage": {
+        "input_tokens": 565,
+        "output_tokens": 49
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t03-5个月边界",
+      "ok": true,
+      "ms": 719,
+      "tierGot": "novice",
+      "tierExpected": "novice",
+      "tierHit": true,
+      "tierConfidence": 0.56,
+      "readiness": 1.86,
+      "usage": {
+        "input_tokens": 564,
+        "output_tokens": 49
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t04-7个月边界",
+      "ok": true,
+      "ms": 723,
+      "tierGot": "intermediate",
+      "tierExpected": "intermediate",
+      "tierHit": true,
+      "tierConfidence": 0.96,
+      "readiness": 2.12,
+      "usage": {
+        "input_tokens": 564,
+        "output_tokens": 50
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t05-两年",
+      "ok": true,
+      "ms": 683,
+      "tierGot": "intermediate",
+      "tierExpected": "intermediate",
+      "tierHit": true,
+      "tierConfidence": 0.84,
+      "readiness": 2.15,
+      "usage": {
+        "input_tokens": 568,
+        "output_tokens": 50
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t06-两年以上",
+      "ok": true,
+      "ms": 868,
+      "tierGot": "intermediate",
+      "tierExpected": "intermediate",
+      "tierHit": true,
+      "tierConfidence": 0.96,
+      "readiness": 2.52,
+      "usage": {
+        "input_tokens": 565,
+        "output_tokens": 50
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t07-停训回归",
+      "ok": true,
+      "ms": 625,
+      "tierGot": "novice",
+      "tierExpected": "novice",
+      "tierHit": true,
+      "tierConfidence": 0.94,
+      "readiness": 1.67,
+      "usage": {
+        "input_tokens": 594,
+        "output_tokens": 49
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t08-口语新手",
+      "ok": true,
+      "ms": 667,
+      "tierGot": "novice",
+      "tierExpected": "novice",
+      "tierHit": true,
+      "tierConfidence": 1,
+      "readiness": 0.92,
+      "usage": {
+        "input_tokens": 559,
+        "output_tokens": 49
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t09-口语老手",
+      "ok": true,
+      "ms": 662,
+      "tierGot": "intermediate",
+      "tierExpected": "intermediate",
+      "tierHit": true,
+      "tierConfidence": 0.98,
+      "readiness": 1.33,
+      "usage": {
+        "input_tokens": 559,
+        "output_tokens": 50
+      }
+    },
+    {
+      "node": "N3",
+      "sample": "t10-六月整",
+      "ok": true,
+      "ms": 777,
+      "tierGot": "intermediate",
+      "tierExpected": "intermediate",
+      "tierHit": true,
+      "tierConfidence": 0.98,
+      "readiness": 2.55,
+      "usage": {
+        "input_tokens": 569,
+        "output_tokens": 50
+      }
+    }
+  ]
+}
