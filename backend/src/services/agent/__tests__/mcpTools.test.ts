@@ -69,6 +69,22 @@ const SESSION = {
   notes: "felt strong",
 };
 
+/**
+ * #164：create_exercise 已隔离下架（默认关）。既有用例改为显式设开关跑
+ * （保留测试资产；回滚 = env AGENT_TOOL_CREATE_EXERCISE 翻转）。装配是
+ * 同步的（env 在 buildMcpToolsWith 调用时读取），开关用后即还原。
+ */
+function buildMcpToolsWithCreateExercise(
+  ...args: Parameters<typeof buildMcpToolsWith>
+) {
+  process.env.AGENT_TOOL_CREATE_EXERCISE = "true";
+  try {
+    return buildMcpToolsWith(...args);
+  } finally {
+    delete process.env.AGENT_TOOL_CREATE_EXERCISE;
+  }
+}
+
 // ===========================================================================
 // No-PG suite: scope guard + tool structure + zod3 boundary (always runs)
 // ===========================================================================
@@ -81,14 +97,15 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
     "00000000-0000-0000-0000-0000000000aa",
   );
 
-  it("builds exactly the thirteen named tools", () => {
+  it("builds exactly the twelve default tools (create_exercise delisted, #164)", () => {
     // B5b (230e9c9) removed save_weekly_plan under the proposal-confirm flow;
-    // T2 (#54) added find_exercises (combined-criteria ranked search) — eleven
-    // remained. #151 S3 added pick_template + instantiate_weekly_plan
-    // (template catalog + programmatic kernel expansion) → thirteen.
+    // T2 (#54) added find_exercises (combined-criteria ranked search). #151 S3
+    // added pick_template + instantiate_weekly_plan (template catalog +
+    // programmatic kernel expansion) → twelve after #164 delisted
+    // create_exercise from the default table (user-bound AI self-creation is
+    // off by default; the tool body survives behind AGENT_TOOL_CREATE_EXERCISE).
     const names = tools.map((t) => t.name).sort();
     assert.deepEqual(names, [
-      "create_exercise",
       "find_exercises",
       "get_current_plan",
       "get_exercise_detail",
@@ -102,6 +119,21 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
       "write_memory",
       "write_session",
     ]);
+    assert.ok(
+      !names.includes("create_exercise"),
+      "#164: create_exercise must not be in the default tool table",
+    );
+  });
+
+  it("AGENT_TOOL_CREATE_EXERCISE=true restores create_exercise (13 tools, rollback = config flip, #164)", () => {
+    const names = buildMcpToolsWithCreateExercise(
+      {} as never,
+      "00000000-0000-0000-0000-0000000000aa",
+    )
+      .map((t) => t.name)
+      .sort();
+    assert.equal(names.length, 13, "switch on → 13 named tools");
+    assert.ok(names.includes("create_exercise"), "switch restores the tool");
   });
 
   it("every tool is a DynamicStructuredTool with a non-empty description + schema (P005)", () => {
@@ -152,7 +184,12 @@ describe("mcpTools — B1 structure & P005 zod3 boundary (no PG)", () => {
     const ws = tools.find((t) => t.name === "write_session")!;
     const wm = tools.find((t) => t.name === "write_memory")!;
     const up = tools.find((t) => t.name === "update_profile")!;
-    const ce = tools.find((t) => t.name === "create_exercise")!;
+    // #164: create_exercise is behind the switch — assemble with it enabled so
+    // the schema-shape assertions keep guarding the tool body (asset preserved).
+    const ce = buildMcpToolsWithCreateExercise(
+      {} as never,
+      "00000000-0000-0000-0000-0000000000aa",
+    ).find((t) => t.name === "create_exercise")!;
     const wsShape =
       (ws.schema as unknown as { shape?: Record<string, unknown> }).shape ?? {};
     const wmShape =
@@ -485,9 +522,9 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
       seeded,
       "seeded R3 exercise must be reachable via keyword filter (real PG read)",
     );
-    assert.equal(typeof seeded!.description, "string");
+    assert.equal(typeof seeded.description, "string");
     assert.ok(
-      seeded!.description.length > 0,
+      seeded.description.length > 0,
       "description is synthesized for every exercise",
     );
   });
@@ -642,7 +679,7 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     // The whole library is loaded into context; the `description` one-liner must
     // carry the constraint-relevant fields so the agent can filter in-context:
     // mechanic/force, muscles, and equipment.
-    const d = attr!.description;
+    const d = attr.description;
     assert.ok(d.includes("compound"), "description carries mechanic:compound");
     assert.ok(d.includes("quadriceps"), "description carries primary muscle");
     assert.ok(d.includes("dumbbell"), "description carries equipment:dumbbell");
@@ -765,9 +802,9 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     assert.deepEqual(parsed.exercises, []);
     assert.ok(parsed.relax_hint, "empty result carries a relax_hint");
     assert.ok(
-      typeof parsed.relax_hint!.drop_movement_pattern === "number" &&
-        typeof parsed.relax_hint!.drop_difficulty === "number" &&
-        typeof parsed.relax_hint!.drop_muscle_groups === "number",
+      typeof parsed.relax_hint.drop_movement_pattern === "number" &&
+        typeof parsed.relax_hint.drop_difficulty === "number" &&
+        typeof parsed.relax_hint.drop_muscle_groups === "number",
       "relax_hint counts every applied dimension (equipment not applied → no key)",
     );
     assert.equal(
@@ -776,7 +813,7 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
       "hint only covers dimensions that were actually applied",
     );
     assert.ok(
-      parsed.relax_hint!.message.includes("Relax ONE dimension"),
+      parsed.relax_hint.message.includes("Relax ONE dimension"),
       "hint message tells the agent to relax one dimension at a time",
     );
   });
@@ -791,7 +828,7 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     const first = JSON.parse(
       (await fe.invoke({ muscle_groups: ["chest"] })) as string,
     ) as { total: number; exercises: { id: string }[] };
-    const excludedId = first.exercises[0]!.id;
+    const excludedId = first.exercises[0].id;
     const second = JSON.parse(
       (await fe.invoke({
         muscle_groups: ["chest"],
@@ -896,7 +933,8 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
       t.skip("PG unreachable");
       return;
     }
-    const tools = buildMcpToolsWith(client, userA);
+    // #164：工具默认下架，本用例显式设开关跑（保留测试资产）。
+    const tools = buildMcpToolsWithCreateExercise(client, userA);
     const ce = tools.find((t2) => t2.name === "create_exercise")!;
     const uniqueName = `测试自定义动作-${crypto.randomUUID().slice(0, 8)}`;
     const out = (await ce.invoke({
@@ -926,12 +964,12 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
     const row = await eq.findByIdFull(parsed.id);
     assert.ok(row, "created row readable via ExerciseQuery");
     assert.equal(
-      row!.owner_user_id,
+      row.owner_user_id,
       userA,
       "owner_user_id column binds the calling user",
     );
     assert.ok(
-      String(row!.content_html).includes("### 动作作用"),
+      String(row.content_html).includes("### 动作作用"),
       "tutorial persisted into content_html",
     );
   });
@@ -941,7 +979,8 @@ describe("mcpTools — B2/B4 real PG", { concurrency: false }, () => {
       t.skip("PG unreachable");
       return;
     }
-    const tools = buildMcpToolsWith(client, userA);
+    // #164：工具默认下架，本用例显式设开关跑（保留测试资产）。
+    const tools = buildMcpToolsWithCreateExercise(client, userA);
     const ce = tools.find((t2) => t2.name === "create_exercise")!;
     // EXERCISE_ID_SIMPLE is seeded with a known name in this suite.
     const seededName = (await new ExerciseQueryLike(client).findByIdFull(

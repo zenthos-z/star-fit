@@ -9,7 +9,7 @@
  * touch the fixed-workflow pipelines (action CRUD, tutorial, media, video),
  * which keep their own controller→Repository paths.
  *
- * ## Tool set (11)
+ * ## Tool set (10 默认 + 2 模板；create_exercise 下架后需开关加回 → 11 + 2)
  * - `load_history`        (read)  history_summary + profile_static + profile_dynamic
  * - `list_exercises`      (read)  the exercise library, FILTERED + PAGINATED (42b,
  *                                 issue #42): optional body_part / equipment /
@@ -45,7 +45,9 @@
  *                                 invisible to other users' queries and the
  *                                 admin console filters can adopt it later. A
  *                                 NanoID is generated server-side (never
- *                                 LLM-supplied).
+ *                                 LLM-supplied). [#164 隔离下架] 默认不注册：
+ *                                 仅 env `AGENT_TOOL_CREATE_EXERCISE=true`
+ *                                 显式开启（回滚 = 配置翻转，工具本体保留）。
  * - `get_current_plan`    (read)  the user's persisted weekly plan (E3: plans
  *                                 are entities, reuse-by-default — one per user
  *                                 per week; week_id defaults to the CURRENT
@@ -1247,6 +1249,16 @@ async function readProfileDynamicMemories(
     : {};
 }
 
+/**
+ * #164 create_exercise 隔离下架开关（默认关）：用户定调「默认直接调用动作库，
+ * AI 不自建动作」。关闭时 `create_exercise` 不进默认工具表（提示词/技能层已
+ * 零引用，无幻影工具面）；工具本体与 B2 单测保留，回滚 = env 翻转为 true。
+ * 「科学动作库（动作科学性 + 演示）」另立项，届时以新工具形态回归。
+ */
+export function isCreateExerciseToolEnabled(): boolean {
+  return process.env.AGENT_TOOL_CREATE_EXERCISE === "true";
+}
+
 // ---------------------------------------------------------------------------
 // Tool factory
 // ---------------------------------------------------------------------------
@@ -1345,10 +1357,15 @@ export function buildMcpToolsWith(
           rejected: gate.rejected,
         };
       }
+      // users.history_summary JSONB 的运行时形状含契约 HistorySummarySchema
+      // 未声明的 sessions 键（write_session Agent 记忆条目载体）：注解为
+      // Record 收窄取出。直接属性访问报 TS2339；`as Record` 断言写法则会被
+      // no-unnecessary-type-assertion 的 --fix 削回（#168 验收返工根因）。
+      const summaryRecord: Record<string, unknown> | null = history;
       const trimmed = trimSessions(
         {
           sessions: mergeHistorySources(
-            (history as Record<string, unknown> | null)?.sessions,
+            summaryRecord?.sessions,
             liveRows,
             limit,
           ),
@@ -1768,6 +1785,9 @@ export function buildMcpToolsWith(
     resolveUserId: getUserIdFromContext,
   });
 
+  // #164 隔离下架：create_exercise 默认不进工具表（开关见
+  // isCreateExerciseToolEnabled）。工具本体照常构建（纯对象、无副作用），
+  // B2 用例显式设开关跑；回滚 = env AGENT_TOOL_CREATE_EXERCISE=true 翻转。
   return [
     loadHistory,
     listExercises,
@@ -1775,7 +1795,7 @@ export function buildMcpToolsWith(
     getExerciseDetail,
     getSessionHrCurve,
     getHrTrend,
-    createExercise,
+    ...(isCreateExerciseToolEnabled() ? [createExercise] : []),
     writeSession,
     writeMemory,
     updateProfile,
@@ -1846,6 +1866,14 @@ export const TURN_CACHEABLE_TOOLS: ReadonlySet<string> = new Set([
  * 会改变缓存可见数据的工具——执行前清空该线程的本轮缓存（轮内写后读
  * 新鲜度：write_session 后再 load_history 必须拿到写入后的数据，而不是
  * 命中写前的缓存）。写类工具本身从不进缓存（不在 TURN_CACHEABLE_TOOLS）。
+ *
+ * 与工具表的联动语义（#164 核清）：本集合是**中间件层按工具名匹配的超集**，
+ * 有意不与 buildMcpTools 工具表强同步——成员含非本文件注册的 deepagents
+ * 内置写类工具（write_file / edit_file / execute），create_exercise 同理：
+ * #164 隔离下架（默认不注册）后其条目为惰性（名字不会到达 wrapToolCall，
+ * has() 恒 false，无行为影响）；保留条目则保证开关翻真时缓存新鲜度约束
+ * 自动生效，无需再同步本集合。规则：新增会改缓存可见数据的工具（无论注册
+ * 与否）都登记于此，删除工具时条目可留置。
  */
 const TURN_CACHE_INVALIDATING_TOOLS: ReadonlySet<string> = new Set([
   "write_session",

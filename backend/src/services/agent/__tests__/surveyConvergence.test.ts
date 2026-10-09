@@ -120,11 +120,7 @@ const SUMMARY_CARD: unknown = {
 };
 
 /** Bank questions keyed by id for assertions. */
-const BANK_BY_ID = new Map(
-  PROFILE_INTAKE_QUESTIONS.map((q) => [q.id, q]) as Array<
-    [string, (typeof PROFILE_INTAKE_QUESTIONS)[number]]
-  >,
-);
+const BANK_BY_ID = new Map(PROFILE_INTAKE_QUESTIONS.map((q) => [q.id, q]));
 
 /** Extract the survey data face from a card object (loose cast). */
 function surveyData(card: unknown): SurveyCardData {
@@ -189,7 +185,7 @@ describe("canonicalizeSurveyCard — profile_intake", () => {
     assert.ok(result.ok);
     const questions = surveyData(result.card).questions;
     const goal = questions.find((q) => q.id === "goal");
-    goal && (goal.question = "MUTATED");
+    if (goal) goal.question = "MUTATED";
     const fresh = canonicalizeSurveyCard(PARAPHRASED_INTAKE);
     assert.ok(fresh.ok);
     assert.equal(
@@ -292,7 +288,7 @@ const baseReq: ChatRequest = {
 };
 
 function uiHint(card: unknown): AgentEvent {
-  return { type: "uiHint", card: card as never } as AgentEvent;
+  return { type: "uiHint", card: card as never };
 }
 
 async function drain(it: AsyncIterable<AgentEvent>): Promise<AgentEvent[]> {
