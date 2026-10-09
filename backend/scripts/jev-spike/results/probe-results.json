@@ -1,0 +1,182 @@
+{
+  "generatedAt": "2026-10-09T04:43:32.986Z",
+  "sections": {
+    "modelsCatalog": {
+      "httpStatus": 200,
+      "totalModels": 525,
+      "jevEntry": {
+        "id": "jev-1.13.0",
+        "object": "model",
+        "created": 1626777600,
+        "owned_by": "task plugin",
+        "supported_endpoint_types": ["openai"]
+      }
+    },
+    "chatCompletionsControl": {
+      "attempts": [
+        {
+          "try": 1,
+          "httpStatus": null,
+          "error": "TypeError: fetch failed",
+          "wallMs": 30318
+        },
+        {
+          "try": 2,
+          "httpStatus": null,
+          "error": "TypeError: fetch failed",
+          "wallMs": 24953
+        }
+      ],
+      "note": "curl 直测同请求稳定返回 503 model_not_found（分组 default 无渠道），见 REPORT.md"
+    },
+    "typesafeFull": {
+      "ok": true,
+      "status": 200,
+      "ms": 1855,
+      "requestShape": {
+        "model": "jev-1.13.0",
+        "state": "【用户消息】帮我做一份增肌计划，我每周能练三天。",
+        "questions": {
+          "intent": {
+            "type": "choice",
+            "instructions": "判断这条健身应用用户消息的意图类别。",
+            "criteria": {
+              "chat": "自由聊天、闲聊、咨询健身知识，不涉及生成计划/记录训练/更新个人资料",
+              "plan": "明确请求生成、调整或查看训练计划",
+              "workout_complete": "报告完成了训练、记录训练结果、回传训练数据",
+              "update_profile": "更新个人资料、身体数据、目标、偏好设置"
+            }
+          },
+          "certainty": {
+            "type": "score",
+            "instructions": "评估你对 intent 判断的确定程度。",
+            "criteria": ["很不确定", "较不确定", "一般", "较确定", "很确定"]
+          },
+          "is_ambiguous": {
+            "type": "noul",
+            "instructions": "判断这条消息的意图是否 ambiguous（可能同时属于多个类别）。"
+          }
+        }
+      },
+      "responseBody": {
+        "answers": {
+          "certainty": {
+            "confidence": 0.98,
+            "legend": {
+              "0": "很不确定",
+              "1": "较不确定",
+              "2": "一般",
+              "3": "较确定",
+              "4": "很确定"
+            },
+            "probabilities": {
+              "0": 0,
+              "1": 0,
+              "2": 0,
+              "3": 0.02,
+              "4": 0.98
+            },
+            "score": 3.97,
+            "type": "score"
+          },
+          "intent": {
+            "choice": "plan",
+            "confidence": 1,
+            "probabilities": {
+              "chat": 0,
+              "plan": 1,
+              "update_profile": 0,
+              "workout_complete": 0
+            },
+            "type": "choice"
+          },
+          "is_ambiguous": {
+            "noul": 0.28,
+            "type": "noul"
+          }
+        },
+        "model": "jev-1.13.0",
+        "usage": {
+          "input_tokens": 554,
+          "output_tokens": 83
+        }
+      }
+    },
+    "typesafeSingleQuestion": {
+      "ok": true,
+      "status": 200,
+      "ms": 2050,
+      "responseBody": {
+        "answers": {
+          "intent": {
+            "choice": "plan",
+            "confidence": 1,
+            "probabilities": {
+              "chat": 0,
+              "plan": 1,
+              "update_profile": 0,
+              "workout_complete": 0
+            },
+            "type": "choice"
+          }
+        },
+        "model": "jev-1.13.0",
+        "usage": {
+          "input_tokens": 455,
+          "output_tokens": 48
+        }
+      }
+    },
+    "edgeProbes": [
+      {
+        "name": "missing_state",
+        "ok": false,
+        "status": 400,
+        "ms": 34,
+        "body": {
+          "detail": "state must be text, an object, an array, or null"
+        }
+      },
+      {
+        "name": "unknown_question_type",
+        "ok": false,
+        "status": 400,
+        "ms": 32,
+        "body": {
+          "detail": "Each question must have type choice, score, or noul"
+        }
+      },
+      {
+        "name": "choice_missing_criteria",
+        "ok": false,
+        "status": 400,
+        "ms": 30,
+        "body": {
+          "detail": "Choice criteria must contain between 1 and 255 options"
+        }
+      },
+      {
+        "name": "unknown_model",
+        "ok": false,
+        "status": 400,
+        "ms": 31,
+        "body": {
+          "detail": "model \"jev-9.9.9-not-exist\" is not served by this plugin"
+        }
+      },
+      {
+        "name": "invalid_api_key",
+        "ok": false,
+        "status": 401,
+        "ms": 139,
+        "body": {
+          "error": {
+            "code": "",
+            "message": "Invalid token (request id: 20261009044432660493843c14228f5dGJyreKL)",
+            "type": "dmx_api_error"
+          }
+        }
+      }
+    ]
+  }
+}
