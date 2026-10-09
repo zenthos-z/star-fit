@@ -1,0 +1,135 @@
+{
+  "schema": "jev-nodes-replay-baseline-free/1",
+  "note": "自由路径（中级×居家×4练=矩阵半命中陷阱）两轮完整数据；主脚本被停在 run3 前，本文件为日志+checkpointer 实取汇总",
+  "ranAt": "2026-10-09T13:49:05.187Z",
+  "runs": [
+    {
+      "run": 1,
+      "thread": "jev-nodes-r1-mv10561s",
+      "turns": [
+        {
+          "turn": 1,
+          "label": "survey_round",
+          "thinkingEvents": 445,
+          "thinkingChars": 6402,
+          "tokenChars": 74,
+          "ms": 28891,
+          "cards": [
+            "survey_card"
+          ],
+          "templateFingerprint": null
+        },
+        {
+          "turn": 2,
+          "label": "plan_round",
+          "thinkingEvents": 20563,
+          "thinkingChars": 127090,
+          "tokenChars": 215,
+          "ms": 590077,
+          "cards": [
+            "weekly_plan"
+          ],
+          "templateFingerprint": null
+        }
+      ],
+      "toolRounds": [
+        {
+          "turn": 1,
+          "modelRounds": 3,
+          "toolCalls": [
+            "load_history",
+            "read_file",
+            "get_current_plan",
+            "submit_survey"
+          ]
+        },
+        {
+          "turn": 2,
+          "modelRounds": 8,
+          "toolCalls": [
+            "read_file",
+            "pick_template",
+            "instantiate_weekly_plan",
+            "find_exercises",
+            "find_exercises",
+            "read_file",
+            "read_file",
+            "find_exercises",
+            "submit_weekly_plan",
+            "write_memory",
+            "write_memory"
+          ]
+        }
+      ]
+    },
+    {
+      "run": 2,
+      "thread": "jev-nodes-r2-mv10infg",
+      "turns": [
+        {
+          "turn": 1,
+          "label": "survey_round",
+          "thinkingEvents": 391,
+          "thinkingChars": 6114,
+          "tokenChars": 72,
+          "ms": 26749,
+          "cards": [
+            "survey_card"
+          ],
+          "templateFingerprint": null
+        },
+        {
+          "turn": 2,
+          "label": "plan_round",
+          "thinkingEvents": 15297,
+          "thinkingChars": 116909,
+          "tokenChars": 119,
+          "ms": 468698,
+          "cards": [
+            "weekly_plan"
+          ],
+          "templateFingerprint": null
+        }
+      ],
+      "toolRounds": [
+        {
+          "turn": 1,
+          "modelRounds": 3,
+          "toolCalls": [
+            "read_file",
+            "load_history",
+            "get_current_plan",
+            "submit_survey"
+          ]
+        },
+        {
+          "turn": 2,
+          "modelRounds": 7,
+          "toolCalls": [
+            "pick_template",
+            "instantiate_weekly_plan",
+            "find_exercises",
+            "find_exercises",
+            "find_exercises",
+            "find_exercises",
+            "find_exercises",
+            "find_exercises",
+            "read_file",
+            "read_file",
+            "read_file",
+            "submit_weekly_plan"
+          ]
+        }
+      ]
+    }
+  ],
+  "halfHitTrap": {
+    "runs": 2,
+    "instantiated": "t3-int-upper-lower",
+    "ok": true,
+    "adjustments": 12,
+    "deletedSlots": 9,
+    "substituted": 3,
+    "outcome": "模型弃用空壳实例化，转自由路径（两轮完全复现）"
+  }
+}
