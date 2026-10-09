@@ -1357,9 +1357,18 @@ export function buildMcpToolsWith(
           rejected: gate.rejected,
         };
       }
+      // users.history_summary JSONB 的运行时形状含契约 HistorySummarySchema
+      // 未声明的 sessions 键（write_session Agent 记忆条目载体）：注解为
+      // Record 收窄取出。直接属性访问报 TS2339；`as Record` 断言写法则会被
+      // no-unnecessary-type-assertion 的 --fix 削回（#168 验收返工根因）。
+      const summaryRecord: Record<string, unknown> | null = history;
       const trimmed = trimSessions(
         {
-          sessions: mergeHistorySources(history?.sessions, liveRows, limit),
+          sessions: mergeHistorySources(
+            summaryRecord?.sessions,
+            liveRows,
+            limit,
+          ),
           ...(deliveryGate ? { delivery_gate: deliveryGate } : {}),
         },
         limit,
