@@ -1,7 +1,7 @@
 /**
  * skillLoader (R5) — exposes the legacy MAS skills' pure-knowledge `.md`
- * (plan-generation / exercise-type-guide / strength-training-designer, ~13 GOLD
- * assets) plus the new operational skills (e.g. fitness-data-tools) through
+ * (plan-generation / exercise-type-guide / volume-landmarks, GOLD assets)
+ * plus the new operational skills (e.g. fitness-data-tools) through
  * **Deep Agents native Skills + Filesystem**, mounted in full for the generic
  * agent and read on demand.
  *
@@ -280,9 +280,9 @@ function buildDescriptorFromDir(dirName: string): SkillDescriptor {
  * this registry no longer gates which skills mount.)
  *
  * Asset count: 4 (plan-generation: main + 3 topic splits, 42c) + 11
- * (exercise-type-guide: index + 10 types) + 1 (strength-training-designer) = 16
- * knowledge files — the ~15 GOLD assets named in the card (SKILL.md entries
- * round it up).
+ * (exercise-type-guide: index + 10 types) + 2 (volume-landmarks: muscle
+ * table notes + non-big-three guide, #163 merge — absorbed
+ * strength-training-designer) = 17 knowledge files.
  */
 const GOLD_REGISTRY: Record<string, () => SkillDescriptor> = {
   "plan-generation": () =>
@@ -306,8 +306,12 @@ const GOLD_REGISTRY: Record<string, () => SkillDescriptor> = {
       { rel: "knowledge/heavy_weight.md", label: "heavy_weight type" },
       { rel: "knowledge/rep_training.md", label: "rep_training type" },
     ]),
-  "strength-training-designer": () =>
-    buildDescriptor("strength-training-designer", [
+  "volume-landmarks": () =>
+    buildDescriptor("volume-landmarks", [
+      {
+        rel: "knowledge/muscle-table-notes.md",
+        label: "muscle table provenance notes",
+      },
       {
         rel: "knowledge/non-big-three-guide.md",
         label: "non-big-three guide",
