@@ -78,33 +78,41 @@ describe("loadUiHintFormatSkill — M5a skill text", () => {
   });
 });
 
-describe("#151 S2 双轨：卡型级通道开关（tool / fence 文案分流）", () => {
-  const S2_DEFAULTS = {
+describe("#151 S4 通道锁：survey/weekly_plan 恒 tool，双轨开关仅剩 plan_card", () => {
+  const S4_DEFAULTS = {
     survey_card: "tool",
     weekly_plan: "tool",
     plan_card: "fence",
   } as const;
-  const dual = loadUiHintFormatSkill(S2_DEFAULTS);
+  const dual = loadUiHintFormatSkill(S4_DEFAULTS);
 
-  it("缺省（无参 / 空 channels）= 全 fence：原文围栏指令保留，无 submit 工具字样", () => {
+  it("缺省（无参 / 空 channels）= S4 默认通道输出（survey/weekly 工具文案，plan_card 围栏）", () => {
     const bare = loadUiHintFormatSkill();
     const empty = loadUiHintFormatSkill({});
     assert.equal(bare, empty, "无参与空对象输出一致");
-    assert.match(
-      bare,
-      /ALWAYS wrap the card in a ```json fenced block/,
-      "围栏主指令原文保留",
-    );
-    assert.ok(!bare.includes("submit_"), "缺省不出现 submit_xxx 工具文案");
+    assert.equal(bare, dual, "无参与显式默认通道输出一致");
+    assert.match(bare, /submit_survey/);
+    assert.match(bare, /submit_weekly_plan/);
+    assert.ok(!bare.includes("submit_plan_card"), "plan_card=fence 不点名工具");
+    // fence 分流的通用规则行仍然在场（fenceTypes 非空时保留围栏主指令）。
+    assert.match(bare, /```json fenced block/);
+    assert.match(bare, /plan_card, summary_card/);
   });
 
-  it("双轨模式：tool 卡型点名 submit 工具，fence 卡型保留围栏", () => {
-    assert.match(dual, /submit_survey/);
-    assert.match(dual, /submit_weekly_plan/);
-    assert.ok(!dual.includes("submit_plan_card"), "plan_card=fence 不点名工具");
-    // fence 分流的通用规则行仍然在场（fenceTypes 非空时保留围栏主指令）。
-    assert.match(dual, /```json fenced block/);
-    assert.match(dual, /plan_card, summary_card/);
+  it("通道锁：channels 传 fence 也不回退围栏文案（S4 围栏退役红线）", () => {
+    const flipped = loadUiHintFormatSkill({
+      survey_card: "fence",
+      weekly_plan: "fence",
+      plan_card: "fence",
+    });
+    assert.match(flipped, /submit_weekly_plan[\s\S]*?ONLY delivery channel/);
+    assert.match(flipped, /NEVER write survey JSON/);
+    // 已退役的围栏时代文案在任何通道组合下都不得再现。
+    assert.ok(!flipped.includes("there is NO save tool"));
+    assert.ok(
+      !/emit it\s*\n?\s*DIRECTLY in the reply/.test(flipped),
+      "weekly_plan「围栏直出」文案已随 S4 退役",
+    );
   });
 
   it("weekly_plan=tool → 「NO save tool」围栏文案被替换为工具提交指令", () => {
@@ -115,15 +123,6 @@ describe("#151 S2 双轨：卡型级通道开关（tool / fence 文案分流）"
     assert.match(dual, /submit_weekly_plan[\s\S]*?ONLY delivery channel/);
     // data.apply 载荷契约（apply 落库语义）两通道共用，不得丢。
     assert.match(dual, /data\.apply/);
-  });
-
-  it("weekly_plan=fence → 围栏原文逐字保留（含 NO save tool）", () => {
-    const fenceOnly = loadUiHintFormatSkill({ weekly_plan: "fence" });
-    assert.match(
-      fenceOnly,
-      /emit it\s*\n?\s*DIRECTLY in the reply with `data\.apply`/,
-    );
-    assert.match(fenceOnly, /there is NO save tool/);
   });
 
   it("survey_card=tool → 意图参数指令（purpose + 题库 id，不写卡 JSON）", () => {

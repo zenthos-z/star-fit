@@ -55,9 +55,9 @@
  *      - 合规（新增硬失败面）：正文 token 不得再出现卡围栏（```json + 白名单
  *        卡 body）——工具通道卡写成散文=失败交付，且与工具卡双发=重复渲染；
  *      - 上限：吞卡判别 0 命中 + 泄漏 <1500 字符（与围栏回放同标准）。
- *   npx tsx scripts/replay-stream-card.ts --fence          # 围栏回归：进程内
- *     强制 CARD_CHANNEL_*=fence（DB 无 card_channel_* 键时 env 生效），预期
- *     走原围栏管道出卡（卡从 token 提取），围栏路径不因双轨改造回归。
+ *     （S2 期的 --fence 围栏回归模式已随 #151 S4 退役：survey/weekly 的
+ *     fence 翻转位被 resolveCardChannels 忽略，围栏流层回归由 --fixtures
+ *     F1-F4 与 plan_card 默认围栏路径覆盖。）
  *
  * #151 S3 模板路径回放（--template，2026-10-08）：默认通道（tool/tool/fence）
  * 下验证「pick_template → instantiate_weekly_plan → submit_weekly_plan」全链。
@@ -90,8 +90,6 @@ const EVENTS_DIR = process.env.EVENTS_DIR ?? "/tmp";
 /** #151 S2 模式开关。 */
 const TOOL_CHANNEL_MODE =
   process.argv.includes("--tool-channel") || process.env.TOOL_CHANNEL === "1";
-const FENCE_MODE =
-  process.argv.includes("--fence") || process.env.FENCE === "1";
 /** #151 S3 模式开关：模板路径回放（pick_template → instantiate → submit 全链）。 */
 const TEMPLATE_MODE =
   process.argv.includes("--template") || process.env.TEMPLATE === "1";
@@ -1062,16 +1060,6 @@ async function main(): Promise<number> {
   }
   if (TOOL_CHANNEL_MODE) {
     return toolChannelMain();
-  }
-  if (FENCE_MODE) {
-    // 围栏回归：进程内强制全 fence（DB 无 card_channel_* 键时 env 生效，
-    // 通道解析 DB > env > 默认）。出卡路径应回到原围栏管道（token 提取）。
-    process.env.CARD_CHANNEL_SURVEY_CARD = "fence";
-    process.env.CARD_CHANNEL_WEEKLY_PLAN = "fence";
-    process.env.CARD_CHANNEL_PLAN_CARD = "fence";
-    console.log(
-      "=== #151 S2 围栏回归模式：CARD_CHANNEL_*=fence（预期卡从 token 围栏提取）===",
-    );
   }
   const app = Fastify({ logger: false });
   app.post("/api/admin/login-or-create", loginOrCreate);

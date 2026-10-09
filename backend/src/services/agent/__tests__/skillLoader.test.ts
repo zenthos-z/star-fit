@@ -69,6 +69,11 @@ import {
 //               instantiate_weekly_plan → submit_weekly_plan）；§9.1/§9.3
 //               示例卡 JSON 删除（#73 复述源 + #136 伪造 id 示例源治理，
 //               字段契约单一真源 = data-schema 技能）——SHA 按磁盘实值重算
+//   2026-10-09  plan-generation knowledge (#151 S4 围栏指令退役)：§9.3 删
+//               「通道为 fence 回滚位」与「围栏通道下出卡消息不得携带
+//               tool_calls」围栏残余；§11.1 问卷轮交付改 submit_survey 工具
+//               调用（survey_card 围栏输出指令零残留 grep 门）——SHA 按
+//               磁盘实值重算
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
@@ -94,7 +99,7 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge/unilateral.md":
     "de7d5b00f5f2146c3bae79c7063bfb01a17698174f0944cbb982394b7972a4a2",
   "plan-generation/knowledge.md":
-    "f5edc6598bf5fa94c3524064e36bc2743779af8dbb79892434e5ee4903574559",
+    "99d8d56240a08cdb09f5d661d58507262a093580bd1d7486bce147f1d1cf55a6",
   "plan-generation/knowledge/injury-adjustment.md":
     "d556d96744b2cea9404dd88a085454729ec6ce4e3060712b662692f8ff269e0a",
   "plan-generation/knowledge/novice-starting.md":

@@ -22,8 +22,10 @@ import {
   EXERCISE_TYPE_VALUES,
   PROFILE_INTAKE_QUESTIONS,
 } from "shared/contracts";
-// #151 S2 双轨：卡型级通道开关（tool=submit_xxx 工具 / fence=正文围栏）。
-// 类型-only 导入——本模块仍是纯字符串生产者，无运行时耦合。
+// #151 S4：survey_card/weekly_plan 的围栏选项已退役（恒 tool，见下方
+// TOOL_LOCKED_CARD_TYPES）；双轨开关仅剩 plan_card 在用（未迁移卡型，
+// 未来迁移时经 card_channel_plan_card flag 翻转）。类型-only 导入——
+// 本模块仍是纯字符串生产者，无运行时耦合。
 import type { CardChannels } from "./cardSubmit.js";
 
 /**
@@ -49,6 +51,20 @@ export const ALLOWED_UIHINT_TYPES = [
 export const BLACKLISTED_UIHINT_TYPES = ["hitl_confirm"] as const;
 
 /**
+ * #151 S4：围栏指令文案已退役的卡型（已迁移至 submit_xxx 工具通道，恒 tool
+ * 文案——`channels` 里传 "fence" 也不回退围栏指令）。
+ *
+ * 单一真源：cardSubmit.resolveCardChannels 的通道锁定与 uiHintFormat 的文案
+ * 锁定共用本清单（导入方向 cardSubmit → 本模块，保持本模块纯字符串生产者、
+ * 不拖 langchain 运行时依赖）。plan_card 不在清单内——它是双轨开关的最后
+ * 一个使用方（未迁移卡型，围栏路径完整保留）。
+ */
+export const TOOL_LOCKED_CARD_TYPES: ReadonlySet<string> = new Set([
+  "survey_card",
+  "weekly_plan",
+]);
+
+/**
  * 首用画像问卷题库 id 清单（#114 B5c）——运行时从 PROFILE_INTAKE_QUESTIONS
  * 派生（id + 题干），注入下方 survey_card 段落。单一真源：题库增删题时
  * 本清单自动跟随，prompt 永不手抄题面。
@@ -65,16 +81,17 @@ const PROFILE_BANK_ID_LIST: string = PROFILE_INTAKE_QUESTIONS.map(
  *   - the per-type `data` schema the validator enforces,
  *   - the HC-4 hard constraint against HITL types.
  *
- * #151 S2 双轨：`channels` 标注各卡型交付通道（tool=submit_xxx 工具提交 /
- * fence=正文围栏，默认缺省 = 全 fence）。tool 卡型的文案改为「调用 submit_xxx
- * 提交」（含各自参数形态），fence 卡型保留围栏指令原文；两套指令同卡型互斥，
- * 数据 schema 文档两通道共用（shape 是卡契约，与怎么到前端无关）。
+ * #151 S4：`channels` 仅对 plan_card 生效（tool=submit_plan_card 工具 /
+ * fence=正文围栏，缺省 fence）。survey_card/weekly_plan 已锁死 tool 通道
+ * （TOOL_LOCKED_CARD_TYPES——围栏指令文案随 S4 退役，fence 值不再被文案
+ * 消费）；数据 schema 文档两通道共用（shape 是卡契约，与怎么到前端无关）。
  *
- * Pure function — same input always yields the same string；
- * `loadUiHintFormatSkill()`（无参）输出与双轨改造前逐字节一致。
+ * Pure function — same input always yields the same string；无参输出 =
+ * S4 默认通道（survey/weekly=tool，plan=fence）的文案。
  */
 export function loadUiHintFormatSkill(channels: CardChannels = {}): string {
-  const toolChannel = (t: string): boolean => channels[t] === "tool";
+  const toolChannel = (t: string): boolean =>
+    TOOL_LOCKED_CARD_TYPES.has(t) || channels[t] === "tool";
   const toolTypes = ALLOWED_UIHINT_TYPES.filter(toolChannel);
   const fenceTypes = ALLOWED_UIHINT_TYPES.filter((t) => !toolChannel(t));
   return [
@@ -132,17 +149,12 @@ export function loadUiHintFormatSkill(channels: CardChannels = {}): string {
     "  1. Call `list_exercises` to get the exercise library (includes `exercise_type`)",
     "  2. For each exercise, match its `exercise_type` to the requirements above",
     "  3. If unsure, read `exercise-type-guide/knowledge-index.md`",
-    ...(toolChannel("weekly_plan")
-      ? [
-          "- `weekly_plan` — a WHOLE-WEEK plan card (proposal-confirm: submit it",
-          "  via the `submit_weekly_plan` tool with the FULL card data INCLUDING",
-          "  `data.apply` — the tool is the ONLY delivery channel; never write",
-          "  the card JSON in prose or a fence). `data` is an",
-        ]
-      : [
-          "- `weekly_plan` — a WHOLE-WEEK plan card (proposal-confirm: emit it",
-          "  DIRECTLY in the reply with `data.apply` — there is NO save tool). `data` is an",
-        ]),
+    // #151 S4：weekly_plan 围栏分支文案已退役（toolChannel 恒 true）——
+    // 工具提交指令无条件渲染。
+    "- `weekly_plan` — a WHOLE-WEEK plan card (proposal-confirm: submit it",
+    "  via the `submit_weekly_plan` tool with the FULL card data INCLUDING",
+    "  `data.apply` — the tool is the ONLY delivery channel; never write",
+    "  the card JSON in prose or a fence). `data` is an",
     "  OBJECT (not an array): `week_label` (non-empty string, e.g. 第 2 周),",
     "  optional `phase_label` (e.g. 力量块), `split_summary` (non-empty one-line",
     "  summary, e.g. 推拉腿 · 每周 3 练 · 主项渐进 +1 档), `days` (array, 1+ items;",
@@ -173,15 +185,13 @@ export function loadUiHintFormatSkill(channels: CardChannels = {}): string {
     "  string|number).",
     "- `survey_card` — interactive questionnaire, tagged with `data.purpose`",
     "  (one of `profile_intake` / `plan_gap` / `workout_feedback`):",
-    ...(toolChannel("survey_card")
-      ? [
-          "  **Delivery: call `submit_survey` (intent-only params): `purpose` +",
-          "  `question_ids` (bank ids; `profile_intake` may omit = full bank) +",
-          "  your own `title`/`message` prose. For `workout_feedback` pass",
-          "  `questions` directly (≤3 free-form). NEVER write survey JSON in",
-          "  prose or a fence.**",
-        ]
-      : []),
+    // #151 S4：survey_card 围栏分支文案已退役（toolChannel 恒 true）——
+    // submit_survey 意图提交指令无条件渲染。
+    "  **Delivery: call `submit_survey` (intent-only params): `purpose` +",
+    "  `question_ids` (bank ids; `profile_intake` may omit = full bank) +",
+    "  your own `title`/`message` prose. For `workout_feedback` pass",
+    "  `questions` directly (≤3 free-form). NEVER write survey JSON in",
+    "  prose or a fence.**",
     "  * `profile_intake` — FIRST-USE profile survey for a brand-new user whose",
     "    goal/experience/equipment/frequency/injuries/weight are mostly unknown.",
     "    Emit it BEFORE any plan; a plain-text question list in prose is a FAILED",

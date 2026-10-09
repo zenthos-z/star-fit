@@ -1758,8 +1758,8 @@ export function buildMcpToolsWith(
     : [];
 
   // #151 S3 模板工具：pick_template（目录）+ instantiate_weekly_plan（内核展开）。
-  // 无条件装配（非卡交付通道工具——模板展开在 tool/fence 两种通道下都成立；
-  // fence 回滚位下展开结果仍显著优于自由生成：日期/剂量算术已下放程序层）。
+  // 无条件装配（非卡交付通道工具——展开结果只喂 submit_weekly_plan 或自由
+  // 生成路径，与卡交付通道无关；日期/剂量算术已下放程序层）。
   // resolveUserId/listExerciseIds 经依赖注入（templateTools 不反向 import 本
   // 模块——cardSubmit 同款单向防循环）。
   const templateTools = buildTemplateTools({

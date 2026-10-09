@@ -175,9 +175,9 @@ const BASE_SYSTEM_PROMPT = [
   "instead of updating the profile again.",
   "",
   "## Weekly-plan proposal rules (proposal-confirm — B5b, ANY scenario)",
-  "Weekly plans are PROPOSALS: there is NO save tool — compute the full",
-  "entries this turn, emit a weekly_plan card carrying data.apply, and the",
-  "app persists ONLY after the user taps confirm. Never say 已保存/已生效",
+  "Weekly plans are PROPOSALS: compute the full entries this turn and submit",
+  "the weekly_plan card via the `submit_weekly_plan` tool carrying data.apply",
+  "— the app persists ONLY after the user taps confirm. Never say 已保存/已生效",
   "for a proposed plan; say 确认后生效.",
   "Weekly/daily granularity (survey-first gate / whole-week-first / day-",
   "adjust vs framework-recompute / ask when unclear), the apply payload",
@@ -186,10 +186,11 @@ const BASE_SYSTEM_PROMPT = [
   "enum, server-resolved week_id, sets.length = target_sets) and the name_zh",
   "Chinese-first rule have ONE source: the plan-generation skill — read its",
   "SKILL.md then knowledge.md §11.1 granularity table before any plan work.",
-  "Delivery rule: every plan-delivery turn (weekly proposal, day adjust,",
-  "tomorrow-plan request) MUST contain the fenced card — never prose-only;",
-  "a prose summary is a failed delivery. Re-emitting on a repeat ask is",
-  "correct, not spam.",
+  "Delivery rule: every plan-delivery turn MUST deliver its card — weekly",
+  "proposal / day adjust via the `submit_weekly_plan` tool (#151 S4 起",
+  "weekly_plan 唯一交付通道), tomorrow-plan (plan_card) as a ```json fenced",
+  "card; never prose-only — a prose summary is a failed delivery. Re-emitting",
+  "on a repeat ask is correct, not spam.",
   "",
   "## Output length & formatting",
   "NON-CARD PROSE LIMIT: plain explanations and chat replies that contain no",
@@ -226,7 +227,8 @@ const BASE_SYSTEM_PROMPT = [
   "and (6) body weight (basic_info.weight — needed for resistance estimation,",
   "assisted-exercise assistance sizing, and bodyweight effective-load",
   "semantics). If any of these is genuinely unknown and NOT answerable from",
-  "tools, ask FIRST — emit a survey_card listing the missing bank question",
+  "tools, ask FIRST — deliver a survey_card via the `submit_survey` tool",
+  "listing the missing bank question",
   "ids: purpose='plan_gap' for a few specific gaps, 'profile_intake' when the",
   "profile is mostly empty (the backend canonicalizes question content from",
   "the shared bank by id — never invent profile question wording/options;",
@@ -392,8 +394,8 @@ export function buildSystemPrompt(
   if (scenario === "plan") {
     parts.push(PLAN_SCENARIO_QUICKREF);
   }
-  // #151 S2 双轨：tool 通道卡型的文案切「调用 submit_xxx 提交」；缺省
-  // （不传 channels）= 全 fence，输出与改造前逐字节一致。
+  // #151 S4：survey/weekly_plan 文案恒 tool 通道（TOOL_LOCKED_CARD_TYPES）；
+  // 缺省（不传 channels）= 默认通道（survey/weekly=tool，plan=fence）。
   parts.push(loadUiHintFormatSkill(cardChannels));
   return parts.join("\n\n");
 }
@@ -439,9 +441,10 @@ export class DeepAgentService implements AgentService {
   private cached: Map<string, Promise<CompiledStatefulAgent>> = new Map();
 
   /**
-   * #151 S2 双轨：每个缓存键（scenario::img/txt）组装时的通道签章。
-   * `chat()` 每轮解析通道对拍——DB/env flag 翻转 → resetAgentCache，
-   * 下一轮按新通道重建（prompt 文案 + submit_xxx 工具面一起换）。
+   * #151 双轨通道签章：每个缓存键（scenario::img/txt）组装时的通道快照。
+   * `chat()` 每轮解析通道对拍——flag 翻转 → resetAgentCache，下一轮按新
+   * 通道重建（prompt 文案 + submit_xxx 工具面一起换）。S4 后可翻转卡型仅
+   * plan_card（survey/weekly 恒 tool，见 cardSubmit.TOOL_LOCKED_CARD_TYPES）。
    */
   private channelSignatures: Map<string, string> = new Map();
 
