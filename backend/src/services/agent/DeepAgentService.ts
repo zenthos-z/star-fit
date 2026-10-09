@@ -39,7 +39,9 @@
 
 import { createDeepAgent, type DeepAgent } from "deepagents";
 import { AIMessageChunk } from "@langchain/core/messages";
-import { HumanMessage } from "@langchain/core/messages";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
+// #46：isCommand 对齐 langchain AgentNode isInternalModelResponse 的合同判定。
+import { isCommand } from "@langchain/langgraph";
 import { createMiddleware } from "langchain";
 
 import type { AgentEvent, ChatRequest } from "shared/contracts";
@@ -760,6 +762,12 @@ export async function* classifyAgentStream(
   // （典型：read_file plan-generation knowledge.md §9 的示例卡围栏被复述），
   // 不救——防止把技能文档里的示例卡当真卡送给用户。
   const toolResultFlats: string[] = [];
+  // ★#80 去重锚：before_agent 历史重放把 checkpoint 里全部工具返回随快照
+  // 重新下发，同一条 ToolMessage 跨快照反复进入 collectToolResults；sink 只
+  // 做 includes 存在性判定（isToolResultEcho），重复条目零语义价值，却让
+  // 重复扁平化与 O(n·m) 扫描开销随会话长度累积。按消息 id 去重（checkpoint
+  // 持久化、跨轮稳定）；无 id 消息按扁平文本兜底（内容相同 ⟹ 锚值相同）。
+  const toolResultSeen = new Set<string>();
   const isToolResultEcho = (segment: string): boolean => {
     const flat = segment.replace(/\s+/g, "");
     if (flat.length === 0) return false;
@@ -862,7 +870,8 @@ export async function* classifyAgentStream(
       // ★吞卡修复（refs #73）：先收集本快照（任意节点）里的工具返回文本作
       // 复述判别锚——必须在 model_request 分类前执行：卡所在步的快照只含 AI
       // 消息，工具返回在相邻的 tools 节点快照 / before_agent 历史重放里。
-      collectToolResults(update, toolResultFlats);
+      // #80：seen 集合保证同一条工具消息跨快照只收集一次。
+      collectToolResults(update, toolResultFlats, toolResultSeen);
       // #151 S2：tools 节点快照落地时（submit_xxx 已执行完毕）排水发射。
       // 放在快照分类之前：任意节点快照都可能携带新工具结果，先发卡再分类。
       yield* drainSinkCards();
@@ -1040,10 +1049,17 @@ export async function* classifyAgentStream(
  * whitespace) inside a tool result is an echo — e.g. the example card fence
  * inside a read_file return of plan-generation/knowledge.md — not a delivery,
  * and must not be rescued to the token stream.
+ *
+ * ★#80（2026-10-09）：`seen` 去重锚——before_agent 历史重放（及多节点快照
+ * 携带同一消息）会把同一条 ToolMessage 反复送进来，sink 仅做 includes 存在性
+ * 判定，重复条目零语义价值；按消息 id 去重（id 命中在扁平化前短路，重放快照
+ * 不再重复付扁平化成本），无 id 消息按扁平文本兜底。缺省 seen（旧调用方兼容）
+ * 退化为逐快照集合，行为与旧版一致。导出仅供单测断言去重语义。
  */
-function collectToolResults(
+export function collectToolResults(
   update: Record<string, { messages?: unknown[] }> | undefined,
   sink: string[],
+  seen: Set<string> = new Set(),
 ): void {
   for (const nodeState of Object.values(update ?? {})) {
     const ms = nodeState?.messages;
@@ -1053,13 +1069,21 @@ function collectToolResults(
         _getType?: () => string;
         role?: string;
         content?: unknown;
+        id?: unknown;
       } | null;
       if (!msg) continue;
       const kind =
         typeof msg._getType === "function" ? msg._getType() : msg.role;
       if (kind !== "tool") continue;
+      const idKey =
+        typeof msg.id === "string" && msg.id.length > 0 ? `id:${msg.id}` : null;
+      if (idKey !== null && seen.has(idKey)) continue;
       const flat = flattenMessageText(msg.content);
-      if (flat) sink.push(flat);
+      if (!flat) continue;
+      const key = idKey ?? `flat:${flat}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      sink.push(flat);
     }
   }
 }
@@ -1335,7 +1359,49 @@ export function toErrorEvent(err: unknown): AgentEvent {
  * "Model do not support image input"（带图轮用视觉模型、后续文本轮回文本模型的
  * 混合 thread 场景）。
  */
-const stripImageMiddleware = createMiddleware({
+/**
+ * 框架内部模型响应合同判定（#46 类型收窄）：对齐 langchain AgentNode 的
+ * isInternalModelResponse——wrapModelCall 每层返回必须落在
+ * AIMessage | Command | {structuredResponse, messages} 三形之一，否则框架
+ * 以 `Invalid response from "wrapModelCall" in middleware "<name>": expected
+ * AIMessage or Command, got object` 拒绝整轮。
+ */
+function isInternalModelResponseLike(x: unknown): boolean {
+  if (AIMessage.isInstance(x)) return true;
+  if (isCommand(x)) return true;
+  return (
+    typeof x === "object" &&
+    x !== null &&
+    "structuredResponse" in x &&
+    "messages" in x
+  );
+}
+
+/**
+ * #46 响应出口类型收窄（2026-10-09）：本中间件是文本链 wrapModelCall 链的
+ * 最外层，框架在每层返回处校验上述三形合同。#46 实录（2026-09-28 b5b 剧本）
+ * 报错正是甩在本中间件名下——当时它是唯一自定义中间件（ca7d2cd：
+ * `middleware = hasImage ? undefined : [stripImageMiddleware]`），GLM 无 role
+ * 尾包把聚合结果映射成 ChatMessageChunk（非 AIMessage 实例）直穿本层被拒；
+ * #112/#116（2026-10-03）落地后 frameworkTrimMiddleware 在内层已重水化
+ * ChatMessageChunk 家族，本闸门收窄残余缺口：内层漏出的「字段同构的消息形
+ * 对象」（内层按 constructor.name 探测漏判的形态 / 未来 provider 形状漂移）
+ * 按 42b 先例重水化为 AIMessage（字段同构只补类型，语义零改动）；非消息形
+ * 对象原样返回交框架校验（行为与现状完全一致，不吞错）。
+ */
+function narrowInternalModelResponse<T>(response: T): T {
+  if (response === null || typeof response !== "object") return response;
+  if (isInternalModelResponseLike(response)) return response;
+  const content = (response as { content?: unknown }).content;
+  if (typeof content !== "string" && !Array.isArray(content)) return response;
+  return new AIMessage({ ...(response as object) }) as T;
+}
+
+/**
+ * 导出仅供单测：直接驱动 wrapModelCall 断言响应合同收窄语义（运行时经
+ * assembleAgent 组装消费，与 frameworkTrimMiddleware 同款导出先例）。
+ */
+export const stripImageMiddleware = createMiddleware({
   name: "stripImageForTextModel",
   wrapModelCall: async (request, handler) => {
     const { messages } = request;
@@ -1343,26 +1409,41 @@ const stripImageMiddleware = createMiddleware({
     const cleaned = messages.map((msg) => {
       const content = (msg as { content?: unknown }).content;
       if (!Array.isArray(content)) return msg;
+      // #46 类型收窄：块判定前先确认 part 是对象——不再依赖可选链对字符串/
+      // 数值原语的属性访问兜底行为（`"x"?.type` 合法但语义含混）。
+      const isTextLike = (part: unknown): part is { text?: unknown } =>
+        typeof part === "object" &&
+        part !== null &&
+        (part as { type?: unknown }).type === "text";
       const hasImage = content.some(
-        (part) => (part as { type?: string })?.type === "image_url",
+        (part) =>
+          typeof part === "object" &&
+          part !== null &&
+          (part as { type?: unknown }).type === "image_url",
       );
       if (!hasImage) return msg;
       touched = true;
-      const textParts = content
-        .filter((part) => (part as { type?: string })?.type === "text")
-        .map((part) => (part as { text?: string }).text ?? "");
+      const textParts = content.filter(isTextLike).map((part) => {
+        const t = part.text;
+        return typeof t === "string" ? t : "";
+      });
+      // additional_kwargs 只在真对象时透传（旧实现把 undefined 也显式带进
+      // 构造参数，语义靠下游 `?? {}` 兜底，收窄为条件展开更明确）。
+      const inheritedKwargs = (msg as { additional_kwargs?: unknown })
+        .additional_kwargs;
       return new HumanMessage({
         content:
           textParts.join("\n") +
           "\n（此前的图片附件内容已在当时由视觉模型读取并分析，图片本身不再附带。）",
-        additional_kwargs: (
-          msg as { additional_kwargs?: Record<string, unknown> }
-        ).additional_kwargs,
+        ...(typeof inheritedKwargs === "object" && inheritedKwargs !== null
+          ? { additional_kwargs: inheritedKwargs as Record<string, unknown> }
+          : null),
       });
     });
-    return touched
+    const response = await (touched
       ? handler({ ...request, messages: cleaned })
-      : handler(request);
+      : handler(request));
+    return narrowInternalModelResponse(response);
   },
 });
 
