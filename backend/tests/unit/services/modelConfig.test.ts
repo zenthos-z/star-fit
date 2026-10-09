@@ -3,7 +3,9 @@
  *
  * Covers behavioral ACs:
  *   B1 default flash          - resolveDeepSeekModel('flash') / loadModel() -> deepseek-v4-flash
- *   B3 thinking off           - resolveDeepSeekModel(tier).thinking === false
+ *   B3 thinking 收编          - resolveDeepSeekModel 不再携带 thinking 字段（#162：
+ *                              真源 = resolveThinkingConfig，场景思考开关见
+ *                              src/services/agent/__tests__/modelRoutingConfig.test.ts）
  *   B4 pro override           - DEEPSEEK_MODEL_PRO env overrides pro tier
  *   B5 single source of truth - modelConfigService vs modelRouter resolve identical ids
  *   B6 vacuity probe          - unknown provider / missing key fail explicitly
@@ -145,16 +147,21 @@ describe("M8 DeepSeek model config", () => {
     });
   });
 
-  // --- B3: thinking off --------------------------------------------------
-  describe("B3 thinking default off", () => {
-    it("flash tier has thinking === false", async () => {
+  // --- B3: thinking 配置收编（#162）--------------------------------------
+  // 旧的 resolveDeepSeekModel(tier).thinking === false 常量字段退役：它宣称
+  // "默认关思考"而 llm.ts deepseek 分支实际硬编码 enabled，正是 #162 盘底的
+  // 断链病灶。真源 = modelConfigService.resolveThinkingConfig（DB > env >
+  // THINKING_DISABLED_SCENARIOS 场景默认 > 现状行为），消费链路断言在
+  // src/services/agent/__tests__/modelRoutingConfig.test.ts。
+  describe("B3 thinking config relocated to resolveThinkingConfig (#162)", () => {
+    it("flash tier no longer carries the misleading thinking field", async () => {
       const cfg = await resolveDeepSeekModel("flash");
-      expect(cfg.thinking).toBe(false);
+      expect("thinking" in cfg).toBe(false);
     });
 
-    it("pro tier has thinking === false", async () => {
+    it("pro tier no longer carries the misleading thinking field", async () => {
       const cfg = await resolveDeepSeekModel("pro");
-      expect(cfg.thinking).toBe(false);
+      expect("thinking" in cfg).toBe(false);
     });
   });
 

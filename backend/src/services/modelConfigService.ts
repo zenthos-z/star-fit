@@ -192,7 +192,6 @@ const IMAGE_MODELS: Record<string, string[]> = {
 export interface DeepSeekModelConfig {
   model: string;
   baseURL: string;
-  thinking: false; // B3: thinking disabled by default for both tiers
 }
 
 export interface GLMModelConfig {
@@ -272,7 +271,9 @@ export async function resolveGLMLegacyModel(
  * - flash (default tier): DEEPSEEK_MODEL_FLASH, default "deepseek-v4-flash"
  * - pro: DEEPSEEK_MODEL_PRO; if unset, falls back to the flash default so the
  *   pro tier is never silently bound to an expensive model.
- * thinking is always false (DeepSeek reasoning toggled off by default).
+ * thinking 不在此解析（#162：旧的常量 false 字段退役——它宣称"默认关思考"
+ * 而 llm.ts deepseek 分支实际硬编码 enabled，正是断链病灶）；场景思考开关
+ * 真源 = resolveThinkingConfig，由 loadModel 消费。
  */
 export async function resolveDeepSeekModel(
   tier: "flash" | "pro" = "flash",
@@ -291,7 +292,168 @@ export async function resolveDeepSeekModel(
     process.env.DEEPSEEK_BASE_URL?.trim() ||
     DEFAULT_DEEPSEEK_BASE_URL;
 
-  return { model, baseURL, thinking: false };
+  return { model, baseURL };
+}
+
+// ----------------------------------------------------------------------------
+// Thinking 开关解析（#162 接通）——
+// 配置层此前宣称"已关思考"但加载层从不消费，唯一生效开关是 llm.ts 硬编码
+// 的场景集。本节把场景集降级为解析链的「场景默认层」，DB/env 配置自此真正
+// 生效；默认值逐字保留（chat/plan 继续带思考，workout_complete 继续关）。
+// ----------------------------------------------------------------------------
+
+/**
+ * [B5b SSE ③ / issue #38 → #162 收编] 快车道场景集：这些场景默认关闭思考
+ * （thinking: disabled）缩短轮次时长。MVP 场景级开关——workout_complete
+ * 汇报/数据写入类轮次不需要长思考链（实测 GLM 深思考轮 5-6 分钟，iOS
+ * WKWebView 空闲连接被系统掐断的主因之一）。
+ */
+export const THINKING_DISABLED_SCENARIOS: ReadonlySet<string> = new Set([
+  "workout_complete",
+]);
+
+/** thinking 解析结果。thinking=true 表示该场景带思考链。 */
+export interface ThinkingConfig {
+  thinking: boolean;
+  source: "db" | "env" | "scenario-default" | "default";
+}
+
+/**
+ * "true"/"false"（trim + 大小写不敏感）→ 布尔；其余值视为未配置（落到
+ * 下一层，配置手误不至于把开关拍死在错误档位）。
+ */
+function parseDisabledFlag(raw: string | null | undefined): boolean | null {
+  const v = raw?.trim().toLowerCase();
+  if (v === "true") return true;
+  if (v === "false") return false;
+  return null;
+}
+
+/**
+ * Resolve the thinking switch for a scenario（#162）。
+ * 优先级链（每档 DB > env）：
+ *   1. THINKING_DISABLED_<TASK>（任务域）
+ *   2. THINKING_DISABLED（全局）
+ *   3. 场景默认层：THINKING_DISABLED_SCENARIOS（现仅 workout_complete）
+ *   4. 现状行为：thinking 开（glm 不带 disabled kwargs，deepseek enabled）
+ * 消费点：llm.ts loadModel 的 glm / glm-legacy / deepseek 分支。
+ */
+export async function resolveThinkingConfig(
+  scenario: string = "default",
+): Promise<ThinkingConfig> {
+  const taskUpper = scenario.toUpperCase();
+
+  const taskDb = parseDisabledFlag(
+    await safeGetConfig(`THINKING_DISABLED_${taskUpper}`),
+  );
+  if (taskDb !== null) return { thinking: !taskDb, source: "db" };
+  const taskEnv = parseDisabledFlag(
+    process.env[`THINKING_DISABLED_${taskUpper}`],
+  );
+  if (taskEnv !== null) return { thinking: !taskEnv, source: "env" };
+
+  const globalDb = parseDisabledFlag(await safeGetConfig("THINKING_DISABLED"));
+  if (globalDb !== null) return { thinking: !globalDb, source: "db" };
+  const globalEnv = parseDisabledFlag(process.env.THINKING_DISABLED);
+  if (globalEnv !== null) return { thinking: !globalEnv, source: "env" };
+
+  if (THINKING_DISABLED_SCENARIOS.has(scenario)) {
+    return { thinking: false, source: "scenario-default" };
+  }
+  return { thinking: true, source: "default" };
+}
+
+// ----------------------------------------------------------------------------
+// Vision（多模态）模型配置（#162 收编真源）——
+// 解析链自 llm.ts loadVisionModel 原位收编，行为逐字对齐（含借用
+// DEEPSEEK ark key/baseURL 的兜底）；llm.ts 不再自带硬编码默认模型串，
+// 唯一默认值落点 = 本节。
+// ----------------------------------------------------------------------------
+
+/** 火山 ark 套餐内 doubao 视觉模型默认 id（日期快照版，会退役——届时改此处或经 VISION_MODEL 覆盖）。 */
+export const DEFAULT_VISION_MODEL = "doubao-seed-2-1-turbo-260628";
+
+export interface VisionModelConfig {
+  model: string;
+  baseURL: string;
+  apiKey: string;
+  source: "db" | "env" | "default";
+}
+
+/**
+ * Resolve the vision (multimodal) model config. Hierarchy per field
+ * (DB > env > default，与收编前 llm.ts 行为一致）：
+ *   model:   VISION_MODEL(db) > VISION_MODEL(env) > DEFAULT_VISION_MODEL
+ *   baseURL: VISION_BASE_URL(db) > VISION_BASE_URL(env) > DEEPSEEK_BASE_URL(env) > ""
+ *   apiKey:  VISION_API_KEY(db)  > VISION_API_KEY(env)  > DEEPSEEK_API_KEY(env)  > ""
+ * 与旧实现的唯一差异：DB 读取走 safeGetConfig（库不可用时落到 env 层而非
+ * 抛错），与 GLM/DeepSeek 链路对齐。apiKey 为空由消费方（loadVisionModel）
+ * 抛 MissingApiKeyError("vision")。
+ */
+export async function resolveVisionModelConfig(): Promise<VisionModelConfig> {
+  // model
+  const modelDb = await safeGetConfig("VISION_MODEL");
+  const modelEnv = process.env.VISION_MODEL?.trim();
+  let model: string;
+  let modelSource: "db" | "env" | "default" = "default";
+  if (modelDb) {
+    model = modelDb;
+    modelSource = "db";
+  } else if (modelEnv) {
+    model = modelEnv;
+    modelSource = "env";
+  } else {
+    model = DEFAULT_VISION_MODEL;
+  }
+
+  // baseURL（含 ark 借用兜底：env DEEPSEEK_BASE_URL，不读 DB 侧——保持收编前行为）
+  const baseURLDb = await safeGetConfig("VISION_BASE_URL");
+  const baseURLEnv = process.env.VISION_BASE_URL?.trim();
+  const baseURLArk = process.env.DEEPSEEK_BASE_URL?.trim();
+  let baseURL: string;
+  let baseURLSource: "db" | "env" | "default" = "default";
+  if (baseURLDb) {
+    baseURL = baseURLDb;
+    baseURLSource = "db";
+  } else if (baseURLEnv) {
+    baseURL = baseURLEnv;
+    baseURLSource = "env";
+  } else if (baseURLArk) {
+    baseURL = baseURLArk;
+    baseURLSource = "env";
+  } else {
+    baseURL = "";
+  }
+
+  // apiKey（同构借用链：env DEEPSEEK_API_KEY 兜底）
+  const apiKeyDb = await safeGetConfig("VISION_API_KEY");
+  const apiKeyEnv = process.env.VISION_API_KEY?.trim();
+  const apiKeyArk = process.env.DEEPSEEK_API_KEY?.trim();
+  let apiKey: string;
+  let apiKeySource: "db" | "env" | "default" = "default";
+  if (apiKeyDb) {
+    apiKey = apiKeyDb;
+    apiKeySource = "db";
+  } else if (apiKeyEnv) {
+    apiKey = apiKeyEnv;
+    apiKeySource = "env";
+  } else if (apiKeyArk) {
+    apiKey = apiKeyArk;
+    apiKeySource = "env";
+  } else {
+    apiKey = "";
+  }
+
+  const sourcePriority = ["db", "env", "default"];
+  const finalSource = sourcePriority[
+    Math.min(
+      sourcePriority.indexOf(modelSource),
+      sourcePriority.indexOf(baseURLSource),
+      sourcePriority.indexOf(apiKeySource),
+    )
+  ] as "db" | "env" | "default";
+
+  return { model, baseURL, apiKey, source: finalSource };
 }
 
 /**

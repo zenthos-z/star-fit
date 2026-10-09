@@ -8,6 +8,8 @@ import {
   resolveGLMLegacyModel,
   resolveDefaultedProvider,
   resolveTaskConfig,
+  resolveThinkingConfig,
+  resolveVisionModelConfig,
   isKnownProvider,
   UnknownProviderError,
   MissingApiKeyError,
@@ -128,14 +130,11 @@ async function getBaseURL(): Promise<string> {
 }
 
 /**
- * [B5b SSE ③ / issue #38] 快车道场景集：这些场景关闭 GLM 思考
- * （thinking: disabled）缩短轮次时长。MVP 场景级开关——workout_complete
- * 汇报/数据写入类轮次不需要长思考链（实测 GLM 深思考轮 5-6 分钟，
- * iOS WKWebView 空闲连接被系统掐断的主因之一）。
+ * [B5b SSE ③ / issue #38 → #162 收编] 快车道场景集已迁
+ * modelConfigService.THINKING_DISABLED_SCENARIOS，降级为 thinking 解析链
+ * （resolveThinkingConfig）的「场景默认层」——DB/env 的
+ * THINKING_DISABLED(_<TASK>) 配置自此真正生效。
  */
-export const THINKING_DISABLED_SCENARIOS: ReadonlySet<string> = new Set([
-  "workout_complete",
-]);
 
 /**
  * Load a langchain BaseChatModel for a scenario.
@@ -145,11 +144,14 @@ export const THINKING_DISABLED_SCENARIOS: ReadonlySet<string> = new Set([
  * glm-anthropic 是 B4 备选路径（bigmodel Anthropic Messages 协议，
  * ChatAnthropic，thinking 走 content blocks）；glm-legacy 回退旧 z.ai
  * OpenAI 兼容端点。deepseek / gemini / openai are honored when configured
- * via DB/env. thinking：glm 流式自带 additional_kwargs.reasoning_content
- * （DeepAgentService 分流进 thinking 事件，无需额外 kwargs）；deepseek 走
- * ChatDeepSeek 协议级 reasoning_content。快车道场景（THINKING_DISABLED_
- * SCENARIOS，B5b）GLM 显式携带 thinking:{type:'disabled'}。Unknown provider
- * / missing API key fail explicitly (no silent fallback).
+ * via DB/env. thinking（#162 接通）：经 modelConfigService.
+ * resolveThinkingConfig 解析（DB THINKING_DISABLED(_<TASK>) > env 同键 >
+ * THINKING_DISABLED_SCENARIOS 场景默认 > 现状行为）——glm 流式自带
+ * additional_kwargs.reasoning_content（DeepAgentService 分流进 thinking
+ * 事件），关思考时显式携带 thinking:{type:'disabled'}；deepseek 走
+ * ChatDeepSeek 协议级 reasoning_content，开思考时携带
+ * thinking:{type:'enabled'}。Unknown provider / missing API key fail
+ * explicitly (no silent fallback).
  */
 export async function loadModel(
   scenario: Scenario = "default",
@@ -179,11 +181,13 @@ export async function loadModel(
     // 42,250 字符 + weekly_plan 卡 JSON 一并超限 → finish_reason=length 写卡
     // 中途截断 → EMPTY_ANSWER 空轮；65536 端点实弹验证直接接受（探针 P4），
     // 且仍远高于 OpenAI-SDK 默认上限，继续规避长 tool-call 参数 JSON 的
-    // mid-args 截断（deepagents AgentNode AIMessage 校验）。Fast-lane
-    // scenarios (B5b) explicitly disable thinking via modelKwargs (merged
-    // into the request body) — GLM supports the `thinking` parameter on the
-    // OpenAI-compatible endpoint.
-    const disableThinking = THINKING_DISABLED_SCENARIOS.has(scenario);
+    // mid-args 截断（deepagents AgentNode AIMessage 校验）。thinking 开关
+    // （#162 接通）：经 resolveThinkingConfig 解析（DB > env > 场景默认集
+    // > 现状行为）——默认链不回归：chat/plan 继续不带 disabled kwargs，
+    // workout_complete 继续关（B5b 语义原样，配置层自此真正生效）。
+    // thinking:false 时经 modelKwargs 显式携带 thinking:{type:'disabled'}
+    // （并入请求体）——GLM OpenAI 兼容端点支持该参数。
+    const { thinking } = await resolveThinkingConfig(scenario);
     // #113: RoleHealingChatOpenAI — GLM 无 role 流根治（转换层补 role 语义，
     // refs #110 #112）。重型请求下 GLM 整轮流式 delta 高发全程无 role，
     // 基线 ChatOpenAI 转换层走 ChatMessageChunk 兜底分支静默丢弃
@@ -195,9 +199,7 @@ export async function loadModel(
       configuration: { baseURL: resolved.baseURL },
       temperature: 1.0,
       maxTokens: 65536,
-      ...(disableThinking
-        ? { modelKwargs: { thinking: { type: "disabled" } } }
-        : {}),
+      ...(!thinking ? { modelKwargs: { thinking: { type: "disabled" } } } : {}),
     });
   }
 
@@ -241,15 +243,21 @@ export async function loadModel(
     // 2026-09-16 复测：ChatDeepSeek + thinking 开启，bindTools 工具调用 arguments
     // 完整合法（'{"city":"北京","date":"2025-10-27"}'），老坑未复现——截断疑与
     // ChatOpenAI 的 OpenAI SDK 序列化路径有关，而非 DeepSeek 服务端。
+    // thinking 开关（#162 接通）：此前硬编码 enabled，配置链从不消费；现经
+    // resolveThinkingConfig 解析（DB > env > THINKING_DISABLED_SCENARIOS 场景
+    // 默认 > 现状行为）。默认链不回归：chat 等场景继续 enabled；workout_complete
+    // 等快车道场景自此随场景默认层关思考（原 glm 专属的快车道语义统一到
+    // provider 无关的配置层）。
+    const { thinking } = await resolveThinkingConfig(scenario);
     const { ChatDeepSeek } = await import("@langchain/deepseek");
     return new ChatDeepSeek({
       model: resolved.model || DEFAULT_DEEPSEEK_FLASH,
       apiKey,
       configuration: { baseURL: resolved.baseURL },
       temperature: 1.0,
-      // ChatDeepSeek 默认即开启 thinking（deepseek reasoning 模型默认行为），
-      // 显式写出以防上游默认变化：
-      modelKwargs: { thinking: { type: "enabled" } },
+      // thinking:true → enabled（ChatDeepSeek 默认即开启，显式写出以防上游
+      // 默认变化）；false → disabled（#162 配置链/快车道场景生效）。
+      modelKwargs: { thinking: { type: thinking ? "enabled" : "disabled" } },
     });
   }
 
@@ -288,19 +296,14 @@ export async function loadModel(
  *
  * 选型：火山 ark 套餐内 doubao-seed-2.1-turbo（实测可看图：BENCH PRESS / 27.5kg /
  * 11次 / 4组 全部准确读出），OpenAI 兼容。配置位 VISION_MODEL / VISION_BASE_URL /
- * VISION_API_KEY（DB > env > 默认复用 DEEPSEEK 的 ark key/baseURL）。与主模型
- * （deepseek 纯文本）并存：带图请求才切视觉模型，无图保持原 provider 不变。
+ * VISION_API_KEY 的解析（DB > env > 默认，含复用 DEEPSEEK ark key/baseURL
+ * 的兜底）自 #162 起收编 modelConfigService.resolveVisionModelConfig——本
+ * 文件不再自带硬编码默认模型串，唯一默认值落点 = modelConfigService。
+ * 与主模型（deepseek 纯文本）并存：带图请求才切视觉模型，无图保持原
+ * provider 不变。
  */
 export async function loadVisionModel(): Promise<BaseChatModel> {
-  const dbModel = await ConfigRepo.getConfig("system", "VISION_MODEL");
-  const model =
-    dbModel || process.env.VISION_MODEL || "doubao-seed-2-1-turbo-260628";
-  const dbURL = await ConfigRepo.getConfig("system", "VISION_BASE_URL");
-  const baseURL =
-    dbURL || process.env.VISION_BASE_URL || process.env.DEEPSEEK_BASE_URL || "";
-  const dbKey = await ConfigRepo.getConfig("system", "VISION_API_KEY");
-  const apiKey =
-    dbKey || process.env.VISION_API_KEY || process.env.DEEPSEEK_API_KEY || "";
+  const { model, baseURL, apiKey } = await resolveVisionModelConfig();
   if (!apiKey) {
     throw new MissingApiKeyError("vision");
   }
