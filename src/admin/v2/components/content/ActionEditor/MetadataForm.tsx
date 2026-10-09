@@ -1,10 +1,17 @@
 import React, { useState } from 'react';
-import { TagInput } from '../../ui/TagInput';
 import { Badge } from '../../ui/Badge';
 import { Exercise } from '../../../services/types';
 import { Upload, ImageIcon, Plus, Settings2 } from 'lucide-react';
 import { API_BASE } from '../../../services/geminiService';
 import { MuscleSelectorDialog, MuscleTarget } from './MuscleSelectorDialog';
+import {
+  EXERCISE_EQUIPMENT,
+  EXERCISE_CATEGORIES,
+  EXERCISE_BODY_PARTS,
+  EQUIPMENT_LABELS_ZH,
+  CATEGORY_LABELS_ZH,
+  BODY_PART_LABELS_ZH,
+} from 'shared/contracts';
 
 interface MetadataFormProps {
   data: Partial<Exercise>;
@@ -56,19 +63,7 @@ export const MetadataForm: React.FC<MetadataFormProps> = ({
     }
   })();
 
-  const equipment = (() => {
-    try {
-      if (!data.equipment_required) return [];
-      if (typeof data.equipment_required === 'string') {
-        const parsed = JSON.parse(data.equipment_required);
-        return Array.isArray(parsed) ? parsed : [];
-      }
-      if (Array.isArray(data.equipment_required)) return data.equipment_required;
-      return [];
-    } catch {
-      return [];
-    }
-  })();
+  const equipment = data.equipment ?? null;
 
   const handleCoverChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -86,12 +81,6 @@ export const MetadataForm: React.FC<MetadataFormProps> = ({
       ...(secondary.length > 0 && { secondary })
     };
     onChange({ targets: JSON.stringify(newTargets) });
-  };
-
-  const updateEquipment = (newEquipment: string[]) => {
-    onChange({
-      equipment_required: JSON.stringify(newEquipment)
-    });
   };
 
   const removeTarget = (muscle: MuscleTarget, type: 'primary' | 'secondary') => {
@@ -137,6 +126,18 @@ export const MetadataForm: React.FC<MetadataFormProps> = ({
             onChange={e => onChange({ name: e.target.value })}
             data-testid="admin-exercise-name"
             className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-star-accent/20 focus:border-star-accent outline-none"
+            placeholder="例如：Barbell Bench Press（库名唯一，英文为主）"
+          />
+        </div>
+
+        <div>
+          <label className="block text-xs font-medium text-gray-500 mb-1">中文名称</label>
+          <input
+            type="text"
+            value={data.name_zh || ''}
+            onChange={e => onChange({ name_zh: e.target.value || null })}
+            data-testid="admin-exercise-name-zh"
+            className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-star-accent/20 focus:border-star-accent outline-none"
             placeholder="例如：杠铃卧推"
           />
         </div>
@@ -179,6 +180,37 @@ export const MetadataForm: React.FC<MetadataFormProps> = ({
                 </button>
               ))}
             </div>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-2 gap-4">
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">训练类目</label>
+            <select
+              value={data.category || ''}
+              onChange={e => onChange({ category: (e.target.value || null) as any })}
+              data-testid="admin-exercise-category"
+              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none"
+            >
+              <option value="">未分类</option>
+              {EXERCISE_CATEGORIES.map(cat => (
+                <option key={cat} value={cat}>{CATEGORY_LABELS_ZH[cat]}</option>
+              ))}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-medium text-gray-500 mb-1">身体区域</label>
+            <select
+              value={data.body_part || ''}
+              onChange={e => onChange({ body_part: (e.target.value || null) as any })}
+              data-testid="admin-exercise-body-part"
+              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-sm outline-none"
+            >
+              <option value="">未知</option>
+              {EXERCISE_BODY_PARTS.map(bp => (
+                <option key={bp} value={bp}>{BODY_PART_LABELS_ZH[bp]}</option>
+              ))}
+            </select>
           </div>
         </div>
       </div>
@@ -248,18 +280,28 @@ export const MetadataForm: React.FC<MetadataFormProps> = ({
         </div>
       </div>
 
-      {/* Equipment */}
+      {/* Equipment — 枚举选择器（#171 P0-2）：选项 = exercise_equipment 15 英文枚举值
+          （真源 shared/contracts EXERCISE_EQUIPMENT），展示中文经 EQUIPMENT_LABELS_ZH；
+          中文自由标签不可写 PG 枚举列，故不再提供自由输入 */}
       <div className="space-y-4 pt-4 border-t border-gray-100">
         <div>
-          <label className="block text-xs font-medium text-gray-500 mb-1 uppercase tracking-wider">所需器械</label>
-          <TagInput
-            value={equipment || []}
-            onChange={updateEquipment}
-            placeholder="输入器械..."
-            suggestions={['杠铃', '哑铃', '壶铃', '龙门架', '史密斯机', '弹力带', '自重', '卧推凳']}
-            testId="admin-equipment"
-            inputTestId="admin-equipment-input"
-          />
+          <label className="block text-xs font-medium text-gray-500 mb-2 uppercase tracking-wider">所需器械</label>
+          <div className="flex flex-wrap gap-2" data-testid="admin-equipment">
+            {EXERCISE_EQUIPMENT.map(eq => (
+              <button
+                key={eq}
+                type="button"
+                onClick={() => onChange({ equipment: equipment === eq ? null : eq })}
+                data-testid={`admin-equipment-${eq}`}
+                className={`px-3 py-1.5 text-xs rounded-lg border transition-all ${equipment === eq
+                  ? 'bg-star-accent/10 border-star-accent text-star-accent font-medium'
+                  : 'bg-white border-gray-200 text-gray-600 hover:bg-gray-50'
+                  }`}
+              >
+                {EQUIPMENT_LABELS_ZH[eq]}
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 

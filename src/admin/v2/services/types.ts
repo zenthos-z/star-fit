@@ -2,6 +2,12 @@
 // 词表归一单一真源（#88 分册1）：strength/stretch/weight_only/reps_only 等
 // 旧值先归一到细类/动作词表，再做管理台展示折叠
 import { normalizeExerciseActionType } from '../../../../shared/contracts/card-types';
+import type {
+  ExerciseBodyPart,
+  ExerciseCategory,
+  ExerciseEquipment,
+  ExerciseVideoUrls,
+} from 'shared/contracts';
 
 export interface Exercise {
   id: string;
@@ -14,6 +20,20 @@ export interface Exercise {
   equipment_required: string; // JSON
   difficulty: 'beginner' | 'intermediate' | 'advanced';
   updated_at?: number;
+
+  // ---- 002 深化列（对齐 shared/contracts ExerciseLibraryItemSchema）----
+  name_zh?: string | null;
+  equipment?: ExerciseEquipment | null;
+  category?: ExerciseCategory | null;
+  body_part?: ExerciseBodyPart | null;
+  primary_muscles?: string[];
+  secondary_muscles?: string[];
+  instructions_zh?: string[] | null;
+  image_refs?: string[] | null;
+  video_urls?: ExerciseVideoUrls | null;
+  poster_url?: string | null;
+  owner_user_id?: string | null;
+  created_at?: string;
 
   /** @deprecated Use targets instead */
   body_category?: string;
