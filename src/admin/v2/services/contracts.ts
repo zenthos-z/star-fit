@@ -1,4 +1,13 @@
 import { z } from 'zod';
+import {
+  ExerciseEquipmentSchema,
+  ExerciseCategorySchema,
+  ExerciseBodyPartSchema,
+  ExerciseVideoUrlsSchema,
+  EXERCISE_EQUIPMENT,
+  parseJSONSafe,
+  type ExerciseEquipment,
+} from 'shared/contracts';
 
 const zNumber = z.union([z.number(), z.string().transform((v) => Number(v))]).pipe(z.number());
 
@@ -217,6 +226,22 @@ export type AdminUser = z.infer<typeof zAdminUser>;
 export const zExercise = z.object({
   id: z.string().catch(''),
   name: z.string().catch(''),
+  // ---- 002 深化列（#171 P1-3 根因修复：旧声明把新列全部 strip）----
+  // 形状逐键对齐 shared/contracts ExerciseLibraryItemSchema（唯一行真源），
+  // 展示层用 catch 兜底而非 strict 拒绝（与既有 admin 契约口径一致）
+  name_zh: z.string().nullable().optional().catch(undefined),
+  equipment: ExerciseEquipmentSchema.nullable().optional().catch(undefined),
+  category: ExerciseCategorySchema.nullable().optional().catch(undefined),
+  body_part: ExerciseBodyPartSchema.nullable().optional().catch(undefined),
+  primary_muscles: z.array(z.string()).catch([]),
+  secondary_muscles: z.array(z.string()).catch([]),
+  instructions_zh: z.array(z.string()).nullable().optional().catch(undefined),
+  image_refs: z.array(z.string()).nullable().optional().catch(undefined),
+  video_urls: ExerciseVideoUrlsSchema.nullable().optional().catch(undefined),
+  poster_url: z.string().nullable().optional().catch(undefined),
+  owner_user_id: z.string().nullable().optional().catch(undefined),
+  created_at: z.string().catch(''),
+  // ---- 既有键 ----
   exercise_type: z.string().catch(''),
   targets: z.union([z.string(), z.any()]).transform((v) => (typeof v === 'string' ? v : JSON.stringify(v ?? { primary: [] }))).catch('{"primary":[]}'),
   content_html: z.string().catch(''),
@@ -250,6 +275,29 @@ export const zExercise = z.object({
   body_category: z.string().optional().catch(undefined),
   muscle_groups: z.union([z.string(), z.any()]).optional().catch(undefined),
 });
+
+/**
+ * 器材旧视图键（equipment_required JSON 数组/中文自由标签）→ 英文枚举单值。
+ * 仅认 public.exercise_equipment 15 值词表；中文旧值/空 → null（不可写库，
+ * 写库一律走枚举选择器产出的 data.equipment）。
+ */
+export function toEquipmentEnum(raw: unknown): ExerciseEquipment | null {
+  const valid = new Set<string>(EXERCISE_EQUIPMENT);
+  const pick = (v: unknown): ExerciseEquipment | null =>
+    typeof v === 'string' && valid.has(v) ? (v as ExerciseEquipment) : null;
+  if (typeof raw === 'string') {
+    const bare = pick(raw.trim());
+    if (bare) return bare;
+    // 视图键契约恒为 JSON 数组串（withViewFields: JSON.stringify([equipment])）；
+    // 其余形态（旧中文自由标签等）非 JSON，直接判 null——parseJSONSafe 在
+    // 非 production 下对非法 JSON 抛错，不越界调用
+    if (!raw.trim().startsWith('[')) return null;
+    const parsed = parseJSONSafe(raw, 'admin.contracts.toEquipmentEnum');
+    return Array.isArray(parsed) ? pick(parsed[0]) : null;
+  }
+  if (Array.isArray(raw)) return pick(raw[0]);
+  return null;
+}
 
 export const zExercises = z.array(zExercise).catch([]);
 export type AdminExercise = z.infer<typeof zExercise>;

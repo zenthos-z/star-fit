@@ -174,10 +174,22 @@ export const AdminService = {
   exercises: {
     list: async () => zExercises.parse(await requestJson<unknown>('/exercises')) as unknown as Exercise[],
     get: async (id: string) => zExercise.parse(await requestJson<unknown>(`/exercises/${id}`)) as unknown as Exercise,
-    create: async (data: Record<string, unknown>) =>
-      zExercise.parse(await requestJson<unknown>('/exercises', { method: 'POST', body: JSON.stringify(data) })) as unknown as Exercise,
-    update: async (id: string, data: Record<string, unknown>) =>
-      zExercise.parse(await requestJson<unknown>(`/exercises/${id}`, { method: 'PUT', body: JSON.stringify(data) })) as unknown as Exercise,
+    // 正规 create（POST /exercises）：后端无服务端 id 生成，id 必须由调用方
+    // 以 nanoid(21) 前端生成（exercises_id_check：NanoID 12-24，#171 P0-1）；
+    // equipment_required 须携带 exercise_equipment 英文枚举值（#171 P0-2）。
+    // 201 响应为 { message, exerciseId } 信封，非行数据，不进 zExercise。
+    create: (data: Record<string, unknown>) =>
+      requestJson<{ message: string; exerciseId: string }>('/exercises', { method: 'POST', body: JSON.stringify(data) }),
+    // 正规编辑通道（PATCH /admin/exercises/:id）：白名单
+    // name/name_zh/category/body_part/primary_muscles/equipment，strict 校验，
+    // 重名 409（#171 P1-5）。白名单外字段一律不可经此发送（后端 400）。
+    patch: (id: string, data: Record<string, unknown>) =>
+      requestJson<{ success: boolean; data: unknown }>(`/admin/exercises/${id}`, { method: 'PATCH', body: JSON.stringify(data) }),
+    // 旧 PUT 链仅保留为「非白名单遗留字段桥」（exercise_type/difficulty/
+    // content_html/targets 次肌群/assets_json）——这些字段 PATCH 白名单暂未
+    // 覆盖，R2 内容/资产管理改版后停用。禁传 name/equipment（归 PATCH 管辖）。
+    updateLegacyFields: (id: string, data: Record<string, unknown>) =>
+      requestJson<{ message: string }>(`/exercises/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     delete: (id: string) => requestJson<{ success: boolean }>(`/exercises/${id}`, { method: 'DELETE' }),
   },
   

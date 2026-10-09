@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { ArrowLeft, Save } from 'lucide-react';
-import { v4 as uuidv4 } from 'uuid';
+import { nanoid } from 'nanoid';
 import { MetadataForm } from './MetadataForm';
 import { VideoGallery, AdminVideoItem } from './VideoGallery';
 import { RichTextEditor } from './RichTextEditor';
 import { Button } from '../../ui/Button';
 import { AdminService } from '../../../services/api';
+import { toEquipmentEnum } from '../../../services/contracts';
 import { Exercise } from '../../../services/types';
 import { VideoAsset } from '../../../../../types/video';
 import { API_BASE } from '../../../services/geminiService';
@@ -71,6 +72,8 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({ exerciseId, onBack }
         ...exercise,
         targets,
         equipment_required: equipmentRequired,
+        // 器材归一：新列枚举优先，旧视图键（英文枚举值）兜底；中文旧值 → null
+        equipment: (exercise as any).equipment ?? toEquipmentEnum(equipmentRequired),
       } as Partial<Exercise>;
 
       setData(normalized);
@@ -185,14 +188,23 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({ exerciseId, onBack }
       return;
     }
 
-    console.log('[ActionEditor] Saving exercise:', exerciseId);
-    console.log('[ActionEditor] Current data.assets_json:', (data as any).assets_json);
-    console.log('[ActionEditor] Current videos:', videos);
-
     setSaving(true);
     try {
+      const name = (data.name || '').trim();
+      if (!name) {
+        alert('请填写动作名称');
+        setSaving(false);
+        return;
+      }
+      if (name.length > 200) {
+        alert('动作名称过长（上限 200 字符）');
+        setSaving(false);
+        return;
+      }
+
       // Normalize targets for validation
       let targetsStr = data.targets || JSON.stringify({ primary: [] });
+      let primaryMuscles: string[] = [];
       try {
         const parsed = JSON.parse(targetsStr);
         if (!parsed.primary || parsed.primary.length === 0) {
@@ -200,31 +212,19 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({ exerciseId, onBack }
           setSaving(false);
           return;
         }
+        primaryMuscles = parsed.primary;
       } catch {
         alert('锻炼目标数据格式错误');
         setSaving(false);
         return;
       }
 
-      const normalized: any = {
-        ...data,
-        id: exerciseId ? String((data as any).id ?? exerciseId) : (data.id ? String(data.id) : uuidv4()),
-        exercise_type: data.exercise_type || 'resistance',
-        difficulty: data.difficulty || 'beginner',
-        targets: targetsStr,
-        equipment_required:
-          typeof (data as any).equipment_required === 'string'
-            ? (data as any).equipment_required
-            : JSON.stringify((data as any).equipment_required ?? []),
-      };
-
-      // Prune deprecated fields
-      delete normalized.body_category;
-      delete normalized.muscle_groups;
+      // 器材：枚举单值（loadExercise 已归一到 data.equipment，中文旧值不可写库）
+      const equipment = data.equipment ?? null;
 
       const existingAssets = (() => {
         try {
-          const parsed = JSON.parse(normalized.assets_json || '{}');
+          const parsed = JSON.parse((data as any).assets_json || '{}');
           if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
           return parsed;
         } catch {
@@ -267,22 +267,53 @@ export const ActionEditor: React.FC<ActionEditorProps> = ({ exerciseId, onBack }
         ...(videoAssetsForStorage.length > 0 ? { video: videoAssetsForStorage } : {})
       });
 
-      console.log('[ActionEditor] Built assetsJson:', assetsJson);
-      console.log('[ActionEditor] Video assets for storage:', videoAssetsForStorage);
-
-      const payload = {
-        ...normalized,
-        assets_json: assetsJson
-      };
-
       if (exerciseId) {
-        await AdminService.exercises.update(exerciseId, payload);
+        // 正规编辑通道（#171 P1-5）：白名单字段走 PATCH /admin/exercises/:id
+        // （strict 校验 + 409 重名保护）；后端返回的错误经 message 透出
+        await AdminService.exercises.patch(exerciseId, {
+          name,
+          name_zh: data.name_zh ?? null,
+          category: data.category ?? null,
+          body_part: data.body_part ?? null,
+          primary_muscles: primaryMuscles,
+          equipment,
+        });
+        // 遗留字段桥：PATCH 白名单外的编辑器字段（类型/难度/教学富文本/次肌群/资产），
+        // 禁传 name/equipment（归 PATCH 管辖，避免绕过 409 保护）
+        await AdminService.exercises.updateLegacyFields(exerciseId, {
+          exercise_type: data.exercise_type || 'resistance',
+          difficulty: data.difficulty || 'beginner',
+          content_html: data.content_html ?? '',
+          targets: targetsStr,
+          assets_json: assetsJson,
+        });
       } else {
-        await AdminService.exercises.create(payload);
+        // 新建（#171 P0-1）：后端 POST /exercises 无服务端 id 生成，前端
+        // nanoid(21) 生成（exercises_id_check 要求 NanoID 12-24，uuid 36 字符必炸）
+        const newId = nanoid(21);
+        await AdminService.exercises.create({
+          id: newId,
+          name,
+          exercise_type: data.exercise_type || 'resistance',
+          difficulty: data.difficulty || 'beginner',
+          targets: targetsStr,
+          equipment_required: JSON.stringify(equipment ? [equipment] : []),
+          content_html: data.content_html ?? '',
+          assets_json: assetsJson,
+        });
+        // POST 不含 002 深化列（name_zh/category/body_part），非空时经正规 PATCH 补写
+        const followUp: Record<string, unknown> = {};
+        if (data.name_zh) followUp.name_zh = data.name_zh;
+        if (data.category) followUp.category = data.category;
+        if (data.body_part) followUp.body_part = data.body_part;
+        if (Object.keys(followUp).length > 0) {
+          await AdminService.exercises.patch(newId, followUp);
+        }
       }
       onBack();
     } catch (e) {
-      alert('保存失败');
+      // 透出后端错误语义（409 重名 / zod 400 / 网络超时）
+      alert(e instanceof Error && e.message ? e.message : '保存失败');
     } finally {
       setSaving(false);
     }
