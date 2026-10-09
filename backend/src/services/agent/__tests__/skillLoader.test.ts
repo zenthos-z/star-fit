@@ -74,6 +74,13 @@ import {
 //               tool_calls」围栏残余；§11.1 问卷轮交付改 submit_survey 工具
 //               调用（survey_card 围栏输出指令零残留 grep 门）——SHA 按
 //               磁盘实值重算
+//   2026-10-09  #163 技能合并：strength-training-designer 并入
+//               volume-landmarks——non-big-three-guide.md 平移至
+//               volume-landmarks/knowledge/（语义不变；commit 时 lint-staged
+//               prettier 做表格对齐归一化，SHA 按归一化后磁盘实值重算）；
+//               muscle-table-notes.md 首次纳管；volume-progression.md
+//               交叉引用改指 volume-landmarks——SHA 全部按磁盘实值重算
+//               （同一 commit，GOLD SHA 铁律）
 // ---------------------------------------------------------------------------
 const GOLD_SNAPSHOT: Record<string, string> = {
   "exercise-type-guide/knowledge-index.md":
@@ -105,9 +112,11 @@ const GOLD_SNAPSHOT: Record<string, string> = {
   "plan-generation/knowledge/novice-starting.md":
     "847a375799c8375da695ff1ce24636c3519846c73d16358fc88f28129508b642",
   "plan-generation/knowledge/volume-progression.md":
-    "10d70dc7b3a974860aab5ec02c2dbeed649a3c02662a2dcce4703d546cf0b5bb",
-  "strength-training-designer/knowledge/non-big-three-guide.md":
-    "2cfc4569bf8ee7adf99dd7f4a946e17f2be00c59e6c8989d6f2ed8b3b2320a82",
+    "dd472bb33af8bfe7f13be337867ec679db986af55d9c78b7f1d3e21bbe4d8ea1",
+  "volume-landmarks/knowledge/muscle-table-notes.md":
+    "adbea21a0710a47d8449f7093253b8f322bd51dca0e34dc99c5fc7a87d53c8e2",
+  "volume-landmarks/knowledge/non-big-three-guide.md":
+    "93d2cf6d5c33bbd9ed9b4ba487827975b56be043d41fb4b56666db6d6e9cb692",
 };
 
 function sha256(absPath: string): string {
@@ -203,7 +212,7 @@ describe("skillLoader — B3 generic mount (loadAllSkills)", () => {
       "exercise-type-guide",
       "fitness-data-tools",
       "plan-generation",
-      "strength-training-designer",
+      "volume-landmarks",
     ]) {
       assert.ok(
         n.includes(expected),
@@ -326,7 +335,7 @@ describe("skillLoader — descriptor shape", () => {
     for (const dir of [
       "plan-generation",
       "exercise-type-guide",
-      "strength-training-designer",
+      "volume-landmarks",
     ]) {
       assert.ok(
         fs.existsSync(path.join(SKILLS_BACKEND_ROOT, dir, "SKILL.md")),
