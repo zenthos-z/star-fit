@@ -19,11 +19,12 @@
  *   - 失败返回结构化错误 JSON 字符串 → Agent 下一轮工具调用原生二级弹跳
  *     （增量修正，不再整流重跑）。
  *
- * 双轨（迁移期）：卡型级 feature flag `card_channel: "tool" | "fence"`，
- * app_configs DB（card_channel_<type> 键）> env（CARD_CHANNEL_<TYPE>）>
- * 默认（survey_card/weekly_plan=tool 试点，plan_card 及其余卡型=fence）。
- * 围栏管道（extractUiHintEvents + chatWithValidationLoop）冻结不动，继续
- * 服务未迁移卡型（S4 批次统一退役）。
+ * 双轨（#151 S4 后）：卡型级 feature flag `card_channel: "tool" | "fence"`
+ * 仅剩 plan_card 在用（未迁移卡型的回滚位，app_configs DB
+ * （card_channel_plan_card 键）> env（CARD_CHANNEL_PLAN_CARD）> 默认 fence）。
+ * survey_card/weekly_plan 的围栏选项已随 S4 退役（TOOL_LOCKED_CARD_TYPES
+ * ——恒 tool，DB/env 写 fence 一律忽略）。围栏管道（extractUiHintEvents +
+ * chatWithValidationLoop）继续服务 plan_card 及未迁移卡型。
  *
  * 数据契约红线：本模块不改 shared/contracts（zod 真源不动——JSON Schema 是
  * 派生物，仅作传输层描述给模型，运行期校验永远走 zod）。
@@ -41,6 +42,9 @@ import {
   WeeklyPlanCardDataSchema,
 } from "./schemas/uiHintSchemas.js";
 import { validateUiHint, type StructuredError } from "./uiHintValidator.js";
+// #151 S4：围栏选项退役卡型清单（单一真源在本模块——见 uiHintFormat 侧注释：
+// 导入方向 cardSubmit → uiHintFormat，保持 uiHintFormat 纯字符串生产者）。
+import { TOOL_LOCKED_CARD_TYPES } from "./uiHintFormat.js";
 import { canonicalizeSurveyCard } from "./surveyConvergence.js";
 import {
   cardToCheckableText,
@@ -82,8 +86,8 @@ export const CARD_TOOL_NAMES: Record<SubmittableCardType, string> = {
 };
 
 /**
- * 默认通道（spec §6 S2 批：survey_card 试点 + weekly_plan 迁移优先级 1；
- * plan_card 建内核但保持 fence——「其余卡型不动」）。
+ * 默认通道（#151 S4 后）：survey_card/weekly_plan = tool（锁死，见
+ * TOOL_LOCKED_CARD_TYPES）；plan_card = fence（未迁移，唯一可翻转卡型）。
  */
 export const DEFAULT_CARD_CHANNELS: Readonly<CardChannels> = {
   survey_card: "tool",
@@ -105,7 +109,12 @@ function channelEnvKey(cardType: string): string {
 }
 
 /**
- * 解析全部可迁移卡型的通道（DB > env > 默认）。
+ * 解析全部可迁移卡型的通道（DB > env > 默认；**plan_card 专属开关**）。
+ *
+ * #151 S4：survey_card/weekly_plan 恒 tool（TOOL_LOCKED_CARD_TYPES）——
+ * DB/env 里的 fence 值一律忽略。理由：这些卡型的围栏指令文案已删，fence
+ * 翻转会得到「prompt 教模型调不存在的 submit 工具」的破损组装；回滚不再
+ * 走通道翻转（本批纯删除，git revert 即回）。
  *
  * DB 读走 safeGetConfig（ConfigRepo "system" 命名空间，读失败回落 env——
  * 单测/库不可用不阻断组装）。`readConfig` 依赖注入仅供测试替身。
@@ -116,6 +125,10 @@ export async function resolveCardChannels(
   const read = deps.readConfig ?? safeGetConfig;
   const resolved: CardChannels = {};
   for (const cardType of SUBMITTABLE_CARD_TYPES) {
+    if (TOOL_LOCKED_CARD_TYPES.has(cardType)) {
+      resolved[cardType] = "tool";
+      continue;
+    }
     const fromDb = normalizeChannel(await read(`card_channel_${cardType}`));
     if (fromDb) {
       resolved[cardType] = fromDb;

@@ -209,7 +209,6 @@ load_history → pick_template（目录：键/人群/分化/器械面/天数档�
   instantiate_weekly_plan 再提交新卡，不要手改旧卡
 - `ok:false` 结构化错误（UNKNOWN_TEMPLATE / INVALID_PARAMS）按 errors/hint
   修正参数后重调，**不要降级为散文交付**
-- 通道为 fence（回滚位）时按 uiHint 格式技能走正文围栏，数据面不变
 
 **自由生成回退（模板覆盖不了时）**：无匹配分化 / 模板器械面空洞过多 →
 按 SKILL.md 三段式（策略→选动作→配参数）自行构造 weekly_plan 卡数据
@@ -231,8 +230,7 @@ load_history → pick_template（目录：键/人群/分化/器械面/天数档�
     与落库处方同源；自由生成路径按同一契约构造
 - **算术红线**：模板路径天然满足（剂量/日期/递进程序层产出）；自由生成
   时重量/RPE 照 §3.2.0 起步表或 load_anchors **直取**，禁止在思考阶段
-  逐组换算。**围栏通道下出卡消息不得携带 tool_calls**——需要的知识先
-  读完再进出卡段（工具轮消息的正文会被流层归为思考，卡无法送达）
+  逐组换算
 - **`apply` 载荷（5.0 必带）**：确认落库的唯一数据面。scope=week 整周
   （split 必带，严格五枚举）；scope=days 单日覆盖（dates 列出被替换日，
   entries 只含该日条目）。展示层 `days[].exercises[].name` 用 **name_zh**
@@ -349,9 +347,9 @@ Agent 提案轮（编排，无写入工具）
 | `height_cm` / `gender` / `session_minutes` | 选答补充                                                          | `basic_info.height` / `basic_info.gender` / `preferences.time_constraint` |
 | `notes`                                    | 自由补充（textarea，≤500 字）                                     | 对话上下文 / `write_memory`                                               |
 
-问卷轮交付 = ```json survey_card 卡（data.purpose + questions=[题库 id 子集]），
-**纯文本问题清单 = 失败交付**；问卷轮不带 data.apply，完成后下一轮按 #1 出
-整周卡。
+问卷轮交付 = `submit_survey` 工具调用（purpose + question_ids=[题库 id 子集]
+与 title/message 话术，题目内容后端按题库对齐），**纯文本问题清单 = 失败
+交付**；问卷完成后下一轮按 #1 出整周卡。
 
 <!-- prettier-ignore -->
 | # | 条件 | 动作 | scope |

@@ -138,7 +138,7 @@ describe("deriveCardSubmitJsonSchemas — zod 真源 → 传输层描述", () =>
 // 通道解析（DB > env > 默认）
 // ---------------------------------------------------------------------------
 
-describe("resolveCardChannels — 卡型级 feature flag", () => {
+describe("resolveCardChannels — plan_card 专属 feature flag（#151 S4）", () => {
   const ENV_KEYS = [
     "CARD_CHANNEL_SURVEY_CARD",
     "CARD_CHANNEL_WEEKLY_PLAN",
@@ -160,34 +160,46 @@ describe("resolveCardChannels — 卡型级 feature flag", () => {
     }
   });
 
-  it("无 DB 无 env → 默认（survey/weekly=tool 试点，plan=fence）", async () => {
+  it("无 DB 无 env → 默认（survey/weekly=tool 锁定，plan=fence）", async () => {
     expect(await resolveCardChannels({ readConfig: async () => null })).toEqual(
       DEFAULT_CARD_CHANNELS,
     );
   });
 
-  it("DB 值优先于 env 与默认", async () => {
-    process.env.CARD_CHANNEL_WEEKLY_PLAN = "tool";
+  it("DB 值优先于 env 与默认（S4 后仅 plan_card 可翻转）", async () => {
+    process.env.CARD_CHANNEL_PLAN_CARD = "fence";
     const channels = await resolveCardChannels({
       readConfig: async (key) =>
-        key === "card_channel_weekly_plan" ? "fence" : null,
+        key === "card_channel_plan_card" ? "tool" : null,
     });
-    expect(channels.weekly_plan).toBe("fence");
-    expect(channels.survey_card).toBe("tool"); // 未命中 → 默认
+    expect(channels.plan_card).toBe("tool");
+    expect(channels.survey_card).toBe("tool"); // 锁定卡型不读 flag
   });
 
   it("DB 非法值回落 env；env 非法值回落默认（不炸组装）", async () => {
-    process.env.CARD_CHANNEL_SURVEY_CARD = "maybe";
+    process.env.CARD_CHANNEL_PLAN_CARD = "tool";
     const channels = await resolveCardChannels({
-      readConfig: async (key) =>
-        key === "card_channel_survey_card" ? "sms" : null,
-    });
-    expect(channels.survey_card).toBe("tool"); // env 也非法 → 默认
-    process.env.CARD_CHANNEL_SURVEY_CARD = "fence";
-    const channels2 = await resolveCardChannels({
       readConfig: async () => "maybe",
     });
-    expect(channels2.survey_card).toBe("fence"); // DB 非法 → env 命中
+    expect(channels.plan_card).toBe("tool"); // DB 非法 → env 命中
+    delete process.env.CARD_CHANNEL_PLAN_CARD;
+    const channels2 = await resolveCardChannels({
+      readConfig: async (key) =>
+        key === "card_channel_plan_card" ? "sms" : null,
+    });
+    expect(channels2.plan_card).toBe("fence"); // DB/env 都非法 → 默认
+  });
+
+  it("S4 通道锁：survey/weekly 的 DB/env fence 值一律忽略（恒 tool）", async () => {
+    process.env.CARD_CHANNEL_SURVEY_CARD = "fence";
+    process.env.CARD_CHANNEL_WEEKLY_PLAN = "fence";
+    const channels = await resolveCardChannels({
+      readConfig: async (key) =>
+        key === "card_channel_survey_card" ? "fence" : null,
+    });
+    expect(channels.survey_card).toBe("tool"); // DB fence 忽略
+    expect(channels.weekly_plan).toBe("tool"); // env fence 忽略
+    expect(channels.plan_card).toBe("fence"); // plan_card 的 flag 语义不受影响
   });
 
   it("channelSignature 随通道翻转而变（agent 缓存失效判据）", () => {
@@ -581,7 +593,7 @@ describe("makeCardSubmitTool — 三层闸门 + 卡汇推入", () => {
       ]);
     });
 
-    it("全 fence → 零工具（围栏管道继续服务）", () => {
+    it("全 fence 输入 → 零工具（builder 契约；survey/weekly 的 fence 已不可达，见 resolveCardChannels 通道锁）", () => {
       const tools = buildCardSubmitTools(baseDeps(), {
         survey_card: "fence",
         weekly_plan: "fence",

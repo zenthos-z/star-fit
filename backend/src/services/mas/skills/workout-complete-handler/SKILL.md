@@ -111,48 +111,47 @@ update_profile({
 | 本周训练 >4次   | 恢复状态如何？               | 中     |
 | 无明显异常      | 疲劳程度（RPE 1-10）- 可选   | 低     |
 
-**示例 survey_card 生成**：
+**示例 submit_survey 调用**（survey_card 唯一交付通道是 `submit_survey` 工具，
+练后反馈 purpose=workout_feedback 时 questions 自由出题直接作参数；不要把
+问卷 JSON 写进正文）：
 
-```json
-{
-  "type": "survey_card",
-  "data": {
-    "title": "训练反馈",
-    "purpose": "workout_feedback",
-    "sessionId": "from request metadata",
-    "questions": [
-      {
-        "id": "fatigue_level",
-        "question": "今天的训练感觉有多累？（1-10分）",
-        "required": false,
-        "inputType": "number",
-        "placeholder": "请输入 1-10 的分数"
-      },
-      {
-        "id": "sleep_quality",
-        "question": "昨晚睡眠质量如何？",
-        "required": false,
-        "options": [
-          { "label": "很好", "value": "excellent" },
-          { "label": "一般", "value": "average" },
-          { "label": "较差", "value": "poor" }
-        ]
-      },
-      {
-        "id": "discomfort_areas",
-        "question": "本次训练哪些部位感到不适？（可多选）",
-        "required": false,
-        "inputType": "checkbox",
-        "options": [
-          { "label": "肩部", "value": "shoulder" },
-          { "label": "腰部", "value": "lower_back" },
-          { "label": "膝盖", "value": "knee" },
-          { "label": "手腕", "value": "wrist" }
-        ]
-      }
-    ]
-  }
-}
+```
+submit_survey({
+  purpose: "workout_feedback",
+  title: "训练反馈",
+  sessionId: "from request metadata",
+  questions: [
+    {
+      "id": "fatigue_level",
+      "question": "今天的训练感觉有多累？（1-10分）",
+      "required": false,
+      "inputType": "number",
+      "placeholder": "请输入 1-10 的分数"
+    },
+    {
+      "id": "sleep_quality",
+      "question": "昨晚睡眠质量如何？",
+      "required": false,
+      "options": [
+        { "label": "很好", "value": "excellent" },
+        { "label": "一般", "value": "average" },
+        { "label": "较差", "value": "poor" }
+      ]
+    },
+    {
+      "id": "discomfort_areas",
+      "question": "本次训练哪些部位感到不适？（可多选）",
+      "required": false,
+      "inputType": "checkbox",
+      "options": [
+        { "label": "肩部", "value": "shoulder" },
+        { "label": "腰部", "value": "lower_back" },
+        { "label": "膝盖", "value": "knee" },
+        { "label": "手腕", "value": "wrist" }
+      ]
+    }
+  ]
+})
 ```
 
 #### survey_card Schema
