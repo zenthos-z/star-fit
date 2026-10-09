@@ -221,7 +221,7 @@ export const ExerciseLibraryIOService = {
     zipStructure["manifest.json"] = JSON.stringify(manifest, null, 2);
 
     // 创建 ZIP
-    return await ZipHandler.createArchive(zipStructure);
+    return ZipHandler.createArchive(zipStructure);
   },
 
   // ============================================
@@ -686,7 +686,7 @@ export const ExerciseLibraryIOService = {
     const client = await getPostgresClient();
 
     // 确保 system 用户存在
-    let systemUserId = "system";
+    const systemUserId = "system";
     const userResult = await client.query(
       "SELECT id FROM users WHERE id = $1",
       [systemUserId],

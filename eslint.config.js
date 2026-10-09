@@ -2,7 +2,10 @@ import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
 
 export default tseslint.config(
-  { ignores: ['dist/', 'node_modules/', 'android/', 'backend/', 'docs-site/', 'packages/', 'src/admin/', 'build/', 'release/', 'fixtures/'] },
+  // backend/ 不在 ignores：它有自己的 eslint.config.js（#166/#153），在
+  // backend 目录内跑 lint 用自己的 type-aware 配置；从根扫（eslint .）时
+  // flat config 只认 CWD 的这份，backend 文件按本文件的宽松档过（无 error）。
+  { ignores: ['dist/', 'node_modules/', 'android/', 'docs-site/', 'packages/', 'src/admin/', 'build/', 'release/', 'fixtures/'] },
   {
     files: ['**/*.{ts,tsx}'],
     extends: [...tseslint.configs.recommended],

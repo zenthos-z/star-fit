@@ -103,7 +103,7 @@ docs/card-spec/
 
 ### 前提铁律：只用库内动作
 
-Agent 生成的计划只允许引用动作库内的 `exerciseId`（#81 / #86 返工实证的事实约束）。库内缺合适动作时，走 `create_exercise` 工具入库（服务端生成 NanoID、用户可见），再引用返回的 id——禁止计划卡里出现编造的 exerciseId。
+Agent 生成的计划只允许引用动作库内的 `exerciseId`（#81 / #86 返工实证的事实约束）。库内缺合适动作时，Agent 不自建动作（#164：`create_exercise` 工具已隔离下架，默认不在工具表；仅在 env `AGENT_TOOL_CREATE_EXERCISE=true` 显式开启时可用，「科学动作库」另立项）——计划从库内选最接近的动作——禁止计划卡里出现编造的 exerciseId。
 
 ### 新增细类（fine type）
 
