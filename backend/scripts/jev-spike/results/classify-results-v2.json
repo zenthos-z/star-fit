@@ -1,0 +1,1797 @@
+{
+  "generatedAt": "2026-10-09T04:37:45.708Z",
+  "variant": "v2",
+  "passes": [
+    {
+      "pass": 1,
+      "accuracy": {
+        "total": 36,
+        "correct": 35,
+        "rate": 0.9722222222222222
+      },
+      "boundaryAccuracy": {
+        "total": 9,
+        "correct": 8,
+        "rate": 0.8888888888888888
+      },
+      "confusion": {
+        "chat": {
+          "chat": 9,
+          "plan": 0,
+          "workout_complete": 0,
+          "update_profile": 0
+        },
+        "plan": {
+          "chat": 0,
+          "plan": 9,
+          "workout_complete": 0,
+          "update_profile": 0
+        },
+        "workout_complete": {
+          "chat": 1,
+          "plan": 0,
+          "workout_complete": 8,
+          "update_profile": 0
+        },
+        "update_profile": {
+          "chat": 0,
+          "plan": 0,
+          "workout_complete": 0,
+          "update_profile": 9
+        }
+      },
+      "misclassified": [
+        {
+          "id": "wc-07",
+          "text": "我昨天练了背，感觉还挺不错的",
+          "expected": "workout_complete",
+          "predicted": "chat",
+          "confidence": 0.37,
+          "probabilities": {
+            "chat": 0.53,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.46
+          },
+          "boundary": true
+        }
+      ],
+      "latencyMs": {
+        "p50": 804,
+        "p90": 1461,
+        "p95": 1996,
+        "max": 23082,
+        "min": 685,
+        "mean": 1522
+      },
+      "tokens": {
+        "inputTotal": 24147,
+        "outputTotal": 3013,
+        "inputMean": 671
+      },
+      "lowConfidenceSamples": [
+        {
+          "id": "wc-05",
+          "text": "训练结束，帮我分析一下今天的表现",
+          "expected": "workout_complete",
+          "predicted": "workout_complete",
+          "confidence": 0.79,
+          "probabilities": {
+            "chat": 0.16,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.84
+          }
+        },
+        {
+          "id": "wc-07",
+          "text": "我昨天练了背，感觉还挺不错的",
+          "expected": "workout_complete",
+          "predicted": "chat",
+          "confidence": 0.37,
+          "probabilities": {
+            "chat": 0.53,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.46
+          }
+        },
+        {
+          "id": "wc-09",
+          "text": "just finished my workout, feeling great",
+          "expected": "workout_complete",
+          "predicted": "workout_complete",
+          "confidence": 0.65,
+          "probabilities": {
+            "chat": 0.26,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.74
+          }
+        }
+      ],
+      "rows": [
+        {
+          "id": "chat-01",
+          "text": "今天天气不错，适合户外跑步吗？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 2173,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 0.99,
+          "probabilities": {
+            "chat": 0.99,
+            "plan": 0.01,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.46,
+          "certaintyScore": 3.42,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-02",
+          "text": "蛋白质和碳水应该怎么搭配？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 685.3,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.44,
+          "certaintyScore": 3.89,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-03",
+          "text": "卧推和俯卧撑哪个练胸效果好？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 930.4,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.28,
+          "certaintyScore": 3.96,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-04",
+          "text": "我今天心情不太好",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 1890.4,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.78,
+          "certaintyScore": 1.8,
+          "inputTokens": 665,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-05",
+          "text": "你好，你都能帮我做什么？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 761.8,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.58,
+          "certaintyScore": 3.68,
+          "inputTokens": 668,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-06",
+          "text": "增肌期间可以喝酒吗",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 821,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.28,
+          "certaintyScore": 3.93,
+          "inputTokens": 666,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-07",
+          "text": "What's the best time of day to work out?",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 813.2,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.36,
+          "certaintyScore": 3.93,
+          "inputTokens": 668,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-08",
+          "text": "深蹲的时候膝盖到底能不能超过脚尖啊",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 981.2,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.27,
+          "certaintyScore": 3.94,
+          "inputTokens": 676,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-09",
+          "text": "讲个笑话听听",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 751.7,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.36,
+          "certaintyScore": 3.88,
+          "inputTokens": 663,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-01",
+          "text": "帮我做一份增肌计划",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 716,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.38,
+          "certaintyScore": 3.98,
+          "inputTokens": 666,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-02",
+          "text": "下周练什么？",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 714.6,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.69,
+          "certaintyScore": 3.29,
+          "inputTokens": 663,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-03",
+          "text": "我要备战马拉松，帮我排一个12周的跑步计划",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 739.1,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.22,
+          "certaintyScore": 3.98,
+          "inputTokens": 678,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-04",
+          "text": "给我安排一个每周四练的分化训练",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 802.9,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.3,
+          "certaintyScore": 3.97,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-05",
+          "text": "我是新手，帮我制定入门训练方案",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 707.3,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.31,
+          "certaintyScore": 3.97,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-06",
+          "text": "调整我的计划，这周改成练三天",
+          "expected": "plan",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 801.9,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 0.87,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0.9,
+            "update_profile": 0.1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.53,
+          "certaintyScore": 3.76,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-07",
+          "text": "帮我换个计划，现在这个太累了",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 736.4,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.69,
+          "certaintyScore": 3.28,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-08",
+          "text": "计划里的硬拉换成罗马尼亚硬拉",
+          "expected": "plan",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 860.5,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.29,
+          "certaintyScore": 3.97,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-09",
+          "text": "给我生成一个减脂的训练计划，我家里只有一对哑铃",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 695.2,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.21,
+          "certaintyScore": 3.99,
+          "inputTokens": 681,
+          "outputTokens": 83
+        },
+        {
+          "id": "wc-01",
+          "text": "我练完了",
+          "expected": "workout_complete",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 988.1,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 1
+          },
+          "ambiguityNoul": 0.63,
+          "certaintyScore": 2.16,
+          "inputTokens": 661,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-02",
+          "text": "今天的训练做完了，卧推80kg做了5组每组5个",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 920.6,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.99,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.99
+          },
+          "ambiguityNoul": 0.55,
+          "certaintyScore": 3.01,
+          "inputTokens": 679,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-03",
+          "text": "刚跑完10公里，用时52分钟",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 750.6,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.99,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.99
+          },
+          "ambiguityNoul": 0.66,
+          "certaintyScore": 2.55,
+          "inputTokens": 669,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-04",
+          "text": "深蹲练了5组，每组8个，100公斤",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 804.7,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 1
+          },
+          "ambiguityNoul": 0.6,
+          "certaintyScore": 2.65,
+          "inputTokens": 674,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-05",
+          "text": "训练结束，帮我分析一下今天的表现",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 767.4,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.79,
+          "probabilities": {
+            "chat": 0.16,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.84
+          },
+          "ambiguityNoul": 0.49,
+          "certaintyScore": 3.85,
+          "inputTokens": 673,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-06",
+          "text": "今天没做完，做了一半就没力了",
+          "expected": "workout_complete",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 711.7,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.89,
+          "probabilities": {
+            "chat": 0.06,
+            "plan": 0,
+            "update_profile": 0.02,
+            "workout_complete": 0.92
+          },
+          "ambiguityNoul": 0.73,
+          "certaintyScore": 2.49,
+          "inputTokens": 671,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-07",
+          "text": "我昨天练了背，感觉还挺不错的",
+          "expected": "workout_complete",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 1937.2,
+          "predicted": "chat",
+          "correct": false,
+          "confidence": 0.37,
+          "probabilities": {
+            "chat": 0.53,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.46
+          },
+          "ambiguityNoul": 0.62,
+          "certaintyScore": 2,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "wc-08",
+          "text": "打卡，今日臀腿日完成✅",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 700.5,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 1
+          },
+          "ambiguityNoul": 0.38,
+          "certaintyScore": 3.9,
+          "inputTokens": 668,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-09",
+          "text": "just finished my workout, feeling great",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 754,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.65,
+          "probabilities": {
+            "chat": 0.26,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.74
+          },
+          "ambiguityNoul": 0.55,
+          "certaintyScore": 2.63,
+          "inputTokens": 664,
+          "outputTokens": 85
+        },
+        {
+          "id": "up-01",
+          "text": "我的体重现在是75公斤了，帮我更新一下",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 1030.9,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.2,
+          "certaintyScore": 3.97,
+          "inputTokens": 676,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-02",
+          "text": "把我的目标从减脂改成增肌",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 896.6,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.27,
+          "certaintyScore": 4,
+          "inputTokens": 669,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-03",
+          "text": "我今年28岁，身高178",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 23081.9,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.62,
+          "certaintyScore": 1.63,
+          "inputTokens": 669,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-04",
+          "text": "我最近膝盖有伤，深蹲相关的先不要给我安排",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 831.2,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 0.97,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0.02,
+            "update_profile": 0.98,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.3,
+          "certaintyScore": 3.97,
+          "inputTokens": 679,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-05",
+          "text": "更新一下我的资料，我一星期可以练4天了",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 853,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.29,
+          "certaintyScore": 3.89,
+          "inputTokens": 676,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-06",
+          "text": "我不吃鸡蛋，还有点乳糖不耐",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 847.6,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.59,
+          "certaintyScore": 3.49,
+          "inputTokens": 670,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-07",
+          "text": "我现在的卧推极限到100公斤了",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 698.6,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.65,
+          "certaintyScore": 2.31,
+          "inputTokens": 672,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-08",
+          "text": "我只有周末有空练了",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 919.9,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 0.99,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0.01,
+            "update_profile": 0.99,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.58,
+          "certaintyScore": 2.79,
+          "inputTokens": 666,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-09",
+          "text": "静息心率降到55了，最近恢复得不错",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 727.1,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.51,
+          "certaintyScore": 3.1,
+          "inputTokens": 674,
+          "outputTokens": 84
+        }
+      ]
+    },
+    {
+      "pass": 2,
+      "accuracy": {
+        "total": 36,
+        "correct": 36,
+        "rate": 1
+      },
+      "boundaryAccuracy": {
+        "total": 9,
+        "correct": 9,
+        "rate": 1
+      },
+      "confusion": {
+        "chat": {
+          "chat": 9,
+          "plan": 0,
+          "workout_complete": 0,
+          "update_profile": 0
+        },
+        "plan": {
+          "chat": 0,
+          "plan": 9,
+          "workout_complete": 0,
+          "update_profile": 0
+        },
+        "workout_complete": {
+          "chat": 0,
+          "plan": 0,
+          "workout_complete": 9,
+          "update_profile": 0
+        },
+        "update_profile": {
+          "chat": 0,
+          "plan": 0,
+          "workout_complete": 0,
+          "update_profile": 9
+        }
+      },
+      "misclassified": [],
+      "latencyMs": {
+        "p50": 779,
+        "p90": 912,
+        "p95": 935,
+        "max": 1818,
+        "min": 665,
+        "mean": 822
+      },
+      "tokens": {
+        "inputTotal": 24147,
+        "outputTotal": 3015,
+        "inputMean": 671
+      },
+      "lowConfidenceSamples": [
+        {
+          "id": "wc-05",
+          "text": "训练结束，帮我分析一下今天的表现",
+          "expected": "workout_complete",
+          "predicted": "workout_complete",
+          "confidence": 0.77,
+          "probabilities": {
+            "chat": 0.17,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.83
+          }
+        },
+        {
+          "id": "wc-07",
+          "text": "我昨天练了背，感觉还挺不错的",
+          "expected": "workout_complete",
+          "predicted": "workout_complete",
+          "confidence": 0.36,
+          "probabilities": {
+            "chat": 0.47,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.52
+          }
+        },
+        {
+          "id": "wc-09",
+          "text": "just finished my workout, feeling great",
+          "expected": "workout_complete",
+          "predicted": "workout_complete",
+          "confidence": 0.67,
+          "probabilities": {
+            "chat": 0.25,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.75
+          }
+        }
+      ],
+      "rows": [
+        {
+          "id": "chat-01",
+          "text": "今天天气不错，适合户外跑步吗？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 799.3,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 0.99,
+          "probabilities": {
+            "chat": 0.99,
+            "plan": 0.01,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.48,
+          "certaintyScore": 3.47,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-02",
+          "text": "蛋白质和碳水应该怎么搭配？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 868.8,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.42,
+          "certaintyScore": 3.85,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-03",
+          "text": "卧推和俯卧撑哪个练胸效果好？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 841.8,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.28,
+          "certaintyScore": 3.96,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-04",
+          "text": "我今天心情不太好",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 895.7,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.79,
+          "certaintyScore": 1.67,
+          "inputTokens": 665,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-05",
+          "text": "你好，你都能帮我做什么？",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 665,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.62,
+          "certaintyScore": 3.65,
+          "inputTokens": 668,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-06",
+          "text": "增肌期间可以喝酒吗",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 771.1,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.3,
+          "certaintyScore": 3.94,
+          "inputTokens": 666,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-07",
+          "text": "What's the best time of day to work out?",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 1818.2,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.36,
+          "certaintyScore": 3.92,
+          "inputTokens": 668,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-08",
+          "text": "深蹲的时候膝盖到底能不能超过脚尖啊",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 857.2,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.27,
+          "certaintyScore": 3.94,
+          "inputTokens": 676,
+          "outputTokens": 83
+        },
+        {
+          "id": "chat-09",
+          "text": "讲个笑话听听",
+          "expected": "chat",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 725.2,
+          "predicted": "chat",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 1,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.36,
+          "certaintyScore": 3.86,
+          "inputTokens": 663,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-01",
+          "text": "帮我做一份增肌计划",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 780.5,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.38,
+          "certaintyScore": 3.99,
+          "inputTokens": 666,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-02",
+          "text": "下周练什么？",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 874.5,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.72,
+          "certaintyScore": 3.25,
+          "inputTokens": 663,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-03",
+          "text": "我要备战马拉松，帮我排一个12周的跑步计划",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 684,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.22,
+          "certaintyScore": 3.99,
+          "inputTokens": 678,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-04",
+          "text": "给我安排一个每周四练的分化训练",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 719,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.3,
+          "certaintyScore": 3.97,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-05",
+          "text": "我是新手，帮我制定入门训练方案",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 720.3,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.29,
+          "certaintyScore": 3.97,
+          "inputTokens": 672,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-06",
+          "text": "调整我的计划，这周改成练三天",
+          "expected": "plan",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 730.5,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 0.83,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0.87,
+            "update_profile": 0.13,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.51,
+          "certaintyScore": 3.74,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-07",
+          "text": "帮我换个计划，现在这个太累了",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 790.1,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.7,
+          "certaintyScore": 3.23,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-08",
+          "text": "计划里的硬拉换成罗马尼亚硬拉",
+          "expected": "plan",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 769.4,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.28,
+          "certaintyScore": 3.97,
+          "inputTokens": 671,
+          "outputTokens": 83
+        },
+        {
+          "id": "plan-09",
+          "text": "给我生成一个减脂的训练计划，我家里只有一对哑铃",
+          "expected": "plan",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 978.3,
+          "predicted": "plan",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 1,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.22,
+          "certaintyScore": 3.99,
+          "inputTokens": 681,
+          "outputTokens": 83
+        },
+        {
+          "id": "wc-01",
+          "text": "我练完了",
+          "expected": "workout_complete",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 690.8,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 1
+          },
+          "ambiguityNoul": 0.63,
+          "certaintyScore": 2.2,
+          "inputTokens": 661,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-02",
+          "text": "今天的训练做完了，卧推80kg做了5组每组5个",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 784.3,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 1
+          },
+          "ambiguityNoul": 0.55,
+          "certaintyScore": 2.94,
+          "inputTokens": 679,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-03",
+          "text": "刚跑完10公里，用时52分钟",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 720,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.99,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.99
+          },
+          "ambiguityNoul": 0.66,
+          "certaintyScore": 2.55,
+          "inputTokens": 669,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-04",
+          "text": "深蹲练了5组，每组8个，100公斤",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 741.9,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 1
+          },
+          "ambiguityNoul": 0.61,
+          "certaintyScore": 2.91,
+          "inputTokens": 674,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-05",
+          "text": "训练结束，帮我分析一下今天的表现",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 758.8,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.77,
+          "probabilities": {
+            "chat": 0.17,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.83
+          },
+          "ambiguityNoul": 0.49,
+          "certaintyScore": 3.83,
+          "inputTokens": 673,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-06",
+          "text": "今天没做完，做了一半就没力了",
+          "expected": "workout_complete",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 902.6,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.88,
+          "probabilities": {
+            "chat": 0.07,
+            "plan": 0,
+            "update_profile": 0.02,
+            "workout_complete": 0.91
+          },
+          "ambiguityNoul": 0.72,
+          "certaintyScore": 2.44,
+          "inputTokens": 671,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-07",
+          "text": "我昨天练了背，感觉还挺不错的",
+          "expected": "workout_complete",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 776.5,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.36,
+          "probabilities": {
+            "chat": 0.47,
+            "plan": 0,
+            "update_profile": 0.01,
+            "workout_complete": 0.52
+          },
+          "ambiguityNoul": 0.63,
+          "certaintyScore": 2.12,
+          "inputTokens": 671,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-08",
+          "text": "打卡，今日臀腿日完成✅",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 703.8,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 1
+          },
+          "ambiguityNoul": 0.39,
+          "certaintyScore": 3.87,
+          "inputTokens": 668,
+          "outputTokens": 85
+        },
+        {
+          "id": "wc-09",
+          "text": "just finished my workout, feeling great",
+          "expected": "workout_complete",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 758.6,
+          "predicted": "workout_complete",
+          "correct": true,
+          "confidence": 0.67,
+          "probabilities": {
+            "chat": 0.25,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.75
+          },
+          "ambiguityNoul": 0.56,
+          "certaintyScore": 2.63,
+          "inputTokens": 664,
+          "outputTokens": 85
+        },
+        {
+          "id": "up-01",
+          "text": "我的体重现在是75公斤了，帮我更新一下",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 883.7,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.2,
+          "certaintyScore": 3.98,
+          "inputTokens": 676,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-02",
+          "text": "把我的目标从减脂改成增肌",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 818.3,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.28,
+          "certaintyScore": 4,
+          "inputTokens": 669,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-03",
+          "text": "我今年28岁，身高178",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 804.4,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.64,
+          "certaintyScore": 1.66,
+          "inputTokens": 669,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-04",
+          "text": "我最近膝盖有伤，深蹲相关的先不要给我安排",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 770.1,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 0.97,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0.02,
+            "update_profile": 0.98,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.32,
+          "certaintyScore": 3.97,
+          "inputTokens": 679,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-05",
+          "text": "更新一下我的资料，我一星期可以练4天了",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 691.9,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.29,
+          "certaintyScore": 3.88,
+          "inputTokens": 676,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-06",
+          "text": "我不吃鸡蛋，还有点乳糖不耐",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 921.1,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.61,
+          "certaintyScore": 3.44,
+          "inputTokens": 670,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-07",
+          "text": "我现在的卧推极限到100公斤了",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 758.1,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.62,
+          "certaintyScore": 2.27,
+          "inputTokens": 672,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-08",
+          "text": "我只有周末有空练了",
+          "expected": "update_profile",
+          "boundary": true,
+          "ok": true,
+          "status": 200,
+          "ms": 911.7,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 0.99,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0.01,
+            "update_profile": 0.99,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.57,
+          "certaintyScore": 2.85,
+          "inputTokens": 666,
+          "outputTokens": 84
+        },
+        {
+          "id": "up-09",
+          "text": "静息心率降到55了，最近恢复得不错",
+          "expected": "update_profile",
+          "boundary": false,
+          "ok": true,
+          "status": 200,
+          "ms": 913,
+          "predicted": "update_profile",
+          "correct": true,
+          "confidence": 1,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 1,
+            "workout_complete": 0
+          },
+          "ambiguityNoul": 0.53,
+          "certaintyScore": 3.16,
+          "inputTokens": 674,
+          "outputTokens": 84
+        }
+      ]
+    }
+  ]
+}

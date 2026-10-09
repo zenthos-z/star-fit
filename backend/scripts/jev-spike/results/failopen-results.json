@@ -1,0 +1,171 @@
+{
+  "generatedAt": "2026-10-09T04:40:20.387Z",
+  "cases": [
+    {
+      "case": "timeout_hang",
+      "sim": "mock /hang 永不响应 + 800ms AbortController",
+      "result": {
+        "ok": false,
+        "status": null,
+        "ms": 805,
+        "error": {
+          "name": "AbortError",
+          "message": "This operation was aborted"
+        }
+      },
+      "decision": {
+        "routed": "chat",
+        "reason": "调用失败（AbortError）→ fail-open"
+      }
+    },
+    {
+      "case": "server_5xx",
+      "sim": "mock /500 返回 500 + dmx 风格 JSON",
+      "result": {
+        "ok": false,
+        "status": 500,
+        "ms": 6,
+        "body": {
+          "error": {
+            "code": "upstream_error",
+            "message": "simulated 5xx",
+            "type": "dmx_api_error"
+          }
+        }
+      },
+      "decision": {
+        "routed": "chat",
+        "reason": "调用失败（HTTP 500）→ fail-open"
+      }
+    },
+    {
+      "case": "empty_body_200",
+      "sim": "mock /empty200 返回 200 + 空 body",
+      "result": {
+        "ok": true,
+        "status": 200,
+        "ms": 2,
+        "bodyType": "string",
+        "bodyPreview": ""
+      },
+      "decision": {
+        "routed": "chat",
+        "reason": "answers 缺失/为空 → fail-open"
+      }
+    },
+    {
+      "case": "real_empty_questions",
+      "sim": "真实 API questions:{}",
+      "result": {
+        "ok": false,
+        "status": 400,
+        "ms": 130,
+        "body": {
+          "detail": "questions must be a nonempty object"
+        }
+      },
+      "decision": {
+        "routed": "chat",
+        "reason": "调用失败（HTTP 400）→ fail-open"
+      }
+    },
+    {
+      "case": "real_empty_state",
+      "sim": "真实 API state:\"\"（空上下文）",
+      "result": {
+        "ok": true,
+        "status": 200,
+        "ms": 725,
+        "answers": {
+          "intent": {
+            "choice": "chat",
+            "confidence": 0.96,
+            "probabilities": {
+              "chat": 0.97,
+              "plan": 0.02,
+              "update_profile": 0,
+              "workout_complete": 0.01
+            },
+            "type": "choice"
+          }
+        }
+      },
+      "decision": {
+        "routed": "chat",
+        "reason": "confidence 0.96 ≥ 0.7 → 正常路由"
+      }
+    },
+    {
+      "case": "low_confidence_amb-hard",
+      "sim": "真实歧义样本：我昨天练了背，感觉还挺不错的（v1/v2 均低置信（0.36-0.71 波动）的复盘式样本）",
+      "result": {
+        "ok": true,
+        "status": 200,
+        "ms": 669,
+        "intent": {
+          "choice": "workout_complete",
+          "confidence": 0.73,
+          "probabilities": {
+            "chat": 0.2,
+            "plan": 0,
+            "update_profile": 0,
+            "workout_complete": 0.8
+          },
+          "type": "choice"
+        }
+      },
+      "decision": {
+        "routed": "workout_complete",
+        "reason": "confidence 0.73 ≥ 0.7 → 正常路由"
+      }
+    },
+    {
+      "case": "low_confidence_amb-vague",
+      "sim": "真实歧义样本：随便来点啥（无任何意图信号）",
+      "result": {
+        "ok": true,
+        "status": 200,
+        "ms": 2105,
+        "intent": {
+          "choice": "plan",
+          "confidence": 0.45,
+          "probabilities": {
+            "chat": 0.41,
+            "plan": 0.59,
+            "update_profile": 0,
+            "workout_complete": 0
+          },
+          "type": "choice"
+        }
+      },
+      "decision": {
+        "routed": "chat",
+        "reason": "confidence 0.45 < 0.7 → fail-open"
+      }
+    },
+    {
+      "case": "low_confidence_amb-mixed",
+      "sim": "真实歧义样本：练完了，顺便把我体重改成73公斤（双意图混合）",
+      "result": {
+        "ok": true,
+        "status": 200,
+        "ms": 2166,
+        "intent": {
+          "choice": "update_profile",
+          "confidence": 0.85,
+          "probabilities": {
+            "chat": 0,
+            "plan": 0,
+            "update_profile": 0.89,
+            "workout_complete": 0.11
+          },
+          "type": "choice"
+        }
+      },
+      "decision": {
+        "routed": "update_profile",
+        "reason": "confidence 0.85 ≥ 0.7 → 正常路由"
+      }
+    }
+  ]
+}
