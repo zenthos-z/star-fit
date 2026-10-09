@@ -114,16 +114,20 @@ export function looksLikeToolReturnEcho(text: string): boolean {
   }
 
   // B. JSON 主导：trim 后以 { / [ 开头（裸 JSON，无 ``` 围栏——围栏卡片以
-  // ``` 开头不会误伤）。双重判定：
+  // ``` 开头不会误伤）。判定链：
+  //   B0. 卡片豁免（2026-09-23 返工 v3）：顶层带非空 string `type` 的可解析
+  //       对象是 uiHint 卡片载荷（模型偶尔不包围栏直接 inline），必须到达
+  //       token 流供 uiHintExtractor 提取——绝不拦截；
+  //   B3. 写类工具回执签名（#150，2026-10-09）：整段可解析且带布尔 `ok` 的
+  //       对象是 write_memory / write_session / update_profile / submit_xxx
+  //       回执（isToolReceiptObject，见其注释）——正文不会以裸回执 JSON 开头；
   //   B1. 任务原话：非空白中 >60% 是 ASCII 结构字符/引号（{}[]",:）；
   //   B2. 兜底：整段能被 JSON.parse 解析的对象/数组且长度足够大——正文绝不
-  //       可能以「大段可解析裸 JSON」开头；短 JSON（如 {"ok":true}）用长度
-  //       阈值排除误杀。真实动作库 JSON 含中文名/英文键，结构字符占比可能
-  //       低于 60%（如 {"id":"ex_1","name":"深蹲"} 仅约 1/3），B2 兜住。
+  //       可能以「大段可解析裸 JSON」开头；无签名短 JSON（如 {"a":1}）用长度
+  //       阈值排除误杀（写类工具回执的短 JSON 由 B3 接管）。真实动作库 JSON
+  //       含中文名/英文键，结构字符占比可能低于 60%（如
+  //       {"id":"ex_1","name":"深蹲"} 仅约 1/3），B2 兜住。
   if (t.startsWith("{") || t.startsWith("[")) {
-    // B0. 卡片豁免（2026-09-23 返工 v3）：顶层带非空 string `type` 的可解析
-    //     对象是 uiHint 卡片载荷（模型偶尔不包围栏直接 inline），必须到达
-    //     token 流供 uiHintExtractor 提取——绝不拦截。
     try {
       const parsed: unknown = JSON.parse(t);
       if (
@@ -135,8 +139,9 @@ export function looksLikeToolReturnEcho(text: string): boolean {
       ) {
         return false;
       }
+      if (isToolReceiptObject(parsed)) return true;
     } catch {
-      // 非纯 JSON（含叙述包裹 / 多个粘接对象）——B0 不判定，继续 B1/B2
+      // 非纯 JSON（含叙述包裹 / 多个粘接对象）——B0/B3 不判定，继续 B1/B2
     }
     const nonWs = t.replace(/\s+/g, "");
     if (nonWs.length === 0) return false;
@@ -153,6 +158,54 @@ export function looksLikeToolReturnEcho(text: string): boolean {
   }
 
   return false;
+}
+
+/**
+ * 写类工具回执对象判定（#150，2026-10-09）：本项目全部写类工具的回执统一是
+ * 「裸 JSON 对象 + 布尔 ok」——write_memory `{ok:true,userId,key}`、
+ * write_session `{ok:true,userId,sessions_count}`、update_profile
+ * `{ok:true,userId,updated_fields}`（mcpTools.ts scoped write helpers）、
+ * submit_xxx `{ok:true,cardId,channel}`（cardSubmit.ts）。模型在终步复述该
+ * 回执并与正文无分隔粘接（形如 `{"ok":true,…,"key":"post_workout_feedback_
+ * 20261008"}反馈已记录：…`，用户实测 2026-10-08）时，既有判定特征全部不
+ * 命中：B1 结构字符占比 ~25% < 60%、B2 长度 < 100、sigA/sigH 签名不匹配、
+ * leadingEchoJsonLen 的 ≥300 阈值也不到 → 回执直通正文。判定只认「布尔 ok
+ * 字段」（含 ok:false 的错误回执——同一泄漏族），不锁 key 形态：key 是模型
+ * 自选的 memory 键，形态不受控。
+ */
+export function isToolReceiptObject(x: unknown): boolean {
+  if (x === null || typeof x !== "object" || Array.isArray(x)) return false;
+  return typeof (x as { ok?: unknown }).ok === "boolean";
+}
+
+/**
+ * 从块首摘取「工具回执 JSON」段（#150）：块以平衡可解析的 `{…}` 开头、
+ * 顶层无 type（非卡，B0 同款豁免优先）、且命中 isToolReceiptObject → 摘出
+ * 回执段，rest 返回其后文本（含无分隔粘接的正文）。未命中返回 null（非块首
+ * `{`、围栏块、卡片对象、非回执 JSON）。只处理块首：回执落在段中的形态未
+ * 观测过，段中切片的误伤面（正文里的示例代码等）不可控，不扩。
+ */
+export function sliceLeadingReceiptEcho(
+  block: string,
+): { echo: string; rest: string } | null {
+  if (!block.startsWith("{")) return null;
+  const end = scanBalancedJsonAt(block, 0);
+  if (end === null) return null;
+  const obj = block.slice(0, end);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(obj);
+  } catch {
+    return null;
+  }
+  if (
+    typeof (parsed as { type?: unknown } | null)?.type === "string" &&
+    ((parsed as { type: string }).type as string).length > 0
+  ) {
+    return null; // 卡片豁免：inline 卡必须到达 token 流，绝不摘
+  }
+  if (!isToolReceiptObject(parsed)) return null;
+  return { echo: obj, rest: block.slice(end) };
 }
 
 /**
@@ -263,6 +316,8 @@ export function stripToolEchoPrefix(text: string): {
  * 「任意位置剥离」：
  *   - 命中复述特征（looksLikeToolReturnEcho / isNumberedToolEcho）→ 摘进
  *     thinking（leakedThinking），绝不进 token；
+ *   - 块首「工具回执 JSON」（#150，sliceLeadingReceiptEcho）→ 只摘回执段，
+ *     粘接在回执后的正文原样保留为 token；
  *   - 命中后紧跟的文档延续块（编号行 frontmatter 被空行切开的后续块、技能
  *     文档结构块）→ 链式一并摘除，遇围栏/普通叙述块即断链；
  *   - 其余块原样保留为 token。
@@ -291,6 +346,16 @@ export function stripToolEchoBlocks(text: string): {
       // 围栏卡片——token 载体，绝不摘；链同步断开（卡片不属于复述文档）。
       inEchoChain = false;
       keep.push(block);
+      continue;
+    }
+    // #150（2026-10-09）：块首「工具回执 JSON」精确摘除——含与正文无分隔
+    // 粘接形态（`{"ok":true,…}反馈已记录：…`），只摘回执段，rest 原样保留
+    // 为 token；不延长复述链（回执后的正文不是复述文档延续）。
+    const receipt = sliceLeadingReceiptEcho(block);
+    if (receipt) {
+      echoes.push(receipt.echo);
+      inEchoChain = false;
+      if (receipt.rest.trim().length > 0) keep.push(receipt.rest);
       continue;
     }
     const hit = looksLikeToolReturnEcho(block) || isNumberedToolEcho(block);
@@ -472,6 +537,16 @@ export class LiveEchoGate {
         keep.push(block);
         continue;
       }
+      // #150（2026-10-09）：块首「工具回执 JSON」精确摘除——answerLive 直通
+      // 段的同一泄漏族（isEchoSuspicious 的行首 `{` 特征已把该形态挂链缓冲
+      // 到此），只摘回执段，rest 放行 token；链断开语义与批量层一致。
+      const receipt = sliceLeadingReceiptEcho(block);
+      if (receipt) {
+        echoes.push(receipt.echo);
+        this.chain = false;
+        if (receipt.rest.trim().length > 0) keep.push(receipt.rest);
+        continue;
+      }
       const hit = looksLikeToolReturnEcho(block) || isNumberedToolEcho(block);
       if (hit) {
         echoes.push(block);
@@ -519,6 +594,7 @@ function leadingEchoJsonLen(text: string): {
 } {
   let collected = "";
   let pos = 0;
+  let firstParsed: unknown; // #150：首个收集对象的回执签名判定
   while (pos < text.length) {
     while (pos < text.length && /\s/.test(text[pos]!)) pos += 1;
     const ch = text[pos];
@@ -532,6 +608,7 @@ function leadingEchoJsonLen(text: string): {
     } catch {
       break;
     }
+    if (firstParsed === undefined) firstParsed = parsed;
     const topType = (parsed as { type?: unknown } | null)?.type;
     if (typeof topType === "string" && topType.length > 0) break; // 卡片→保留
     collected += obj;
@@ -543,7 +620,10 @@ function leadingEchoJsonLen(text: string): {
   const sigH =
     /"history_summary"\s*:/.test(collected) &&
     /"profile_static"\s*:/.test(collected);
-  const isEcho = sigA || sigH || collected.length >= 300;
+  // #150：首个收集对象命中写类工具回执签名（布尔 ok）即整串判复述——回执
+  // 短（<300）且无 count/exercises 等既有签名，B1/B2 全部漏判的正是它。
+  const isEcho =
+    sigA || sigH || collected.length >= 300 || isToolReceiptObject(firstParsed);
   return { echoLen: isEcho ? pos : 0, isEcho };
 }
 

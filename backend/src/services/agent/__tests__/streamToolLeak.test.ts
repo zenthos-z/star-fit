@@ -22,6 +22,8 @@ import assert from "node:assert/strict";
 import { classifyAgentStream } from "../DeepAgentService.js";
 import {
   isAnswerStartBlock,
+  looksLikeToolReturnEcho,
+  sliceLeadingReceiptEcho,
   stripToolEchoPrefix,
   stripToolEchoBlocks,
   LiveEchoGate,
@@ -887,7 +889,10 @@ describe("stripToolEchoPrefix 直接单测（剥离边界契约）", () => {
   });
 
   it("短 JSON（无签名、<300 字符）→ 不剥", () => {
-    const short = '{"ok":true,"msg":"已保存"}';
+    // #150（2026-10-09）夹具更新：原夹具 `{"ok":true,"msg":"已保存"}` 恰好
+    // 落进新确立的写类工具回执签名（布尔 ok）——回执必须剥离（见 #150 套件）。
+    // 本测试守护的边界是「无任何签名的短 JSON 不剥」，改用无 ok 的短 JSON。
+    const short = '{"status":"saved","msg":"已保存"}';
     const { echo, rest } = stripToolEchoPrefix(short + "\n\n好的。");
     assert.equal(echo, "");
     assert.ok(rest.includes(short));
@@ -1722,5 +1727,207 @@ describe("tool-leak 返工 v6：切碎 delta 的复述特征识别（真根因�
     assert.equal(isEchoSuspicious("练了3次"), false, "中置数字不可疑");
     assert.equal(isEchoSuspicious("第 3 组做 10 次"), false, "数字+空格不可疑");
     assert.equal(isEchoSuspicious("12:30 开始训练"), false, "数字+冒号不可疑");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// #150（2026-10-09）：写类工具回执复述混入正文——三层治理管线补回执特征
+// ---------------------------------------------------------------------------
+// 用户实测（2026-10-08 晨）：write_memory 回执 `{"ok":true,"userId":"…",
+// "key":"post_workout_feedback_20261008"}` 被模型复述并与正文无分隔粘接
+// （`…20261008"}反馈已记录：…`）直通用户正文。既有判定特征全部漏判：
+// B1 结构字符占比 ~25% < 60%、B2 长度 < 100、sigA/sigH 签名不匹配、
+// leadingEchoJsonLen 的 ≥300 阈值不到。修复=三层各补回执特征：
+//   ① 前缀剥离（stripToolEchoPrefix → leadingEchoJsonLen）：首个收集对象
+//      命中 isToolReceiptObject（布尔 ok）即整串判复述；
+//   ② 全段扫描（stripToolEchoBlocks）：块首回执精确摘除（sliceLeadingReceiptEcho），
+//      粘接在回执后的正文原样保留；
+//   ③ 直通段闸门（LiveEchoGate.judge）：同款块首摘除（isEchoSuspicious 的
+//      行首 `{` 特征已把该形态挂链缓冲到这里判定）。
+// 防矫枉过正红线：只摘回执段；正常中文回答、围栏卡片路径必须完好。
+describe("#150 写类工具回执复述混入正文：三层剥离（只摘回执段）", () => {
+  // 与 issue #150 实录同构的 write_memory 回执 + 无分隔粘接正文
+  const RECEIPT =
+    '{"ok":true,"userId":"886c798a-4b5c-4d6e-8f90-1a2b3c4d5e6f","key":"post_workout_feedback_20261008"}';
+  const GLUED =
+    RECEIPT +
+    "反馈已记录：疲劳8分偏高，恢复评分下调至60；手腕轻微不适，已并入现有手腕限制继续观察。下次训练建议减轻组数或休息一天。";
+
+  /** tools 节点快照：write_memory 的 ToolMessage（回执原文）。 */
+  function toolsNodeUpdate(toolContent: string): unknown {
+    return [
+      "updates",
+      {
+        tools: { messages: [{ _getType: () => "tool", content: toolContent }] },
+      },
+    ];
+  }
+
+  it("1. 终步快照：回执与正文无分隔粘接 → 回执进 thinking、正文进 token（双向断言①②）", async () => {
+    const raws = [
+      toolsNodeUpdate(RECEIPT),
+      msgDelta(GLUED),
+      modelRequestUpdate(aiTerminal(GLUED)),
+    ];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    // ① 回执串不进 token 正文
+    assert.equal(
+      tokens.includes('"ok":true'),
+      false,
+      `回执 JSON 不得泄漏进 token（实际 token: ${JSON.stringify(tokens.slice(0, 80))}）`,
+    );
+    assert.equal(tokens.includes("post_workout_feedback_20261008"), false);
+    // ② 正常中文回答不受影响（正文非空）
+    assert.ok(tokens.includes("反馈已记录"), "粘接在回执后的正文必须进 token");
+    assert.ok(thinking.includes('"ok":true'), "回执进 thinking 面板（不丢失）");
+  });
+
+  it("2. answerLive 直通段：终步快照后 delta 流出粘接正文 → LiveEchoGate 摘回执、放行正文", async () => {
+    // DeepSeek「先出快照再补输出」形态：空终步快照触发 answerLive，回执粘接
+    // 正文从直通分支到达（v4 时代裸放行的同构路径）。
+    const raws = [modelRequestUpdate(aiTerminal("")), msgDelta(GLUED)];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const thinking = texts(events, "thinking");
+    assert.equal(tokens.includes('"ok":true'), false, "直通段回执不得进 token");
+    assert.ok(
+      tokens.includes("反馈已记录"),
+      "直通段正文必须进 token（流式收益保留）",
+    );
+    assert.ok(thinking.includes('"ok":true'), "直通段回执进 thinking");
+  });
+
+  it("3. 回执块位于答案中部（段落分隔）→ 全段扫描摘回执、前后正文保留", async () => {
+    const answer =
+      "收到，本周训练复盘如下。\n\n" +
+      RECEIPT +
+      "反馈已记录，下周会调低强度。\n\n有疑问随时告诉我。";
+    const raws = [msgDelta(answer), modelRequestUpdate(aiTerminal(answer))];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    assert.equal(tokens.includes('"ok":true'), false, "中部回执块不得进 token");
+    assert.ok(tokens.includes("本周训练复盘如下"), "前置正文保留");
+    assert.ok(tokens.includes("下周会调低强度"), "粘接正文保留");
+    assert.ok(tokens.includes("有疑问随时告诉我"), "后置正文保留");
+  });
+
+  it("4. 正常回答 + 围栏卡片完好（红线回归：卡片路径不受回执特征影响）", async () => {
+    const answer =
+      "好的，这是你本周的训练卡片：\n\n```json\n" +
+      '{"type":"survey_card","title":"训练复盘","questions":[{"id":"q1","text":"疲劳度","options":["低","中","高"]}]}\n' +
+      "```\n\n填完告诉我，我好调整下周计划。";
+    const raws = [msgDelta(answer), modelRequestUpdate(aiTerminal(answer))];
+    const events = await classify(
+      (async function* () {
+        for (const r of raws) yield r;
+      })(),
+    );
+    const tokens = texts(events, "token");
+    const hints = await collectHints(events);
+    assert.ok(tokens.includes("这是你本周的训练卡片"), "正文保留");
+    assert.ok(tokens.includes("```json"), "围栏完整保留（卡片 token 载体）");
+    assert.ok(tokens.includes("填完告诉我"), "卡片后正文保留");
+    assert.deepEqual(hints, ["survey_card"], "卡片被 uiHint 提取器正常提取");
+    assert.equal(
+      texts(events, "thinking").includes("训练复盘"),
+      false,
+      "卡片不得被误摘进 thinking",
+    );
+  });
+
+  it("5. stripToolEchoPrefix 直接断言：粘接形态只剥回执段，rest = 正文", () => {
+    const { echo, rest } = stripToolEchoPrefix(GLUED);
+    assert.equal(echo, RECEIPT, "只剥回执 JSON 段");
+    assert.ok(rest.startsWith("反馈已记录"), "rest 从正文起（无分隔粘接）");
+    // 不误伤：正常回答开头（无回执）完全不剥
+    const normal = "反馈已记录：疲劳8分偏高，建议休息一天。";
+    const r2 = stripToolEchoPrefix(normal);
+    assert.equal(r2.echo, "", "正常回答零剥离");
+    assert.equal(r2.rest, normal);
+  });
+
+  it("6. sliceLeadingReceiptEcho 边界契约：命中 / 卡片豁免 / 非回执 / 非块首", () => {
+    const hit = sliceLeadingReceiptEcho(GLUED);
+    assert.ok(hit !== null, "回执粘接块命中");
+    assert.equal(hit!.echo, RECEIPT);
+    assert.ok(hit!.rest.startsWith("反馈已记录"));
+    // 卡片豁免：带顶层 type 的对象即使带 ok 字段也绝不摘（inline 卡保命）
+    const card = '{"ok":true,"type":"survey_card","title":"t"}正文';
+    assert.equal(
+      sliceLeadingReceiptEcho(card),
+      null,
+      "带 type 的 inline 卡豁免",
+    );
+    // 非回执 JSON（无布尔 ok）
+    assert.equal(
+      sliceLeadingReceiptEcho('{"count":3,"exercises":[]}后面'),
+      null,
+      "无 ok 字段的 JSON 不判回执",
+    );
+    // 非块首 {（段中 JSON 不扩判——未观测形态不冒险）
+    assert.equal(
+      sliceLeadingReceiptEcho('好的 {"ok":true}'),
+      null,
+      "段中回执不摘（只处理块首）",
+    );
+    // ok:false 错误回执同一泄漏族，同样命中
+    const errReceipt =
+      '{"ok":false,"code":"NO_THREAD_CONTEXT","hint":"缺少线程上下文"}提示';
+    const hitErr = sliceLeadingReceiptEcho(errReceipt);
+    assert.ok(hitErr !== null, "ok:false 错误回执同样命中");
+    assert.ok(hitErr!.rest.startsWith("提示"));
+  });
+
+  it("7. looksLikeToolReturnEcho 补特征：独立回执块判 true，粘接块不整体判死", () => {
+    assert.equal(
+      looksLikeToolReturnEcho(RECEIPT),
+      true,
+      "独立回执块（整段可解析 + 布尔 ok）判复述",
+    );
+    assert.equal(
+      looksLikeToolReturnEcho(GLUED),
+      false,
+      "粘接块不整体判死——由 sliceLeadingReceiptEcho 精确摘回执段，正文保留",
+    );
+    assert.equal(
+      looksLikeToolReturnEcho('{"ok":true,"type":"plan_card"}'),
+      false,
+      "卡片豁免优先于回执签名",
+    );
+  });
+
+  it("8. stripToolEchoBlocks 直接断言：回执段进 echo、粘接正文进 rest", () => {
+    const { echo, rest } = stripToolEchoBlocks(GLUED);
+    assert.equal(echo, RECEIPT);
+    assert.ok(rest.startsWith("反馈已记录"), "正文保留为 token");
+  });
+
+  it("9. LiveEchoGate 直接断言：可疑缓冲后块首摘回执、正文放行", () => {
+    const gate = new LiveEchoGate();
+    const drained = gate.feed(GLUED);
+    assert.equal(
+      drained.tokens.includes('"ok":true'),
+      false,
+      "feed 阶段不得逐 delta 放行回执",
+    );
+    const tail = gate.flush();
+    const allTokens = drained.tokens + tail.tokens;
+    const allEchoes = drained.echoes + tail.echoes;
+    assert.ok(allTokens.includes("反馈已记录"), "正文最终放行 token");
+    assert.ok(allEchoes.includes('"ok":true'), "回执判进 echoes");
   });
 });
