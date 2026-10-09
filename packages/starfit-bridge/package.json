@@ -1,0 +1,33 @@
+{
+  "name": "starfit-bridge",
+  "version": "0.1.0",
+  "description": "star-fit 数据桥 —— 用户运动数据与画像的全量开放对接 CLI（外部 Agent 零门槛接入）",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "bridge": "dist/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "build:test": "tsc -p tsconfig.test.json",
+    "test": "npm run build && npm run build:test && node --test dist-test/test/*.test.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json --noEmit"
+  },
+  "keywords": [
+    "starfit",
+    "bridge",
+    "cli",
+    "agent"
+  ],
+  "devDependencies": {
+    "@types/node": "^18.19.0",
+    "typescript": "^5.8.3"
+  }
+}
